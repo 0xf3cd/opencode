@@ -5677,6 +5677,7 @@ export type MessageListInput = {
     readonly limit?: number | undefined
     readonly order?: "asc" | "desc" | undefined
     readonly cursor?: string | undefined
+    readonly before?: string | undefined
     readonly type?:
       | "agent-switched"
       | "model-switched"
@@ -5694,6 +5695,7 @@ export type MessageListInput = {
     readonly limit?: number | undefined
     readonly order?: "asc" | "desc" | undefined
     readonly cursor?: string | undefined
+    readonly before?: string | undefined
     readonly type?:
       | "agent-switched"
       | "model-switched"
@@ -5711,6 +5713,7 @@ export type MessageListInput = {
     readonly limit?: number | undefined
     readonly order?: "asc" | "desc" | undefined
     readonly cursor?: string | undefined
+    readonly before?: string | undefined
     readonly type?:
       | "agent-switched"
       | "model-switched"
@@ -5724,10 +5727,29 @@ export type MessageListInput = {
       | "compaction"
       | undefined
   }["cursor"]
+  readonly before?: {
+    readonly limit?: number | undefined
+    readonly order?: "asc" | "desc" | undefined
+    readonly cursor?: string | undefined
+    readonly before?: string | undefined
+    readonly type?:
+      | "agent-switched"
+      | "model-switched"
+      | "location-switched"
+      | "user"
+      | "synthetic"
+      | "system"
+      | "skill"
+      | "shell"
+      | "assistant"
+      | "compaction"
+      | undefined
+  }["before"]
   readonly type?: {
     readonly limit?: number | undefined
     readonly order?: "asc" | "desc" | undefined
     readonly cursor?: string | undefined
+    readonly before?: string | undefined
     readonly type?:
       | "agent-switched"
       | "model-switched"
