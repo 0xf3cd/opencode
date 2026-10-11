@@ -254,6 +254,7 @@ export function CurrentUserMessageDisplay(props: {
   actions?: SessionUserActions
   comments?: SessionUserComment[]
   references?: SessionUserAttachmentReference[]
+  voice?: boolean
 }) {
   const data = useData()
   const dialog = useDialog()
@@ -367,6 +368,11 @@ export function CurrentUserMessageDisplay(props: {
         }
       >
         <div data-slot="user-message-body">
+          <Show when={props.voice}>
+            <span data-slot="user-message-source" class="text-12-regular text-text-weak">
+              {i18n.t("ui.message.voice")}
+            </span>
+          </Show>
           <div data-slot="user-message-text" dir="auto" data-comments={comments().length > 0 ? "true" : undefined}>
             <CurrentHighlightedText text={props.text} files={inlineFiles()} agents={agents()} />
             <Show when={comments().length > 0}>

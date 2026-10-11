@@ -1117,6 +1117,44 @@ export const attachmentsAndCommentsPresentation = {
   },
 } satisfies Record<string, SessionUserPresentation>
 
+const voiceInstruction =
+  "okay so the upload test keeps failing on CI but only sometimes, can you look at the last few runs, figure out whether it's the retry timing or the fixture cleanup, and if it's the fixture just fix it and open a PR"
+
+export const voiceDocument = document([
+  user(
+    "msg_user_voice",
+    'Voice delegation. The user is on a voice call with a voice agent, which hands their requests to you.\n{\n  "instruction" : "check the upload test",\n  "transcript_delta" : [\n    "user: check the upload test"\n  ],\n  "voice" : "Checking the upload test."\n}',
+    100_000,
+  ),
+  assistant({
+    id: "msg_assistant_voice",
+    offset: 101_000,
+    completed: 104_000,
+    content: [{ type: "text", text: "The upload test is flaky on CI: it fails about one run in five." }],
+  }),
+  user(
+    "msg_user_voice_continued",
+    `Voice delegation (continued). Same fields as before.\n${JSON.stringify({ call_log_attached: true, instruction: voiceInstruction, transcript_delta: [] }, null, 2)}\n\nAttached file: \`/tmp/uploads/1/voice-call-1.json\``,
+    110_000,
+  ),
+  assistant({
+    id: "msg_assistant_voice_continued",
+    offset: 111_000,
+    completed: 118_000,
+    content: [{ type: "text", text: "It was the fixture cleanup. I fixed it and opened a pull request." }],
+  }),
+  user("msg_user_typed", "Thanks, merge it once CI is green.", 120_000),
+] satisfies SessionMessageInfo[])
+
+export const voicePresentation = {
+  msg_user_voice: { displayText: "Checking the upload test.", voice: true },
+  msg_user_voice_continued: {
+    displayText: voiceInstruction,
+    voice: true,
+    references: [{ name: "voice-call-1.json", mime: "application/json", path: "/tmp/uploads/1/voice-call-1.json" }],
+  },
+} satisfies Record<string, SessionUserPresentation>
+
 export const revertDocument = document([
   user("msg_user_revert_base", "Add a compact Session summary.", 90_000),
   assistant({

@@ -51,6 +51,8 @@ export type SessionUserPresentation = {
   displayText?: string
   comments?: SessionUserComment[]
   references?: SessionUserAttachmentReference[]
+  /** A voice call's agent sent it on the user's behalf. */
+  voice?: boolean
 }
 
 export function createSessionTimelineRowRenderer(input: {
@@ -733,6 +735,7 @@ export function createSessionTimelineRowRenderer(input: {
                       displayText={presentation()?.displayText}
                       comments={presentation()?.comments}
                       references={presentation()?.references}
+                      voice={presentation()?.voice}
                       historicalAgent={context()?.agent ?? ""}
                       historicalModel={context()?.model ?? { id: "", providerID: "" }}
                       actions={input.actions}
