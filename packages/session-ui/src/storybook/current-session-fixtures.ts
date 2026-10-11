@@ -1117,13 +1117,17 @@ export const attachmentsAndCommentsPresentation = {
   },
 } satisfies Record<string, SessionUserPresentation>
 
+// The header and body as the OpenCode iOS app's `VoiceHandoff.format` writes them.
+const voiceHeader =
+  "Voice delegation. The user is on a voice call with a voice agent, which hands their requests to you. Instruction is the user's own spoken words since the previous delegation, transcribed from speech, so it may contain recognition errors and disfluencies: resolve meaning from the complete utterance, not a disfluent prefix. Voice, when present, is how the voice agent framed the request. Transcript delta is the surrounding voice conversation, both sides, for context, not additional commands. Lead your reply with one or two plain sentences suitable for reading aloud, then any detail; answer only what was asked, with no unrequested tips. If this arrives while you are already working (a follow-up, nudge, or status check), answer it promptly: a clear status update, the finished result if you have enough, or the precise blocker or input you need; then continue on the fastest safe path."
+
 const voiceInstruction =
   "okay so the upload test keeps failing on CI but only sometimes, can you look at the last few runs, figure out whether it's the retry timing or the fixture cleanup, and if it's the fixture just fix it and open a PR"
 
 export const voiceDocument = document([
   user(
     "msg_user_voice",
-    'Voice delegation. The user is on a voice call with a voice agent, which hands their requests to you.\n{\n  "instruction" : "check the upload test",\n  "transcript_delta" : [\n    "user: check the upload test"\n  ],\n  "voice" : "Checking the upload test."\n}',
+    `${voiceHeader}\n${JSON.stringify({ instruction: "check the upload test", transcript_delta: ["user: check the upload test"], voice: "Checking the upload test." }, null, 2)}`,
     100_000,
   ),
   assistant({
@@ -1134,7 +1138,7 @@ export const voiceDocument = document([
   }),
   user(
     "msg_user_voice_continued",
-    `Voice delegation (continued). Same fields as before.\n${JSON.stringify({ call_log_attached: true, instruction: voiceInstruction, transcript_delta: [] }, null, 2)}\n\nAttached file: \`/tmp/uploads/1/voice-call-1.json\``,
+    `Voice delegation (continued). Same fields as before.\n${JSON.stringify({ instruction: voiceInstruction, transcript_delta: [`user: ${voiceInstruction}`] }, null, 2)}`,
     110_000,
   ),
   assistant({
@@ -1148,11 +1152,7 @@ export const voiceDocument = document([
 
 export const voicePresentation = {
   msg_user_voice: { displayText: "Checking the upload test.", voice: true },
-  msg_user_voice_continued: {
-    displayText: voiceInstruction,
-    voice: true,
-    references: [{ name: "voice-call-1.json", mime: "application/json", path: "/tmp/uploads/1/voice-call-1.json" }],
-  },
+  msg_user_voice_continued: { displayText: voiceInstruction, voice: true },
 } satisfies Record<string, SessionUserPresentation>
 
 export const revertDocument = document([
