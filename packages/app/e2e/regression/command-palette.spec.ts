@@ -1,5 +1,6 @@
 import { expect, test } from "@playwright/test"
 import { captureConsoleWarnings, openCommandPalette, paletteSession } from "../utils/command-palette"
+import { holdRoute } from "../utils/app"
 
 test.use({ serviceWorkers: "block", permissions: ["clipboard-read", "clipboard-write"] })
 
@@ -57,6 +58,108 @@ test("reopens from its shortcut as soon as it closes", async ({ page }) => {
   await expect(dialog.getByRole("textbox")).toBeFocused()
 })
 
+for (const home of [false, true]) {
+  test(`filters known sessions before remote search resolves from ${home ? "home" : "session"}`, async ({ page }) => {
+    const release = Promise.withResolvers<void>()
+
+    const { dialog, input } = await openCommandPalette(page, home, undefined, () =>
+      page.route(/\/api\/(session\?|fs\/find\?)/, async (route) => {
+        await release.promise
+        await route.fallback()
+      }),
+    )
+
+    const known = dialog.getByRole("option", { name: /Palette fixture session/ })
+
+    await input.pressSequentially("palette fixture")
+    await expect(known).toHaveAttribute("aria-selected", "true")
+    await expect(dialog.getByRole("option")).toHaveCount(1)
+    await input.pressSequentially("zzz")
+    await expect(dialog.getByRole("option")).toHaveCount(0)
+    await expect(dialog.getByText("Loading", { exact: true })).toBeVisible()
+    await input.press("Backspace")
+    await input.press("Backspace")
+    await input.press("Backspace")
+    await expect(known).toHaveAttribute("aria-selected", "true")
+    await expect(dialog.getByRole("option")).toHaveCount(1)
+    await input.press("Enter")
+    await expect(dialog).toHaveCount(0)
+    await expect(page.getByRole("heading", { name: paletteSession.title, exact: true })).toBeVisible()
+    release.resolve()
+  })
+}
+
+test("merges late sessions in recency order without duplicating or stealing an explicit selection", async ({
+  page,
+}) => {
+  const newer = {
+    ...paletteSession,
+    id: "ses_palette_release",
+    title: "Palette release notes",
+    time: { ...paletteSession.time, updated: paletteSession.time.updated + 1 },
+  }
+
+  const { dialog, input } = await openCommandPalette(page, false, [newer, paletteSession])
+  await expect(dialog.getByRole("option", { name: /Palette release notes/ })).toBeVisible()
+  const release = Promise.withResolvers<void>()
+  await page.route("**/api/session?*", async (route) => {
+    await release.promise
+    await route.fulfill({
+      json: {
+        data: [
+          {
+            ...newer,
+            id: "ses_palette_remote",
+            title: "Palette remote archive",
+            time: { ...newer.time, updated: newer.time.updated + 1 },
+            location: { directory: newer.directory },
+          },
+          { ...paletteSession, location: { directory: paletteSession.directory } },
+        ],
+      },
+    })
+  })
+  await page.route("**/api/fs/find?*", (route) =>
+    route.fulfill({ json: { data: [{ path: "palette.md", type: "file" }] } }),
+  )
+  await input.fill("palette")
+  await expect(dialog.getByRole("option", { name: /Palette release notes/ })).toHaveAttribute("aria-selected", "true")
+  await input.press("ArrowDown")
+  const selected = dialog.getByRole("option", { name: /Palette fixture session/ })
+  await expect(selected).toHaveAttribute("aria-selected", "true")
+  await expect(dialog.getByRole("option", { name: "/ palette.md", exact: true })).toBeVisible()
+  release.resolve()
+  await expect(dialog.getByRole("option")).toHaveText([
+    /Palette remote archive/,
+    /Palette release notes/,
+    /Palette fixture session/,
+    /palette.md/,
+  ])
+  await expect(selected).toHaveAttribute("aria-selected", "true")
+  await page.unroute("**/api/session?*")
+  await page.unroute("**/api/fs/find?*")
+  const refining = await holdRoute(page, /\/api\/(session\?|fs\/find\?)/)
+  await input.fill("palette remote")
+  await expect(dialog.getByRole("option")).toHaveCount(1)
+  await expect(dialog.getByRole("option", { name: /Palette remote archive/ })).toHaveAttribute("aria-selected", "true")
+  refining.release()
+  await input.fill("no-such-session")
+  await expect(dialog.getByRole("option")).toHaveCount(0)
+  await expect(dialog.getByText("No results found", { exact: true })).toBeVisible()
+  await page.route("**/api/session?*", (route) => route.fulfill({ status: 503, json: { message: "offline" } }))
+  await input.fill("offline")
+  await expect(dialog.getByText("Request failed", { exact: true })).toBeVisible()
+  await input.clear()
+  await expect(dialog.getByText("Recent sessions", { exact: true })).toBeVisible()
+  await page.clock.install()
+  await input.press("Escape")
+  // Finish the dialog's closing timer without a wall-clock sleep before using the global shortcut again.
+  await page.clock.fastForward(1_000)
+  await expect(page.locator("[data-dialog-layer]")).toHaveCount(0)
+  await page.keyboard.press("ControlOrMeta+Shift+P")
+  await expect(dialog.getByRole("textbox")).toHaveValue("")
+  await expect(dialog.getByText("Recent sessions", { exact: true })).toBeVisible()
+})
 test("appends search results without resetting the selected command", async ({ page }) => {
   const { dialog, input } = await openCommandPalette(page)
   const files = Promise.withResolvers<void>()
@@ -138,7 +241,14 @@ test("keeps a keyboard-selected file when session results arrive later", async (
   const { dialog, input } = await openCommandPalette(page)
   const sessions = Promise.withResolvers<void>()
   await page.route("**/api/fs/find?*", (route) =>
-    route.fulfill({ json: { data: [{ path: "README.txt", type: "file" }, { path: "README.md", type: "file" }] } }),
+    route.fulfill({
+      json: {
+        data: [
+          { path: "README.txt", type: "file" },
+          { path: "README.md", type: "file" },
+        ],
+      },
+    }),
   )
   await page.route("**/api/session?*", async (route) => {
     await sessions.promise
