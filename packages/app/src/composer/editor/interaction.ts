@@ -303,7 +303,10 @@ export function createComposerEditor(input: {
 
   createEffect(() => {
     if (state.popover.type === "closed") return
-    const ids = suggestions().map((item) => item.id)
+    const current = list()
+
+    if (current.filter() !== state.popover.query || current.grouped.loading) return
+    const ids = current.flat().map((item) => item.id)
 
     if (state.popover.activeID ? ids.includes(state.popover.activeID) : ids.length === 0) return
     dispatch({ type: "popover.results", ids })

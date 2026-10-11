@@ -1,5 +1,5 @@
 import fuzzysort from "fuzzysort"
-import { entries, flatMap, groupBy, map, pipe } from "remeda"
+import { entries, flatMap, groupBy, isFunction, map, pipe } from "remeda"
 import { createEffect, createMemo, createResource, on } from "solid-js"
 import { createStore } from "solid-js/store"
 import { createList } from "solid-list"
@@ -27,7 +27,7 @@ export function useFilteredList<T>(props: FilteredListProps<T>) {
   const [grouped, { refetch }] = createResource(
     () => ({
       filter: store.filter,
-      items: typeof props.items === "function" ? props.items(store.filter) : props.items,
+      items: isFunction(props.items) ? props.items(store.filter) : props.items,
     }),
     async ({ filter, items }) => {
       const query = filter ?? ""
@@ -41,11 +41,12 @@ export function useFilteredList<T>(props: FilteredListProps<T>) {
           const skipFilter = props.skipFilter
           const filterable = skipFilter ? x.filter((item) => !skipFilter(item)) : x
           const skipped = skipFilter ? x.filter(skipFilter) : []
+          const order = new Map(filterable.map((item, index) => [item, index]))
+          const keys = props.filterKeys ?? [(item: T) => String(item)]
 
-          const filtered =
-            !props.filterKeys && Array.isArray(filterable) && filterable.every((e) => typeof e === "string")
-              ? (fuzzysort.go(needle, filterable).map((x) => x.target) as T[])
-              : fuzzysort.go(needle, filterable, { keys: props.filterKeys! }).map((x) => x.obj)
+          const filtered = Array.from(fuzzysort.go(needle, filterable, { keys }))
+            .sort((a, b) => b.score - a.score || (order.get(a.obj) ?? 0) - (order.get(b.obj) ?? 0))
+            .map((x) => x.obj)
 
           return skipped.length ? [...filtered, ...skipped] : filtered
         },

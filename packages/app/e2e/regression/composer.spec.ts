@@ -548,7 +548,17 @@ test("mentions open or running sessions by readable title, survives title change
   await expect(suggestions.locator(`[data-suggestion-id="session:${currentID}"]`)).toHaveCount(0)
   await expect(suggestions.locator(`[data-suggestion-id="session:${idleClosedID}"]`)).toHaveCount(0)
 
-  await editor.pressSequentially(openTabID.slice(0, 8))
+  await editor.pressSequentially(`${openTabID.slice(0, 8)}${runningID.slice(-1)}`)
+  await expect(suggestions.locator('[data-suggestion-id^="session:"] bdi')).toHaveText(["@Background migration"])
+  await expect(suggestions.locator(`[data-suggestion-id="session:${runningID}"][data-active]`)).toContainText(
+    "@Background migration",
+  )
+
+  await editor.press("Backspace")
+  await expect(suggestions.locator('[data-suggestion-id^="session:"] bdi')).toHaveText([
+    "@Auth refactor",
+    "@Background migration",
+  ])
   await expect(suggestions.locator(`[data-suggestion-id="session:${openTabID}"][data-active]`)).toContainText(
     "@Auth refactor",
   )
@@ -562,8 +572,8 @@ test("mentions open or running sessions by readable title, survives title change
 
   await tabLink.click({ button: "right" })
   await page.getByRole("menuitem", { name: "Rename", exact: true }).click()
-  await expect(tabTitle).toHaveAttribute("contenteditable", "true")
-  await page.keyboard.type("Auth v2")
+  await expect(tabTitle).toBeFocused()
+  await tabTitle.fill("Auth v2")
   await tabTitle.press("Enter")
   await expect(tabTitle).toHaveText("Auth v2")
   await expect(pill).toHaveText("@Auth v2")
@@ -597,8 +607,8 @@ test("mentions open or running sessions by readable title, survives title change
 
   await tabLink.click({ button: "right" })
   await page.getByRole("menuitem", { name: "Rename", exact: true }).click()
-  await expect(tabTitle).toHaveAttribute("contenteditable", "true")
-  await page.keyboard.type("Auth final")
+  await expect(tabTitle).toBeFocused()
+  await tabTitle.fill("Auth final")
   await tabTitle.press("Enter")
   await expect(transcriptLink).toHaveText("@Auth final")
 
