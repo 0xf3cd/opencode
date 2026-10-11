@@ -2,8 +2,6 @@ export default {
   "tab.title": "檢閱",
   "tab.count.one": "{{count}} 個檔案已變更",
   "tab.count.other": "{{count}} 個檔案已變更",
-  "mobile.title.one": "變更",
-  "mobile.title.other": "變更",
   "empty.git": "尚無未提交的變更",
   "empty.branch": "尚無分支變更",
   "git.title": "建立 Git 儲存庫",
@@ -12,4 +10,5 @@ export default {
   noChanges: "沒有變更",
   "settings.wrapLines.title": "換行",
   "settings.wrapLines.description": "在行動裝置差異中換行，而不是水平捲動",
+  "mobile.title": "變更",
 }

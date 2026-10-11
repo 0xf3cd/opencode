@@ -30,6 +30,7 @@ export default {
   "error.host-key":
     "Samleikin hjá vertinum kundi ikki staðfestast. Staðfest fingramerkið áðrenn tú dagførir tínar SSH kendu vertir.",
   "error.ssh-missing": "OpenSSH varð ikki funnið. Set ein OpenSSH klient upp og tryggja tær at ssh er tøkt á PATH.",
+  "error.unavailable": "SSH er ikki tøkt",
   "action.authenticate": "Staðfesta",
   "stage.connecting": "Samband yvir SSH...",
   "stage.authentication": "Staðfesting krevst",

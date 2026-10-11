@@ -34,4 +34,5 @@ export default {
   "form.namePlaceholder": "Localhost",
   "form.add": "เพิ่มเซิร์ฟเวอร์",
   "menu.delete": "ลบ",
+  "error.unavailable": "ไม่สามารถใช้ SSH ได้",
 }

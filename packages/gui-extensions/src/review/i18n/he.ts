@@ -1,11 +1,8 @@
 export default {
   "tab.title": "סקירה",
-  "tab.count.one": "{{count}} קובץ השתנה",
-  "tab.count.two": "{{count}} קבצים השתנו",
-  "tab.count.other": "{{count}} קבצים השתנו",
-  "mobile.title.one": "שינוי",
-  "mobile.title.two": "שינויים",
-  "mobile.title.other": "שינויים",
+  "mobile.title": "שינויים",
+  "tab.count.one": "⁨{{count}}⁩ קובץ השתנה",
+  "tab.count.other": "⁨{{count}}⁩ קבצים השתנו",
   "empty.git": "אין עדיין שינויים שלא בוצע להם commit",
   "empty.branch": "אין עדיין שינויים בענף",
   "git.title": "צור מאגר Git",
@@ -14,4 +11,5 @@ export default {
   noChanges: "אין שינויים",
   "settings.wrapLines.title": "גלישת שורות",
   "settings.wrapLines.description": "גלוש שורות ארוכות בהבדלים בנייד במקום לגלול אופקית",
+  "tab.count.two": "⁨{{count}}⁩ קבצים השתנו",
 }

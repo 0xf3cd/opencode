@@ -29,6 +29,7 @@ export default {
   "error.host-key":
     "Ekki var hægt að staðfesta auðkenni gestgjafans. Staðfestu fingrafar þess áður en þú uppfærir SSH þekkta gestgjafa þína.",
   "error.ssh-missing": "OpenSSH fannst ekki. Settu upp OpenSSH viðskiptavin og tryggðu að ssh sé tiltækt á PATH.",
+  "error.unavailable": "SSH er ekki tiltækt",
   "action.authenticate": "Staðfesta",
   "stage.connecting": "Tengist yfir SSH…",
   "stage.authentication": "Auðkenning krafist",

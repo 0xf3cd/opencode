@@ -32,6 +32,7 @@ export default {
     "Værtens identitet kunne ikke bekræftes. Bekræft dets fingeraftryk, før du opdaterer dine SSH kendte værter.",
   "error.ssh-missing":
     "OpenSSH blev ikke fundet. Installer en OpenSSH-klient, og sørg for, at ssh er tilgængelig på PATH.",
+  "error.unavailable": "SSH er ikke tilgængelig",
   "action.authenticate": "Godkend",
   "stage.connecting": "Opretter forbindelse via SSH...",
   "stage.authentication": "Godkendelse påkrævet",

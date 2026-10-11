@@ -21,7 +21,7 @@ export default {
   "dialog.checkFailed.title": "خطأ في التحديث",
   "dialog.upToDate.message": "لديك أحدث إصدار.",
   "dialog.upToDate.title": "لا توجد تحديثات",
-  "dialog.ready.message": "تم تنزيل التحديث {{version}}. هل تريد إعادة التشغيل الآن؟",
+  "dialog.ready.message": "تم تنزيل التحديث ⁨{{version}}⁩. هل تريد إعادة التشغيل الآن؟",
   "dialog.ready.title": "التحديث جاهز",
   "dialog.restart": "إعادة التشغيل",
   "dialog.later": "لاحقًا",

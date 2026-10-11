@@ -32,6 +32,7 @@ export default {
     "L’identité de l’hôte n’a pas pu être vérifiée. Vérifiez son empreinte digitale avant de mettre à jour vos hôtes connus SSH.",
   "error.ssh-missing":
     "OpenSSH est introuvable. Installez un client OpenSSH et assurez-vous que ssh est disponible sur PATH.",
+  "error.unavailable": "SSH est indisponible",
   "action.authenticate": "Authentifier",
   "stage.connecting": "Connexion via SSH…",
   "stage.authentication": "Authentification requise",

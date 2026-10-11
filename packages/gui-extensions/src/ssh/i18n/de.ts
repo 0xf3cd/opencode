@@ -33,6 +33,7 @@ export default {
     "Die Identität des Hosts konnte nicht überprüft werden. Überprüfen Sie den Fingerabdruck, bevor Sie Ihre bekannten SSH-Hosts aktualisieren.",
   "error.ssh-missing":
     "OpenSSH wurde nicht gefunden. Installieren Sie einen OpenSSH-Client und stellen Sie sicher, dass SSH auf PATH verfügbar ist.",
+  "error.unavailable": "SSH ist nicht verfügbar",
   "action.authenticate": "Authentifizieren",
   "stage.connecting": "Verbindung über SSH…",
   "stage.authentication": "Authentifizierung erforderlich",

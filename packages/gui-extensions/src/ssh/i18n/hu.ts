@@ -32,6 +32,7 @@ export default {
     "A házigazda személyazonosságát nem sikerült ellenőrizni. A SSH ismert gazdagépeinek frissítése előtt ellenőrizze az ujjlenyomatát.",
   "error.ssh-missing":
     "OpenSSH nem található. Telepítsen egy OpenSSH klienst, és győződjön meg arról, hogy az ssh elérhető a PATH-on.",
+  "error.unavailable": "Az SSH nem érhető el",
   "action.authenticate": "Hitelesítés",
   "stage.connecting": "Csatlakozás SSH-n keresztül…",
   "stage.authentication": "Hitelesítés szükséges",

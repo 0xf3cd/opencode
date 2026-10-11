@@ -25,7 +25,7 @@ export default {
   "stats.sessionCreated": "جلسه ایجاد شد",
   "stats.lastActivity": "آخرین فعالیت",
   "export.success.title": "جلسه صادر شد",
-  "export.success.description": "جلسه در {{filename}} ذخیره شد",
+  "export.success.description": "جلسه در ⁨{{filename}}⁩ ذخیره شد",
   "export.failed.title": "جلسه صادر نشد",
   "export.failed.description": "هنگام صادر کردن جلسه خطایی روی داد",
 }

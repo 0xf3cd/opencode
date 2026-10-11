@@ -32,6 +32,7 @@ export default {
     "A identidade do anfitrião não pôde ser verificada. Verifique sua impressão digital antes de atualizar seus hosts conhecidos SSH.",
   "error.ssh-missing":
     "OpenSSH não foi encontrado. Instale um cliente OpenSSH e certifique-se de que o ssh esteja disponível no PATH.",
+  "error.unavailable": "SSH não está disponível",
   "action.authenticate": "Autenticar",
   "stage.connecting": "Conectando através de SSH…",
   "stage.authentication": "Autenticação necessária",

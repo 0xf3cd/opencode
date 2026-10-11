@@ -2,8 +2,6 @@ export default {
   "tab.title": "İcmal",
   "tab.count.one": "{{count}} fayl dəyişdi",
   "tab.count.other": "{{count}} fayl dəyişdi",
-  "mobile.title.one": "Dəyişiklik",
-  "mobile.title.other": "Dəyişikliklər",
   "empty.git": "Hələ commit edilməmiş dəyişiklik yoxdur",
   "empty.branch": "Hələ branch dəyişikliyi yoxdur",
   "git.title": "Git repozitoriyası yaradın",
@@ -12,4 +10,5 @@ export default {
   noChanges: "Dəyişiklik yoxdur",
   "settings.wrapLines.title": "Sətirləri bük",
   "settings.wrapLines.description": "Mobil diff-lərdə üfüqi sürüşdürmək əvəzinə uzun sətirləri bük",
+  "mobile.title": "Dəyişikliklər",
 }

@@ -32,6 +32,7 @@ export default {
     "Identiteti i hostit nuk mund të verifikohej. Verifiko gjurmën e gishtit të tij përpara se të përditësosh hostet e njohur SSH.",
   "error.ssh-missing":
     "OpenSSH nuk u gjet. Instaloni një klient OpenSSH dhe sigurohuni që ssh të jetë i disponueshëm në PATH.",
+  "error.unavailable": "SSH-ja nuk është e disponueshme",
   "action.authenticate": "Autentifiko",
   "stage.connecting": "Po lidhet me SSH…",
   "stage.authentication": "Kërkohet vërtetimi",

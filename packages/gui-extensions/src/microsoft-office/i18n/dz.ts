@@ -1,0 +1,21 @@
+export default {
+  "pages.one": "{{count}}ཤོག་ངོས་",
+  "pages.other": "{{count}} ཤོག་ལེབ་ཚུ་",
+  "slides.one": "{{count}} འོག་ཐིག་",
+  "slides.other": "{{count}} ས་ལུད་ཚུ་",
+  "sheets.one": "{{count}} ཡིག་ཆ་",
+  "sheets.other": "{{count}}ཤོག་ལྷེ་",
+  page: "ཤོག་ལེབ་ {{number}}",
+  slide: "འོག་གི་ཤོག་ལེབ་ཚུ་ {{number}}",
+  hiddenSlide: "གསང་བའི་གློག་བརྙན་",
+  slideFailed: "འདི་ནང་ལུ་ བལྟ་མ་ཚུགསཔ་",
+  speakerNotes: "གསུང་བཤད་བཤད་མི་གི་ཐོ་ཚུ་",
+  "sheet.copyTooLarge": "གདམ་ཁ་འདི་ མགུ་འཐོམ་ནི་ལུ་སྦོམ་པས་",
+  "sheet.copyFailed": "ཚད་འཛིན་ཚུ་ བཏོན་མ་ཚུགསཔ་",
+  "sheet.openFailed": "འ་ནི་ཤོག་ལེབ་འདི་ཕྱེ་མི་ཚུགས་ཡོདཔ་ཨིན།",
+  "sheet.paintFailed": "ས་ཆ་འདི་སྟོན་མ་ཚུགསཔ་",
+  "sheet.tabs": "ཤོག་ལེབ་ཚུ་",
+  "problem.compound":
+    "འདི་ ཡིག་སྣོད་འདི་ Passwordགིས་སྲུང་སྐྱོབས་འབད་ཡོདཔ་ ཡང་ན་ Office གྱི་རྙིངམ་བཟོ་རྣམ་ནང་བཞག་ཡོདཔ་ཨིན།",
+  "problem.format": "འདི་ ཡིག་ཆ་འདི་ ཆ་གནས་ཅན་གྱི་ ཡིག་ཆ་ཅིག་མེན་ Office",
+}

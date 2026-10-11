@@ -37,4 +37,5 @@ export default {
   "form.namePlaceholder": "Localhost",
   "form.add": "បន្ថែមម៉ាស៊ីនមេ",
   "menu.delete": "លុប",
+  "error.unavailable": "មិនអាចប្រើ SSH បានទេ",
 }

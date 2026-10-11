@@ -32,6 +32,7 @@ export default {
     "Värdens identitet kunde inte verifieras. Verifiera dess fingeravtryck innan du uppdaterar dina kända SSH-värdar.",
   "error.ssh-missing":
     "OpenSSH hittades inte. Installera en OpenSSH-klient och se till att ssh är tillgängligt på PATH.",
+  "error.unavailable": "SSH är inte tillgängligt",
   "action.authenticate": "Autentisera",
   "stage.connecting": "Ansluter över SSH...",
   "stage.authentication": "Autentisering krävs",

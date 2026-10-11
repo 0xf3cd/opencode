@@ -2,8 +2,6 @@ export default {
   "tab.title": "Преглед",
   "tab.count.one": "{{count}} файл е променен",
   "tab.count.other": "{{count}} файла са променени",
-  "mobile.title.one": "промяна",
-  "mobile.title.other": "Промени",
   "empty.git": "Все още няма незавършени промени",
   "empty.branch": "Все още няма промени в клона",
   "git.title": "Създайте Git хранилище",
@@ -12,4 +10,5 @@ export default {
   noChanges: "Без промени",
   "settings.wrapLines.title": "Пренасяне на редовете",
   "settings.wrapLines.description": "Увийте дълги редове в мобилни разлики, вместо да превъртате хоризонтално",
+  "mobile.title": "Промени",
 }

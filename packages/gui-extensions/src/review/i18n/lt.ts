@@ -1,13 +1,8 @@
 export default {
   "tab.title": "Apžvalga",
+  "mobile.title": "Pakeitimai",
   "tab.count.one": "Pakeistas failas: {{count}}",
-  "tab.count.few": "Pakeisti {{count}} failai",
-  "tab.count.many": "Pakeista {{count}} failų",
   "tab.count.other": "Pakeista {{count}} failų",
-  "mobile.title.one": "Keisti",
-  "mobile.title.few": "Pakeitimai",
-  "mobile.title.many": "Pakeitimų",
-  "mobile.title.other": "Pakeitimai",
   "empty.git": "Dar nėra nepadarytų pakeitimų",
   "empty.branch": "Šakoje pakeitimų dar nėra",
   "git.title": "Sukurkite Git saugyklą",
@@ -16,4 +11,6 @@ export default {
   noChanges: "Jokių pakeitimų",
   "settings.wrapLines.title": "Laužyti eilutes",
   "settings.wrapLines.description": "Užuot slinkus horizontaliai, apvyniokite ilgas eilutes mobiliaisiais skirtumais",
+  "tab.count.few": "Pakeisti {{count}} failai",
+  "tab.count.many": "Pakeista {{count}} failų",
 }

@@ -21,7 +21,7 @@ export default {
   "dialog.checkFailed.title": "שגיאת עדכון",
   "dialog.upToDate.message": "אתה מעודכן.",
   "dialog.upToDate.title": "אין עדכונים",
-  "dialog.ready.message": "הורד עדכון {{version}}. להפעיל מחדש עכשיו?",
+  "dialog.ready.message": "הורד עדכון ⁨{{version}}⁩. להפעיל מחדש עכשיו?",
   "dialog.ready.title": "עדכון מוכן",
   "dialog.restart": "הפעל מחדש",
   "dialog.later": "מאוחר יותר",

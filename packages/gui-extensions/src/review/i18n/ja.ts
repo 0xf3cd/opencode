@@ -2,8 +2,6 @@ export default {
   "tab.title": "レビュー",
   "tab.count.one": "{{count}} ファイルが変更されました",
   "tab.count.other": "{{count}} 個のファイルが変更されました",
-  "mobile.title.one": "変更",
-  "mobile.title.other": "変更",
   "empty.git": "コミットされていない変更はまだありません",
   "empty.branch": "ブランチの変更はまだありません",
   "git.title": "Git リポジトリを作成",
@@ -12,4 +10,5 @@ export default {
   noChanges: "変更なし",
   "settings.wrapLines.title": "折り返しライン",
   "settings.wrapLines.description": "横にスクロールするのではなく、モバイル差分で長い行を折り返す",
+  "mobile.title": "変更",
 }

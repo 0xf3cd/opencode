@@ -32,6 +32,7 @@ export default {
     "No s'ha pogut verificar la identitat de l'amfitrió. Verifiqueu la seva empremta digital abans d'actualitzar els vostres amfitrions coneguts SSH.",
   "error.ssh-missing":
     "No s'ha trobat OpenSSH. Instal·leu un client OpenSSH i assegureu-vos que ssh estigui disponible a PATH.",
+  "error.unavailable": "SSH no està disponible",
   "action.authenticate": "Autenticar",
   "stage.connecting": "S'està connectant a través de SSH…",
   "stage.authentication": "Cal autenticació",

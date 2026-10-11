@@ -31,6 +31,7 @@ export default {
     "Vertens identitet kunne ikke bekreftes. Bekreft fingeravtrykket før du oppdaterer de kjente vertene dine for SSH.",
   "error.ssh-missing":
     "OpenSSH ble ikke funnet. Installer en OpenSSH-klient og sørg for at ssh er tilgjengelig på PATH.",
+  "error.unavailable": "SSH er utilgjengelig",
   "action.authenticate": "Autentiser",
   "stage.connecting": "Kobler over SSH...",
   "stage.authentication": "Autentisering kreves",

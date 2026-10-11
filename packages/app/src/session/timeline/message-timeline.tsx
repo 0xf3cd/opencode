@@ -489,6 +489,7 @@ function MessageTimelineView(
                         data-slot="session-title-child"
                         dir="auto"
                         value={title.draft}
+                        aria-label={language.t("common.rename")}
                         disabled={props.pending.rename()}
                         class="block text-[13px] font-[530] leading-4 tracking-[-0.04px] text-v2-text-text-base field-sizing-content rounded-[6px] px-1 py-1"
                         classList={{ "max-w-[45%] shrink-0": !!parentID() }}

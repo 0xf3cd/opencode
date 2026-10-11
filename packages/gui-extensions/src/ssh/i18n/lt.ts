@@ -30,6 +30,7 @@ export default {
   "error.host-key":
     "Nepavyko patvirtinti šeimininko tapatybės. Prieš atnaujindami žinomus SSH pagrindinius kompiuterius, patikrinkite jo pirštų atspaudus.",
   "error.ssh-missing": "OpenSSH nerastas. Įdiekite OpenSSH klientą ir įsitikinkite, kad ssh yra PATH.",
+  "error.unavailable": "SSH nepasiekiamas",
   "action.authenticate": "Autentifikuoti",
   "stage.connecting": "Jungiamasi per SSH…",
   "stage.authentication": "Reikalingas autentifikavimas",

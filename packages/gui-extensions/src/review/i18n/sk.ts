@@ -1,13 +1,9 @@
 export default {
   "tab.title": "Revízia",
   "tab.count.one": "{{count}} súbor zmenený",
+  "tab.count.other": "{{count}} súborov zmenených",
   "tab.count.few": "{{count}} súbory zmenené",
   "tab.count.many": "{{count}} súboru zmeneného",
-  "tab.count.other": "{{count}} súborov zmenených",
-  "mobile.title.one": "Zmena",
-  "mobile.title.few": "Zmeny",
-  "mobile.title.many": "Zmeny",
-  "mobile.title.other": "Zmeny",
   "empty.git": "Zatiaľ žiadne neuložené zmeny",
   "empty.branch": "Zatiaľ žiadne zmeny vetvy",
   "git.title": "Vytvoriť Git repozitár",
@@ -16,4 +12,5 @@ export default {
   noChanges: "Žiadne zmeny",
   "settings.wrapLines.title": "Zalamovať riadky",
   "settings.wrapLines.description": "Zabaľte dlhé riadky do mobilných rozdielov namiesto vodorovného posúvania",
+  "mobile.title": "Zmeny",
 }

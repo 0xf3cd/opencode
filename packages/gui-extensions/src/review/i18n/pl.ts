@@ -1,13 +1,9 @@
 export default {
   "tab.title": "Przegląd",
   "tab.count.one": "{{count}} plik zmieniony",
+  "tab.count.other": "{{count}} pliku zmienionego",
   "tab.count.few": "{{count}} pliki zmienione",
   "tab.count.many": "{{count}} plików zmienionych",
-  "tab.count.other": "{{count}} pliku zmienionego",
-  "mobile.title.one": "Zmiana",
-  "mobile.title.few": "Zmiany",
-  "mobile.title.many": "Zmian",
-  "mobile.title.other": "Zmiany",
   "empty.git": "Brak jeszcze niezatwierdzonych zmian",
   "empty.branch": "Brak jeszcze zmian w gałęzi",
   "git.title": "Utwórz repozytorium Git",
@@ -16,4 +12,5 @@ export default {
   noChanges: "Brak zmian",
   "settings.wrapLines.title": "Zawijaj wiersze",
   "settings.wrapLines.description": "Zawijaj długie linie w różnicach mobilnych, zamiast przewijać w poziomie",
+  "mobile.title": "Zmiany",
 }

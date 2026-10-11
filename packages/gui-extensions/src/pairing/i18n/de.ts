@@ -1,0 +1,37 @@
+export default {
+  "command.title": "Gerät koppeln",
+  title: "Kopplung",
+  connection: "Lokales Netzwerk",
+  "local.description": "Verbindungsdetails und einen QR-Code anzeigen, um ein Gerät im selben Netzwerk zu verbinden.",
+  "local.open": "Details anzeigen",
+  "screenActive.title": "Bildschirm aktiv halten",
+  "screenActive.description":
+    "Verhindern, dass sich der Bildschirm dieses Computers ausschaltet, während OpenCode ausgeführt wird.",
+  "screenActive.error":
+    "Die Einstellung für die Bildschirmaktivität konnte nicht aktualisiert werden. Erneut versuchen.",
+  description: "Ein weiteres Gerät mit dem OpenCode-Server dieses Computers verbinden.",
+  qr: "QR-Code zur Kopplung",
+  copyLink: "Link kopieren",
+  "copy.error": "Konnte die Paarungsdetails nicht kopieren. Versuch's nochmal.",
+  error: "Die Kopplungsdetails konnten nicht aktualisiert werden. Erneut versuchen.",
+  routes: "Verbinden Sie sich mit",
+  "route.local": "Lokales Netzwerk",
+  "route.local.description": "Geräte im selben Netzwerk",
+  "route.vpn": "VPN",
+  "route.vpn.description": "Geräte auf demselben VPN",
+  "route.custom": "Benutzerdefinierte Adresse",
+  "route.custom.description": "Geräte, die diese Adresse öffnen können",
+  "route.other": "Netzwerkadresse",
+  "route.other.description": "Geräte, die diese Adresse erreichen können",
+  expires: "Auslauf in {{time}}",
+  refresh: "Neuer Code",
+  "custom.title": "Eingeschnittene Adresse",
+  "custom.description":
+    "Eine Adresse, die diesen Computer von anderen Geräten, wie einem VPN, Tunnel oder Reverse Proxy URL erreicht.",
+  "custom.placeholder": "https://opencode.example.com",
+  "custom.invalid": "Geben Sie eine HTTP oder HTTPS Adresse ohne Weg ein, z. B. https://opencode.example.com.",
+  "unreachable.title": "Nur dieser Computer kann den Server erreichen.",
+  "unreachable.description":
+    "Um ein Gerät in Ihrem Netzwerk zu koppeln, laufen Sie diesen Befehl in einem Terminal aus und öffnen Sie dann das Pairing wieder.",
+  "unreachable.copy": "Kopiebe Befehl",
+}

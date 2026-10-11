@@ -21,7 +21,7 @@ export default {
   "dialog.checkFailed.title": "خطای آپدیت",
   "dialog.upToDate.message": "شما به روز هستید.",
   "dialog.upToDate.title": "بدون به روز رسانی",
-  "dialog.ready.message": "به روز رسانی {{version}} دانلود شد. اکنون دوباره راه اندازی شود؟",
+  "dialog.ready.message": "به روز رسانی ⁨{{version}}⁩ دانلود شد. اکنون دوباره راه اندازی شود؟",
   "dialog.ready.title": "به روز رسانی آماده است",
   "dialog.restart": "راه اندازی مجدد",
   "dialog.later": "بعدا",

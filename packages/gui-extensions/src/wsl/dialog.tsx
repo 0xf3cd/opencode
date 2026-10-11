@@ -96,6 +96,7 @@ export function DialogAddWslServer(props: DialogWslServerProps) {
                     class="settings-wsl-catalog-search"
                     appearance="large"
                     placeholder={language.t("onboarding.searchDistros")}
+                    aria-label={language.t("onboarding.searchDistros")}
                     value={controller.catalogSearch()}
                     disabled={model().busy}
                     onInput={(event) => controller.setCatalogSearch(event.currentTarget.value)}

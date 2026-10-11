@@ -1,0 +1,21 @@
+export default {
+  "pages.one": "⁨{{count}}⁩ ޞަފްޙާ",
+  "pages.other": "⁨{{count}}⁩ ޞަފްޙާ",
+  "slides.one": "⁨{{count}}⁩ ސްލައިޑް",
+  "slides.other": "⁨{{count}}⁩ ސްލައިޑް",
+  "sheets.one": "⁨{{count}}⁩ ޝީޓް",
+  "sheets.other": "⁨{{count}}⁩ ޝީޓް",
+  page: "ޞަފްޙާ ⁨{{number}}⁩",
+  slide: "ސްލައިޑް ⁨{{number}}⁩",
+  hiddenSlide: "ފޮރުވިފައިވާ ސްލައިޑް",
+  slideFailed: "މި ސްލައިޑް ދައްކާނުލެވުނު",
+  speakerNotes: "ޕްރެޒެންޓަރުގެ ނޯޓްސް",
+  "sheet.copyTooLarge": "ކޮޕީކުރުމަށް ހޮވާފައިވާ ބައި ވަރަށް ބޮޑު",
+  "sheet.copyFailed": "ސެލްތައް ކޮޕީކުރެވުނު ނުކުޅުނު",
+  "sheet.openFailed": "މި ޝީޓް ހުޅުވާނުލެވުނު",
+  "sheet.paintFailed": "ޝީޓްގެ މި ބައި ދައްކާނުލެވުނު",
+  "sheet.tabs": "ޝީޓްތައް",
+  "problem.compound":
+    "މި ފައިލަކީ ޕާސްވޯޑުން ހިމާޔަތްކޮށްފައިވާ ނުވަތަ ކުރީގެ އޮފީސް ފޯމެޓަކުން ސޭވްކޮށްފައިވާ ފައިލެއް.",
+  "problem.format": "މި ފައިލަކީ ސައްޙަ އޮފީސް ޑޮކިއުމަންޓެއް ނޫން.",
+}

@@ -31,6 +31,7 @@ export default {
     "Toplantı sahibinin kimliği doğrulanamadı. Bilinen SSH ana bilgisayarlarınızı güncellemeden önce parmak izini doğrulayın.",
   "error.ssh-missing":
     "OpenSSH bulunamadı. Bir OpenSSH istemcisi kurun ve ssh'nin PATH'de mevcut olduğundan emin olun.",
+  "error.unavailable": "SSH kullanılamıyor",
   "action.authenticate": "Kimlik Doğrula",
   "stage.connecting": "SSH üzerinden bağlanılıyor…",
   "stage.authentication": "Kimlik doğrulama gerekli",

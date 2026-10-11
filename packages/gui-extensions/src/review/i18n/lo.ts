@@ -2,8 +2,6 @@ export default {
   "tab.title": "ການທົບທວນຄືນ",
   "tab.count.one": "ປ່ຽນໄຟລ໌ {{count}} ແລ້ວ",
   "tab.count.other": "ປ່ຽນ {{count}} ໄຟລ໌",
-  "mobile.title.one": "ປ່ຽນແປງ",
-  "mobile.title.other": "ການປ່ຽນແປງ",
   "empty.git": "ບໍ່ມີການປ່ຽນແປງທີ່ບໍ່ໄດ້ຕົກລົງເທື່ອ",
   "empty.branch": "ບໍ່ມີການປ່ຽນແປງສາຂາເທື່ອ",
   "git.title": "ສ້າງບ່ອນເກັບຂໍ້ມູນ Git",
@@ -12,4 +10,5 @@ export default {
   noChanges: "ບໍ່ມີການປ່ຽນແປງ",
   "settings.wrapLines.title": "ຫໍ່ສາຍ",
   "settings.wrapLines.description": "ຫໍ່ເສັ້ນຍາວຢູ່ໃນຄວາມແຕກຕ່າງຂອງມືຖືແທນທີ່ຈະເລື່ອນຕາມແນວນອນ",
+  "mobile.title": "ການປ່ຽນແປງ",
 }

@@ -2,8 +2,6 @@ export default {
   "tab.title": "검토",
   "tab.count.one": "{{count}}개의 파일이 변경되었습니다.",
   "tab.count.other": "{{count}}개의 파일이 변경되었습니다.",
-  "mobile.title.one": "변경",
-  "mobile.title.other": "변경",
   "empty.git": "아직 커밋되지 않은 변경 사항이 없습니다",
   "empty.branch": "아직 브랜치 변경 사항이 없습니다",
   "git.title": "Git 저장소 생성",
@@ -12,4 +10,5 @@ export default {
   noChanges: "변경 없음",
   "settings.wrapLines.title": "줄 바꿈",
   "settings.wrapLines.description": "가로로 스크롤하는 대신 모바일 diff에 긴 줄을 넣습니다.",
+  "mobile.title": "변경",
 }

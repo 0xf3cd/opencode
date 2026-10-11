@@ -25,11 +25,6 @@ export const dict = {
   "ui.fileMedia.binary.title": "바이너리 파일",
   "ui.fileMedia.binary.description.path": "{{path}}은(는) 바이너리 파일이므로 표시할 수 없습니다.",
   "ui.fileMedia.binary.description.default": "바이너리 파일이므로 표시할 수 없습니다.",
-
-  "ui.lineComment.label.prefix": "",
-  "ui.lineComment.label.suffix": "에 댓글 달기",
-  "ui.lineComment.editorLabel.prefix": "",
-  "ui.lineComment.editorLabel.suffix": "에 댓글 작성 중",
   "ui.lineComment.placeholder": "댓글 추가",
   "ui.lineComment.contextPlaceholder": "이 변경 사항에 대한 컨텍스트 추가",
   "ui.lineComment.submit": "댓글 달기",
@@ -88,8 +83,6 @@ export const dict = {
   "ui.list.loading": "로딩 중",
   "ui.list.empty": "결과 없음",
   "ui.list.clearFilter": "필터 지우기",
-  "ui.list.emptyWithFilter.prefix": "다음에 대한 결과 없음: ",
-  "ui.list.emptyWithFilter.suffix": "",
 
   "ui.messageNav.newMessage": "새 메시지",
 
@@ -139,8 +132,6 @@ export const dict = {
 
   "ui.common.file.one": "파일",
   "ui.common.file.other": "파일",
-  "ui.common.question.one": "질문",
-  "ui.common.question.other": "질문",
 
   "ui.common.add": "추가",
   "ui.common.clear": "지우기",
@@ -174,8 +165,6 @@ export const dict = {
   "ui.patch.action.created": "생성됨",
   "ui.patch.action.moved": "이동됨",
   "ui.patch.action.patched": "패치됨",
-
-  "ui.question.subtitle.answered": "{{count}}개 답변됨",
   "ui.question.answer.none": "(답변 없음)",
   "ui.question.review.notAnswered": "(답변하지 않음)",
   "ui.question.multiHint": "해당하는 항목 모두 선택",
@@ -271,4 +260,17 @@ export const dict = {
   "ui.tool.browser": "브라우저",
   "ui.common.fileCount.one": "파일 {{count}}개",
   "ui.common.fileCount.other": "파일 {{count}}개",
+  "ui.fileMedia.audioLabel": "오디오: {{filename}}",
+  "ui.lineComment.label": "{{selection}}에 댓글 달기",
+  "ui.lineComment.editorLabel": "{{selection}}에 댓글 작성 중",
+  "ui.messagePart.compaction.queued": "세션 압축이 대기열에 추가됨",
+  "ui.list.emptyWithFilter": "{{query}}에 대한 결과 없음",
+  "ui.common.questionCount.one": "질문 {{count}}개",
+  "ui.common.questionCount.other": "질문 {{count}}개",
+  "ui.message.moveToQueue": "대기열로 이동",
+  "ui.message.pending": "보류 중",
+  "ui.message.deletePending": "삭제",
+  "ui.message.modelVariant": "{{model}} ({{variant}})",
+  "ui.question.subtitle.answeredCount.one": "{{count}}개 답변 완료",
+  "ui.question.subtitle.answeredCount.other": "{{count}}개 답변 완료",
 }

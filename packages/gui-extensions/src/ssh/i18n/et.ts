@@ -30,6 +30,7 @@ export default {
   "error.host-key":
     "Võõrustaja identiteeti ei õnnestunud kinnitada. Enne SSH teadaolevate hostide värskendamist kontrollige selle sõrmejälge.",
   "error.ssh-missing": "OpenSSH ei leitud. Installige OpenSSH klient ja veenduge, et ssh oleks PATH-il saadaval.",
+  "error.unavailable": "SSH pole saadaval",
   "action.authenticate": "Autentida",
   "stage.connecting": "Ühendamine üle SSH…",
   "stage.authentication": "Nõutav autentimine",

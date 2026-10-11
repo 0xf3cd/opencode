@@ -29,6 +29,7 @@ export default {
   "error.host-key":
     "Isännän henkilöllisyyttä ei voitu vahvistaa. Tarkista sen sormenjälki ennen kuin päivität tunnettuja SSH-isäntiäsi.",
   "error.ssh-missing": "OpenSSH ei löytynyt. Asenna OpenSSH-asiakas ja varmista, että ssh on saatavilla PATH:ssä.",
+  "error.unavailable": "SSH ei ole käytettävissä",
   "action.authenticate": "Todentaa",
   "stage.connecting": "Yhdistetään SSH:n kautta…",
   "stage.authentication": "Todennus vaaditaan",

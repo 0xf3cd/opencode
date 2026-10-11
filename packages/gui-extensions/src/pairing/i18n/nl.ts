@@ -1,0 +1,37 @@
+export default {
+  "command.title": "Apparaat koppelen",
+  title: "Koppelen",
+  connection: "Lokaal netwerk",
+  "local.description": "Bekijk verbindingsgegevens en een QR-code om een apparaat met hetzelfde netwerk te verbinden.",
+  "local.open": "Details tonen",
+  "screenActive.title": "Scherm actief houden",
+  "screenActive.description":
+    "Voorkom dat het beeldscherm van deze computer in de slaapstand gaat terwijl OpenCode actief is.",
+  "screenActive.error": "De instelling voor schermactiviteit kon niet worden bijgewerkt. Probeer het opnieuw.",
+  description: "Verbind een ander apparaat met de OpenCode-server van deze computer.",
+  qr: "QR-code voor koppelen",
+  copyLink: "Link kopiëren",
+  "copy.error": "De koppelingsgegevens konden niet worden gekopieerd. Probeer het opnieuw.",
+  error: "De koppelingsgegevens konden niet worden bijgewerkt. Probeer het opnieuw.",
+  routes: "Verbind met",
+  "route.local": "Lokaal netwerk",
+  "route.local.description": "Apparaten op hetzelfde netwerk",
+  "route.vpn": "VPN",
+  "route.vpn.description":
+    "De voorziening van de onderhavige toepassing is niet van toepassing op de onderhavige toepassing.",
+  "route.custom": "Custom adres",
+  "route.custom.description": "Apparaten die dit adres kunnen openen",
+  "route.other": "Netwerkadres",
+  "route.other.description": "Apparaten die dit adres kunnen bereiken",
+  expires: "Verval in {{time}}",
+  refresh: "Nieuwe code",
+  "custom.title": "Custom adres",
+  "custom.description":
+    "Een adres dat deze computer bereikt vanaf andere apparaten, zoals een VPN, tunnel of omgekeerde proxy URL.",
+  "custom.placeholder": "https://opencode.example.com",
+  "custom.invalid": "Voer een HTTP of HTTPS adres in zonder pad, zoals https://opencode.example.com.",
+  "unreachable.title": "Alleen deze computer kan de OpenCode server bereiken",
+  "unreachable.description":
+    "Om een apparaat in je netwerk te koppelen, voer dit commando uit in een terminal, en open dan opnieuw Pairing.",
+  "unreachable.copy": "Kopieer command",
+}

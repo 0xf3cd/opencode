@@ -31,6 +31,7 @@ export default {
     "Nevarēja pārbaudīt saimnieka identitāti. Pirms SSH zināmo saimniekdatoru atjaunināšanas pārbaudiet tā pirkstu nospiedumu.",
   "error.ssh-missing":
     "OpenSSH netika atrasts. Instalējiet OpenSSH klientu un pārliecinieties, ka ssh ir pieejams PATH.",
+  "error.unavailable": "SSH nav pieejams",
   "action.authenticate": "Autentificēt",
   "stage.connecting": "Savienojuma izveide, izmantojot SSH…",
   "stage.authentication": "Nepieciešama autentifikācija",

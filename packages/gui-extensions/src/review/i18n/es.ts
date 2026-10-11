@@ -1,11 +1,8 @@
 export default {
   "tab.title": "Revisión",
+  "mobile.title": "Cambios",
   "tab.count.one": "{{count}} archivo cambiado",
-  "tab.count.many": "{{count}} archivos cambiados",
   "tab.count.other": "{{count}} archivos cambiados",
-  "mobile.title.one": "Cambio",
-  "mobile.title.many": "Cambios",
-  "mobile.title.other": "Cambios",
   "empty.git": "Aún no hay cambios sin confirmar",
   "empty.branch": "Aún no hay cambios en la rama",
   "git.title": "Crear repositorio Git",
@@ -15,4 +12,5 @@ export default {
   "settings.wrapLines.title": "Ajustar líneas",
   "settings.wrapLines.description":
     "Ajustar las líneas largas en los diffs móviles en vez de desplazarse horizontalmente",
+  "tab.count.many": "{{count}} archivos cambiados",
 }

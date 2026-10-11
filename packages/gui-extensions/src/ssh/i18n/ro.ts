@@ -33,6 +33,7 @@ export default {
     "Identitatea gazdei nu a putut fi verificată. Verificați-i amprenta înainte de a actualiza gazdele cunoscute SSH.",
   "error.ssh-missing":
     "OpenSSH nu a fost găsit. Instalați un client OpenSSH și asigurați-vă că ssh este disponibil pe PATH.",
+  "error.unavailable": "SSH nu este disponibil",
   "action.authenticate": "Autentificare",
   "stage.connecting": "Se conectează prin SSH…",
   "stage.authentication": "Este necesară autentificare",

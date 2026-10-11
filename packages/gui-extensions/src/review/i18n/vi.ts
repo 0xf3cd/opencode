@@ -2,8 +2,6 @@ export default {
   "tab.title": "Xem lại",
   "tab.count.one": "{{count}} tệp đã thay đổi",
   "tab.count.other": "{{count}} tệp đã thay đổi",
-  "mobile.title.one": "Thay đổi",
-  "mobile.title.other": "Thay đổi",
   "empty.git": "Chưa có thay đổi nào chưa commit",
   "empty.branch": "Chưa có thay đổi nhánh",
   "git.title": "Tạo kho lưu trữ Git",
@@ -13,4 +11,5 @@ export default {
   "settings.wrapLines.title": "Đường quấn",
   "settings.wrapLines.description":
     "Quấn các dòng dài trong các khác biệt trên thiết bị di động thay vì cuộn theo chiều ngang",
+  "mobile.title": "Thay đổi",
 }

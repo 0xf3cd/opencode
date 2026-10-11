@@ -37,4 +37,5 @@ export default {
   "form.namePlaceholder": "Localhost",
   "form.add": "ဆာဗာထည့်ပါ။",
   "menu.delete": "ဖျက်ပါ",
+  "error.unavailable": "SSH ကို အသုံးမပြုနိုင်ပါ",
 }

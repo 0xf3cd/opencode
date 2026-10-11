@@ -1264,7 +1264,7 @@ function FileTool(props: ToolProps & { title: string; count: number; children?: 
       rail={false}
       trigger={{
         title: props.title,
-        subtitle: props.count > 0 ? `${props.count} ${i18n.plural("ui.common.file", props.count)}` : "",
+        subtitle: props.count > 0 ? i18n.plural("ui.common.fileCount", props.count) : "",
       }}
     >
       {props.children}
@@ -1541,7 +1541,7 @@ function toolErrorSubtitle(props: ToolProps, i18n: UiI18n) {
 
     if (count === 0) return undefined
 
-    return `${count} ${i18n.plural("ui.common.file", count)}`
+    return i18n.plural("ui.common.fileCount", count)
   }
 
   if (props.tool === "question") {
@@ -1549,7 +1549,7 @@ function toolErrorSubtitle(props: ToolProps, i18n: UiI18n) {
 
     if (count === 0) return undefined
 
-    return `${count} ${i18n.plural("ui.common.question", count)}`
+    return i18n.plural("ui.common.questionCount", count)
   }
 
   return undefined
@@ -2487,9 +2487,9 @@ ToolRegistry.register({
 
       if (count === 0) return ""
 
-      if (completed()) return i18n.t("ui.question.subtitle.answered", { count })
+      if (completed()) return i18n.plural("ui.question.subtitle.answeredCount", count)
 
-      return `${count} ${i18n.plural("ui.common.question", count)}`
+      return i18n.plural("ui.common.questionCount", count)
     })
 
     return (

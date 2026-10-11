@@ -2,8 +2,6 @@ export default {
   "tab.title": "Tinjauan",
   "tab.count.one": "{{count}} file diubah",
   "tab.count.other": "{{count}} file diubah",
-  "mobile.title.one": "Perubahan",
-  "mobile.title.other": "Perubahan",
   "empty.git": "Belum ada perubahan yang belum dikomit",
   "empty.branch": "Belum ada perubahan cabang",
   "git.title": "Buat repositori Git",
@@ -13,4 +11,5 @@ export default {
   "settings.wrapLines.title": "Bungkus garis",
   "settings.wrapLines.description":
     "Bungkus garis panjang dalam perbedaan seluler alih-alih menggulir secara horizontal",
+  "mobile.title": "Perubahan",
 }

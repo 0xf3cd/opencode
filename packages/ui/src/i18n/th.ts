@@ -43,11 +43,6 @@ export const dict = {
   "ui.fileMedia.binary.title": "ไฟล์ไบนารี",
   "ui.fileMedia.binary.description.path": "{{path}} เป็นไฟล์ไบนารีและไม่สามารถแสดงผลได้",
   "ui.fileMedia.binary.description.default": "ไฟล์ไบนารีไม่สามารถแสดงผลได้",
-
-  "ui.lineComment.label.prefix": "แสดงความคิดเห็นที่ ",
-  "ui.lineComment.label.suffix": "",
-  "ui.lineComment.editorLabel.prefix": "กำลังแสดงความคิดเห็นที่ ",
-  "ui.lineComment.editorLabel.suffix": "",
   "ui.lineComment.placeholder": "เพิ่มความคิดเห็น",
   "ui.lineComment.contextPlaceholder": "เพิ่มบริบทสำหรับการเปลี่ยนแปลงนี้",
   "ui.lineComment.submit": "แสดงความคิดเห็น",
@@ -112,8 +107,6 @@ export const dict = {
   "ui.list.loading": "กำลังโหลด",
   "ui.list.empty": "ไม่มีผลลัพธ์",
   "ui.list.clearFilter": "ล้างตัวกรอง",
-  "ui.list.emptyWithFilter.prefix": "ไม่มีผลลัพธ์สำหรับ",
-  "ui.list.emptyWithFilter.suffix": "",
 
   "ui.messageNav.newMessage": "ข้อความใหม่",
 
@@ -163,8 +156,6 @@ export const dict = {
 
   "ui.common.file.one": "ไฟล์",
   "ui.common.file.other": "ไฟล์",
-  "ui.common.question.one": "คำถาม",
-  "ui.common.question.other": "คำถาม",
 
   "ui.common.add": "เพิ่ม",
   "ui.common.clear": "ล้าง",
@@ -198,8 +189,6 @@ export const dict = {
   "ui.patch.action.created": "สร้าง",
   "ui.patch.action.moved": "ย้าย",
   "ui.patch.action.patched": "แพตช์",
-
-  "ui.question.subtitle.answered": "ตอบแล้ว {{count}} ข้อ",
   "ui.question.answer.none": "(ไม่มีคำตอบ)",
   "ui.question.review.notAnswered": "(ไม่ได้ตอบ)",
   "ui.question.multiHint": "เลือกคำตอบที่เกี่ยวข้องทั้งหมด",
@@ -270,4 +259,17 @@ export const dict = {
   "ui.tool.browser": "เบราว์เซอร์",
   "ui.common.fileCount.one": "{{count}} ไฟล์",
   "ui.common.fileCount.other": "{{count}} ไฟล์",
+  "ui.fileMedia.audioLabel": "เสียง: {{filename}}",
+  "ui.lineComment.label": "แสดงความคิดเห็นเกี่ยวกับ {{selection}}",
+  "ui.lineComment.editorLabel": "กำลังแสดงความคิดเห็นเกี่ยวกับ {{selection}}",
+  "ui.messagePart.compaction.queued": "การบีบอัดเซสชันเข้าคิวแล้ว",
+  "ui.list.emptyWithFilter": "ไม่มีผลลัพธ์สําหรับ {{query}}",
+  "ui.common.questionCount.one": "{{count}} คำถาม",
+  "ui.common.questionCount.other": "{{count}} คำถาม",
+  "ui.message.moveToQueue": "ย้ายไปคิว",
+  "ui.message.pending": "รอดำเนินการ",
+  "ui.message.deletePending": "ลบ",
+  "ui.message.modelVariant": "{{model}} ({{variant}})",
+  "ui.question.subtitle.answeredCount.one": "ตอบแล้ว {{count}} รายการ",
+  "ui.question.subtitle.answeredCount.other": "ตอบแล้ว {{count}} รายการ",
 }

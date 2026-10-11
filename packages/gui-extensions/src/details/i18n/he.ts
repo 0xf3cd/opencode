@@ -28,7 +28,7 @@ export default {
   configFileMissing: "לא נמצא קובץ תצורה",
   loadingChanges: "טוען שינויים…",
   noChanges: "אין שינויים",
-  basedOn: "מבוסס על {{branch}}",
+  basedOn: "מבוסס על ⁨{{branch}}⁩",
   "workspace.local": "מאגר מקומי",
   "workspace.existing": "עץ עבודה",
   "workspace.new": "סביבת עבודה חדשה",

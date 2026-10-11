@@ -32,6 +32,7 @@ export default {
     "Non è stato possibile verificare l'identità dell'host. Verifica la sua impronta digitale prima di aggiornare i tuoi host conosciuti SSH.",
   "error.ssh-missing":
     "OpenSSH non è stato trovato. Installa un client OpenSSH e assicurati che ssh sia disponibile su PATH.",
+  "error.unavailable": "SSH non è disponibile",
   "action.authenticate": "Autenticarsi",
   "stage.connecting": "Collegamento tramite SSH…",
   "stage.authentication": "Autenticazione richiesta",

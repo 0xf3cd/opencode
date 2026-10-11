@@ -32,6 +32,7 @@ export default {
     "De identiteit van de host kon niet worden geverifieerd. Controleer de vingerafdruk voordat u uw bekende SSH-hosts bijwerkt.",
   "error.ssh-missing":
     "OpenSSH is niet gevonden. Installeer een OpenSSH-client en zorg ervoor dat ssh beschikbaar is op PATH.",
+  "error.unavailable": "SSH is niet beschikbaar",
   "action.authenticate": "Authenticeren",
   "stage.connecting": "Verbinding maken via SSH…",
   "stage.authentication": "Authenticatie vereist",

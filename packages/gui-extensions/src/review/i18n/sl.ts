@@ -1,13 +1,9 @@
 export default {
   "tab.title": "Pregled",
   "tab.count.one": "{{count}} datoteka spremenjena",
+  "tab.count.other": "{{count}} datotek spremenjenih",
   "tab.count.two": "{{count}} datoteki spremenjeni",
   "tab.count.few": "{{count}} datoteke spremenjene",
-  "tab.count.other": "{{count}} datotek spremenjenih",
-  "mobile.title.one": "spremeniti",
-  "mobile.title.two": "Spremembi",
-  "mobile.title.few": "Spremembe",
-  "mobile.title.other": "Spremembe",
   "empty.git": "Ni še nepotrjenih sprememb",
   "empty.branch": "Ni še nobenih sprememb veje",
   "git.title": "Ustvarite repozitorij Git",
@@ -16,4 +12,5 @@ export default {
   noChanges: "Brez sprememb",
   "settings.wrapLines.title": "Prelomi vrstice",
   "settings.wrapLines.description": "Zavijte dolge vrstice v mobilne razlike namesto vodoravnega drsenja",
+  "mobile.title": "Spremembe",
 }
