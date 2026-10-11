@@ -185,7 +185,7 @@ Review endpoints in document order. For each endpoint, select one disposition an
 | [x] 077 | `GET` | `/api/experimental/session/{sessionID}/instructions/entries` | `experimental.session.instructions.entry.list` | Experimental-only | API-managed durable context entries retained outside the stable API. |
 | [x] 078 | `PUT` | `/api/experimental/session/{sessionID}/instructions/entries/{key}` | `experimental.session.instructions.entry.put` | Experimental-only | API-managed durable context entries retained outside the stable API. |
 | [x] 079 | `DELETE` | `/api/experimental/session/{sessionID}/instructions/entries/{key}` | `experimental.session.instructions.entry.remove` | Experimental-only | API-managed durable context entries retained outside the stable API. |
-| [x] 080 | `GET` | `/api/experimental/session/{sessionID}/log` | `session.log` | Experimental-only | Retained outside the stable API commitment. |
+| [x] 080 | `GET` | `/api/experimental/session/{sessionID}/log` | `experimental.session.log` | Experimental-only | Retained outside the stable API commitment. |
 | [x] 081 | `GET` | `/api/session/{sessionID}/message/{messageID}` | `session.message.get` | Change | Normalized specific-message operation ID. |
 | [x] 082 | `GET` | `/api/session/{sessionID}/message` | `session.message.list` | Change | Normalized session-scoped message-list operation ID. |
 
