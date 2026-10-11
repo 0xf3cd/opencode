@@ -483,7 +483,6 @@ for (const transition of ["reasoning-end", "idle", "retry"] as const) {
     await timeline.send(transition === "reasoning-end" ? partUpdated(reasoningPart(id, text)) : status(transition))
     await expect(trigger).toContainText("Thought")
     await expect(page.locator('[data-timeline-row="Thinking"]')).toHaveCount(0)
-    await expect(page.locator('[data-timeline-row="Retry"]')).toHaveCount(transition === "retry" ? 1 : 0)
     await trigger.click()
     await expect(trigger).toHaveAttribute("aria-expanded", "true")
     await expect(part.getByText("The timeline is ready for the next step.", { exact: true })).toBeVisible()
@@ -729,20 +728,20 @@ test.describe("Working", () => {
     })
   }
 
-  test("replaces Working with Retry and restores it on recovery", async ({ page }) => {
+  test("keeps Working without the retryable error through a scheduled retry", async ({ page }) => {
     const assistant = assistantMessage([], { completed: false })
     const timeline = await setupTimeline(page, { messages: [userMessage(), assistant] })
     const working = page.locator('[data-component="session-working"]')
     await expect(working).toBeVisible()
 
     await timeline.send(status("retry"))
-    const retry = page.locator('[data-timeline-row="Retry"]')
-    await expect(retry).toContainText("Rate limited")
-    await expect(working).toHaveCount(0)
+    await timeline.send(status("retry", 2))
+    await expect(page.getByText("Rate limited")).toHaveCount(0)
+    await expect(page.locator('[data-timeline-row="Error"]')).toHaveCount(0)
     await expect(page.locator('[data-timeline-row="Thinking"]')).toHaveCount(0)
+    await expect(working).toBeVisible()
 
     await timeline.send(stepStarted(assistant))
-    await expect(retry).toHaveCount(0)
     await expect(page.locator('[data-timeline-row="Thinking"]')).toHaveCount(0)
     await expect(working.locator('[data-component="text-shimmer"]')).toHaveAttribute("aria-label", "Working")
     await expect(working).toBeVisible()

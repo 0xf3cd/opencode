@@ -9,7 +9,6 @@ import {
 import {
   assistantMessage,
   completedAssistantInfo,
-  event,
   messageUpdated,
   partDelta,
   partUpdated,
@@ -148,35 +147,23 @@ test("replaces thinking with an assistant error without a blank turn", async ({ 
   )
 })
 
-test("updates retry attempts and long provider messages without remounting the retry row", async ({
-  page,
-}, testInfo) => {
+test("keeps Working stable across retry attempts without showing their errors", async ({ page }, testInfo) => {
   const timeline = await setupTimeline(page, {
     messages: [userMessage(), assistantMessage([], { completed: false })],
     cpuRate: 4,
   })
 
   await timeline.send(status("retry", 1), 120)
-  await expect(page.locator('[data-timeline-row="Retry"]')).toBeVisible()
+  await expect(page.locator('[data-component="session-working"]')).toBeVisible()
 
   const regions = defineVisualRegions({
-    retry: { selector: '[data-timeline-row="Retry"]' },
+    working: { selector: '[data-component="session-working"]' },
   })
 
   await startVisualProbe(page, regions)
-  await timeline.send(
-    event("session.status", {
-      sessionID: "ses_timeline_stability",
-      status: {
-        type: "retry",
-        attempt: 2,
-        message: "A very long provider retry message ".repeat(8),
-        next: Date.now() + 10_000,
-      },
-    }),
-    300,
-  )
+  await timeline.send(status("retry", 2), 300)
   await timeline.send(status("retry", 3), 300)
+  await expect(page.getByText("Rate limited")).toHaveCount(0)
   const trace = await stopVisualProbe<keyof typeof regions>(page)
   await reportVisualStability(
     testInfo,
@@ -185,9 +172,9 @@ test("updates retry attempts and long provider messages without remounting the r
     visualPlan(
       regions,
       [
-        { type: "required", regions: ["retry"] },
-        { type: "unique", regions: ["retry"] },
-        { type: "stable", regions: ["retry"] },
+        { type: "required", regions: ["working"] },
+        { type: "unique", regions: ["working"] },
+        { type: "stable", regions: ["working"] },
         { type: "opacity", regions: "all" },
         { type: "continuity", regions: "all" },
         { type: "motion", regions: "all", maxPositionReversals: 0 },

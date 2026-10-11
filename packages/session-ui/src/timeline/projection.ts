@@ -340,7 +340,6 @@ export namespace Timeline {
               ? visibleNotice(entry.message)
               : entry.type === "idle" ||
                 !!entry.message.error ||
-                !!entry.message.retry ||
                 entry.message.content.some((content) => isRenderable(content, showReasoning, detail)),
           )
         })
@@ -526,8 +525,10 @@ export namespace Timeline {
 
       if (lastStep?.type !== "assistant") return
 
-      if (isActive && lastAssistant?.retry) rows.push(new TimelineRow.Retry({ userMessageID: turnID }))
-      else if (lastAssistant?.error && !isInterrupted(lastAssistant.error))
+      // A scheduled retry can still succeed, so its error stays hidden until retries run out.
+      const retrying = isActive && !!lastAssistant?.retry
+
+      if (!retrying && lastAssistant?.error && !isInterrupted(lastAssistant.error))
         rows.push(
           new TimelineRow.Error({ userMessageID: turnID, text: unwrapErrorMessage(lastAssistant.error.message) }),
         )

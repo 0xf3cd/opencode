@@ -2,7 +2,7 @@ import { createMemo, Show } from "solid-js"
 import { Card } from "@opencode/ui/card"
 import { Icon } from "@opencode/ui/icon"
 
-export function SessionErrorMessage(props: { message: string }) {
+function SessionErrorMessage(props: { message: string }) {
   const content = createMemo(() => {
     const separator = props.message.indexOf(":")
 

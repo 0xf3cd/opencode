@@ -244,7 +244,7 @@ export const ProviderRetry = {
   render: () => (
     <CurrentSessionTimelineStory
       title="Provider retry"
-      description="A temporary provider limit keeps the turn active and explains the scheduled retry."
+      description="A scheduled provider retry keeps the turn working without showing its retryable error."
       document={retryDocument}
       width="520px"
     />

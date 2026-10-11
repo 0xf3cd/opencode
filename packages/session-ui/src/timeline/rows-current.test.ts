@@ -225,7 +225,7 @@ describe("current session timeline rows", () => {
     })
   })
 
-  test("renders retry state from the current assistant message", () => {
+  test("hides a retryable error while its retry is scheduled", () => {
     const source = [
       { id: "msg_user", type: "user", text: "retry", time: { created: 1 } },
       {
@@ -241,7 +241,7 @@ describe("current session timeline rows", () => {
 
     const result = Timeline.constructSessionMessageRows(source, true, { type: "busy" })
 
-    expect(result.rows.map((row) => row._tag)).toEqual(["UserMessage", "Retry"])
+    expect(result.rows.map((row) => row._tag)).toEqual(["UserMessage"])
   })
 
   test.each(["hidden", "compact", "full"] as const)("only shows active reasoning in %s mode", (reasoningMode) => {
@@ -510,7 +510,7 @@ describe("current session timeline rows", () => {
     ])
   })
 
-  test("keeps assistant errors and retries before later notices", () => {
+  test("keeps assistant errors before later notices and hides scheduled retries", () => {
     const result = Timeline.constructSessionMessageRows(
       [
         { id: "msg_user", type: "user", text: "continue", time: { created: 1 } },
@@ -560,7 +560,7 @@ describe("current session timeline rows", () => {
       { type: "retry", attempt: 2, next: 10, message: "rate limited" },
     )
 
-    expect(retry.rows.map((row) => row._tag)).toEqual(["UserMessage", "Retry", "Notice"])
+    expect(retry.rows.map((row) => row._tag)).toEqual(["UserMessage", "Notice"])
   })
 
   test("suppresses an earlier error when the turn recovers across a notice", () => {
@@ -598,7 +598,7 @@ describe("current session timeline rows", () => {
     ])
   })
 
-  test("does not render the retry error twice", () => {
+  test("hides a failed attempt's error until retries run out", () => {
     const source = [
       { id: "msg_user", type: "user", text: "retry", time: { created: 1 } },
       {
@@ -624,7 +624,16 @@ describe("current session timeline rows", () => {
       message: "The provider response ended unexpectedly.",
     })
 
-    expect(result.rows.map((row) => row._tag)).toEqual(["UserMessage", "Retry"])
+    expect(result.rows.map((row) => row._tag)).toEqual(["UserMessage"])
+
+    // The final failed attempt clears the retry, so the error surfaces once retries run out.
+    const exhausted = source.map((message) =>
+      message.type === "assistant" ? { ...message, retry: undefined, time: { created: 2, completed: 3 } } : message,
+    )
+
+    expect(Timeline.constructSessionMessageRows(exhausted, true, { type: "idle" }).rows.map((row) => row._tag)).toEqual(
+      ["UserMessage", "Error"],
+    )
   })
 
   test("removes a failed assistant error when the turn continues streaming", () => {

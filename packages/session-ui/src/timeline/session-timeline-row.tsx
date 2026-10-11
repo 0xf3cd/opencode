@@ -26,7 +26,6 @@ import {
   SessionCompactionQueued,
 } from "../message/message-content"
 import type { ContextGroupPart } from "../tools/tool-renderer"
-import { SessionRetry } from "../components/session-retry"
 import { SessionError } from "../components/session-error"
 import { timelineCategory, type TimelineDetail } from "./detail"
 import { currentToolFailed } from "../message/current-tool-state"
@@ -884,34 +883,6 @@ export function createSessionTimelineRowRenderer(input: {
                 )}
               </Show>
             </div>
-          </div>
-        </Frame>
-      )
-    }
-
-    if (Predicate.isTagged(row(), "Retry")) {
-      const current = () => {
-        const value = row()
-
-        if (!Predicate.isTagged(value, "Retry")) throw new Error("Expected a retry timeline row")
-
-        return value
-      }
-
-      const status = createMemo(() => {
-        const retry = (
-          input.projection.assistantMessagesByParent().get(current().userMessageID) ?? emptyAssistantMessages
-        ).at(-1)?.retry
-
-        if (!retry) return input.status()
-
-        return { type: "retry" as const, attempt: retry.attempt, message: retry.error.message, next: retry.at }
-      })
-
-      return (
-        <Frame row={current()}>
-          <div data-slot="session-turn-message-container" class={`w-full ${padding()}`}>
-            <SessionRetry status={status()} show={input.projection.activeMessageID() === current().userMessageID} />
           </div>
         </Frame>
       )

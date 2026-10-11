@@ -343,12 +343,12 @@ function MessageTimelineView(
     if (!active) return false
     const assistant = projection.assistantMessagesByParent().get(active)?.at(-1)
 
-    if (assistant?.retry) return false
-
+    // A scheduled retry keeps the turn working; its error only surfaces once retries run out.
     // Pending steers still project under the previous response until delivery.
     // Its error must not hide feedback for a newly submitted prompt.
     if (
       assistant?.error &&
+      !assistant.retry &&
       !data.session.pending.list(id).some((item) => item.type === "user" && item.delivery === "steer")
     )
       return false

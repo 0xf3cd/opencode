@@ -62,10 +62,6 @@ export namespace TimelineRow {
     text: string
   }> {}
 
-  export class Retry extends Data.TaggedClass("Retry")<{
-    userMessageID: string
-  }> {}
-
   /** A compaction the server has admitted but not started. */
   export class CompactionQueued extends Data.TaggedClass("CompactionQueued")<{
     userMessageID: string
@@ -81,7 +77,6 @@ export namespace TimelineRow {
     | AssistantPart
     | Thinking
     | Error
-    | Retry
     | CompactionQueued
 
   export const key: (row: TimelineRow) => string = Match.typeTags<TimelineRow>()({
@@ -96,7 +91,6 @@ export namespace TimelineRow {
     AssistantPart: (row) => `assistant-part:${row.group.type}:${row.group.key}`,
     Thinking: (row) => `thinking:${row.userMessageID}`,
     Error: (row) => `error:${row.userMessageID}`,
-    Retry: (row) => `retry:${row.userMessageID}`,
     CompactionQueued: (row) => `compaction-queued:${row.inboxID}`,
   })
 
@@ -118,7 +112,6 @@ export type TimelineRowMap = {
     spacing?: "tool" | "content"
   }
   Thinking: { userMessageID: string; ref: PartRef }
-  Retry: { userMessageID: string }
   Error: { userMessageID: string; text: string }
   CompactionQueued: { userMessageID: string; inboxID: string }
 }
