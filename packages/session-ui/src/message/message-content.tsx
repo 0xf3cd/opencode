@@ -12,11 +12,13 @@ import {
 import { createStore } from "solid-js/store"
 import { createMediaQuery } from "@solid-primitives/media"
 import { useData } from "../context"
+import { useMarkdown } from "../context/markdown"
 import { useDialog } from "@opencode/ui/context/dialog"
 import { useI18n } from "@opencode/ui/context/i18n"
 import { Markdown } from "../components/markdown"
 import { ImagePreview } from "@opencode/ui/image-preview"
 import { getFilename } from "@opencode/util/path"
+import { isFallbackTitle } from "@opencode/util/session-title-fallback"
 import { AttachmentCard } from "./attachment-card"
 import { CommentCard } from "./comment-card"
 import { TimelineSeparator } from "../components/timeline-separator"
@@ -38,7 +40,12 @@ import type {
   SessionMessageCompaction,
   SessionMessageUser,
 } from "@opencode/client/promise"
-import type { SessionUserActions, SessionUserAttachmentReference, SessionUserComment } from "../actions"
+import type {
+  SessionUserActions,
+  SessionUserAttachmentReference,
+  SessionUserComment,
+  SessionUserSessionReference,
+} from "../actions"
 import { attached, typeLabel } from "../components/message-file"
 
 export async function writeClipboard(text: string): Promise<boolean> {
@@ -266,6 +273,7 @@ export function CurrentUserMessageDisplay(props: {
   actions?: SessionUserActions
   comments?: SessionUserComment[]
   references?: SessionUserAttachmentReference[]
+  sessions?: SessionUserSessionReference[]
   voice?: boolean
 }) {
   const data = useData()
@@ -279,6 +287,7 @@ export function CurrentUserMessageDisplay(props: {
   const waiting = createMemo(() => status() === "steering" || status() === "stranded")
   const attachments = createMemo(() => (props.message.files ?? []).filter(attached))
   const references = createMemo(() => props.references ?? [])
+  const sessions = createMemo(() => props.sessions ?? [])
   const inlineFiles = createMemo(() => (props.message.files ?? []).filter((file) => !!file.mention))
   const agents = createMemo(() => props.message.agents ?? [])
   const comments = createMemo(() => props.comments ?? [])
@@ -402,7 +411,12 @@ export function CurrentUserMessageDisplay(props: {
             </div>
           </Show>
           <div data-slot="user-message-text" dir="auto" data-comments={comments().length > 0 ? "true" : undefined}>
-            <CurrentHighlightedText text={props.text} files={inlineFiles()} agents={agents()} />
+            <CurrentHighlightedText
+              text={props.text}
+              files={inlineFiles()}
+              agents={agents()}
+              sessions={sessions()}
+            />
             <Show when={comments().length > 0}>
               <UserMessageComments comments={comments()} bounded />
             </Show>
@@ -522,8 +536,33 @@ function CurrentHighlightedText(props: {
   text: string
   files: PromptFileAttachment[]
   agents: PromptAgentAttachment[]
+  sessions?: SessionUserSessionReference[]
 }) {
+  const data = useData()
+  const markdown = useMarkdown()
+
   const segments = createMemo(() => {
+    let searchFrom = 0
+
+    const sessionMentions = (props.sessions ?? []).flatMap((session) => {
+      const mention = session.mention
+
+      if (!mention.text) return []
+
+      const exact =
+        mention.start >= searchFrom &&
+        mention.end >= mention.start &&
+        props.text.slice(mention.start, mention.end) === mention.text
+
+      const start = exact ? mention.start : props.text.indexOf(mention.text, searchFrom)
+
+      if (start < 0) return []
+      const end = start + mention.text.length
+      searchFrom = end
+
+      return [{ start, end, type: "session" as const, sessionID: session.id }]
+    })
+
     const references = [
       ...props.files.flatMap((file) =>
         file.mention ? [{ start: file.mention.start, end: file.mention.end, type: "file" as const }] : [],
@@ -531,6 +570,7 @@ function CurrentHighlightedText(props: {
       ...props.agents.flatMap((agent) =>
         agent.mention ? [{ start: agent.mention.start, end: agent.mention.end, type: "agent" as const }] : [],
       ),
+      ...sessionMentions,
     ].sort((a, b) => a.start - b.start)
 
     const result: HighlightSegment[] = []
@@ -539,7 +579,11 @@ function CurrentHighlightedText(props: {
       if (reference.start < last) return
 
       if (reference.start > last) result.push({ text: props.text.slice(last, reference.start) })
-      result.push({ text: props.text.slice(reference.start, reference.end), type: reference.type })
+      result.push({
+        text: props.text.slice(reference.start, reference.end),
+        type: reference.type,
+        sessionID: "sessionID" in reference ? reference.sessionID : undefined,
+      })
       last = reference.end
     })
 
@@ -550,19 +594,45 @@ function CurrentHighlightedText(props: {
 
   return (
     <For each={segments()}>
-      {(segment) => (
-        <span data-highlight={segment.type}>
-          <Show when={segment.type && segment.text.startsWith("@")} fallback={segment.text}>
+      {(segment) => {
+        const text = createMemo(() => {
+          if (segment.type !== "session" || !segment.sessionID || !segment.text.startsWith("@")) return segment.text
+          const live = data.store.session.find((item) => item.id === segment.sessionID)?.title
+
+          return live && !isFallbackTitle(live) ? `@${live}` : segment.text
+        })
+
+        const content = (
+          <Show when={segment.type && text().startsWith("@")} fallback={text()}>
             <span data-slot="user-message-mention-prefix">@</span>
-            {segment.text.slice(1)}
+            {text().slice(1)}
           </Show>
-        </span>
-      )}
+        )
+
+        if (segment.type === "session" && segment.sessionID) {
+          return (
+            <button
+              type="button"
+              class="markdown-session-link"
+              data-highlight="session"
+              data-session-id={segment.sessionID}
+              onClick={(event) => {
+                event.stopPropagation()
+                ;(markdown?.openSession ?? data.navigateToSession)?.(segment.sessionID!)
+              }}
+            >
+              {content}
+            </button>
+          )
+        }
+
+        return <span data-highlight={segment.type}>{content}</span>
+      }}
     </For>
   )
 }
 
-type HighlightSegment = { text: string; type?: "file" | "agent" }
+type HighlightSegment = { text: string; type?: "file" | "agent" | "session"; sessionID?: string }
 
 /** A compaction the server admitted but has not started, drawn as the divider a started one opens with. */
 export function SessionCompactionQueued() {

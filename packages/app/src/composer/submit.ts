@@ -254,6 +254,11 @@ function handoffMessage(value: ComposerSubmission): SessionMessageUser {
       attachments: value.prompt.flatMap((part) =>
         part.type === "path" ? [{ name: part.filename, mime: part.mime, path: part.path }] : [],
       ),
+      sessions: value.prompt.flatMap((part) =>
+        part.type === "session"
+          ? [{ id: part.id, mention: { start: part.start, end: part.end, text: part.content } }]
+          : [],
+      ),
       comments: value.context.flatMap((item): PromptComment[] => {
         const comment = item.comment?.trim()
 
@@ -540,6 +545,7 @@ async function sendPrompt(
       displayText: request.displayText,
       comments: request.comments,
       attachments: request.attachments,
+      sessions: request.sessions,
       agent: value.selection.agent,
       model: selectionModel(value.selection),
       genui: value.genui,

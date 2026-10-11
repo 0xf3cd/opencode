@@ -175,11 +175,21 @@ describe("extractPromptFromMessage", () => {
     ])
   })
 
-  test("restores skill mentions as structured Composer parts", () => {
+  test("restores skill and session mentions as structured Composer parts", () => {
     const message = {
       id: "msg_1",
       type: "user",
-      text: "Use @review",
+      text: 'Use @review with @Auth refactor\nReferenced session "@Auth refactor": `ses_0123456789abcdefghijklmnop`',
+      metadata: {
+        displayText: "Use @review with @Auth refactor",
+        comments: [],
+        sessions: [
+          {
+            id: "ses_0123456789abcdefghijklmnop",
+            mention: { text: "@Auth refactor", start: 17, end: 31 },
+          },
+        ],
+      },
       skills: [{ id: "review", name: "Review", mention: { text: "@review", start: 4, end: 11 } }],
       time: { created: 1 },
     } satisfies SessionMessageUser
@@ -191,6 +201,12 @@ describe("extractPromptFromMessage", () => {
         id: "review",
         name: "Review",
         content: "@review",
+      },
+      { type: "text", content: " with " },
+      {
+        type: "session",
+        id: "ses_0123456789abcdefghijklmnop",
+        content: "@Auth refactor",
       },
     ])
   })

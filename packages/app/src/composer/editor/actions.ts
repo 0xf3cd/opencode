@@ -1,8 +1,10 @@
+import { Predicate } from "effect"
 import { batch, untrack, type Accessor } from "solid-js"
 import type { SetStoreFunction, Store } from "solid-js/store"
 import type {
   ComposerAgentPart,
   ComposerFilePart,
+  ComposerSessionPart,
   ComposerSkillPart,
   ComposerPersistedState,
   ComposerPrompt,
@@ -17,12 +19,12 @@ export type ComposerStateStore = [
 export type ComposerStateStoreInput = ComposerStateStore | Accessor<ComposerStateStore>
 
 export function createComposerEditorActions(input: ComposerStateStoreInput) {
-  const tuple = () => (typeof input === "function" ? input() : input)
+  const tuple = () => (Predicate.isFunction(input) ? input() : input)
 
   const store = () => {
     const value = tuple()[0]
 
-    return typeof value === "function" ? value() : value
+    return Predicate.isFunction(value) ? value() : value
   }
 
   const setStore = () => tuple()[1]
@@ -36,8 +38,11 @@ export function createComposerEditorActions(input: ComposerStateStoreInput) {
       return store()
     },
     setPrompt(prompt: ComposerPrompt, cursor?: number) {
+      const next: Partial<ComposerPersistedState> = { prompt, retry: undefined }
+
+      if (cursor !== undefined) next.cursor = cursor
       // Persisted setters encode on every call, even inside a reactive batch.
-      batch(() => setStore()({ prompt, ...(cursor !== undefined ? { cursor } : {}), retry: undefined }))
+      batch(() => setStore()(next))
     },
     setCursor(cursor: number) {
       if (untrack(() => store().cursor) === cursor) return
@@ -74,7 +79,7 @@ export function createComposerEditorActions(input: ComposerStateStoreInput) {
       clearRetry()
     },
     addMention(
-      mention: ComposerFilePart | ComposerAgentPart | ComposerSkillPart,
+      mention: ComposerFilePart | ComposerAgentPart | ComposerSkillPart | ComposerSessionPart,
       range?: { start: number; end: number },
     ) {
       const text = store()
@@ -127,7 +132,7 @@ function insertMention(
   prompt: ComposerPrompt,
   start: number,
   end: number,
-  mention: ComposerFilePart | ComposerAgentPart | ComposerSkillPart,
+  mention: ComposerFilePart | ComposerAgentPart | ComposerSkillPart | ComposerSessionPart,
 ): ComposerPrompt {
   if (start === 0 && end === 0) {
     return withOffsets([mention, { type: "text", content: " ", start: 0, end: 0 }, ...prompt])

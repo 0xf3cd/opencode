@@ -1,4 +1,5 @@
 import type { SessionMessageUser } from "@opencode/client/promise"
+import { Session } from "@opencode/schema/session"
 import { Option, Schema } from "effect"
 import { Persistence } from "@/runtime/persistence/schema"
 import { uuid } from "@/runtime/persistence/uuid"
@@ -27,6 +28,18 @@ export const PromptAttachmentReference = Persistence.struct({
 
 export type PromptAttachmentReference = typeof PromptAttachmentReference.Type
 
+/** A session referenced from a prompt, backed by its immutable session ID. */
+export const PromptSessionReference = Persistence.struct({
+  id: Session.ID,
+  mention: Schema.Struct({
+    start: Schema.Finite,
+    end: Schema.Finite,
+    text: Schema.String,
+  }),
+})
+
+export type PromptSessionReference = typeof PromptSessionReference.Type
+
 // Presentation metadata needs a comments list, which prompts from other clients lack; a malformed comment or
 // attachment is skipped rather than discarding the rest.
 const decodePromptPresentation = Schema.decodeUnknownOption(
@@ -34,6 +47,7 @@ const decodePromptPresentation = Schema.decodeUnknownOption(
     displayText: Schema.String,
     comments: Schema.Array(Schema.Unknown),
     attachments: Persistence.array(PromptAttachmentReference),
+    sessions: Persistence.array(PromptSessionReference),
   }),
 )
 
@@ -44,6 +58,7 @@ export function readPromptPresentation(metadata: SessionMessageUser["metadata"])
     Option.map(decodePromptPresentation(metadata), (presentation) => ({
       displayText: presentation.displayText,
       attachments: presentation.attachments,
+      sessions: presentation.sessions,
       comments: presentation.comments.flatMap((item): PromptComment[] => Option.toArray(decodePromptComment(item))),
     })),
   )
@@ -51,6 +66,10 @@ export function readPromptPresentation(metadata: SessionMessageUser["metadata"])
 
 export function formatAttachmentReference(input: PromptAttachmentReference) {
   return `Attached file: \`${input.path}\``
+}
+
+export function formatSessionReference(input: PromptSessionReference) {
+  return `Referenced session ${JSON.stringify(input.mention.text)}: \`${input.id}\``
 }
 
 /** A note reads with its live subject while it stays in the app process that attached it. */

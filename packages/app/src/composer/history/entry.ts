@@ -10,12 +10,16 @@ export const MAX_HISTORY = 100
 export type PromptHistoryStoredEntry = PromptHistoryEntry
 
 function cloneSelection(selection: SelectedLineRange): SelectedLineRange {
-  return {
+  const next: SelectedLineRange = {
     start: selection.start,
     end: selection.end,
-    ...(selection.side ? { side: selection.side } : {}),
-    ...(selection.endSide ? { endSide: selection.endSide } : {}),
   }
+
+  if (selection.side) next.side = selection.side
+
+  if (selection.endSide) next.endSide = selection.endSide
+
+  return next
 }
 
 export function clonePromptHistoryComments(comments: PromptHistoryComment[]) {
@@ -111,6 +115,10 @@ function isPromptEqual(entryA: PromptHistoryStoredEntry, entryB: PromptHistorySt
 
     if (partA.type === "skill") {
       if (partB.type !== "skill" || partA.id !== partB.id || partA.name !== partB.name) return false
+    }
+
+    if (partA.type === "session") {
+      if (partB.type !== "session" || partA.id !== partB.id || partA.content !== partB.content) return false
     }
 
     if (isAttachment(partA) && partA.id !== (isAttachment(partB) ? partB.id : "")) return false

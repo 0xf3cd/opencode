@@ -27,7 +27,9 @@ export type {
   NoteContextItem,
   PathAttachmentPart,
   Prompt,
+  PromptHistoryComment,
   PromptModel,
+  SessionPart,
   SkillPart,
   TextPart,
 } from "./schema"

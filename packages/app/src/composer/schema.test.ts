@@ -1,6 +1,7 @@
 import { describe, expect, test } from "bun:test"
 import { Schema } from "effect"
 import { Persistence } from "@/runtime/persistence/schema"
+import { Session } from "@opencode/schema/session"
 import { SessionMessage } from "@opencode/schema/session-message"
 import {
   CommentStore,
@@ -126,13 +127,21 @@ describe("composer persistence schemas", () => {
         text,
         { type: "agent", content: "@build", start: 5, end: 11, name: "build" },
         { type: "skill", content: "@effect", start: 11, end: 18, id: "effect", name: "Effect" },
+        {
+          type: "session",
+          content: "@Auth refactor",
+          start: 18,
+          end: 32,
+          id: "ses_0123456789abcdefghijklmnop",
+        },
+        { type: "session", content: "@broken-session", start: 32, end: 47, id: "not_a_session" },
         { type: "agent", content: "@broken", start: 18, end: 25, name: 42 },
         {
           type: "file",
           path: "src/app.ts",
           content: "@src/app.ts",
-          start: 18,
-          end: 29,
+          start: 32,
+          end: 43,
           selection: { startLine: "broken" },
           mime: 42,
           filename: "app.ts",
@@ -143,13 +152,20 @@ describe("composer persistence schemas", () => {
       retry: { id: "msg_retry", agent: "build", providerID: "provider", modelID: "model", variant: false },
     })
 
-    expect(value.prompt.map((part) => part.type)).toEqual(["text", "agent", "skill", "file"])
+    expect(value.prompt.map((part) => part.type)).toEqual(["text", "agent", "skill", "session", "file"])
     expect(value.prompt[3]).toEqual({
+      type: "session",
+      content: "@Auth refactor",
+      start: 18,
+      end: 32,
+      id: Session.ID.make("ses_0123456789abcdefghijklmnop"),
+    })
+    expect(value.prompt[4]).toEqual({
       type: "file",
       path: "src/app.ts",
       content: "@src/app.ts",
-      start: 18,
-      end: 29,
+      start: 32,
+      end: 43,
       filename: "app.ts",
     })
     expect(value.model?.variant).toBeNull()

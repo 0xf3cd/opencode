@@ -10,7 +10,7 @@ import type { ContextItem, ImageAttachmentPart, PathAttachmentPart, Prompt } fro
 import { appendPrompt, clonePrompt, isAttachment, promptLength } from "@/composer/prompt-parts"
 import { buildPromptRequest } from "@/composer/request"
 import { blobDataUrl, createLegacyBlobReference } from "@/runtime/persistence/drafts"
-import { readPromptPresentation } from "@/composer/comment-note"
+import { formatSessionReference, readPromptPresentation } from "@/composer/comment-note"
 import { extractPromptContext, extractPromptFromMessage } from "@/composer/prompt"
 import { useData } from "@/runtime/server/current"
 import { useServerSDK } from "@/runtime/server/client"
@@ -454,7 +454,15 @@ async function editedPromptInput(
 
   const request = buildPromptRequest({ prompt, context: [], images, text, sessionDirectory: directory })
   const payload = item?.payload
-  const display = item ? queuedPromptText(item) : ""
+  const presented = readPromptPresentation(payload?.metadata)
+
+  const display = [
+    ...(item ? [queuedPromptText(item)] : []),
+    ...(presented?.sessions ?? []).map(formatSessionReference),
+  ]
+    .filter(Boolean)
+    .join("\n")
+
   const notes = payload && display && payload.text.startsWith(display) ? payload.text.slice(display.length) : ""
 
   const mention = (value: { start: number; end: number; text: string } | undefined) => {
@@ -467,8 +475,8 @@ async function editedPromptInput(
   }
 
   // Structured mentions degrade to plain text in the editor, so an original
-  // agent or skill reference survives the edit as long as its mention text
-  // still appears; newly typed structured mentions come from the request.
+  // agent, skill, or session reference survives the edit as long as its mention
+  // text still appears; newly typed structured mentions come from the request.
   const agents = [
     ...(payload?.agents?.filter(
       (agent) =>
@@ -486,9 +494,19 @@ async function editedPromptInput(
     ...request.skills,
   ]
 
+  const retainedSessions = (presented?.sessions ?? []).flatMap((session) => {
+    if (request.sessions.some((entry) => entry.id === session.id)) return []
+    const resolved = mention(session.mention)
+
+    return resolved ? [{ id: session.id, mention: resolved }] : []
+  })
+
+  const sessions = [...retainedSessions, ...request.sessions]
+  const retainedSessionLines = retainedSessions.map((session) => `\n${formatSessionReference(session)}`).join("")
+
   return {
     sessionID,
-    text: request.text + notes,
+    text: request.text + retainedSessionLines + notes,
     files: [
       // A stored file whose mention the edit deleted is dropped; unmentioned context stays.
       ...(payload?.files
@@ -521,6 +539,7 @@ async function editedPromptInput(
       comments: notes ? (payload?.metadata?.["comments"] ?? []) : [],
       displayText: request.displayText,
       attachments: request.attachments,
+      sessions,
     },
   }
 }

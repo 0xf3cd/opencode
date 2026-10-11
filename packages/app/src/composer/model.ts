@@ -3,7 +3,7 @@ import { useDialog } from "@opencode/ui/context/dialog"
 import type { ReferenceInfo } from "@opencode/client/promise"
 import type { Links, MountedSession } from "@opencode/gui-extensions/sdk"
 import { createComponent, createEffect, createMemo, on } from "solid-js"
-import { Predicate } from "effect"
+import { Predicate, Schema } from "effect"
 import type { ComposerSuggestion } from "./types"
 import { createComposerEditor, createComposerEditorState, type ComposerEditorModel } from "./editor/interaction"
 import { selectionFromLines, type SelectedLineRange, useFile } from "@/workspaces/files/model"
@@ -17,8 +17,11 @@ import { usePlatform } from "@/runtime/platform/platform"
 import { useWorkspaceLocation } from "@/workspaces/location"
 import { resolveBlobUrl } from "@/runtime/persistence/drafts"
 import { useData, useServer } from "@/runtime/server/current"
+import { tabKey, useTabs } from "@/shell/tabs/tabs"
+import { sessionTabTitle } from "@/shell/titlebar/tab-title"
 import { showToast } from "@/shell/notifications/toast"
 import { formatServerError } from "@/runtime/server/errors"
+import { Session } from "@opencode/schema/session"
 import { Skill } from "@opencode/schema/skill"
 import type { ComposerAdapter, ComposerControls, ComposerQueue } from "./adapter"
 import { isAttachment } from "./prompt-parts"
@@ -42,6 +45,7 @@ export function createComposerModel(adapter: ComposerAdapter, options?: { queue?
   const sdk = useWorkspaceLocation()
   const data = useData()
   const server = useServer()
+  const tabs = useTabs()
 
   const available = () =>
     server.conn.type !== "extension" || !server.conn.managed || server.ctx.sdk.connection.status() === "connected"
@@ -189,7 +193,99 @@ export function createComposerModel(adapter: ComposerAdapter, options?: { queue?
 
   const skills = createMemo(() => data.location.skill.list({ directory: sdk().directory }) ?? [])
 
+  const isSessionID = Schema.is(Session.ID)
+
+  createEffect(() => {
+    data.session.active().forEach((id) => {
+      if (!data.session.get(id)) void data.session.sync(id).catch(() => undefined)
+    })
+  })
+
+  const sessionTitles = createMemo(() => {
+    const fallback = language.t("session.tab.session")
+
+    return new Map(
+      [
+        ...tabs.store.flatMap((tab) =>
+          tab.type === "session" && tab.server === server.key
+            ? [[tab.sessionId, data.session.get(tab.sessionId)?.title ?? tabs.info[tabKey(tab)]?.title] as const]
+            : [],
+        ),
+        ...data.session.list().map((session) => [session.id, session.title] as const),
+      ].flatMap(([id, raw]) => (raw !== undefined ? [[id, sessionTabTitle(raw, fallback)] as const] : [])),
+    )
+  })
+
+  const sessions = createMemo<ComposerSuggestion[]>(() => {
+    const current = adapter.kind === "active-session" ? adapter.session().id : undefined
+    const fallback = language.t("session.tab.session")
+    const titles = sessionTitles()
+
+    const ids = [
+      ...tabs.store.flatMap((tab) =>
+        tab.type === "session" && tab.server === server.key && !tabs.pendingSession(tab.server, tab.sessionId)
+          ? [tab.sessionId]
+          : [],
+      ),
+      ...data.session.active(),
+      ...data.session
+        .list()
+        .flatMap((session) =>
+          data.session.status(session.id) === "running" ||
+          data.session.pending.list(session.id).some((item) => item.type !== "synthetic")
+            ? [session.id]
+            : [],
+        ),
+    ]
+
+    return Array.from(new Set(ids))
+      .filter((id): id is Session.ID => id !== current && isSessionID(id) && !data.session.get(id)?.time.archived)
+      .map((id) => {
+        const label = `@${titles.get(id) ?? fallback}`
+
+        return {
+          id: `session:${id}`,
+          kind: "session" as const,
+          label,
+          trigger: id,
+          description: id,
+          mention: { type: "session" as const, id, content: label, start: 0, end: 0 },
+        }
+      })
+  })
+
+  createEffect(() => {
+    const titles = sessionTitles()
+    const current = prompt.current()
+
+    if (
+      !current.some((part) => part.type === "session" && titles.has(part.id) && part.content !== `@${titles.get(part.id)}`)
+    )
+      return
+
+    let offset = 0
+    let delta = 0
+    const cursor = prompt.cursor()
+
+    const next = current.map((part) => {
+      if (isAttachment(part)) return part
+      const content = part.type === "session" && titles.has(part.id) ? `@${titles.get(part.id)!}` : part.content
+      const start = offset
+      const end = start + content.length
+
+      if (cursor !== undefined && part.end <= cursor) delta += content.length - part.content.length
+      offset = end
+
+      return content === part.content && start === part.start && end === part.end
+        ? part
+        : { ...part, content, start, end }
+    })
+
+    prompt.set(next, cursor !== undefined ? Math.max(0, cursor + delta) : undefined)
+  })
+
   const context = createMemo<ComposerSuggestion[]>(() => [
+    ...sessions(),
     ...references(),
     ...skills().map((skill) => ({
       id: `skill:${skill.id}`,
@@ -314,8 +410,7 @@ export function createComposerModel(adapter: ComposerAdapter, options?: { queue?
       entries: (mode) => history.entries(mode).map((entry) => ({ prompt: entry.prompt, metadata: entry.comments })),
       add: (value, mode) => history.add(value, mode, mode === "shell" ? [] : historyComments()),
       capture: historyComments,
-      // SAFETY: `entries` stores each entry's comments as its metadata, and the editor restores only metadata it read there.
-      restore: (metadata) => restoreHistoryComments(metadata as PromptHistoryComment[]),
+      restore: (metadata) => restoreHistoryComments(metadata ?? []),
     },
     commands,
     context,

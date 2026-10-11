@@ -32,6 +32,7 @@ import type { Upload } from "../attachments/uploads"
 import { CommentCard } from "@opencode/session-ui/comment-card"
 import { typeLabel } from "@opencode/session-ui/message-file"
 import { getFilename } from "@opencode/util/path"
+import { Session } from "@opencode/schema/session"
 import { Skill } from "@opencode/schema/skill"
 import type {
   ComposerAgentPart,
@@ -241,7 +242,7 @@ export function ComposerEditor(props: ComposerEditorProps) {
             spellcheck={state.mode === "normal"}
             // @ts-expect-error
             autocomplete="off"
-            class="relative z-10 block min-h-[60px] w-full whitespace-pre-wrap bg-transparent px-4 pt-4 pb-2 text-[13px] font-[440] leading-5 text-v2-text-text-base focus:outline-none [&_[data-mention=file]]:text-syntax-property [&_[data-mention=agent]]:text-syntax-type [&_[data-mention=reference]]:text-syntax-keyword"
+            class="relative z-10 block min-h-[60px] w-full whitespace-pre-wrap bg-transparent px-4 pt-4 pb-2 text-[13px] font-[440] leading-5 text-v2-text-text-base focus:outline-none [&_[data-mention=file]]:text-syntax-property [&_[data-mention=agent]]:text-syntax-type [&_[data-mention=session]]:text-syntax-type [&_[data-mention=reference]]:text-syntax-keyword"
             classList={{ "font-mono!": state.mode === "shell", "opacity-50": props.disabled }}
             style={{
               "unicode-bidi": state.mode === "normal" ? "plaintext" : undefined,
@@ -436,6 +437,10 @@ function renderComposerEditor(editor: HTMLDivElement, prompt: ComposerPrompt) {
         mention.dataset.name = part.name
       }
 
+      if (part.type === "session") {
+        mention.dataset.id = part.id
+      }
+
       if (part.type === "file") {
         mention.dataset.path = part.path
 
@@ -500,6 +505,19 @@ function parseComposerEditor(editor: HTMLDivElement) {
       }
 
       parts.push(original?.type === "skill" ? { ...original, ...skill } : skill)
+      position += content.length
+
+      return
+    }
+
+    if (element.dataset.mention === "session") {
+      parts.push({
+        type: "session",
+        id: Session.ID.make(element.dataset.id ?? content.slice(1)),
+        content,
+        start: position,
+        end: position + content.length,
+      })
       position += content.length
 
       return
@@ -1168,6 +1186,8 @@ function ComposerSuggestionIcon(props: { item: ComposerSuggestion }) {
   if (props.item.kind === "agent") return <Icon name="brain" size="small" class="shrink-0 text-icon-info-active" />
 
   if (props.item.kind === "skill") return <Icon name="post-skill" size="small" class="shrink-0" />
+
+  if (props.item.kind === "session") return <Icon name="bubble-5" size="small" class="shrink-0" />
 
   if (props.item.kind === "command") return null
 

@@ -25,6 +25,16 @@ export type SessionUserAttachmentReference = {
   path: string
 }
 
+/** A session referenced from a user prompt. */
+export type SessionUserSessionReference = {
+  id: string
+  mention: {
+    start: number
+    end: number
+    text: string
+  }
+}
+
 export type SessionUserActions = {
   openAttachment?: (file: PromptFileAttachment) => void
   revert?: (input: { sessionID: string; messageID: string }) => Promise<void> | void

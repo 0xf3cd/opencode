@@ -193,31 +193,32 @@ function suggestionSelected(
   persisted: ComposerPersistedState,
 ): ComposerEditorTransition {
   const current = promptText(persisted)
-  const commands: ComposerInteractionCommand[] = []
 
   if (item.kind === "command") {
-    commands.push({
-      type: "draft.setText",
-      value:
-        state.popover.type === "command-menu"
-          ? current.trim()
-            ? `${item.label} ${current.trim()}`
-            : `${item.label} `
-          : replaceTrigger(current, "/", `${item.label} `),
-    })
-  } else {
-    commands.push({
-      type: "mention.add",
-      item,
-      ...(item.kind === "skill" && item.label.startsWith("/")
-        ? { range: { start: 0, end: state.popover.type === "command-menu" ? 0 : current.length } }
-        : {}),
-    })
+    return changed({ ...state, popover: { type: "closed" }, focus: "editor" }, [
+      {
+        type: "draft.setText",
+        value:
+          state.popover.type === "command-menu"
+            ? current.trim()
+              ? `${item.label} ${current.trim()}`
+              : `${item.label} `
+            : replaceTrigger(current, "/", `${item.label} `),
+      },
+      { type: "focus.editor" },
+    ])
   }
 
-  commands.push({ type: "focus.editor" })
+  const command: Extract<ComposerInteractionCommand, { type: "mention.add" }> = {
+    type: "mention.add",
+    item,
+  }
 
-  return changed({ ...state, popover: { type: "closed" }, focus: "editor" }, commands)
+  if (item.kind === "skill" && item.label.startsWith("/")) {
+    command.range = { start: 0, end: state.popover.type === "command-menu" ? 0 : current.length }
+  }
+
+  return changed({ ...state, popover: { type: "closed" }, focus: "editor" }, [command, { type: "focus.editor" }])
 }
 
 function keyDown(
@@ -276,7 +277,7 @@ function populated(persisted: ComposerPersistedState) {
   return (
     !!promptText(persisted).trim() ||
     persisted.context.items.length > 0 ||
-    persisted.prompt.some((part) => part.type === "file" || isAttachment(part))
+    persisted.prompt.some((part) => part.type !== "text" || isAttachment(part))
   )
 }
 

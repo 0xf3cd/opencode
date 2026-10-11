@@ -1,7 +1,12 @@
 import type { SessionMessageAssistant, SessionMessageAssistantTool, SessionMessageUser } from "@opencode/client/promise"
 import { Match, Switch, type ComponentProps } from "solid-js"
 import { GenUI } from "@opencode/plugin-genui/genui"
-import type { SessionUserActions, SessionUserAttachmentReference, SessionUserComment } from "../actions"
+import type {
+  SessionUserActions,
+  SessionUserAttachmentReference,
+  SessionUserComment,
+  SessionUserSessionReference,
+} from "../actions"
 import { AssistantReasoningContent, AssistantTextContent, CurrentUserMessageDisplay } from "./message-content"
 import {
   CurrentContextToolGroup,
@@ -14,7 +19,12 @@ import { currentStreamingInput } from "./streaming-input"
 // Registers the genui_render renderer with the tool registry.
 import "../genui/tool"
 
-export type { SessionUserActions, SessionUserAttachmentReference, SessionUserComment } from "../actions"
+export type {
+  SessionUserActions,
+  SessionUserAttachmentReference,
+  SessionUserComment,
+  SessionUserSessionReference,
+} from "../actions"
 
 export { SessionShellMessage } from "../tools/tool-renderer"
 
@@ -26,6 +36,7 @@ export function SessionUserMessage(props: {
   displayText?: string
   comments?: SessionUserComment[]
   references?: SessionUserAttachmentReference[]
+  sessions?: SessionUserSessionReference[]
   voice?: boolean
   historicalAgent: string
   historicalModel: SessionMessageAssistant["model"]
@@ -38,6 +49,7 @@ export function SessionUserMessage(props: {
       text={props.displayText ?? props.message.text}
       comments={props.comments}
       references={props.references}
+      sessions={props.sessions}
       voice={props.voice}
       agent={props.historicalAgent}
       model={props.historicalModel}

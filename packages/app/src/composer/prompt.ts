@@ -5,6 +5,7 @@ import { commentContextItem, readPromptPresentation } from "./comment-note"
 import { buildPromptRequest } from "./request"
 import { contextItemKey, type FileContextItem } from "./schema"
 import { createPathHelpers, decodeFilePath, stripFileProtocol, stripQueryAndHash } from "@/workspaces/files/path"
+import { Session } from "@opencode/schema/session"
 import { Skill } from "@opencode/schema/skill"
 
 type Inline =
@@ -39,6 +40,13 @@ type Inline =
       value: string
       id: Skill.ID
       name: Skill.Name
+    }
+  | {
+      type: "session"
+      start: number
+      end: number
+      value: string
+      id: Session.ID
     }
 
 function selectionFromFileUrl(url: string): Extract<Inline, { type: "file" }>["selection"] {
@@ -149,6 +157,10 @@ export function extractPromptFromMessage(
     if (mention) inline.push({ ...part, start: mention.start, end: mention.end, value: mention.text })
   }
 
+  for (const session of presentation?.sessions ?? []) {
+    inline.push({ ...session.mention, type: "session", id: Session.ID.make(session.id), value: session.mention.text })
+  }
+
   attachments.push(
     ...(presentation?.attachments ?? []).map(
       (file, index): PathAttachmentPart => ({
@@ -250,6 +262,12 @@ function buildPrompt(
 
     if (item.type === "skill") {
       result.push({ type: "skill", id: item.id, name: item.name, ...span })
+
+      return
+    }
+
+    if (item.type === "session") {
+      result.push({ type: "session", id: item.id, ...span })
 
       return
     }

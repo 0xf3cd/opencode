@@ -300,6 +300,7 @@ function MessageTimelineView(
         displayText: voice ? (voice.framing ?? voice.instruction) : value?.displayText,
         comments: value?.comments ?? (parsed ? [parsed] : []),
         references: value?.attachments,
+        sessions: value?.sessions,
         voice: !!voice,
       }
     },

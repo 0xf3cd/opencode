@@ -1,6 +1,6 @@
 import { expect, test, type Locator, type Page } from "@playwright/test"
-import { NO_PROVIDER, T0, provider } from "../utils/app"
-import { openDraft, openSession } from "../utils/workspace"
+import { NO_PROVIDER, T0, provider, sessionHref } from "../utils/app"
+import { openDraft, openSession, type WorkspaceInput } from "../utils/workspace"
 
 test.use({ permissions: ["clipboard-read", "clipboard-write"] })
 
@@ -508,4 +508,100 @@ test("shows thinking on hover or a non-default selection while preserving keyboa
   await expect(control).toBeFocused()
   await page.keyboard.press("Tab")
   await expect(control).toHaveCSS("opacity", "0")
+})
+
+test("mentions open or running sessions by readable title, survives title changes, and opens from the transcript", async ({
+  page,
+}) => {
+  const currentID = "ses_00000000000000000000000001"
+  const openTabID = "ses_00000000000000000000000002"
+  const runningID = "ses_00000000000000000000000003"
+  const idleClosedID = "ses_00000000000000000000000004"
+  const prompts: Parameters<NonNullable<WorkspaceInput["onPrompt"]>>[0][] = []
+
+  const { editor } = await openSession(page, {
+    name: "ComposerSessionMentions",
+    sessionID: currentID,
+    sessions: [
+      { id: currentID, title: "Current session" },
+      { id: openTabID, title: "Auth refactor" },
+      { id: runningID, title: "Background migration" },
+      { id: idleClosedID, title: "Closed idle session" },
+    ],
+    sessionStatus: {
+      [runningID]: { type: "running" },
+    },
+    seed: {
+      tabs: [currentID, openTabID],
+    },
+    findFiles: () => [],
+    onPrompt: (input) => prompts.push(input),
+  })
+
+  await editor.click()
+  await editor.pressSequentially("@")
+  const suggestions = page.locator('[data-component="composer-suggestions"]')
+  await expect(suggestions.locator('[data-suggestion-id^="session:"] bdi')).toHaveText([
+    "@Auth refactor",
+    "@Background migration",
+  ])
+  await expect(suggestions.locator(`[data-suggestion-id="session:${currentID}"]`)).toHaveCount(0)
+  await expect(suggestions.locator(`[data-suggestion-id="session:${idleClosedID}"]`)).toHaveCount(0)
+
+  await editor.pressSequentially(openTabID.slice(0, 8))
+  await expect(suggestions.locator(`[data-suggestion-id="session:${openTabID}"][data-active]`)).toContainText(
+    "@Auth refactor",
+  )
+  await editor.press("Enter")
+
+  const pill = editor.locator(`[data-mention="session"][data-id="${openTabID}"]`)
+  await expect(pill).toHaveText("@Auth refactor")
+
+  const tabLink = page.locator(`[data-titlebar-tab-link][href="${sessionHref(openTabID)}"]`)
+  const tabTitle = tabLink.locator("[data-titlebar-tab-title]")
+
+  await tabLink.click({ button: "right" })
+  await page.getByRole("menuitem", { name: "Rename", exact: true }).click()
+  await expect(tabTitle).toHaveAttribute("contenteditable", "true")
+  await page.keyboard.type("Auth v2")
+  await tabTitle.press("Enter")
+  await expect(tabTitle).toHaveText("Auth v2")
+  await expect(pill).toHaveText("@Auth v2")
+
+  await editor.click()
+  await page.keyboard.type("compare this")
+  await editor.press("Enter")
+
+  await expect.poll(() => prompts.length).toBe(1)
+  expect(prompts[0]).toMatchObject({
+    sessionID: currentID,
+    body: {
+      text: `@Auth v2 compare this\nReferenced session "@Auth v2": \`${openTabID}\``,
+      metadata: {
+        displayText: "@Auth v2 compare this",
+        sessions: [
+          {
+            id: openTabID,
+            mention: { start: 0, end: 8, text: "@Auth v2" },
+          },
+        ],
+      },
+    },
+  })
+
+  const transcriptLink = page.locator(
+    `[data-component="user-message"] button.markdown-session-link[data-highlight="session"][data-session-id="${openTabID}"]`,
+  )
+
+  await expect(transcriptLink).toHaveText("@Auth v2")
+
+  await tabLink.click({ button: "right" })
+  await page.getByRole("menuitem", { name: "Rename", exact: true }).click()
+  await expect(tabTitle).toHaveAttribute("contenteditable", "true")
+  await page.keyboard.type("Auth final")
+  await tabTitle.press("Enter")
+  await expect(transcriptLink).toHaveText("@Auth final")
+
+  await transcriptLink.click()
+  await expect(page).toHaveURL(sessionHref(openTabID))
 })

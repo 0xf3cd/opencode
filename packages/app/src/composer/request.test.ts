@@ -1,4 +1,5 @@
 import { describe, expect, test } from "bun:test"
+import { Session } from "@opencode/schema/session"
 import { Skill } from "@opencode/schema/skill"
 import type { ImageAttachmentPart, Prompt } from "@/composer/state"
 import type { FileSelection } from "@/workspaces/files/model"
@@ -139,11 +140,13 @@ describe("buildPromptRequest", () => {
     expect(result.files).toEqual([{ uri: "file:///repo/src/button.css", mime: "text/plain", name: "button.css" }])
   })
 
-  test("keeps skill mentions out of file attachments", () => {
+  test("keeps skill and session mentions out of file attachments while preserving session IDs in model text", () => {
     const skill = {
       id: "skill-review",
       name: "review",
     }
+
+    const sessionID = Session.ID.make("ses_0123456789abcdefghijklmnop")
 
     const result = buildPromptRequest({
       prompt: [
@@ -155,15 +158,30 @@ describe("buildPromptRequest", () => {
           start: 0,
           end: 7,
         },
+        { type: "text", content: " ", start: 7, end: 8 },
+        {
+          type: "session",
+          id: sessionID,
+          content: "@Auth refactor",
+          start: 8,
+          end: 22,
+        },
       ],
       context: [],
       images: [],
-      text: "@review",
+      text: "@review @Auth refactor",
       sessionDirectory: "/repo",
     })
 
     expect(result.files).toEqual([])
     expect(result.skills).toEqual([{ id: skill.id, name: skill.name, mention: { start: 0, end: 7, text: "@review" } }])
+    expect(result.sessions).toEqual([
+      { id: sessionID, mention: { start: 8, end: 22, text: "@Auth refactor" } },
+    ])
+    expect(result.displayText).toBe("@review @Auth refactor")
+    expect(result.text).toBe(
+      '@review @Auth refactor\nReferenced session "@Auth refactor": `ses_0123456789abcdefghijklmnop`',
+    )
   })
 
   test.each<{ dir: string; path: string; selection?: FileSelection; context?: true; uri: string }>([

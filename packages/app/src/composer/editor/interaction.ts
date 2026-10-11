@@ -79,7 +79,7 @@ export function createComposerEditor(input: {
   function addPart(part: ComposerPersistedState["prompt"][number]) {
     if (isAttachment(part)) return false
 
-    if (part.type === "file" || part.type === "agent") {
+    if (part.type !== "text") {
       draft.addMention(part)
 
       return true
@@ -131,9 +131,11 @@ export function createComposerEditor(input: {
       return [...fixed, ...recent, ...files]
     },
     key: (item) => item.id,
-    filterKeys: ["label"],
+    filterKeys: ["label", "trigger"],
     skipFilter: (item) => item.kind === "file" && !item.recent,
     groupBy: (item) => {
+      if (item.kind === "session") return "session"
+
       if (item.kind === "reference") return "reference"
 
       if (item.kind === "skill") return "skill"
@@ -147,7 +149,7 @@ export function createComposerEditor(input: {
       return "file"
     },
     sortGroupsBy: (a, b) => {
-      const order = ["reference", "skill", "agent", "resource", "recent", "file"]
+      const order = ["session", "reference", "skill", "agent", "resource", "recent", "file"]
 
       return order.indexOf(a.category) - order.indexOf(b.category)
     },

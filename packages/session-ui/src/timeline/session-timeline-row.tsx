@@ -9,7 +9,12 @@ import { Option, Predicate, Schema } from "effect"
 import { For, Show, createEffect, createMemo, type Accessor, type JSX } from "solid-js"
 import { DiffChanges } from "@opencode/ui/diff-changes"
 import { Dynamic } from "solid-js/web"
-import type { SessionUserActions, SessionUserAttachmentReference, SessionUserComment } from "../actions"
+import type {
+  SessionUserActions,
+  SessionUserAttachmentReference,
+  SessionUserComment,
+  SessionUserSessionReference,
+} from "../actions"
 import { useData } from "../context"
 import { TimelineSeparator } from "../components/timeline-separator"
 import {
@@ -56,6 +61,7 @@ export type SessionUserPresentation = {
   displayText?: string
   comments?: SessionUserComment[]
   references?: SessionUserAttachmentReference[]
+  sessions?: SessionUserSessionReference[]
   /** A voice call's agent sent it on the user's behalf. */
   voice?: boolean
 }
@@ -810,6 +816,7 @@ export function createSessionTimelineRowRenderer(input: {
                       displayText={presentation()?.displayText}
                       comments={presentation()?.comments}
                       references={presentation()?.references}
+                      sessions={presentation()?.sessions}
                       voice={presentation()?.voice}
                       historicalAgent={context()?.agent ?? ""}
                       historicalModel={context()?.model ?? { id: "", providerID: "" }}
