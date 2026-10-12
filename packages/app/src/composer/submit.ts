@@ -1,6 +1,6 @@
 import { SessionMessage } from "@opencode/schema/session-message"
 import type { SessionMessageUser } from "@opencode/client/promise"
-import type { Accessor } from "solid-js"
+import { batch, type Accessor } from "solid-js"
 import type { PromptComment } from "./comment-note"
 import type { PromptHistoryComment } from "./history/entry"
 import type { ImageAttachmentPart, Prompt } from "./state"
@@ -141,41 +141,93 @@ export function createComposerSubmit(input: ComposerSubmitInput) {
       if (!started) return
       const session = started.session
 
-      input.addToHistory(value.prompt, value.mode)
-      input.resetHistory()
       const restore = () => restoreSubmission(input, submission, value, comments)
 
-      if (value.mode === "normal" && !command) {
-        // The timeline shows a steer, and any switches it makes, as the composer clears; a queued prompt shows in
-        // the queue once admitted.
-        if (value.delivery === "steer")
-          session.handoff.set({
-            message: handoffMessage(value),
-            selection: {
-              agent: value.selection.agent,
-              model: {
-                id: value.selection.model.modelID,
-                providerID: value.selection.model.providerID,
-                variant: value.selection.variant,
-              },
-            },
-          })
-        const optimisticBusy = !input.adapter.working()
-
-        if (optimisticBusy) session.data.session.setStatus(session.id, "running")
-
-        const sending = sendPrompt(session, value, input.adapter.controls().model.selection.trackSessionCommit).then(
-          () => ({ ok: true as const }),
-          (error) => ({ ok: false as const, error }),
-        )
-
-        await started.cleanupReady
-        await started.complete?.()
+      const finishPromptCleanup = () => {
+        input.addToHistory(value.prompt, value.mode)
+        input.resetHistory()
         input.adapter.submitted()
         // Like the TUI, sent context goes with the prompt rather than riding along on the next one.
         submission.context.forEach((item) => submission.target().context.remove(item.key))
         input.comments.clear()
         clearSubmission(input, submission)
+      }
+
+      if (value.mode === "normal" && !command) {
+        const optimisticBusy = !input.adapter.working()
+
+        if (input.adapter.kind === "new-session") {
+          session.handoff?.set(handoffMessage(value))
+
+          if (optimisticBusy) session.data.session.setStatus(session.id, "running")
+
+          const sending = sendPrompt(
+            session,
+            value,
+            input.adapter.controls().model.selection.trackSessionCommit,
+            () => {},
+          ).then(
+            () => ({ ok: true as const }),
+            (error) => ({ ok: false as const, error }),
+          )
+
+          await started.cleanupReady
+          await started.complete?.()
+          finishPromptCleanup()
+          void sending.then((result) => {
+            if (!result.ok)
+              failSubmission(input, session, "prompt", result.error, restore, value.id, () => {
+                if (optimisticBusy) session.data.session.setStatus(session.id, "idle")
+              })
+          })
+
+          return
+        }
+
+        // Wait for selection to commit before clearing the composer, then clear in the same batch that admits the
+        // local row so the prompt never disappears between the two surfaces.
+        const admitted = Promise.withResolvers<boolean>()
+
+        const sending = sendPrompt(
+          session,
+          value,
+          input.adapter.controls().model.selection.trackSessionCommit,
+          (images) => {
+            if (images.length > 0) session.handoff?.set({ ...handoffMessage(value), files: images })
+
+            if (optimisticBusy) session.data.session.setStatus(session.id, "running")
+            finishPromptCleanup()
+            admitted.resolve(true)
+          },
+        ).then(
+          () => ({ ok: true as const }),
+          (error) => {
+            admitted.resolve(false)
+
+            return { ok: false as const, error }
+          },
+        )
+
+        if (!(await admitted.promise)) {
+          const result = await sending
+
+          if (!result.ok) {
+            if (submission.current(input.adapter.state) && submission.unchanged()) {
+              submission.target().retry.set({
+                id: value.id,
+                agent: value.selection.agent,
+                providerID: value.selection.model.providerID,
+                modelID: value.selection.model.modelID,
+                variant: value.selection.variant,
+              })
+            }
+
+            input.notify.failed("prompt", result.error)
+          }
+
+          return
+        }
+
         void sending.then((result) => {
           if (!result.ok)
             failSubmission(input, session, "prompt", result.error, restore, value.id, () => {
@@ -186,6 +238,8 @@ export function createComposerSubmit(input: ComposerSubmitInput) {
         return
       }
 
+      input.addToHistory(value.prompt, value.mode)
+      input.resetHistory()
       await started.cleanupReady
       await started.complete?.()
       input.adapter.submitted()
@@ -494,6 +548,7 @@ async function sendPrompt(
   session: ComposerSession,
   value: ComposerSubmission,
   track: ModelSelection["trackSessionCommit"] | undefined,
+  onAdmit: (images: NonNullable<SessionMessageUser["files"]>) => void,
 ) {
   const request = await buildSubmissionRequest(session, value)
 
@@ -533,7 +588,25 @@ async function sendPrompt(
     },
   }
 
-  await session.data.session.prompt(admission).catch(() => session.data.session.prompt(admission))
+  const images = request.files.flatMap((file) =>
+    file.uri.startsWith("data:")
+      ? [{ data: "", mime: file.mime, source: { type: "uri" as const, uri: file.uri }, name: file.name }]
+      : [],
+  )
+
+  const sending = batch(() => {
+    const request = session.data.session.prompt(admission).catch(() => session.data.session.prompt(admission))
+    onAdmit(images)
+
+    return request
+  })
+
+  try {
+    await sending
+  } catch (error) {
+    session.handoff?.clear(value.id)
+    throw error
+  }
 }
 
 async function buildSubmissionRequest(session: ComposerSession, value: ComposerSubmission) {
@@ -565,7 +638,7 @@ function failSubmission(
 ) {
   if (messageID && session.admitted(messageID)) return
 
-  if (messageID) session.handoff.clear(messageID)
+  if (messageID) session.handoff?.clear(messageID)
   rollback?.()
   restore()
   input.notify.failed(kind, error)

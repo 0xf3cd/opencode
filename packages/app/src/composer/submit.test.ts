@@ -1,14 +1,8 @@
 import { describe, expect, test } from "bun:test"
 import type { ModelSelection } from "@/providers/models/selection"
-import type { SessionMessageHandoff } from "@/session/handoff"
+import type { SessionMessageUser } from "@opencode/client/promise"
 import { Skill } from "@opencode/schema/skill"
-import type {
-  ActiveComposerAdapter,
-  ComposerControls,
-  ComposerDelivery,
-  ComposerSession,
-  NewSessionComposerAdapter,
-} from "./adapter"
+import type { ActiveComposerAdapter, ComposerControls, ComposerSession, NewSessionComposerAdapter } from "./adapter"
 import { createMemoryComposerState, type Prompt } from "./state"
 import { createComposerSubmit } from "./submit"
 import type { ComposerStateTarget } from "./submission-state"
@@ -81,14 +75,12 @@ function submitInput(
   commands: () => readonly { name: string }[] | undefined = () => [],
   history: string[] = [],
   clientCommand?: (text: string) => (() => void | Promise<void>) | undefined,
-  delivery: ComposerDelivery = "steer",
 ) {
   return createComposerSubmit({
     adapter,
     mode: () => mode,
     commands,
     clientCommand,
-    delivery: () => delivery,
     editor: () => undefined,
     queueScroll() {},
     addToHistory: (prompt) =>
@@ -118,7 +110,7 @@ function session(input: {
   return {
     id: "session-1",
     directory: "C:/repo",
-    handoff: input.handoff ?? { set() {}, clear() {} },
+    handoff: input.handoff,
     current: input.current ?? (() => undefined),
     admitted: input.admitted ?? (() => false),
     api: {
@@ -237,41 +229,123 @@ describe("Composer submission", () => {
     expect(state.context.items()).toEqual([])
   })
 
-  test.each(["steer", "queue"] as const)(
-    "shows a %s in the session as the composer clears, before its selection commits",
-    async (delivery) => {
-      const state = createMemoryComposerState({ prompt: "ship it" }).capture()
-      const committed = Promise.withResolvers<void>()
-      const handoffs: SessionMessageHandoff[] = []
-      const statuses: ("idle" | "running")[] = []
+  test("keeps the prompt in the composer while selection commits, then clears and hands off attachments on admission", async () => {
+    const state = createMemoryComposerState().capture()
 
-      const target = session({
-        calls: [],
-        statuses,
-        handoff: { set: (handoff) => handoffs.push(handoff), clear() {} },
-        switchModel: async () => committed.promise,
-      })
+    const prompt: Prompt = [
+      { type: "text", content: "ship it", start: 0, end: 7 },
+      {
+        type: "image",
+        id: "attachment",
+        filename: "image.png",
+        mime: "image/png",
+        blob: { id: "attachment", url: "data:image/png;base64,YQ==" },
+      },
+    ]
 
-      await submitInput(active(state, target), undefined, "normal", undefined, undefined, undefined, delivery).submit(
-        new Event("submit"),
-      )
+    state.set(prompt)
+    state.context.add({ type: "file", path: "notes.md", description: "the failing version" })
 
-      expect(state.current()).toEqual([{ type: "text", content: "", start: 0, end: 0 }])
-      expect(statuses).toEqual(["running"])
-      // A queued prompt shows in the queue once admitted, not in the transcript.
-      expect(handoffs).toMatchObject(
-        delivery === "steer"
-          ? [
-              {
-                message: { type: "user", text: "ship it" },
-                selection: { agent: "build", model: { id: "model-1", providerID: "provider-1", variant: "balanced" } },
-              },
-            ]
-          : [],
-      )
-      committed.resolve()
-    },
-  )
+    const switching = Promise.withResolvers<void>()
+    const committed = Promise.withResolvers<void>()
+    const sending = Promise.withResolvers<void>()
+    const calls: string[] = []
+    const statuses: ("idle" | "running")[] = []
+    const handoffs: SessionMessageUser[] = []
+    const history: string[] = []
+
+    const target = session({
+      calls,
+      statuses,
+      current: () => ({ agent: "build", model: { providerID: "provider-1", id: "model-1", variant: "balanced" } }),
+      handoff: { set: (message) => handoffs.push(message), clear() {} },
+      switchModel: async () => {
+        calls.push("switch-model")
+        switching.resolve()
+        await committed.promise
+      },
+      prompt: async () => {
+        await sending.promise
+      },
+    })
+
+    const submission = submitInput(active(state, target), undefined, "normal", () => [], history)
+    const first = submission.submit(new Event("submit"))
+    await switching.promise
+
+    // Overlapping Enter while model selection is in flight must not send a second request.
+    await submission.submit(new Event("submit"))
+
+    expect(calls).toEqual(["switch-model"])
+    expect(state.current()).toEqual(prompt)
+    expect(state.context.items()).toHaveLength(1)
+    expect(statuses).toEqual([])
+    expect(handoffs).toEqual([])
+    expect(history).toEqual([])
+
+    committed.resolve()
+    await first
+
+    expect(calls).toEqual(["switch-model", "prompt"])
+    expect(state.current()).toEqual([{ type: "text", content: "", start: 0, end: 0 }])
+    expect(state.context.items()).toEqual([])
+    expect(statuses).toEqual(["running"])
+    expect(history).toEqual(["add:ship itimage"])
+    expect(handoffs).toMatchObject([
+      {
+        type: "user",
+        text: "ship it",
+        files: [
+          {
+            data: "",
+            mime: "image/png",
+            source: { type: "uri", uri: "data:image/png;base64,YQ==" },
+            name: "image.png",
+          },
+        ],
+      },
+    ])
+
+    sending.resolve()
+  })
+
+  test("keeps the draft intact without clearing or flashing history when model selection fails", async () => {
+    const state = createMemoryComposerState({ prompt: "ship it" }).capture()
+    state.context.add({ type: "file", path: "notes.md", description: "the failing version" })
+    const calls: string[] = []
+    const statuses: ("idle" | "running")[] = []
+    const history: string[] = []
+    const errors: unknown[] = []
+    const error = new Error("model unavailable")
+
+    const target = session({
+      calls,
+      statuses,
+      current: () => ({ agent: "build", model: { providerID: "provider-1", id: "model-1", variant: "balanced" } }),
+      switchModel: async () => {
+        calls.push("switch-model")
+        throw error
+      },
+    })
+
+    const submission = submitInput(
+      active(state, target),
+      { missingSelection() {}, unqueueable() {}, failed: (_kind, cause) => errors.push(cause) },
+      "normal",
+      () => [],
+      history,
+    )
+
+    await submission.submit(new Event("submit"))
+
+    expect(calls).toEqual(["switch-model"])
+    expect(errors).toEqual([error])
+    expect(statuses).toEqual([])
+    expect(history).toEqual([])
+    expect(state.current()).toEqual([{ type: "text", content: "ship it", start: 0, end: 7 }])
+    expect(state.context.items()).toHaveLength(1)
+    expect(state.retry.current()?.id).toMatch(/^msg_/)
+  })
 
   test("applies the captured agent and model before a custom command without passing over its overrides", async () => {
     const state = createMemoryComposerState({ prompt: "/review changes" }).capture()
@@ -505,7 +579,7 @@ describe("Composer submission", () => {
     ]
 
     draft.set(prompt)
-    const handedOff = Promise.withResolvers<SessionMessageHandoff>()
+    const handedOff = Promise.withResolvers<SessionMessageUser>()
     const admitted = Promise.withResolvers<void>()
     const cleanup = Promise.withResolvers<void>()
 
@@ -525,7 +599,7 @@ describe("Composer submission", () => {
     await submitted
     expect(draft.current()).toEqual([{ type: "text", content: "", start: 0, end: 0 }])
 
-    expect((await handedOff.promise).message).toMatchObject({
+    expect(await handedOff.promise).toMatchObject({
       type: "user",
       text: "",
       files: [

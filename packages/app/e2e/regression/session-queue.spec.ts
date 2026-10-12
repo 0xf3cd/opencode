@@ -224,28 +224,147 @@ test("follow-up preference controls Enter while Mod+Enter uses the alternate del
   await expect(view.input).toHaveText("")
 })
 
-test("a steer shows in the timeline as the composer clears, before its selection commits", async ({ page }) => {
+test("waits for model selection before clearing the composer, then shows the steer in the frame the composer clears", async ({
+  page,
+}) => {
   const mock = createQueueMock([])
   const view = await openQueue(page, mock, "steer")
+  const text = "steer after model selection commits"
   const commit = await holdRoute(page, (url) => url.pathname === `/api/session/${sessionID}/model`, { method: "POST" })
+  const admit = await holdRoute(page, (url) => url.pathname === `/api/session/${sessionID}/prompt`, { method: "POST" })
 
   const prompt = page.locator('[data-timeline-virtual-content] [data-timeline-row="UserMessage"]', {
-    hasText: "steer while the model commits",
+    hasText: text,
   })
 
-  await view.input.fill("steer while the model commits")
+  await view.input.fill(text)
+  await expect(view.input).toHaveText(text)
+
+  const probe = await page.evaluateHandle((expected) => {
+    const state = { emptyFrames: 0, emptyMutations: 0, active: true }
+
+    const hasPrompt = () => {
+      const editor = document.querySelector('[data-component="composer-editor"]')
+      const inComposer = (editor?.textContent ?? "").includes(expected)
+      const rows = document.querySelectorAll('[data-timeline-virtual-content] [data-timeline-row="UserMessage"]')
+      const inTimeline = Array.from(rows).some((row) => (row.textContent ?? "").includes(expected))
+
+      return { inComposer, inTimeline }
+    }
+
+    const observer = new MutationObserver(() => {
+      if (!state.active) return
+      const current = hasPrompt()
+
+      if (!current.inComposer && !current.inTimeline) state.emptyMutations++
+    })
+
+    observer.observe(document.body, { childList: true, subtree: true, characterData: true })
+
+    const tick = () => {
+      if (!state.active) return
+      const current = hasPrompt()
+
+      if (!current.inComposer && !current.inTimeline) state.emptyFrames++
+      requestAnimationFrame(tick)
+    }
+
+    requestAnimationFrame(tick)
+
+    return state
+  }, text)
+
   await view.input.press("Enter")
   await commit.arrived
-  await expect(view.input).toHaveText("")
-  await expect(prompt).toBeVisible()
+
+  // A second Enter while model selection is in flight must not double-submit.
+  await view.input.press("Enter")
+  await expect(view.input).toHaveText(text)
+  await expect(prompt).toHaveCount(0)
   expect(mock.prompts).toEqual([])
 
   commit.release()
-  await expect.poll(() => mock.prompts.map((item) => item.text)).toEqual(["steer while the model commits"])
+  await admit.arrived
+  await expect(view.input).toHaveText("")
+  await expect(prompt).toBeVisible()
+  await expect(prompt).toHaveCount(1)
+
+  const counts = await probe.evaluate((state) => {
+    state.active = false
+
+    return { emptyFrames: state.emptyFrames, emptyMutations: state.emptyMutations }
+  })
+
+  expect(counts).toEqual({ emptyFrames: 0, emptyMutations: 0 })
+
+  admit.release()
+  await expect.poll(() => mock.prompts.map((item) => item.text)).toEqual([text])
+  expect(commit.requests).toHaveLength(1)
   await expect(prompt).toHaveCount(1)
 })
 
-test("a steer into an idle session leaves the finished turn finished until delivery", async ({ page }) => {
+test("keeps the draft when model selection fails and rolls back the optimistic row when prompt admission fails", async ({
+  page,
+}) => {
+  const mock = createQueueMock([])
+  const view = await openQueue(page, mock, "steer")
+  const text = "recover this prompt on failure"
+
+  const prompt = page.locator('[data-timeline-virtual-content] [data-timeline-row="UserMessage"]', {
+    hasText: text,
+  })
+
+  let failModel = true
+  await page.route(
+    (url) => url.pathname === `/api/session/${sessionID}/model`,
+    async (route) => {
+      if (route.request().method() !== "POST" || !failModel) return route.fallback()
+      failModel = false
+      await route.fulfill({
+        status: 500,
+        contentType: "application/json",
+        body: JSON.stringify({ data: { message: "Model switch failed" } }),
+      })
+    },
+  )
+
+  await view.input.fill(text)
+  await view.input.press("Enter")
+  await expect(page.getByText("Failed to send prompt", { exact: true })).toBeVisible()
+  await expect(view.input).toHaveText(text)
+  await expect(prompt).toHaveCount(0)
+  expect(mock.prompts).toEqual([])
+
+  let promptAttempts = 0
+  const firstAttempt = Promise.withResolvers<void>()
+  const releasePromptFailure = Promise.withResolvers<void>()
+  await page.route(
+    (url) => url.pathname === `/api/session/${sessionID}/prompt`,
+    async (route) => {
+      if (route.request().method() !== "POST") return route.fallback()
+      promptAttempts++
+      firstAttempt.resolve()
+      await releasePromptFailure.promise
+      await route.fulfill({
+        status: 500,
+        contentType: "application/json",
+        body: JSON.stringify({ data: { message: "Prompt admission failed" } }),
+      })
+    },
+  )
+
+  await view.input.press("Enter")
+  await firstAttempt.promise
+  await expect(view.input).toHaveText("")
+  await expect(prompt).toBeVisible()
+
+  releasePromptFailure.resolve()
+  await expect.poll(() => promptAttempts).toBe(2)
+  await expect(prompt).toHaveCount(0)
+  await expect(view.input).toHaveText(text)
+})
+
+test("a steer into an idle session leaves the finished turn settled until delivery", async ({ page }) => {
   const mock = createQueueMock(
     [],
     [
@@ -550,6 +669,15 @@ test("Undo appends to an existing draft and restores inline attachments", async 
   await expect(view.input).toBeFocused()
   await expect(view.composer.getByRole("img", { name: "shot.png" })).toBeVisible()
   expect(mock.changes).toEqual([{ inboxID: "inb_seed_1", action: "cancel" }])
+
+  const admit = await holdRoute(page, (url) => url.pathname === `/api/session/${sessionID}/prompt`, { method: "POST" })
+  await view.input.press("Enter")
+  await admit.arrived
+  await expect(view.input).toHaveText("")
+  await expect(page.locator('[data-slot="user-message-attachment-image"]')).toBeVisible()
+  admit.release()
+  await expect.poll(() => mock.prompts.length).toBe(1)
+  await expect(page.locator('[data-slot="user-message-attachment-image"]')).toHaveCount(1)
 })
 
 test("Undo of a comment-only prompt keeps the draft text and restores the comment once", async ({ page }) => {
