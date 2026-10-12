@@ -24,6 +24,8 @@ type Input = {
   readonly pendingSnapshot?: Effect.Effect<Snapshot.ID | undefined>
   readonly started: number
   readonly assistantMessageID: SessionMessage.ID
+  /** Tools whose argument JSON is published as deltas while the model writes it. Defaults to none. */
+  readonly streamsInput?: (name: string) => boolean
 }
 
 const asRecord = (value: unknown): Record<string, unknown> =>
@@ -128,6 +130,7 @@ export const createLLMEventPublisher = (bus: Pick<Bus.Interface, "publish">, inp
     ended: (id: string, value: string, ordinal: number, state?: Record<string, unknown>) => Effect.Effect<void>,
     delta?: (id: string, value: string, ordinal: number) => Effect.Effect<void>,
     single = false,
+    streams: (id: string) => boolean = () => true,
   ) => {
     type Fragment = {
       readonly ordinal: number
@@ -161,7 +164,7 @@ export const createLLMEventPublisher = (bus: Pick<Bus.Interface, "publish">, inp
       const current = chunks.get(id)
       if (!current) return yield* Effect.die(new Error(`${name} delta before start: ${id}`))
       current.values.push(value)
-      if (delta) current.pending += value
+      if (delta && streams(id)) current.pending += value
       if (state !== undefined) current.state = { ...current.state, ...state }
       if (current.pending && !current.timer) {
         // Own the trailing flush in the provider fiber, even if no more chunks arrive.
@@ -254,17 +257,29 @@ export const createLLMEventPublisher = (bus: Pick<Bus.Interface, "publish">, inp
       }),
     true,
   )
-  const toolInput = fragments("tool input", (id, value) =>
-    Effect.gen(function* () {
+  const toolInput = fragments(
+    "tool input",
+    (id, value) =>
+      Effect.gen(function* () {
+        const tool = tools.get(id)
+        if (!tool) return yield* Effect.die(new Error(`Tool input end before start: ${id}`))
+        yield* bus.publish(SessionEvent.Tool.Input.Ended, {
+          sessionID: input.sessionID,
+          assistantMessageID,
+          id,
+          text: value,
+        })
+      }),
+    (id, value) =>
+      bus
+        .publish(SessionEvent.Tool.Input.Delta, { sessionID: input.sessionID, assistantMessageID, id, delta: value })
+        .pipe(Effect.asVoid),
+    false,
+    // Most tools stay quiet until their arguments are complete; only opted-in tools stream.
+    (id) => {
       const tool = tools.get(id)
-      if (!tool) return yield* Effect.die(new Error(`Tool input end before start: ${id}`))
-      yield* bus.publish(SessionEvent.Tool.Input.Ended, {
-        sessionID: input.sessionID,
-        assistantMessageID,
-        id,
-        text: value,
-      })
-    }),
+      return tool !== undefined && input.streamsInput?.(tool.name) === true
+    },
   )
 
   // Deltas are batched, but block starts are not. Publishing held deltas first keeps each

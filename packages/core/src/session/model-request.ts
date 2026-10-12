@@ -64,6 +64,8 @@ export interface Prepared<Event = SessionRequest> {
   readonly request: LLMRequest
   readonly options: StreamOptions
   readonly retry: (event: PluginHooks.Domains["session"]["retry"]) => Effect.Effect<void>
+  /** Tools whose argument JSON is published while the model writes it. */
+  readonly streamedInputs?: ReadonlySet<string>
   /** Runs a tool call against the tools this request advertised. */
   readonly executeTool: (
     input: Parameters<Tool.Snapshot["execute"]>[0],
@@ -397,6 +399,7 @@ export const layer = Layer.effect(
         options: { ...(http ? { http } : {}), ...(webSocket ? { webSocket } : {}) },
         retry: (event: Parameters<Prepared["retry"]>[0]) =>
           hooks.trigger("session", "retry", event).pipe(Effect.asVoid),
+        streamedInputs: input.tools?.streamedInputs,
         // Permission.assert and the question tool throw declines as defects so tools cannot
         // catch them and turn a "no" into model-visible output. Recover them here as failures.
         executeTool: (call: Parameters<Prepared["executeTool"]>[0]) =>

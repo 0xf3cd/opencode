@@ -50,6 +50,8 @@ export interface NormalizedResult extends Tool.Result {
 
 export interface Snapshot {
   readonly definitions: ReadonlyArray<ToolDefinition>
+  /** Direct tools whose argument JSON streams to clients while the model writes it. */
+  readonly streamedInputs?: ReadonlySet<string>
   readonly codeModeCatalog?: CodeModeCatalog.Inventory
   readonly execute: (input: {
     readonly sessionID: SessionSchema.ID
@@ -254,6 +256,9 @@ const layer = Layer.effect(
           if (codeModeCatalog) catalog = { data, names, value: codeModeCatalog }
           return {
             ...(codeModeCatalog === undefined ? {} : { codeModeCatalog }),
+            streamedInputs: new Set(
+              Array.from(direct).flatMap(([name, tool]) => (tool.options?.streamInput ? [name] : [])),
+            ),
             definitions: [
               ...Array.from(direct)
                 .sort(([left], [right]) => (left < right ? -1 : left > right ? 1 : 0))

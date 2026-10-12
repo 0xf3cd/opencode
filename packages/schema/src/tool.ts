@@ -27,6 +27,12 @@ export interface Namespace {
 interface BaseOptions {
   readonly namespace?: string
   readonly permission?: string
+  /**
+   * Publish the call's argument JSON to clients as the model writes it (`session.tool.input.delta`), so a client can
+   * render the call before it completes. Applies to direct tools only; off by default to keep large arguments off the
+   * event stream.
+   */
+  readonly streamInput?: boolean
 }
 
 export type Options = BaseOptions &

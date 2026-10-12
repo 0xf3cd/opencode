@@ -50,6 +50,8 @@ export const { use: useData, provider: DataProvider } = createSimpleContext({
     shellOutput?: (input: ShellOutputInput) => Promise<ShellOutputOutput>
     onNavigateToSession?: NavigateToSessionFn
     onSessionHref?: SessionHrefFn
+    /** Sends a prompt as the user, e.g. a reply from an agent-rendered surface. Absent where the user cannot reply. */
+    onPrompt?: (input: { sessionID: string; text: string }) => Promise<void>
   }) => {
     return {
       get store() {
@@ -65,6 +67,7 @@ export const { use: useData, provider: DataProvider } = createSimpleContext({
       sessionHref: props.onSessionHref,
       shellRunning: props.shellRunning,
       shellOutput: props.shellOutput,
+      prompt: props.onPrompt,
     }
   },
 })

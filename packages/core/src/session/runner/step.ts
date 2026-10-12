@@ -86,6 +86,7 @@ export const make = Effect.gen(function* () {
       providerMetadataKey: input.model.model.route.providerMetadataKey ?? input.model.model.provider,
       pendingSnapshot: Fiber.join(pendingStartSnapshot),
       started: yield* Clock.currentTimeMillis,
+      streamsInput: (name) => input.prepared.streamedInputs?.has(name) === true,
     })
     const toolRuns: Array<{
       readonly call: ToolCall

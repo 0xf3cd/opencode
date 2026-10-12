@@ -34,6 +34,7 @@ const capture = (
     readonly interruptProgress?: boolean
     readonly beforeTextDelta?: Effect.Effect<void>
     readonly pendingSnapshot?: Effect.Effect<Snapshot.ID | undefined>
+    readonly streamsInput?: (name: string) => boolean
   },
 ) => {
   const published: Array<{ readonly type: string; readonly data: unknown }> = []
@@ -67,6 +68,7 @@ const capture = (
       pendingSnapshot: options?.pendingSnapshot,
       started: 0,
       assistantMessageID: SessionMessage.ID.create(),
+      streamsInput: options?.streamsInput,
     }),
   }
 }
@@ -504,6 +506,32 @@ test("authoritative end values replace accumulated deltas in the durable ended e
   expect(published.find((event) => event.type === "session.reasoning.ended.1")?.data).toMatchObject({
     text: "Thinking done.",
   })
+})
+
+test("tool input deltas stream only for tools that opt in", async () => {
+  const { published, publisher } = capture("anthropic", { streamsInput: (name) => name === "genui_render" })
+  await Effect.runPromise(
+    Effect.forEach(
+      [
+        LLMEvent.toolInputStart({ id: "quiet", name: "read" }),
+        LLMEvent.toolInputDelta({ id: "quiet", name: "read", text: '{"path":"file.txt"}' }),
+        LLMEvent.toolInputEnd({ id: "quiet", name: "read" }),
+        LLMEvent.toolInputStart({ id: "live", name: "genui_render" }),
+        LLMEvent.toolInputDelta({ id: "live", name: "genui_render", text: '{"code":' }),
+        LLMEvent.toolInputDelta({ id: "live", name: "genui_render", text: '"root"}' }),
+        LLMEvent.toolInputEnd({ id: "live", name: "genui_render" }),
+      ],
+      publisher.publish,
+      { discard: true },
+    ),
+  )
+
+  const deltas = published.filter((event) => event.type === "session.tool.input.delta").map((event) => event.data)
+  expect(deltas).toMatchObject([{ id: "live", delta: '{"code":"root"}' }])
+  expect(published.slice(-2).map((event) => event.type)).toEqual([
+    "session.tool.input.delta",
+    "session.tool.input.ended.1",
+  ])
 })
 
 test("tool input deltas are accumulated without being published", async () => {

@@ -7,6 +7,7 @@ import file from "./file"
 import review from "./review"
 import details from "./details"
 import browser from "./browser"
+import genui from "./genui"
 import pairing from "./pairing"
 import updater from "./updater"
 import ssh from "./ssh"
@@ -26,6 +27,7 @@ export const builtins = Extension.compose(
   review,
   details,
   { ...browser, main: () => import("./browser/main") },
+  genui,
   { ...pairing, main: () => import("./pairing/main") },
   { ...updater, main: () => import("./updater/main") },
   { ...ssh, main: () => import("./ssh/main") },

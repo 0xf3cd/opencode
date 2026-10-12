@@ -8,13 +8,18 @@ import {
   CurrentReadToolGroup,
   ToolDisplay,
 } from "../tools/tool-renderer"
-import { currentToolError, currentToolInput, currentToolMetadata, currentToolOutput } from "./current-tool-state"
+import { currentToolError, currentToolMetadata, currentToolOutput } from "./current-tool-state"
+import { currentStreamingInput } from "./streaming-input"
+// Registers the genui_render renderer with the tool registry.
+import "../genui/tool"
 
 export type { SessionUserActions, SessionUserAttachmentReference, SessionUserComment } from "../actions"
 
 export { SessionShellMessage } from "../tools/tool-renderer"
 
 export { currentContentDefaultOpen } from "./current-tool-state"
+
+export { currentStreamingInput } from "./streaming-input"
 
 export function SessionUserMessage(props: {
   sessionID: string
@@ -83,7 +88,7 @@ export function SessionAssistantContent(props: {
           <ToolDisplay
             id={props.contentID}
             tool={tool().name}
-            input={currentToolInput(tool())}
+            input={currentStreamingInput(tool())}
             metadata={currentToolMetadata(tool())}
             output={currentToolOutput(tool())}
             status={tool().state.status}

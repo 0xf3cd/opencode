@@ -90,6 +90,7 @@ export function SessionUIProvider(
       shellOutput={(input) => serverSDK.api.shell.output(input)}
       onNavigateToSession={navigateToSession}
       onSessionHref={href}
+      onPrompt={(input) => data.session.prompt(input).then(() => undefined)}
     >
       <MarkdownProvider readImage={readImage()} openSession={openReferencedSession}>
         <LocalProvider>{props.children}</LocalProvider>
