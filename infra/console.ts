@@ -1,5 +1,5 @@
 import { domain } from "./stage"
-import { EMAILOCTOPUS_API_KEY } from "./app"
+import { EMAILOCTOPUS_API_KEY, OPENSEND_API_KEY } from "./app"
 
 // Preview stages have no new Console or inference deployment to forward to.
 const migrationDomain =
@@ -37,6 +37,7 @@ new sst.cloudflare.x.SolidStart("Console", {
   link: [
     consoleMigration,
     EMAILOCTOPUS_API_KEY,
+    OPENSEND_API_KEY,
     AWS_SES_ACCESS_KEY_ID,
     AWS_SES_SECRET_ACCESS_KEY,
     ENTERPRISE_SALES_INBOX_EMAIL,

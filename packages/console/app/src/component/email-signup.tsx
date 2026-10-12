@@ -2,22 +2,15 @@ import { action, useSubmission } from "@solidjs/router"
 import { Resource } from "@opencode/console-resource"
 import { Show } from "solid-js"
 import { useI18n } from "~/context/i18n"
+import { subscribeToNewsletter } from "~/lib/opensend"
 
 const emailSignup = action(async (formData: FormData) => {
   "use server"
-  const emailAddress = formData.get("email")!
-  const listId = "8b9bb82c-9d5f-11f0-975f-0df6fd1e4945"
-  const response = await fetch(`https://api.emailoctopus.com/lists/${listId}/contacts`, {
-    method: "PUT",
-    headers: {
-      Authorization: `Bearer ${Resource.EMAILOCTOPUS_API_KEY.value}`,
-      "Content-Type": "application/json",
-    },
-    body: JSON.stringify({
-      email_address: emailAddress,
-    }),
-  })
-  console.log(response)
+  await subscribeToNewsletter(
+    Resource.OPENSEND_API_KEY.value,
+    formData.get("email") as string,
+    "opencode.ai newsletter signup",
+  )
   return true
 })
 

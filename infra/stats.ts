@@ -1,4 +1,4 @@
-import { EMAILOCTOPUS_API_KEY } from "./app"
+import { OPENSEND_API_KEY } from "./app"
 import { domain } from "./stage"
 
 // Keep the deployed names and arguments: the R2 stats sync still uses this VPC
@@ -71,7 +71,7 @@ export const app = new sst.cloudflare.x.SolidStart("Stats", {
   path: "packages/stats/app",
   buildCommand: "bun run build",
   domain: `stats.${domain}`,
-  link: [database, EMAILOCTOPUS_API_KEY],
+  link: [database, OPENSEND_API_KEY],
   environment: {
     PUBLIC_URL: `https://${domain}/data`,
   },
