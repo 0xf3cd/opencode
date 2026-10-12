@@ -2,6 +2,8 @@
 
 import { Script } from "@opencode/script"
 import { $ } from "bun"
+import os from "os"
+import path from "path"
 import { fileURLToPath } from "url"
 
 console.log("=== publishing ===\n")
@@ -115,4 +117,20 @@ if (Script.release && !Script.preview) {
 if (Script.release) {
   console.log("\n=== desktop ===\n")
   await $`bun ./packages/desktop/scripts/publish.ts`
+}
+
+// Gated by the OPENCODE_V2_GITHUB_RELEASES repository variable so the V1/V2 rollout controls when this starts.
+// See docs/release/v1-v2-isolation.md.
+if (Script.release && !Script.preview && process.env["OPENCODE_GITHUB_RELEASE"] === "true") {
+  console.log("\n=== github release ===\n")
+  // OpenCode 1 clients and installers resolve updates through GitHub's Latest release, so V2 releases
+  // never take that flag and carry no assets. The publish workflow verifies Latest afterwards.
+  const notes = process.env["OPENCODE_RELEASE_NOTES"]?.trim() ?? ""
+  const file = path.join(os.tmpdir(), `opencode-release-notes-${tag}.md`)
+  await Bun.write(file, notes)
+  if ((await $`gh release view ${tag} --json tagName`.quiet().nothrow()).exitCode === 0) {
+    await $`gh release edit ${tag} --title ${tag} --draft=false --prerelease=false --latest=false ${notes ? ["--notes-file", file] : []}`
+  } else {
+    await $`gh release create ${tag} --verify-tag --title ${tag} --notes-file ${file} --latest=false`
+  }
 }

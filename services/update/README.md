@@ -123,6 +123,16 @@ byte size. Desktop records additionally contain `metadata.manifests`, with
 the CDN URLs and the original Electron update checksums. Existing `npm`,
 `github`, and `aur` distributions are published independently.
 
+OpenCode 1 publishes only from `refs/heads/v1`, and only to the `v1` channel, so OpenCode 1
+clients never resolve an OpenCode 2 release. OpenCode 2 refs cannot publish to `v1`. OpenCode 1
+sends the same `opencode/latest/<version>/cli` User-Agent shape as OpenCode 2, so `v1` requests
+are treated as cross-channel and do not apply minimum releases. See
+[`docs/release/v1-v2-isolation.md`](../../docs/release/v1-v2-isolation.md).
+
+```sh
+curl 'https://opencode.ai/update/api/v1/cli/github'
+```
+
 GitHub Actions publishes artifacts through `POST https://opencode.ai/update/api/publish`
 using a short-lived OIDC token with audience `https://update.opencode.ai`. The original
 hostname and token audience remain supported. The Worker accepts only tokens signed by

@@ -518,6 +518,8 @@ export function validGitHubClaims(claims: JWTPayload): claims is GitHubClaims {
 }
 
 export function channelsForRef(ref: string) {
+  // OpenCode 1 publishes only to its own channel so its clients never resolve OpenCode 2 releases.
+  if (ref === "refs/heads/v1") return ["v1"]
   if (ref === "refs/heads/dev") return ["dev", "latest"]
   if (ref === "refs/heads/v2") return ["dev", "latest"]
   if (ref === "refs/heads/beta") return ["beta"]

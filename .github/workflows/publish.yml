@@ -644,6 +644,7 @@ jobs:
           OPENCODE_VERSION: ${{ needs.version.outputs.version }}
           OPENCODE_RELEASE: ${{ needs.version.outputs.release }}
           OPENCODE_RELEASE_NOTES: ${{ (github.ref_name == 'dev' && inputs.release_notes) || '' }}
+          OPENCODE_GITHUB_RELEASE: ${{ (github.ref_name == 'dev' && vars.OPENCODE_V2_GITHUB_RELEASES) || '' }}
           AUR_KEY: ${{ secrets.AUR_KEY }}
           GITHUB_TOKEN: ${{ steps.committer.outputs.token }}
           GH_REPO: ${{ needs.version.outputs.repo }}
@@ -655,6 +656,24 @@ jobs:
           CLOUDFLARE_ACCOUNT_ID: 15d29c8639fd3733b1b5486a2acfd968
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
 
+  verify-github-latest:
+    needs:
+      - version
+      - publish
+    if: ${{ !cancelled() && github.repository == 'anomalyco/opencode' && github.ref_name == 'dev' && needs.version.outputs.release && needs.publish.result == 'success' }}
+    runs-on: blacksmith-4vcpu-ubuntu-2404
+    steps:
+      - uses: actions/checkout@f43a0e5ff2bd294095638e18286ca9a3d1956744 # v3.6.0
+
+      - uses: ./.github/actions/setup-bun
+
+      # OpenCode 1 clients resolve updates through GitHub's Latest release, which must stay on 1.x.
+      - name: Verify GitHub Latest release is still V1
+        run: ./script/check-github-latest.ts
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+
   notify-discord-v2:
     needs:
       - version
@@ -662,11 +681,11 @@ jobs:
     if: ${{ !cancelled() && github.repository == 'anomalyco/opencode' && github.ref_name == 'dev' && needs.version.outputs.release && needs.publish.result == 'success' }}
     runs-on: blacksmith-4vcpu-ubuntu-2404
     steps:
-      # Unlike dev, V2 publishes a tag rather than a GitHub Release event.
+      # notify-discord.yml only announces V1 releases, so V2 is announced once, here.
       - name: Announce V2 release in Discord
         uses: SethCohen/github-releases-to-discord@24d166886aee4646d448c8a389ff9e1ebcab3682 # v1.20.0
         with:
           webhook_url: ${{ secrets.DISCORD_WEBHOOK }}
           release_name: OpenCode V2 ${{ needs.version.outputs.tag }}
           release_body: ${{ inputs.release_notes }}
-          release_html_url: https://github.com/${{ github.repository }}/tree/${{ needs.version.outputs.tag }}
+          release_html_url: https://github.com/${{ github.repository }}/${{ (vars.OPENCODE_V2_GITHUB_RELEASES == 'true' && 'releases/tag') || 'tree' }}/${{ needs.version.outputs.tag }}
