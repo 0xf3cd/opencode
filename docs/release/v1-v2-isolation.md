@@ -44,7 +44,7 @@ requests, resolved to the Latest release.
 
 ## Changes
 
-- **OpenCode 2 (`dev`):**
+- **OpenCode 2 (`dev`, #54903):**
   - `script/publish.ts` creates or edits the GitHub Release for each stable tag with
     `--latest=false`, using the reviewed release notes. It attaches no assets.
   - This only runs when the repository variable `OPENCODE_V2_GITHUB_RELEASES` is `true`.
@@ -52,7 +52,7 @@ requests, resolved to the Latest release.
     unless Latest is still a `v1.` release.
   - `notify-discord.yml` only announces `v1.` releases; the publish workflow announces OpenCode 2.
   - The update service accepts `refs/heads/v1` publishes, only to the `v1` channel.
-- **OpenCode 1 (`v1`):**
+- **OpenCode 1 (`v1`, #54904):**
   - The CLI discovers curl, yarn and unknown installs through `opencode.ai/update/api/v1/cli/github`,
     with a 10s timeout, and falls back to the `opencode-ai` npm dist-tag. It never reads GitHub's Latest.
   - Every install method ignores versions outside the installed major version, and only newer
