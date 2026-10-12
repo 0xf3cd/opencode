@@ -11,16 +11,15 @@ import { ConfigProviderOptionsV1 } from "./provider-options.js"
 import { Provider } from "../../provider.js"
 import { Model } from "../../model.js"
 
-const decodeOptions = { errors: "all", onExcessProperty: "ignore", propertyOrder: "original" } as const
+const decodeOptions = { errors: "all", onExcessProperty: "ignore" } as const
 const decodeAgent = Schema.decodeUnknownSync(Schema.fromJsonString(ConfigAgent.Info), decodeOptions)
 const encodeAgent = Schema.encodeSync(ConfigAgent.Info)
 
 function permissions(info?: ConfigPermissionV1.Info) {
-  const rules = Object.entries(info ?? {}).flatMap(([key, rule]) => {
-    if (!rule) return []
+  const rules = (info ?? []).flatMap(([key, rule]) => {
     const action = normalizeAction(key)
     if (typeof rule === "string") return [{ action, resource: "*", effect: rule }]
-    return Object.entries(rule).map(([resource, effect]) => ({ action, resource, effect }))
+    return rule.map(([resource, effect]) => ({ action, resource, effect }))
   })
   return rules.length ? rules : undefined
 }
@@ -121,7 +120,7 @@ function migrateStandardProvider(info: ConfigProviderV1.Info) {
     body: info.options && options.body,
     models:
       info.models &&
-      Object.fromEntries(Object.entries(info.models).map(([name, model]) => [name, migrateModel(model)])),
+      Object.fromEntries(Object.entries(info.models).map(([name, model]) => [name, migrateModel(model, info.npm)])),
   }
 }
 
@@ -167,7 +166,7 @@ export function providerID(input: string) {
   return input
 }
 
-function migrateModel(info: typeof ConfigProviderV1.Model.Type) {
+function migrateModel(info: typeof ConfigProviderV1.Model.Type, npm: string | undefined) {
   const disableThinkingBlockBinding =
     info.options?.thinking?.blockBinding === false || info.options?.reasoningConfig?.blockBinding === false
   const options = info.options && { ...info.options }
@@ -186,7 +185,13 @@ function migrateModel(info: typeof ConfigProviderV1.Model.Type) {
     }
   }
 
-  const settings = options && ConfigProviderOptionsV1.model(options)
+  const compatible = (info.provider?.npm ?? npm) === "@ai-sdk/openai-compatible"
+  const split = (input: Record<string, unknown>) =>
+    compatible
+      ? ConfigProviderOptionsV1.compatibleModel(input)
+      : { settings: ConfigProviderOptionsV1.model(input), body: undefined }
+  const migrated = options && split(options)
+  const settings = migrated?.settings
   const compatibility = Model.compatibility(info.interleaved)
   const costs = info.cost && [
     {
@@ -225,12 +230,10 @@ function migrateModel(info: typeof ConfigProviderV1.Model.Type) {
     settings: info.provider?.api ? { ...settings, baseURL: info.provider.api } : settings,
     capabilities,
     headers: info.headers,
+    body: migrated?.body,
     variants:
       info.variants &&
-      Object.entries(info.variants).map(([id, options]) => ({
-        id,
-        settings: ConfigProviderOptionsV1.model(options),
-      })),
+      Object.entries(info.variants).map(([id, options]) => ({ id, ...split(options) })),
     cost: costs,
     disabled: info.status === "deprecated" ? true : undefined,
     limit: info.limit && {
