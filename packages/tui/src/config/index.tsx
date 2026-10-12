@@ -195,6 +195,9 @@ export const Info = Schema.Struct({
       indicators: Schema.optional(Schema.Literals(["status", "numbers"])).annotate({
         description: "Show status icons or always show tab numbers",
       }),
+      external: Schema.optional(Schema.Literals(["open", "ignore"])).annotate({
+        description: "Open or ignore tabs for root sessions created outside this client, such as from the CLI or SDK",
+      }),
     }),
   ).annotate({ description: "Tab strip settings" }),
   mini: Schema.optional(
@@ -275,6 +278,7 @@ export type Resolved = Omit<Info, "attention" | "cursor" | "keybinds" | "leader"
     scope: "global" | "cwd"
     layout: "horizontal" | "vertical"
     indicators: "status" | "numbers"
+    external: "open" | "ignore"
   }
 }
 
@@ -328,6 +332,7 @@ export function resolve(
       scope: input.tabs?.scope ?? "cwd",
       layout: input.tabs?.layout ?? "horizontal",
       indicators: input.tabs?.indicators ?? "status",
+      external: input.tabs?.external ?? "ignore",
     },
   }
 }

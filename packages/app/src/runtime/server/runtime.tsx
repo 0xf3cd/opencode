@@ -1,5 +1,15 @@
 import { createSimpleContext } from "@opencode/ui/context"
-import { Accessor, batch, createEffect, createMemo, createResource, createRoot, getOwner, untrack } from "solid-js"
+import {
+  Accessor,
+  batch,
+  createEffect,
+  createMemo,
+  createResource,
+  createRoot,
+  getOwner,
+  onCleanup,
+  untrack,
+} from "solid-js"
 import { createServerProjects, RECENTLY_CLOSED_DISPLAY_LIMIT, ServerConnection, useServers } from "./registry"
 import { pathKey } from "@/workspaces/path-key"
 import { useServerHealth } from "@/runtime/server/health"
@@ -20,6 +30,7 @@ import { useSettings } from "@/settings/model"
 import { timelinePreset } from "@opencode/session-ui/timeline/detail"
 import type { SessionInfo } from "@opencode/client/promise"
 import { resolveProjectForSession, resolveSessionDetailsProject } from "@/shell/layout/helpers"
+import { useTabs } from "@/shell/tabs/tabs"
 
 export const { use: useGlobal, provider: GlobalProvider } = createSimpleContext({
   name: "Global",
@@ -168,6 +179,7 @@ function createServerController(
 ) {
   const language = useLanguage()
   const settings = useSettings()
+  const tabs = useTabs()
   const connKey = ServerConnection.key(conn)
   const sdk = createServerSdkContext(conn, scope)
 
@@ -223,6 +235,25 @@ function createServerController(
   }
 
   const projectsList = createMemo(() => projects.list().map(enrich))
+
+  onCleanup(
+    sdk.event.on("session.created", (event) => {
+      if (!settings.general.openExternalSessions() || event.data.parentID) return
+
+      // This window admits its own creates optimistically before their echo and opens their tabs itself.
+      if (data.session.get(event.data.sessionID)) return
+
+      // Non-git directories share the global project ID, so they match by directory instead.
+      const opened = projectsList().some((project) =>
+        project.id && project.id !== "global"
+          ? project.id === event.data.projectID
+          : pathKey(project.worktree) === pathKey(event.data.location.directory),
+      )
+
+      if (!opened) return
+      tabs.addSessionTab({ server: connKey, sessionId: event.data.sessionID })
+    }),
+  )
 
   const forSession = (session: SessionInfo) => {
     const project = resolveProjectForSession(session, projectsList(), sync.data.project)

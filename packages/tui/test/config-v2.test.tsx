@@ -70,6 +70,7 @@ test("resolves nested config and keybind defaults", () => {
     scope: "cwd",
     layout: "horizontal",
     indicators: "status",
+    external: "ignore",
   })
   expect(config.session.new_location).toBe("launch")
   expect(config.session.tps).toBe(true)

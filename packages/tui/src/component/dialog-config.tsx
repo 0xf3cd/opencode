@@ -161,6 +161,15 @@ export const settings: Setting[] = [
     keywords: ["tab numbers", "number mode", "status icons"],
   },
   {
+    title: "External sessions",
+    category: "Tabs",
+    path: ["tabs", "external"],
+    default: "ignore",
+    values: ["ignore", "open"],
+    labels: ["ignore", "open as tabs"],
+    keywords: ["cli", "sdk", "codemode", "auto open", "created elsewhere"],
+  },
+  {
     title: "Layout",
     category: "Diffs",
     path: ["diffs", "view"],

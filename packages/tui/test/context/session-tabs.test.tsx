@@ -202,6 +202,11 @@ async function renderSessionTabs(
     focus: () => app.renderer.emit("focus"),
     blur: () => app.renderer.emit("blur"),
     flush: () => storage.flush(),
+    setExternal: (external: "open" | "ignore") =>
+      config.update((draft) => {
+        draft.tabs ??= {}
+        draft.tabs.external = external
+      }),
     setTabsEnabled: (enabled: boolean) =>
       config.update((draft) => {
         draft.tabs ??= {}
@@ -211,6 +216,23 @@ async function renderSessionTabs(
       app.renderer.destroy()
       await storage.flush()
       await temporary?.[Symbol.asyncDispose]()
+    },
+  }
+}
+
+function created(sessionID: string, options?: { parentID?: string; directory?: string }): OpenCodeEvent {
+  return {
+    id: `evt_created_${sessionID}`,
+    created: Date.now(),
+    type: "session.created",
+    durable: { aggregateID: sessionID, seq: 1, version: 1 },
+    data: {
+      sessionID,
+      projectID: "project",
+      location: { directory: options?.directory ?? directory },
+      parentID: options?.parentID,
+      slug: sessionID,
+      version: "test",
     },
   }
 }
@@ -276,6 +298,27 @@ test("opens a background tab without changing the current session", async () => 
     expect(setup.tabs.current()).toBe("first")
     setup.tabs.move("background", 0)
     await wait(() => setup.tabs.tabs()[0]?.sessionID === "background")
+  } finally {
+    await setup.destroy()
+  }
+})
+
+test("opens root sessions created by other clients in the launch directory only when enabled", async () => {
+  const setup = await renderSessionTabs("first")
+
+  try {
+    await wait(() => setup.data.session.get("first") !== undefined && setup.tabs.tabs().length === 1)
+    setup.emit(created("ignored"))
+    // The data layer fetches every created session, so the fetch shows the event reached all listeners.
+    await wait(() => setup.sessions.includes("ignored"), 2_000, "ignored session fetch")
+    await setup.setExternal("open")
+    setup.emit(created("child", { parentID: "first" }))
+    setup.emit(created("elsewhere", { directory: `${directory}/other` }))
+    setup.emit(created("external"))
+    await wait(() => setup.tabs.tabs().some((tab) => tab.sessionID === "external"), 2_000, "external tab")
+
+    expect(setup.tabs.tabs().map((tab) => tab.sessionID)).toEqual(["first", "external"])
+    expect(setup.tabs.current()).toBe("first")
   } finally {
     await setup.destroy()
   }

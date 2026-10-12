@@ -217,6 +217,25 @@ const TabLayoutSetting = () => {
   )
 }
 
+const OpenExternalSessionsSetting = () => {
+  const language = useLanguage()
+  const settings = useSettings()
+
+  return (
+    <SettingsRow
+      title={language.t("settings.general.row.openExternalSessions.title")}
+      description={language.t("settings.general.row.openExternalSessions.description")}
+    >
+      <div data-action="settings-open-external-sessions">
+        <Switch
+          checked={settings.general.openExternalSessions()}
+          onChange={(checked) => settings.general.setOpenExternalSessions(checked)}
+        />
+      </div>
+    </SettingsRow>
+  )
+}
+
 export const SettingsGeneral: Component = () => {
   const language = useLanguage()
   const platform = usePlatform()
@@ -244,6 +263,7 @@ export const SettingsGeneral: Component = () => {
       <SettingsList>
         <LanguageSetting />
         <TabLayoutSetting />
+        <OpenExternalSessionsSetting />
 
         <WorkspaceDestinationSetting />
         <AutoApprovePermissionsSetting />
