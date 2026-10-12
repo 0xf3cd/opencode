@@ -7,6 +7,7 @@ import { Framing } from "../route/framing.js"
 import { Protocol } from "../route/protocol.js"
 import {
   AIError,
+  InvalidProviderOutputError,
   LLMEvent,
   Usage,
   type FinishReason,
@@ -253,6 +254,7 @@ interface ParserState {
   readonly providerMetadataKey: string
   readonly finishReason?: string
   readonly hasToolCalls: boolean
+  readonly hasOutput: boolean
   readonly promptFeedback?: GeminiPromptFeedback
   readonly usage?: Usage
   readonly lifecycle: Lifecycle.State
@@ -522,11 +524,16 @@ const mapUsage = (usage: GeminiUsage | undefined, metadataKey: string) => {
   })
 }
 
-const mapFinishReason = (finishReason: string | undefined, hasToolCalls: boolean): FinishReason => {
+const mapFinishReason = (finishReason: string | undefined, hasToolCalls: boolean, hasOutput = false): FinishReason => {
   if (finishReason === undefined) return hasToolCalls ? "tool-calls" : "unknown"
   if (finishReason === "STOP") return hasToolCalls ? "tool-calls" : "stop"
   if (finishReason === "MAX_TOKENS") return "length"
   if (GeminiGenerateContent.contentFiltered(finishReason)) return "content-filter"
+  // Gemini may report `MALFORMED_RESPONSE` on the final chunk when a stray trailing
+  // token or tag boundary follows otherwise complete text, media, or tool calls, or
+  // `MALFORMED_FUNCTION_CALL` after a valid tool call was already emitted.
+  if (finishReason === "MALFORMED_RESPONSE" && hasOutput) return hasToolCalls ? "tool-calls" : "stop"
+  if (finishReason === "MALFORMED_FUNCTION_CALL" && hasToolCalls) return "tool-calls"
   if (
     finishReason === "MALFORMED_FUNCTION_CALL" ||
     finishReason === "UNEXPECTED_TOOL_CALL" ||
@@ -570,7 +577,9 @@ const finish = (state: ParserState): ReadonlyArray<LLMEvent> => {
   Lifecycle.finish(lifecycle, events, {
     reason: {
       normalized:
-        promptBlockReason === undefined ? mapFinishReason(finishReason, state.hasToolCalls) : "content-filter",
+        promptBlockReason === undefined
+          ? mapFinishReason(finishReason, state.hasToolCalls, state.hasOutput)
+          : "content-filter",
       raw: finishReason,
     },
     usage: state.usage,
@@ -612,22 +621,9 @@ const step = (state: ParserState, event: GeminiEvent) => {
       : state.usage,
   }
   const candidate = event.candidates?.[0]
-  if (candidate?.finishReason && mapFinishReason(candidate.finishReason, state.hasToolCalls) === "error")
-    return Effect.fail(
-      ProviderShared.eventError(
-        state.route,
-        `Gemini stopped with ${candidate.finishReason}`,
-        ProviderShared.encodeJson(event),
-      ),
-    )
-  if (!candidate?.content)
-    return Effect.succeed([
-      { ...nextState, finishReason: candidate?.finishReason ?? nextState.finishReason },
-      [],
-    ] as const)
-
   const events: LLMEvent[] = []
   let hasToolCalls = nextState.hasToolCalls
+  let hasOutput = nextState.hasOutput
   let lifecycle = nextState.lifecycle
   let reasoningSignature = nextState.reasoningSignature
   let textSignature = nextState.textSignature
@@ -638,7 +634,7 @@ const step = (state: ParserState, event: GeminiEvent) => {
   // Supplier ids must be tracked across chunks of the same response, not just within one event's parts.
   const seenCallIds = new Set(nextState.seenCallIds)
 
-  for (const input of candidate.content.parts ?? []) {
+  for (const input of candidate?.content?.parts ?? []) {
     if (
       ProviderShared.isRecord(input) &&
       !("text" in input) &&
@@ -669,6 +665,7 @@ const step = (state: ParserState, event: GeminiEvent) => {
             : undefined,
         }),
       )
+      hasOutput = true
       continue
     }
     if ("text" in part && part.text.length > 0) {
@@ -722,6 +719,7 @@ const step = (state: ParserState, event: GeminiEvent) => {
         textSignature ? providerMetadata(state.providerMetadataKey, { thoughtSignature: textSignature }) : undefined,
       )
       textSignature = undefined
+      hasOutput = true
       continue
     }
 
@@ -769,13 +767,29 @@ const step = (state: ParserState, event: GeminiEvent) => {
         }),
       )
       hasToolCalls = true
+      hasOutput = true
     }
   }
+
+  if (candidate?.finishReason && mapFinishReason(candidate.finishReason, hasToolCalls, hasOutput) === "error")
+    return Effect.fail(
+      new AIError({
+        reason: new InvalidProviderOutputError({
+          route: state.route,
+          message: `Gemini stopped with ${candidate.finishReason}`,
+          body: ProviderShared.encodeJson(event),
+          ...(candidate.finishReason === "MALFORMED_RESPONSE" || candidate.finishReason === "MALFORMED_FUNCTION_CALL"
+            ? { classification: "incomplete-stream" as const }
+            : {}),
+        }),
+      }),
+    )
 
   return Effect.succeed([
     {
       ...nextState,
       hasToolCalls,
+      hasOutput,
       lifecycle,
       reasoningSignature,
       textSignature,
@@ -784,7 +798,7 @@ const step = (state: ParserState, event: GeminiEvent) => {
       nextReasoningId,
       nextTextId,
       seenCallIds,
-      finishReason: candidate.finishReason ?? nextState.finishReason,
+      finishReason: candidate?.finishReason ?? nextState.finishReason,
     },
     events,
   ] as const)
@@ -811,6 +825,7 @@ export const protocol = Protocol.make({
       route: `${request.model.provider}/${request.model.route.id}`,
       providerMetadataKey: request.model.route.providerMetadataKey ?? String(request.model.provider),
       hasToolCalls: false,
+      hasOutput: false,
       lifecycle: Lifecycle.initial(),
       nextReasoningId: 0,
       nextTextId: 0,

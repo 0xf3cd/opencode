@@ -1,6 +1,16 @@
 import { describe, expect } from "bun:test"
 import { Effect } from "effect"
-import { LLM, AIError, LLMRequest, Message, ToolCallPart, ToolDefinition, Usage, Media } from "../../src/index.js"
+import {
+  LLM,
+  AIError,
+  LLMRequest,
+  Message,
+  ToolCallPart,
+  ToolDefinition,
+  Usage,
+  Media,
+  isRetryable,
+} from "../../src/index.js"
 import { Auth, LLMClient } from "../../src/route.js"
 import { compileRequest } from "../../src/route/client.js"
 import * as Gemini from "../../src/protocols/gemini.js"
@@ -1708,7 +1718,100 @@ describe("Gemini route", () => {
           reason: { _tag: "InvalidProviderOutput", body: JSON.stringify(event), http: { status: 200 } },
           message: `Gemini stopped with ${raw}`,
         })
+        expect(isRetryable(error)).toBe(raw === "MALFORMED_RESPONSE" || raw === "MALFORMED_FUNCTION_CALL")
       }
+    }),
+  )
+
+  it.effect("completes MALFORMED_RESPONSE after streamed output while rejecting thought-only turns", () =>
+    Effect.gen(function* () {
+      const completedText = yield* LLMClient.generate(request).pipe(
+        Effect.provide(
+          fixedResponse(
+            sseEvents(
+              {
+                candidates: [{ content: { role: "model", parts: [{ text: "Complete answer." }] }, index: 0 }],
+              },
+              {
+                candidates: [
+                  {
+                    content: { role: "model", parts: [{ text: "", thoughtSignature: "sig_final" }] },
+                    finishReason: "MALFORMED_RESPONSE",
+                    index: 0,
+                  },
+                ],
+                usageMetadata: {
+                  promptTokenCount: 100,
+                  candidatesTokenCount: 4,
+                  totalTokenCount: 105,
+                  thoughtsTokenCount: 1,
+                },
+              },
+            ),
+          ),
+        ),
+      )
+      const completedTools = yield* LLMClient.generate(request).pipe(
+        Effect.provide(
+          fixedResponse(
+            sseEvents(
+              {
+                candidates: [
+                  {
+                    content: {
+                      role: "model",
+                      parts: [{ functionCall: { id: "call_1", name: "lookup", args: { q: "status" } } }],
+                    },
+                    index: 0,
+                  },
+                ],
+              },
+              {
+                candidates: [
+                  {
+                    content: { role: "model", parts: [] },
+                    finishReason: "MALFORMED_FUNCTION_CALL",
+                    index: 0,
+                  },
+                ],
+              },
+            ),
+          ),
+        ),
+      )
+      const thoughtOnly = yield* LLMClient.generate(request).pipe(
+        Effect.provide(
+          fixedResponse(
+            sseEvents(
+              {
+                candidates: [{ content: { role: "model", parts: [{ text: "Thinking...", thought: true }] }, index: 0 }],
+              },
+              {
+                candidates: [
+                  {
+                    content: { role: "model", parts: [{ text: "", thoughtSignature: "sig_thought" }] },
+                    finishReason: "MALFORMED_RESPONSE",
+                    index: 0,
+                  },
+                ],
+              },
+            ),
+          ),
+        ),
+        Effect.flip,
+      )
+
+      expect(completedText.text).toBe("Complete answer.")
+      expect(completedText.finishReason).toEqual({ normalized: "stop", raw: "MALFORMED_RESPONSE" })
+      expect(completedText.usage).toMatchObject({ inputTokens: 100, outputTokens: 5, reasoningTokens: 1 })
+      expect(completedText.events.find((event) => event.type === "text-end")).toMatchObject({
+        type: "text-end",
+        providerMetadata: { google: { thoughtSignature: "sig_final" } },
+      })
+      expect(completedTools.finishReason).toEqual({ normalized: "tool-calls", raw: "MALFORMED_FUNCTION_CALL" })
+      expect(completedTools.toolCalls).toHaveLength(1)
+      expect(thoughtOnly.message).toBe("Gemini stopped with MALFORMED_RESPONSE")
+      expect(isRetryable(thoughtOnly)).toBe(true)
     }),
   )
 
