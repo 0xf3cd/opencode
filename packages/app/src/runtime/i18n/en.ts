@@ -816,6 +816,9 @@ export const dict = {
     "Choose whether to queue follow-ups or steer the current turn. Use {{keybind}} to switch.",
   "settings.general.row.followUpBehavior.queue": "Queue",
   "settings.general.row.followUpBehavior.steer": "Steer",
+  "settings.general.row.openExternalSessions.title": "Open sessions created elsewhere",
+  "settings.general.row.openExternalSessions.description":
+    "Open sessions started from the CLI, SDK, or another client as background tabs",
   "settings.general.row.pinchZoom.title": "Pinch to zoom",
   "settings.general.row.pinchZoom.description": "Allow trackpad pinch and Ctrl-scroll gestures to zoom",
 

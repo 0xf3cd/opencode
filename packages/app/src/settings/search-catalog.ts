@@ -30,6 +30,12 @@ export const clientSettings: Entry<SettingsRootTab>[] = [
   },
   {
     tab: "general",
+    label: "settings.general.row.openExternalSessions.title",
+    target: "settings-open-external-sessions",
+    keywords: "tabs cli sdk codemode auto open external",
+  },
+  {
+    tab: "general",
     label: "settings.workspaces.default.title",
     target: "settings-workspace-destination",
     description: "settings.workspaces.default.description",

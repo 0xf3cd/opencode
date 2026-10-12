@@ -307,6 +307,18 @@ export const { use: useSessionTabs, provider: SessionTabsProvider } = createSimp
       }),
     )
     onCleanup(
+      event.on("session.created", (evt) => {
+        if (!enabled() || config.tabs.external !== "open" || evt.data.parentID) return
+        // This client admits its own creates optimistically before their echo and tabs them by navigating.
+        if (data.session.get(evt.data.sessionID)) return
+        if (config.tabs.scope === "cwd" && evt.data.location.directory !== paths.cwd) return
+        const sessionID = evt.data.sessionID
+        update((draft) => {
+          draft.tabs = openSessionTab(draft.tabs, { sessionID, title: evt.data.title })
+        })
+      }),
+    )
+    onCleanup(
       event.on("session.inbox.enqueued", (evt) => {
         if (!enabled() || evt.data.item.type !== "user") return
         const sessionID = root(evt.data.sessionID)

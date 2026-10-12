@@ -305,6 +305,47 @@ test("inactive tabs stay busy while work waits in their inbox, and pulse on a ne
   await expect(tab(a.id).locator('[data-slot="tab-prompt-pulse"]')).toHaveCount(0)
 })
 
+test("sessions created outside this window open as background tabs when enabled", async ({ page }) => {
+  const workspace = await openSession(page, {
+    name: "TabExternal",
+    sessions: [a],
+    seed: { settings: { general: { openExternalSessions: true } } },
+  })
+
+  const created = (id: string, input: { directory: string; projectID: string; parentID?: string }) => {
+    workspace.sessions.push(session({ id, title: `${id} title`, ...input }))
+
+    return {
+      id: `evt_created_${id}`,
+      created: 2,
+      type: "session.created",
+      durable: { aggregateID: id, seq: 1, version: 1 },
+      data: {
+        sessionID: id,
+        slug: id,
+        version: "dev",
+        projectID: input.projectID,
+        location: { directory: input.directory },
+        parentID: input.parentID,
+      },
+    } satisfies Extract<OpenCodeEvent, { type: "session.created" }>
+  }
+
+  const titles = page.locator("[data-titlebar-tab-slot] [data-titlebar-tab-title]")
+  const own = { directory: workspace.directory, projectID: workspace.projectID }
+
+  await expect(titles).toHaveText([a.title])
+  // Delivered in order, so the subagent and the session from a project that is not open are settled before the last.
+  await workspace.push([
+    created("ses_tab_child", { ...own, parentID: a.id }),
+    created("ses_tab_closed_project", { directory: "C:/OpenCode/Elsewhere", projectID: "proj_elsewhere" }),
+    created("ses_tab_external", own),
+  ])
+
+  await expect(titles).toHaveText([a.title, "ses_tab_external title"])
+  await expectPath(page, sessionHref(a.id))
+})
+
 test("selecting a tab with waiting work waits for its transcript instead of showing only the inbox", async ({
   page,
 }) => {
