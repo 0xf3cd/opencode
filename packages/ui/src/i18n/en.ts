@@ -193,7 +193,6 @@ const source = {
   "ui.tool.browser": "Browser",
   "ui.genui.title": "Generated UI",
   "ui.genui.writing": "Writing",
-  "ui.genui.panel": "In the side panel",
   "ui.genui.submitted": "Submitted in {{title}}:",
   "ui.genui.total": "Total",
   "ui.genui.actual": "Actual",

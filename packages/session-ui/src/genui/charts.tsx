@@ -1,6 +1,6 @@
 import { createMemo, createSignal, createUniqueId, For, Index, Show, type JSX } from "solid-js"
 import { createResizeObserver } from "@solid-primitives/resize-observer"
-import type { GenUILibrary } from "@opencode/plugin-genui/library"
+import type { GenUICatalog } from "@opencode/plugin-genui/catalog"
 import { useI18n } from "@opencode/ui/context/i18n"
 
 /*
@@ -10,9 +10,9 @@ import { useI18n } from "@opencode/ui/context/i18n"
  * gradients and square end markers follow the stats site.
  */
 
-export type Format = (typeof GenUILibrary.formats)[number]
+export type Format = (typeof GenUICatalog.formats)[number]
 
-type Tone = (typeof GenUILibrary.tones)[number]
+type Tone = (typeof GenUICatalog.tones)[number]
 
 type Series = { readonly name: string; readonly values: readonly (number | null)[] }
 

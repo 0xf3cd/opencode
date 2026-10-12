@@ -34,7 +34,6 @@ const capture = (
     readonly interruptProgress?: boolean
     readonly beforeTextDelta?: Effect.Effect<void>
     readonly pendingSnapshot?: Effect.Effect<Snapshot.ID | undefined>
-    readonly streamsInput?: (name: string) => boolean
   },
 ) => {
   const published: Array<{ readonly type: string; readonly data: unknown }> = []
@@ -68,7 +67,6 @@ const capture = (
       pendingSnapshot: options?.pendingSnapshot,
       started: 0,
       assistantMessageID: SessionMessage.ID.create(),
-      streamsInput: options?.streamsInput,
     }),
   }
 }
@@ -508,52 +506,55 @@ test("authoritative end values replace accumulated deltas in the durable ended e
   })
 })
 
-test("tool input deltas stream only for tools that opt in", async () => {
-  const { published, publisher } = capture("anthropic", { streamsInput: (name) => name === "genui_render" })
-  await Effect.runPromise(
-    Effect.forEach(
-      [
-        LLMEvent.toolInputStart({ id: "quiet", name: "read" }),
-        LLMEvent.toolInputDelta({ id: "quiet", name: "read", text: '{"path":"file.txt"}' }),
-        LLMEvent.toolInputEnd({ id: "quiet", name: "read" }),
-        LLMEvent.toolInputStart({ id: "live", name: "genui_render" }),
-        LLMEvent.toolInputDelta({ id: "live", name: "genui_render", text: '{"code":' }),
-        LLMEvent.toolInputDelta({ id: "live", name: "genui_render", text: '"root"}' }),
-        LLMEvent.toolInputEnd({ id: "live", name: "genui_render" }),
-      ],
-      publisher.publish,
-      { discard: true },
-    ),
-  )
-
-  const deltas = published.filter((event) => event.type === "session.tool.input.delta").map((event) => event.data)
-  expect(deltas).toMatchObject([{ id: "live", delta: '{"code":"root"}' }])
-  expect(published.slice(-2).map((event) => event.type)).toEqual([
-    "session.tool.input.delta",
-    "session.tool.input.ended.1",
-  ])
-})
-
-test("tool input deltas are accumulated without being published", async () => {
-  const { published, publisher } = capture()
-  await Effect.runPromise(
-    Effect.forEach(
+it.effect("batches tool input deltas and flushes pending input before the terminal event", () =>
+  Effect.gen(function* () {
+    const { published, publisher } = capture()
+    const deltas = () =>
+      published.filter((event) => event.type === "session.tool.input.delta").map((event) => event.data)
+    yield* Effect.forEach(
       [
         LLMEvent.toolInputStart({ id: "call", name: "read" }),
         LLMEvent.toolInputDelta({ id: "call", name: "read", text: '{"path":' }),
-        LLMEvent.toolInputDelta({ id: "call", name: "read", text: '"file.txt"}' }),
-        LLMEvent.toolInputEnd({ id: "call", name: "read" }),
+        LLMEvent.toolInputDelta({ id: "call", name: "read", text: '"file' }),
       ],
       publisher.publish,
       { discard: true },
-    ),
-  )
+    )
 
-  expect(published.some((event) => event.type === "session.tool.input.delta")).toBe(false)
-  expect(published.find((event) => event.type === "session.tool.input.ended.1")?.data).toMatchObject({
-    text: '{"path":"file.txt"}',
-  })
-})
+    expect(deltas()).toHaveLength(0)
+    yield* TestClock.adjust("100 millis")
+    expect(deltas()).toMatchObject([{ id: "call", delta: '{"path":"file' }])
+
+    yield* publisher.publish(LLMEvent.toolInputDelta({ id: "call", name: "read", text: '.txt"}' }))
+    yield* publisher.publish(LLMEvent.toolInputEnd({ id: "call", name: "read" }))
+    expect(published.slice(-2)).toMatchObject([
+      { type: "session.tool.input.delta", data: { delta: '.txt"}' } },
+      { type: "session.tool.input.ended.1", data: { text: '{"path":"file.txt"}' } },
+    ])
+  }),
+)
+
+it.effect("publishes held tool input before the next block starts", () =>
+  Effect.gen(function* () {
+    const { published, publisher } = capture()
+    yield* Effect.forEach(
+      [
+        LLMEvent.toolInputStart({ id: "call", name: "read" }),
+        LLMEvent.toolInputDelta({ id: "call", name: "read", text: '{"path":' }),
+        LLMEvent.textStart({ id: "text" }),
+      ],
+      publisher.publish,
+      { discard: true },
+    )
+
+    expect(published.map((event) => event.type).filter((type) => type !== "session.step.started.1")).toEqual([
+      "session.tool.input.started.1",
+      "session.tool.input.delta",
+      "session.text.started.1",
+    ])
+    yield* publisher.flush()
+  }),
+)
 
 test("provider-executed tool metadata is flattened using the route key", async () => {
   const { published, publisher } = capture("openai")

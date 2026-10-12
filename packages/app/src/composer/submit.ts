@@ -530,6 +530,8 @@ async function sendPrompt(
       attachments: request.attachments,
       agent: value.selection.agent,
       model: selectionModel(value.selection),
+      // Tells the server the user reads replies in the app, so it can offer UI only the app renders.
+      client: "app",
     },
   }
 

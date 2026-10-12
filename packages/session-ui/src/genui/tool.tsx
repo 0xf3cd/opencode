@@ -1,7 +1,7 @@
-import { createMemo, createSignal, Show } from "solid-js"
+import { createMemo, Show } from "solid-js"
+import { createStore } from "solid-js/store"
 import { Option, Schema } from "effect"
-import { GenUILibrary } from "@opencode/plugin-genui/library"
-import { GenUI } from "@opencode/plugin-genui/rpc"
+import { GenUI } from "@opencode/plugin-genui/genui"
 import { useI18n } from "@opencode/ui/context/i18n"
 import { Icon } from "@opencode/ui/icon"
 import { TextShimmer } from "@opencode/ui/text-shimmer"
@@ -9,24 +9,24 @@ import { useData } from "../context/data"
 import { ToolRegistry, type ToolProps } from "../tools/tool-renderer"
 import { genuiReplyText, GenUISurface, type GenUIReply } from "./surface"
 
-const decodeInput = Schema.decodeUnknownOption(GenUILibrary.RenderInput)
+const decodeInput = Schema.decodeUnknownOption(GenUI.RenderInput)
 
 /** A `genui_render` call in the timeline: the surface itself, drawn while its program streams in. */
 function GenUITool(props: ToolProps) {
   const i18n = useI18n()
   const data = useData()
-  const input = createMemo(() => Option.getOrElse(decodeInput(props.input), (): GenUILibrary.RenderInput => ({})))
+  const input = createMemo(() => Option.getOrElse(decodeInput(props.input), (): GenUI.RenderInput => ({})))
   const writing = () => props.status === "streaming" || props.status === "running" || props.status === "pending"
-  const [sending, setSending] = createSignal(false)
+  const [state, setState] = createStore({ sending: false })
 
   const reply = (value: GenUIReply) => {
     const prompt = data.prompt
     const sessionID = data.sessionID
 
-    if (!prompt || !sessionID || sending()) return
-    setSending(true)
+    if (!prompt || !sessionID || state.sending) return
+    setState("sending", true)
     const heading = i18n.t("ui.genui.submitted", { title: input().title ?? i18n.t("ui.genui.title") })
-    void prompt({ sessionID, text: genuiReplyText(value, heading) }).finally(() => setSending(false))
+    void prompt({ sessionID, text: genuiReplyText(value, heading) }).finally(() => setState("sending", false))
   }
 
   return (
@@ -41,14 +41,14 @@ function GenUITool(props: ToolProps) {
             <TextShimmer text={i18n.t("ui.genui.writing")} active />
           </span>
         </Show>
-        <span data-slot="genui-inline-panel">{i18n.t("ui.genui.panel")}</span>
       </div>
       <Show when={input().code}>
         {(code) => (
           <div data-slot="genui-inline-body">
             <GenUISurface
               code={code()}
-              busy={!data.prompt || sending()}
+              streaming={writing()}
+              busy={!data.prompt || state.sending}
               onReply={reply}
               onOpen={(url) => {
                 if (/^https?:\/\//iu.test(url)) window.open(url, "_blank", "noopener,noreferrer")

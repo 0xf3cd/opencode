@@ -15,8 +15,6 @@ import details from "./details"
 import detailsRenderer from "./details/renderer"
 import browser from "./browser"
 import browserRenderer from "./browser/renderer"
-import genui from "./genui"
-import genuiRenderer from "./genui/renderer"
 import pairing from "./pairing"
 import pairingRenderer from "./pairing/renderer"
 import updater from "./updater"
@@ -46,7 +44,6 @@ export const builtins = Extension.compose(
   { ...review, renderer: eager(reviewRenderer) },
   { ...details, renderer: eager(detailsRenderer) },
   { ...browser, renderer: eager(browserRenderer) },
-  { ...genui, renderer: eager(genuiRenderer) },
   { ...pairing, renderer: eager(pairingRenderer) },
   { ...updater, renderer: eager(updaterRenderer) },
   { ...ssh, renderer: eager(sshRenderer) },

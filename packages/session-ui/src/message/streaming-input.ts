@@ -3,8 +3,8 @@ import { currentToolInput } from "./current-tool-state"
 import { partialStringFields } from "./partial-json"
 
 /**
- * A tool call's input, including while it streams: once the JSON is incomplete, its string arguments as written so
- * far. Only tools that opt into streaming receive partial JSON; every other call reads as before.
+ * A tool call's input, including while it streams: while the JSON is incomplete, its string arguments as written so
+ * far. For tools whose renderer draws arguments as they arrive.
  */
 export function currentStreamingInput(tool: SessionMessageAssistantTool) {
   const input = currentToolInput(tool)

@@ -9,7 +9,7 @@ import type {
 } from "@opencode/client/promise"
 import { Effect, Option, Predicate, Schema } from "effect"
 import { createMemo, mapArray, type Accessor } from "solid-js"
-import { GenUI } from "@opencode/plugin-genui/rpc"
+import { GenUI } from "@opencode/plugin-genui/genui"
 import {
   currentContentDefaultOpen,
   currentToolFailed,

@@ -1,7 +1,8 @@
 import { createContext, createMemo, createRenderEffect, For, Show, useContext, type JSX } from "solid-js"
 import { createStore, reconcile } from "solid-js/store"
-import { Option, Schema } from "effect"
-import { GenUILibrary } from "@opencode/plugin-genui/library"
+import { GenUICatalog } from "@opencode/plugin-genui/catalog"
+import { GenUI } from "@opencode/plugin-genui/genui"
+import { GenUILang } from "@opencode/plugin-genui/lang"
 import { Button, type ButtonProps } from "@opencode/ui/button"
 import { Divider } from "@opencode/ui/divider"
 import { Icon } from "@opencode/ui/icon"
@@ -39,19 +40,23 @@ export type GenUIReply = {
   readonly values?: readonly (readonly [label: string, value: string])[]
 }
 
-type Node = NonNullable<GenUILibrary.SurfaceElement["props"]["children"][number]>
+type Node = GenUICatalog.Surface["props"]["children"][number]
 
-type MetricNode = typeof GenUILibrary.MetricElement.Type
+type MetricNode = typeof GenUICatalog.Metric.Type
 
-type StatusNode = typeof GenUILibrary.StatusElement.Type
+type StatusNode = typeof GenUICatalog.Status.Type
 
-type Tone = (typeof GenUILibrary.tones)[number]
+/** A button's or row's action: text to reply with, or actions to run in place. */
+type Behaviour = (typeof GenUICatalog.Button.Type)["props"]["action"]
+
+type Tone = (typeof GenUICatalog.tones)[number]
 
 type Value = string | boolean
 
 const Surface = createContext<{
   readonly busy: () => boolean
-  readonly reply: (reply: GenUIReply) => void
+  /** Replies with text (or `label` when there is none), or runs the actions against the surface's state. */
+  readonly act: (behaviour: Behaviour, label: string, values?: GenUIReply["values"]) => void
   readonly open: (url: string) => void
 }>()
 
@@ -66,7 +71,7 @@ const buttonVariants = {
   primary: "contrast",
   secondary: "neutral",
   ghost: "ghost",
-} as const satisfies Record<(typeof GenUILibrary.buttonVariants)[number], ButtonProps["variant"]>
+} as const satisfies Record<(typeof GenUICatalog.buttonVariants)[number], ButtonProps["variant"]>
 
 const noticeIcons: Record<Tone, IconName> = {
   neutral: "info",
@@ -87,11 +92,14 @@ export function genuiReplyText(reply: GenUIReply, heading: string) {
 }
 
 /**
- * Renders an OpenUI Lang program with OpenCode's own components. The program may still be streaming: each update
- * re-parses it and reconciles by statement, so blocks already on screen stay mounted while new ones append below.
+ * Renders a GenUI program with OpenCode's own components. The program may still be streaming: each update parses
+ * only the statements that changed and reconciles by statement, so blocks already on screen stay mounted while new
+ * ones append below. Buttons can change the surface's state in place; only replies reach the agent.
  */
 export function GenUISurface(props: {
   code: string
+  /** The program is still being written. A block that does not render yet keeps showing its last version. */
+  streaming?: boolean
   /** Turns off buttons, rows and form submission, e.g. while a reply is sending. */
   busy?: boolean
   onReply: (reply: GenUIReply) => void
@@ -99,22 +107,62 @@ export function GenUISurface(props: {
   /** Shown when the program has no valid root yet. */
   fallback?: JSX.Element
 }) {
-  const [state, setState] = createStore<{ root?: GenUILibrary.SurfaceElement }>({})
+  const parse = GenUILang.parser()
+  const memory = new Map<string, unknown>()
+  const program = createMemo(() => parse(GenUI.unfence(props.code), props.streaming === true))
+  const start = createMemo(() => GenUILang.initial(program(), GenUICatalog.catalog).state)
 
-  // Syncs the parsed program into a store so unchanged nodes keep their identity across stream updates.
+  // Only the values the user changed; every other $name follows its declaration, including ones still streaming in.
+  const [store, setStore] = createStore<{
+    root?: GenUICatalog.Surface
+    changes: { name: string; value: GenUILang.Data }[]
+  }>({ changes: [] })
+
+  const state = (): GenUILang.State =>
+    new Map([...start(), ...store.changes.map((change) => [change.name, change.value] as const)])
+
+  // Syncs the rendered tree into a store so unchanged nodes keep their identity across stream and state updates.
   createRenderEffect(() => {
-    const root = Option.getOrUndefined(
-      Schema.decodeUnknownOption(GenUILibrary.SurfaceElement)(
-        GenUILibrary.parse(GenUILibrary.unfence(props.code)).root,
-      ),
-    )
+    const rendered = GenUILang.render(program(), {
+      catalog: GenUICatalog.catalog,
+      root: GenUICatalog.Surface,
+      state: state(),
+      memory: props.streaming ? memory : undefined,
+    })
 
-    setState("root", reconcile(root, { key: "statementId", merge: true }))
+    setStore("root", reconcile(rendered.root ?? undefined, { key: "statementId", merge: true }))
   })
 
+  const apply = (outcome: GenUILang.Outcome | undefined, values: GenUIReply["values"]) => {
+    if (outcome?.type === "set")
+      setStore("changes", (changes) => [
+        ...changes.filter((change) => change.name !== outcome.name),
+        { name: outcome.name, value: outcome.value },
+      ])
+
+    if (outcome?.type === "reset")
+      setStore("changes", (changes) => changes.filter((change) => !outcome.names.includes(change.name)))
+
+    if (outcome?.type === "reply") props.onReply({ message: outcome.message, values })
+
+    if (outcome?.type === "open") props.onOpen(outcome.url)
+  }
+
+  // Each action sees the state the previous one left.
+  const run = (actions: readonly GenUILang.Action[], values: GenUIReply["values"]) =>
+    actions.forEach((action) => apply(GenUILang.perform(action, program(), GenUICatalog.catalog, state()), values))
+
+  const act = (behaviour: Behaviour, label: string, values?: GenUIReply["values"]) => {
+    if (behaviour instanceof GenUILang.Action) return run([behaviour], values)
+
+    if (isActionList(behaviour)) return run(behaviour, values)
+
+    props.onReply({ message: behaviour ?? label, values })
+  }
+
   return (
-    <Surface.Provider value={{ busy: () => props.busy === true, reply: props.onReply, open: props.onOpen }}>
-      <Show when={state.root} fallback={props.fallback}>
+    <Surface.Provider value={{ busy: () => props.busy === true, act, open: props.onOpen }}>
+      <Show when={store.root} fallback={props.fallback}>
         {(root) => (
           <div data-component="genui-surface">
             <Blocks items={root().props.children} />
@@ -126,12 +174,10 @@ export function GenUISurface(props: {
 }
 
 /** Renders blocks in order. A run of Status lines shares one card, like the rows of a settings list. */
-function Blocks(props: { items: readonly (Node | null)[] }) {
+function Blocks(props: { items: readonly Node[] }) {
   // Store nodes keep their identity, so `For` keeps every block mounted while the program grows.
   const visible = createMemo(() =>
-    props.items
-      .filter((item): item is Node => item !== null)
-      .filter((item, index, present) => item.typeName !== "Status" || present[index - 1]?.typeName !== "Status"),
+    props.items.filter((item, index) => item.typeName !== "Status" || props.items[index - 1]?.typeName !== "Status"),
   )
 
   return (
@@ -139,6 +185,11 @@ function Blocks(props: { items: readonly (Node | null)[] }) {
       {(node) => (isStatus(node) ? <StatusRun first={node} items={props.items} /> : <Block node={node} />)}
     </For>
   )
+}
+
+// `Array.isArray` cannot narrow a readonly array out of a union.
+function isActionList(behaviour: Behaviour): behaviour is readonly GenUILang.Action[] {
+  return Array.isArray(behaviour)
 }
 
 function isStatus(node: Node): node is StatusNode {
@@ -193,7 +244,7 @@ function Block(props: { node: Node }): JSX.Element {
       return (
         <div data-component="genui-card">
           <div data-slot="genui-metrics">
-            <For each={node.props.items.filter((item) => item !== null)}>
+            <For each={node.props.items}>
               {(metric) => (
                 <div data-slot="genui-metric">
                   <span data-slot="genui-metric-label">{metric.props.label}</span>
@@ -317,7 +368,7 @@ function Block(props: { node: Node }): JSX.Element {
     case "Group":
       return (
         <div data-component="genui-card">
-          <For each={node.props.rows.filter((row) => row !== null)}>{(row) => <GroupRow row={row} />}</For>
+          <For each={node.props.rows}>{(row) => <GroupRow row={row} />}</For>
         </div>
       )
     case "BarChart":
@@ -352,8 +403,8 @@ function Block(props: { node: Node }): JSX.Element {
       return (
         <ComboChart
           labels={node.props.labels}
-          bars={node.props.bars?.props ?? null}
-          line={node.props.line?.props ?? null}
+          bars={node.props.bars.props}
+          line={node.props.line.props}
           barFormat={node.props.barFormat}
           lineFormat={node.props.lineFormat}
         />
@@ -407,9 +458,7 @@ function Block(props: { node: Node }): JSX.Element {
         />
       )
     case "Comparison":
-      return (
-        <Comparison columns={node.props.columns} rows={node.props.rows.flatMap((row) => (row ? [row.props] : []))} />
-      )
+      return <Comparison columns={node.props.columns} rows={node.props.rows.map((row) => row.props)} />
     case "Columns":
       return (
         <div data-component="genui-columns">
@@ -424,13 +473,12 @@ function Block(props: { node: Node }): JSX.Element {
 }
 
 /** One card for a Status and the Status lines right after it, which `Blocks` skips. */
-function StatusRun(props: { first: StatusNode; items: readonly (Node | null)[] }) {
+function StatusRun(props: { first: StatusNode; items: readonly Node[] }) {
   const run = createMemo(() => {
-    const present = props.items.filter((item): item is Node => item !== null)
-    const start = present.indexOf(props.first)
-    const end = present.findIndex((next, at) => at > start && next.typeName !== "Status")
+    const start = props.items.indexOf(props.first)
+    const end = props.items.findIndex((next, at) => at > start && next.typeName !== "Status")
 
-    return present.slice(start, end === -1 ? undefined : end).filter(isStatus)
+    return props.items.slice(start, end === -1 ? undefined : end).filter(isStatus)
   })
 
   return (
@@ -448,7 +496,7 @@ function StatusRun(props: { first: StatusNode; items: readonly (Node | null)[] }
   )
 }
 
-function GroupRow(props: { row: typeof GenUILibrary.RowElement.Type }) {
+function GroupRow(props: { row: typeof GenUICatalog.Row.Type }) {
   const surface = useContext(Surface)
 
   const content = () => (
@@ -459,13 +507,13 @@ function GroupRow(props: { row: typeof GenUILibrary.RowElement.Type }) {
   )
 
   return (
-    <Show when={props.row.props.message} fallback={<div data-slot="genui-row">{content()}</div>}>
-      {(message) => (
+    <Show when={props.row.props.action} fallback={<div data-slot="genui-row">{content()}</div>}>
+      {(action) => (
         <button
           type="button"
           data-slot="genui-row"
           disabled={surface?.busy()}
-          onClick={() => surface?.reply({ message: message() })}
+          onClick={() => surface?.act(action(), props.row.props.label)}
         >
           {content()}
           <span data-slot="genui-row-icon">
@@ -477,13 +525,13 @@ function GroupRow(props: { row: typeof GenUILibrary.RowElement.Type }) {
   )
 }
 
-function Actions(props: { node: typeof GenUILibrary.ActionsElement.Type }) {
+function Actions(props: { node: typeof GenUICatalog.Actions.Type }) {
   const surface = useContext(Surface)
   const form = useContext(Form)
 
   return (
     <div data-component="genui-actions">
-      <For each={props.node.props.items.filter((item) => item !== null)}>
+      <For each={props.node.props.items}>
         {(item) => (
           <Show
             when={item.typeName === "Button" ? item.props : undefined}
@@ -507,7 +555,7 @@ function Actions(props: { node: typeof GenUILibrary.ActionsElement.Type }) {
                 size="normal"
                 variant={buttonVariants[button().variant ?? "secondary"]}
                 disabled={surface?.busy()}
-                onClick={() => surface?.reply({ message: button().message ?? button().label, values: form?.values() })}
+                onClick={() => surface?.act(button().action, button().label, form?.values())}
               >
                 {button().label}
               </Button>
@@ -519,8 +567,8 @@ function Actions(props: { node: typeof GenUILibrary.ActionsElement.Type }) {
   )
 }
 
-function FormBlock(props: { node: typeof GenUILibrary.FormElement.Type }) {
-  const fields = () => props.node.props.fields.filter((field) => field !== null)
+function FormBlock(props: { node: typeof GenUICatalog.Form.Type }) {
+  const fields = () => props.node.props.fields
 
   // Only what the user changed; a field's default comes from its current node, so fields that stream in later
   // still start from theirs.
@@ -548,13 +596,13 @@ function FormBlock(props: { node: typeof GenUILibrary.FormElement.Type }) {
     >
       <form data-component="genui-form" onSubmit={(event) => event.preventDefault()}>
         <For each={fields()}>{(field) => <Field field={field} />}</For>
-        <Show when={props.node.props.actions}>{(actions) => <Actions node={actions()} />}</Show>
+        <Actions node={props.node.props.actions} />
       </form>
     </Form.Provider>
   )
 }
 
-function initial(field: GenUILibrary.FieldElement | undefined): Value | undefined {
+function initial(field: GenUICatalog.Field | undefined): Value | undefined {
   if (!field) return undefined
 
   if (field.typeName === "Toggle") return field.props.value ?? false
@@ -562,7 +610,7 @@ function initial(field: GenUILibrary.FieldElement | undefined): Value | undefine
   return field.props.value ?? undefined
 }
 
-function Field(props: { field: GenUILibrary.FieldElement }): JSX.Element {
+function Field(props: { field: GenUICatalog.Field }): JSX.Element {
   const form = useContext(Form)
   const field = props.field
 
@@ -673,6 +721,6 @@ function deltaTone(delta: MetricNode["props"]["delta"], inverse: MetricNode["pro
   return delta > 0 !== (inverse === true) ? ("success" as const) : ("danger" as const)
 }
 
-function seriesOf(series: readonly (typeof GenUILibrary.SeriesElement.Type | null)[]) {
-  return series.flatMap((item) => (item ? [item.props] : []))
+function seriesOf(series: readonly (typeof GenUICatalog.Series.Type)[]) {
+  return series.map((item) => item.props)
 }

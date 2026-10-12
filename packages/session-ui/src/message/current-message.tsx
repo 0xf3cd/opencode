@@ -1,5 +1,6 @@
 import type { SessionMessageAssistant, SessionMessageAssistantTool, SessionMessageUser } from "@opencode/client/promise"
 import { Match, Switch, type ComponentProps } from "solid-js"
+import { GenUI } from "@opencode/plugin-genui/genui"
 import type { SessionUserActions, SessionUserAttachmentReference, SessionUserComment } from "../actions"
 import { AssistantReasoningContent, AssistantTextContent, CurrentUserMessageDisplay } from "./message-content"
 import {
@@ -8,7 +9,7 @@ import {
   CurrentReadToolGroup,
   ToolDisplay,
 } from "../tools/tool-renderer"
-import { currentToolError, currentToolMetadata, currentToolOutput } from "./current-tool-state"
+import { currentToolError, currentToolInput, currentToolMetadata, currentToolOutput } from "./current-tool-state"
 import { currentStreamingInput } from "./streaming-input"
 // Registers the genui_render renderer with the tool registry.
 import "../genui/tool"
@@ -18,8 +19,6 @@ export type { SessionUserActions, SessionUserAttachmentReference, SessionUserCom
 export { SessionShellMessage } from "../tools/tool-renderer"
 
 export { currentContentDefaultOpen } from "./current-tool-state"
-
-export { currentStreamingInput } from "./streaming-input"
 
 export function SessionUserMessage(props: {
   sessionID: string
@@ -88,7 +87,8 @@ export function SessionAssistantContent(props: {
           <ToolDisplay
             id={props.contentID}
             tool={tool().name}
-            input={currentStreamingInput(tool())}
+            // Surfaces draw their arguments as they stream; every other tool waits for its complete input.
+            input={tool().name === GenUI.RENDER_TOOL ? currentStreamingInput(tool()) : currentToolInput(tool())}
             metadata={currentToolMetadata(tool())}
             output={currentToolOutput(tool())}
             status={tool().state.status}
