@@ -29,7 +29,8 @@ export async function openCommandPalette(
   page: Page,
   home = false,
   sessions: MockSession[] = [paletteSession],
-  beforeOpen?: () => Promise<void>,
+  // oxlint-disable-next-line anti-slop/no-unknown-returns -- Setup callbacks may return a route disposable; only completion is used.
+  beforeOpen?: () => Promise<unknown>,
 ) {
   const mock = await mockOpenCodeServer(page, {
     directory: paletteSession.directory,
