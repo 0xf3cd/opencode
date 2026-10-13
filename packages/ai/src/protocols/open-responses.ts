@@ -4,6 +4,7 @@ import { HttpTransport } from "../route/transport/index.js"
 import { Protocol } from "../route/protocol.js"
 import {
   AIError,
+  type CacheHint,
   LLMEvent,
   ProviderInternalError,
   Usage,
@@ -19,8 +20,10 @@ import {
 } from "../schema/index.js"
 import type { Media } from "../media.js"
 import { JsonObject, optionalArray, optionalNull, ProviderShared } from "./shared.js"
+import { effectiveCacheFormat } from "../cache-policy.js"
 import { classifyProviderFailure } from "../provider-error.js"
 import { effortUpdate } from "../effort-updates.js"
+import { cacheBreakpoint } from "./utils/cache.js"
 import { OpenResponsesOptions } from "./utils/open-responses-options.js"
 import { Lifecycle } from "./utils/lifecycle.js"
 import { ToolStream } from "./utils/tool-stream.js"
@@ -32,14 +35,20 @@ export const PATH = "/responses"
 // =============================================================================
 // Request Body Schema
 // =============================================================================
+// OpenAI GPT-5.6+ explicit prompt-cache breakpoint on an input content block.
+const PromptCacheBreakpoint = Schema.Struct({ mode: Schema.Literal("explicit") })
+type PromptCacheBreakpoint = Schema.Schema.Type<typeof PromptCacheBreakpoint>
+
 export const OpenResponsesInputText = Schema.Struct({
   type: Schema.tag("input_text"),
   text: Schema.String,
+  prompt_cache_breakpoint: Schema.optional(PromptCacheBreakpoint),
 })
 export const OpenResponsesInputImage = Schema.Struct({
   type: Schema.tag("input_image"),
   image_url: Schema.String,
   detail: Schema.optional(Schema.String),
+  prompt_cache_breakpoint: Schema.optional(PromptCacheBreakpoint),
 })
 export const OpenResponsesInputFile = Schema.Struct({
   type: Schema.tag("input_file"),
@@ -47,6 +56,7 @@ export const OpenResponsesInputFile = Schema.Struct({
   detail: Schema.optional(Schema.String),
   file_data: Schema.optional(Schema.String),
   file_url: Schema.optional(Schema.String),
+  prompt_cache_breakpoint: Schema.optional(PromptCacheBreakpoint),
 })
 const OpenResponsesInputVideo = Schema.Struct({
   type: Schema.tag("input_video"),
@@ -183,7 +193,11 @@ export const InputItem = Schema.Union([
   CompactionItem,
   ConfigurationUpdate,
   Schema.Struct({ type: Schema.tag("message"), role: Schema.tag("system"), content: Schema.String }),
-  Schema.Struct({ type: Schema.tag("message"), role: Schema.tag("developer"), content: Schema.String }),
+  Schema.Struct({
+    type: Schema.tag("message"),
+    role: Schema.tag("developer"),
+    content: Schema.Union([Schema.String, Schema.Array(OpenResponsesInputText)]),
+  }),
   Schema.Struct({
     type: Schema.tag("message"),
     role: Schema.tag("user"),
@@ -554,9 +568,11 @@ const lowerUserContent = Effect.fnUntraced(function* (
   part: LLMRequest["messages"][number]["content"][number],
   request: LLMRequest,
   adapter: ProviderAdapter,
+  breakpoint: Breakpoints,
 ) {
-  if (part.type === "text") return { type: "input_text" as const, text: part.text }
-  if (part.type === "media") return yield* lowerMessageMedia(part, request, adapter)
+  if (part.type === "text") return { type: "input_text" as const, text: part.text, ...marker(breakpoint, part.cache) }
+  if (part.type === "media")
+    return { ...(yield* lowerMessageMedia(part, request, adapter)), ...marker(breakpoint, part.cache) }
   return yield* ProviderShared.unsupportedContent(adapter.name, "user", ["text", "media"])
 })
 
@@ -591,13 +607,21 @@ const lowerToolResultOutput = Effect.fnUntraced(function* (
   part: ToolResultPart,
   request: LLMRequest,
   adapter: ProviderAdapter,
+  breakpoint: Breakpoints,
 ) {
+  const mark = marker(breakpoint, part.cache)
   // Text/json/error results are encoded as a plain string for backward
-  // compatibility with existing cassettes and provider expectations.
-  if (part.result.type !== "content") return ProviderShared.toolResultText(part)
+  // compatibility with existing cassettes and provider expectations. A breakpoint needs a content block.
+  if (part.result.type !== "content") {
+    const text = ProviderShared.toolResultText(part)
+    return mark.prompt_cache_breakpoint === undefined ? text : [{ type: "input_text" as const, text, ...mark }]
+  }
   // Preserve the narrowed array element type when compiled through a consumer package.
   const content: ReadonlyArray<Content> = part.result.value
-  return yield* Effect.forEach(content, (item) => lowerToolResultContentItem(item, request, adapter))
+  const items = yield* Effect.forEach(content, (item) => lowerToolResultContentItem(item, request, adapter))
+  const last = items.at(-1)
+  if (last === undefined || last.type === "input_video" || mark.prompt_cache_breakpoint === undefined) return items
+  return [...items.slice(0, -1), { ...last, ...mark }]
 })
 
 const DEFAULT_EFFORT = "medium"
@@ -605,6 +629,7 @@ const DEFAULT_EFFORT = "medium"
 const lowerMessages = Effect.fnUntraced(function* (
   request: LLMRequest,
   adapter: ProviderAdapter,
+  breakpoint: Breakpoints,
 ) {
   const input: OpenResponsesInputItem[] = []
   const providerMetadataKey = metadataKey(request.model)
@@ -630,7 +655,9 @@ const lowerMessages = Effect.fnUntraced(function* (
     }
 
     if (message.role === "user") {
-      const content = yield* Effect.forEach(message.content, (part) => lowerUserContent(part, request, adapter))
+      const content = yield* Effect.forEach(message.content, (part) =>
+        lowerUserContent(part, request, adapter, breakpoint),
+      )
       if (content.length > 0)
         input.push({ type: "message", role: "user", content, id: metadata?.itemId, status: metadata?.status })
       continue
@@ -757,7 +784,7 @@ const lowerMessages = Effect.fnUntraced(function* (
       input.push({
         type: "function_call_output",
         call_id: part.id,
-        output: yield* lowerToolResultOutput(part, request, adapter),
+        output: yield* lowerToolResultOutput(part, request, adapter, breakpoint),
       })
     }
   }
@@ -769,13 +796,37 @@ export const lowerConversation = Effect.fnUntraced(function* (
   request: LLMRequest,
   adapter: ProviderAdapter,
 ) {
-  const instructions = ProviderShared.joinText(request.system)
+  const explicit = effectiveCacheFormat(request.model) === "openai"
+  const breakpoint = explicit ? cacheBreakpoint() : () => undefined
+  // Top-level instructions cannot carry a breakpoint, so a cached system prompt moves into a developer message.
+  const developer =
+    explicit && request.system.some((part) => part.cache !== undefined)
+      ? [
+          {
+            type: "message" as const,
+            role: "developer" as const,
+            content: request.system.map((part) => ({
+              type: "input_text" as const,
+              text: part.text,
+              ...marker(breakpoint, part.cache),
+            })),
+          },
+        ]
+      : []
+  const instructions = developer.length === 0 ? ProviderShared.joinText(request.system) : ""
   return {
     model: request.model.id,
-    input: yield* lowerMessages(request, adapter),
+    input: [...developer, ...(yield* lowerMessages(request, adapter, breakpoint))],
     ...(instructions ? { instructions } : {}),
   }
 })
+
+type Breakpoints = (cache: CacheHint | undefined) => PromptCacheBreakpoint | undefined
+
+const marker = (breakpoint: Breakpoints, cache: CacheHint | undefined) => {
+  const value = breakpoint(cache)
+  return value === undefined ? {} : { prompt_cache_breakpoint: value }
+}
 
 export const lowerGeneration = (request: LLMRequest, options = OpenResponsesOptions.resolve(request)) => {
   const generation = request.generation

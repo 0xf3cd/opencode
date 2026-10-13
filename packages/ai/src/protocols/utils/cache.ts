@@ -22,6 +22,17 @@ export const cacheControl = () => {
   }
 }
 
+// OpenAI GPT-5.6+ explicit breakpoints. Implicit mode keeps its own breakpoint, which takes one of the four cache
+// writes, so explicit breakpoints are capped at three.
+export const cacheBreakpoint = () => {
+  const breakpoints = newBreakpoints(3)
+  return (cache: CacheHint | undefined) => {
+    if (cache === undefined || breakpoints.remaining === 0) return undefined
+    breakpoints.remaining -= 1
+    return { mode: "explicit" as const }
+  }
+}
+
 // OpenRouter and Vercel AI Gateway upstreams other than Anthropic and Alibaba Qwen cache without inline markers.
 export const gatewayCacheFormat = (modelID: string): "anthropic" | "alibaba" | undefined => {
   const id = modelID.replace(/^~/, "")

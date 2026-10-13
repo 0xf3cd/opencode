@@ -153,6 +153,48 @@ describe("OpenAI Responses route", () => {
     }),
   )
 
+  it.effect("writes OpenAI explicit cache breakpoints when compatibility declares the format", () =>
+    Effect.gen(function* () {
+      const prepare = (cacheFormat: "openai" | undefined) =>
+        compileRequest(
+          LLM.request({
+            model: OpenAIResponses.route
+              .with({ endpoint: { baseURL: "https://api.openai.test/v1/" }, auth: Auth.bearer("test") })
+              .model({ id: "gpt-6.1-sol", compatibility: cacheFormat === undefined ? undefined : { cacheFormat } }),
+            system: "Base agent",
+            tools: [ToolDefinition.make({ name: "lookup", description: "Lookup", inputSchema: { type: "object" } })],
+            messages: [
+              Message.user("Look it up"),
+              Message.assistant([ToolCallPart.make({ id: "call_1", name: "lookup", input: { query: "weather" } })]),
+              Message.tool({ id: "call_1", name: "lookup", result: { forecast: "sunny" } }),
+            ],
+          }),
+        )
+
+      const declared = yield* prepare("openai")
+      expect(declared.body).not.toHaveProperty("instructions")
+      expect(declared.body.input).toMatchObject([
+        {
+          type: "message",
+          role: "developer",
+          content: [{ type: "input_text", text: "Base agent", prompt_cache_breakpoint: { mode: "explicit" } }],
+        },
+        { type: "message", role: "user", content: [{ type: "input_text", text: "Look it up" }] },
+        { type: "function_call", call_id: "call_1" },
+        {
+          type: "function_call_output",
+          call_id: "call_1",
+          output: [{ type: "input_text", prompt_cache_breakpoint: { mode: "explicit" } }],
+        },
+      ])
+      expect(JSON.stringify(declared.body.tools)).not.toContain("prompt_cache_breakpoint")
+
+      const implicit = yield* prepare(undefined)
+      expect(implicit.body.instructions).toBe("Base agent")
+      expect(JSON.stringify(implicit.body)).not.toContain("prompt_cache_breakpoint")
+    }),
+  )
+
   it.effect("lowers the hosted OpenAI image generation tool", () =>
     Effect.gen(function* () {
       const prepared = yield* compileRequest(

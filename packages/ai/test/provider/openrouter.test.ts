@@ -147,6 +147,27 @@ describe("OpenRouter", () => {
     }),
   )
 
+  it.effect("uses the declared OpenAI breakpoint format on OpenRouter", () =>
+    Effect.gen(function* () {
+      const model = OpenRouter.configure({ apiKey: "test-key" }).model("openai/gpt-6.1-sol")
+      const prepared = yield* compileRequest(
+        LLM.request({
+          model: LanguageModel.update(model, { compatibility: { cacheFormat: "openai" } }),
+          system: "Base agent",
+          prompt: "Hello",
+          promptCacheKey: "session_123",
+        }),
+      )
+
+      expect(prepared.body.prompt_cache_key).toBe("session_123")
+      expect(prepared.body.messages).toMatchObject([
+        { role: "system", content: [{ text: "Base agent", prompt_cache_breakpoint: { mode: "explicit" } }] },
+        { role: "user", content: [{ text: "Hello", prompt_cache_breakpoint: { mode: "explicit" } }] },
+      ])
+      expect(JSON.stringify(prepared.body)).not.toContain("cache_control")
+    }),
+  )
+
   it.effect("sends no default breakpoints to upstreams that cache without them", () =>
     Effect.gen(function* () {
       const openrouter = OpenRouter.configure({ apiKey: "test-key" })

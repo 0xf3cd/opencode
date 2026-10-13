@@ -209,9 +209,16 @@ export type LanguageModelMaxTokensFieldCompatibility = Schema.Schema.Type<
 
 /**
  * Prompt-cache marker syntax for a model or endpoint. `none` opts out of the protocol default.
- * `anthropic` and `alibaba` send `cache_control` (`alibaba` skips tool definitions); `bedrock` sends `cachePoint`.
+ * `anthropic` and `alibaba` send `cache_control` (`alibaba` skips tool definitions); `openai` sends
+ * `prompt_cache_breakpoint`; `bedrock` sends `cachePoint`.
  */
-export const LanguageModelCacheFormatCompatibility = Schema.Literals(["anthropic", "alibaba", "bedrock", "none"])
+export const LanguageModelCacheFormatCompatibility = Schema.Literals([
+  "anthropic",
+  "alibaba",
+  "openai",
+  "bedrock",
+  "none",
+])
 export type LanguageModelCacheFormatCompatibility = Schema.Schema.Type<typeof LanguageModelCacheFormatCompatibility>
 
 export class LanguageModelCompatibility extends Schema.Class<LanguageModelCompatibility>(

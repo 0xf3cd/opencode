@@ -159,5 +159,5 @@ const selectPolicy = (request: LLMRequest): CachePolicyObject => {
   const format = effectiveCacheFormat(request.model)
   if (format === undefined || format === "none") return NONE
   const policy = resolve(request.cache)
-  return format === "alibaba" ? { ...policy, tools: false } : policy
+  return format === "alibaba" || format === "openai" ? { ...policy, tools: false } : policy
 }

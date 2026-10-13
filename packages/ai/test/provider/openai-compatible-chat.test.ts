@@ -101,7 +101,7 @@ describe("OpenAI-compatible Chat route", () => {
 
   it.effect("places cache breakpoints only when compatibility declares the format", () =>
     Effect.gen(function* () {
-      const prepare = (cacheFormat: "anthropic" | "alibaba" | undefined) =>
+      const prepare = (cacheFormat: "anthropic" | "alibaba" | "openai" | undefined) =>
         compileRequest(
           LLM.request({
             model: OpenAICompatibleChat.route
@@ -131,6 +131,21 @@ describe("OpenAI-compatible Chat route", () => {
         ],
       })
       expect(alibaba.body.tools?.[0]?.cache_control).toBeUndefined()
+
+      const openai = yield* prepare("openai")
+      expect(openai.body).toMatchObject({
+        messages: [
+          {
+            role: "system",
+            content: [{ type: "text", text: "You are concise.", prompt_cache_breakpoint: { mode: "explicit" } }],
+          },
+          {
+            role: "user",
+            content: [{ type: "text", text: "Say hello.", prompt_cache_breakpoint: { mode: "explicit" } }],
+          },
+        ],
+      })
+      expect(JSON.stringify(openai.body)).not.toContain("cache_control")
 
       expect(JSON.stringify((yield* prepare(undefined)).body)).not.toContain("cache_control")
     }),

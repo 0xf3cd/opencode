@@ -22,9 +22,10 @@ import {
   type ToolCallPart,
   type ToolDefinition,
 } from "../schema/index.js"
+import { effectiveCacheFormat } from "../cache-policy.js"
 import { classifyProviderFailure } from "../provider-error.js"
 import { isRecord, JsonObject, optionalArray, optionalNull, ProviderShared } from "./shared.js"
-import { cacheControl } from "./utils/cache.js"
+import { cacheBreakpoint, cacheControl } from "./utils/cache.js"
 import { OpenAIOptions } from "./utils/openai-options.js"
 import { Lifecycle } from "./utils/lifecycle.js"
 import { ToolStream } from "./utils/tool-stream.js"
@@ -45,6 +46,9 @@ const OpenAIChatCacheControl = Schema.Struct({
   ttl: Schema.optional(Schema.String),
 })
 type OpenAIChatCacheControl = Schema.Schema.Type<typeof OpenAIChatCacheControl>
+// OpenAI GPT-5.6+ explicit prompt-cache breakpoint on a content part.
+const OpenAIChatCacheBreakpoint = Schema.Struct({ mode: Schema.Literal("explicit") })
+type OpenAIChatCacheBreakpoint = Schema.Schema.Type<typeof OpenAIChatCacheBreakpoint>
 
 const OpenAIChatTool = Schema.Struct({
   type: Schema.tag("function"),
@@ -119,6 +123,7 @@ const OpenAIChatTextContent = Schema.Struct({
   type: Schema.Literal("text"),
   text: Schema.String,
   cache_control: Schema.optional(OpenAIChatCacheControl),
+  prompt_cache_breakpoint: Schema.optional(OpenAIChatCacheBreakpoint),
 })
 type OpenAIChatTextContent = Schema.Schema.Type<typeof OpenAIChatTextContent>
 
@@ -324,8 +329,16 @@ export interface ParserState {
 // Lowering is the only place that knows how common LLM messages map onto the
 // OpenAI Chat wire format. Keep provider quirks here instead of leaking native
 // fields into `LLMRequest`.
+type CacheMarker = {
+  readonly cache_control?: OpenAIChatCacheControl
+  readonly prompt_cache_breakpoint?: OpenAIChatCacheBreakpoint
+}
+
+const hasCacheMarker = (marker: CacheMarker | undefined) =>
+  marker?.cache_control !== undefined || marker?.prompt_cache_breakpoint !== undefined
+
 interface LoweringOptions {
-  readonly cacheControl?: (cache: CacheHint | undefined) => OpenAIChatCacheControl | undefined
+  readonly cacheMarker?: (cache: CacheHint | undefined) => CacheMarker
   readonly toolCallID?: (id: string) => string
   /** Project provider-specific fields from the exact source, even when other messages are dropped during lowering. */
   readonly assistant?: (source: LLMRequest["messages"][number], message: OpenAIChatMessage) => OpenAIChatMessage
@@ -339,7 +352,7 @@ const lowerTool = (tool: ToolDefinition, options: LoweringOptions, supportsStric
     parameters: tool.inputSchema,
     ...(supportsStrictMode ? { strict: false } : {}),
   },
-  cache_control: options.cacheControl?.(tool.cache),
+  cache_control: options.cacheMarker?.(tool.cache).cache_control,
 })
 
 const lowerToolChoice = (toolChoice: NonNullable<LLMRequest["toolChoice"]>) =>
@@ -416,7 +429,7 @@ const lowerUserMessage = Effect.fnUntraced(function* (
   const content: OpenAIChatUserContent[] = []
   for (const part of message.content) {
     if (part.type === "text") {
-      content.push({ type: "text", text: part.text, cache_control: options.cacheControl?.(part.cache) })
+      content.push({ type: "text", text: part.text, ...options.cacheMarker?.(part.cache) })
       continue
     }
     if (part.type === "media") {
@@ -425,7 +438,7 @@ const lowerUserMessage = Effect.fnUntraced(function* (
     }
     return yield* ProviderShared.unsupportedContent("OpenAI Chat", "user", ["text", "media"])
   }
-  if (content.every((part) => part.type === "text" && part.cache_control === undefined))
+  if (content.every((part) => part.type === "text" && !hasCacheMarker(part)))
     return {
       role: "user" as const,
       content: content.map((part) => (part.type === "text" ? part.text : "")).join(""),
@@ -446,7 +459,7 @@ const lowerAssistantMessage = Effect.fnUntraced(function* (
     if (!ProviderShared.supportsContent(part, ["text", "reasoning", "tool-call"]))
       return yield* ProviderShared.unsupportedContent("OpenAI Chat", "assistant", ["text", "reasoning", "tool-call"])
     if (part.type === "text") {
-      content.push({ type: "text", text: part.text, cache_control: options.cacheControl?.(part.cache) })
+      content.push({ type: "text", text: part.text, ...options.cacheMarker?.(part.cache) })
       continue
     }
     if (part.type === "reasoning") {
@@ -487,7 +500,7 @@ const lowerAssistantMessage = Effect.fnUntraced(function* (
   const result = {
     role: "assistant" as const,
     content: (() => {
-      if (content.some((part) => part.cache_control !== undefined)) return content
+      if (content.some(hasCacheMarker)) return content
       if (content.length === 0 && toolCalls.length > 0) return null
       return content.map((part) => part.text).join("")
     })(),
@@ -512,7 +525,7 @@ const lowerToolMessages = Effect.fnUntraced(function* (
         toolMessage(
           options.toolCallID?.(part.id) ?? part.id,
           ProviderShared.toolResultText(part),
-          options.cacheControl?.(part.cache),
+          options.cacheMarker?.(part.cache),
         ),
       )
       continue
@@ -520,7 +533,7 @@ const lowerToolMessages = Effect.fnUntraced(function* (
     const content: ReadonlyArray<Tool.Content> = part.result.value
     const text = content.filter((item) => item.type === "text").map((item) => item.text)
     messages.push(
-      toolMessage(options.toolCallID?.(part.id) ?? part.id, text.join("\n"), options.cacheControl?.(part.cache)),
+      toolMessage(options.toolCallID?.(part.id) ?? part.id, text.join("\n"), options.cacheMarker?.(part.cache)),
     )
     const files = content.filter((item) => item.type === "file")
     attachments.push(...(yield* Effect.forEach(files, (item) => lowerMedia(ProviderShared.toolFileMedia(item)))))
@@ -529,10 +542,10 @@ const lowerToolMessages = Effect.fnUntraced(function* (
 })
 
 // Chat cache breakpoints belong on text content parts, not on the message itself.
-const toolMessage = (toolCallID: string, text: string, cacheControl: OpenAIChatCacheControl | undefined) => ({
+const toolMessage = (toolCallID: string, text: string, marker: CacheMarker | undefined) => ({
   role: "tool" as const,
   tool_call_id: toolCallID,
-  content: cacheControl === undefined ? text : [{ type: "text" as const, text, cache_control: cacheControl }],
+  content: hasCacheMarker(marker) ? [{ type: "text" as const, text, ...marker }] : text,
 })
 
 const lowerMessage = Effect.fnUntraced(function* (
@@ -553,14 +566,14 @@ const lowerMessages = Effect.fnUntraced(function* (request: LLMRequest, options:
   const system: OpenAIChatMessage[] =
     request.system.length === 0
       ? []
-      : request.system.some((part) => part.cache !== undefined) && options.cacheControl !== undefined
+      : request.system.some((part) => part.cache !== undefined) && options.cacheMarker !== undefined
         ? [
             {
               role: "system",
               content: request.system.map((part) => ({
                 type: "text",
                 text: part.text,
-                cache_control: options.cacheControl?.(part.cache),
+                ...options.cacheMarker?.(part.cache),
               })),
             },
           ]
@@ -605,43 +618,34 @@ const lowerMessages = Effect.fnUntraced(function* (request: LLMRequest, options:
     if (message.role === "user") bridgeTools()
     if (message.role === "system") {
       const part = yield* ProviderShared.wrappedSystemUpdate("OpenAI Chat", message)
-      const cacheControl = options.cacheControl?.(part.cache)
+      const marker = options.cacheMarker?.(part.cache)
       if (pendingAttachments.length > 0) {
         messages.push({
           role: "user",
-          content: [
-            ...pendingAttachments.splice(0),
-            { type: "text", text: part.text, cache_control: cacheControl },
-          ],
+          content: [...pendingAttachments.splice(0), { type: "text", text: part.text, ...marker }],
         })
         continue
       }
       const previous = messages.at(-1)
       if (previous?.role === "user" && typeof previous.content === "string")
-        messages[messages.length - 1] = cacheControl
+        messages[messages.length - 1] = hasCacheMarker(marker)
           ? {
               role: "user",
               content: [
                 { type: "text", text: previous.content },
-                { type: "text", text: part.text, cache_control: cacheControl },
+                { type: "text", text: part.text, ...marker },
               ],
             }
           : { role: "user", content: `${previous.content}\n${part.text}` }
       else if (previous?.role === "user" && Array.isArray(previous.content))
         messages[messages.length - 1] = {
           role: "user",
-          content: [
-            ...previous.content,
-            { type: "text", text: part.text, cache_control: cacheControl },
-          ],
+          content: [...previous.content, { type: "text", text: part.text, ...marker }],
         }
       else
         messages.push(
-          cacheControl
-            ? {
-                role: "user",
-                content: [{ type: "text", text: part.text, cache_control: cacheControl }],
-              }
+          hasCacheMarker(marker)
+            ? { role: "user", content: [{ type: "text", text: part.text, ...marker }] }
             : { role: "user", content: part.text },
         )
       continue
@@ -828,7 +832,7 @@ export const fromRequest = Effect.fn("OpenAIChat.fromRequest")(function* (
     request.model.compatibility?.zaiToolStream ?? detectZaiToolStream(provider, baseURL, request.model.id)
   const hasHistory = hasToolHistory(request.messages)
   const hasActiveTools = flattened.tools.length > 0
-  const lowering = { ...options, cacheControl: cacheControl() }
+  const lowering = { ...options, cacheMarker: chatCacheMarker(effectiveCacheFormat(request.model)) }
   return {
     model: request.model.id,
     messages: yield* lowerMessages(flattened.request, lowering),
@@ -854,6 +858,15 @@ export const fromRequest = Effect.fn("OpenAIChat.fromRequest")(function* (
     ...lowerOptions(request, supportsStore),
   }
 })
+
+const chatCacheMarker = (format: ReturnType<typeof effectiveCacheFormat>) => {
+  if (format === "openai") {
+    const breakpoint = cacheBreakpoint()
+    return (cache: CacheHint | undefined): CacheMarker => ({ prompt_cache_breakpoint: breakpoint(cache) })
+  }
+  const control = cacheControl()
+  return (cache: CacheHint | undefined): CacheMarker => ({ cache_control: control(cache) })
+}
 
 // =============================================================================
 // Stream Parsing
