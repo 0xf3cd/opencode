@@ -68,7 +68,7 @@ The selected agent or provider system prompt is sent first. OpenCode then assemb
 1. Agent or provider system prompt
 2. Built-in environment and date context
 3. Code Mode tool guidance, when enabled
-4. Global and project AGENTS.md files
+4. Global and project AGENTS.md files, then configured instructions
 5. Available skill, reference, and MCP guidance
 6. Session-specific instruction entries supplied through the API
 ```
@@ -100,13 +100,26 @@ Instruction values remain privileged. Clients can see which sources changed, but
 
 ## Configuration
 
-The V2 config schema accepts an `instructions` array, but V2 does not currently resolve its files, glob patterns, or URLs. This configuration does not add instructions to the model yet:
+Use `instructions` in config to load existing files, such as contribution guides or rules written for other tools, without copying them into `AGENTS.md`.
 
 ```jsonc title="opencode.jsonc"
 {
   "$schema": "https://opencode.ai/config.json",
-  "instructions": ["CONTRIBUTING.md", "docs/guidelines/*.md", "https://example.com/instructions.md"],
+  "instructions": ["CONTRIBUTING.md", ".cursor/rules/*.md", "https://example.com/instructions.md"],
 }
 ```
 
-Use `AGENTS.md` for active V2 instructions. See [Config](/config) for configuration locations and precedence.
+Each entry is a file path, a glob pattern, or an `http://` or `https://` URL. Entries from every loaded config file are combined.
+
+| Entry                          | Resolved from                                                          |
+| ------------------------------ | ---------------------------------------------------------------------- |
+| `CONTRIBUTING.md`, `docs/*.md` | The current workspace directory and each parent up to the project root |
+| `~/rules/style.md`             | Your home directory                                                    |
+| `/opt/team/rules/*.md`         | The absolute path; only the final segment may be a glob                |
+| `https://example.com/rules.md` | Fetched with a 5 second timeout                                        |
+
+- With `OPENCODE_DISABLE_PROJECT_CONFIG=1`, relative entries resolve in the global config directory instead of the project.
+- Configured files load after `AGENTS.md` files, followed by URLs. A file that is also discovered as an `AGENTS.md` is included once.
+- Entries that match no files, unreadable files, and failed fetches are skipped with a warning in the logs.
+
+Edits to matched files update a running session like `AGENTS.md` changes. Glob patterns and URLs are re-read when config changes. A new file that matches an existing glob is picked up on the next config or instruction file change. See [Config](/config) for configuration locations and precedence.

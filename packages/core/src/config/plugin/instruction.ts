@@ -4,13 +4,14 @@ import { define } from "@opencode/plugin/effect/plugin"
 import { FSUtil } from "@opencode/util/fs-util"
 import { Global } from "@opencode/util/global"
 import { sameDirectory } from "@opencode/util/path"
-import { dirname, join } from "path"
-import { Effect, PubSub, Semaphore, Stream } from "effect"
+import { basename, dirname, isAbsolute, join } from "path"
+import { Effect, FiberMap, PubSub, Semaphore, Stream } from "effect"
+import { HttpClient, HttpClientRequest } from "effect/http"
+import { Config } from "../../config.js"
 import { Watcher } from "../../filesystem/watcher.js"
 import { InstructionDiscovery } from "../../instruction-discovery.js"
 import { Instructions } from "../../instructions/index.js"
 import { Location } from "../../location.js"
-import { AbsolutePath } from "../../schema.js"
 
 type Loaded =
   | { readonly type: "available"; readonly files: InstructionDiscovery.File[] }
@@ -18,13 +19,14 @@ type Loaded =
 
 export const Plugin = define({
   id: "opencode.config.instruction",
-  effect: Effect.fn(function* () {
+  effect: Effect.fn(function* (ctx) {
     const discovery = yield* InstructionDiscovery.Service
-    // Nothing this plugin watches or loads can contribute when both scopes
-    // are disabled; skip the resolves, the watcher fiber, and the transform.
-    if (!discovery.project && !discovery.global) return
+    // Configured `instructions` are explicit requests, so they still load when
+    // both ambient AGENTS.md scopes are disabled.
     yield* Effect.gen(function* () {
+      const config = yield* Config.Service
       const fs = yield* FSUtil.Service
+      const http = (yield* HttpClient.HttpClient).pipe(HttpClient.filterStatusOk)
       const global = yield* Global.Service
       const location = yield* Location.Service
       const watcher = yield* Watcher.Service
@@ -37,6 +39,13 @@ export const Plugin = define({
       const stop = FSUtil.contains(home, start) ? home : root
       const globalFile = yield* fs.resolve(join(global.config, "AGENTS.md"))
       const loaded: { current: Loaded } = { current: { type: "available", files: [] } }
+      // Relative `instructions` patterns search from the location directory up to the
+      // project root. Without project discovery they resolve in the global config
+      // directory instead, so global config cannot pull project files into the prompt.
+      const relativeStart = discovery.project ? start : yield* fs.resolve(global.config)
+      const relativeStop = project ? root : relativeStart
+      const configured: { patterns: string[]; remote: InstructionDiscovery.File[] } = { patterns: [], remote: [] }
+      const configuredWatches = yield* FiberMap.make<string>()
 
       const publish = (update: Watcher.Update) => PubSub.publish(changes, update.path).pipe(Effect.asVoid)
       // The ancestor walk can reach the global file when the location sits
@@ -56,7 +65,7 @@ export const Plugin = define({
 
       const read = Effect.fn("ConfigInstructionPlugin.read")(function* (path: string) {
         const content = yield* fs.readFileStringSafe(path)
-        if (content !== undefined) return new InstructionDiscovery.File({ path: AbsolutePath.make(path), content })
+        if (content !== undefined) return new InstructionDiscovery.File({ path, content })
         yield* Effect.logDebug("instruction file skipped", { path, reason: "unavailable" })
       })
 
@@ -78,6 +87,60 @@ export const Plugin = define({
         return files.filter((file): file is InstructionDiscovery.File => file !== undefined)
       })
 
+      const configuredSource = Effect.fn("ConfigInstructionPlugin.configuredSource")(function* () {
+        yield* FiberMap.clear(configuredWatches)
+        const files: InstructionDiscovery.File[] = []
+        for (const pattern of configured.patterns) {
+          const matches = yield* match(pattern)
+          if (matches.length === 0) yield* Effect.logWarning("instruction pattern matched no files", { pattern })
+          for (const file of matches) {
+            yield* FiberMap.run(
+              configuredWatches,
+              file,
+              Stream.unwrap(watcher.subscribe({ path: file, type: "file" })).pipe(Stream.runForEach(publish)),
+              { onlyIfMissing: true, startImmediately: true },
+            )
+            const content = yield* fs.readFileStringSafe(file)
+            if (content === undefined) {
+              yield* Effect.logWarning("instruction file unreadable", { pattern, path: file })
+              continue
+            }
+            files.push(new InstructionDiscovery.File({ path: file, content }))
+          }
+        }
+        return files
+      })
+
+      // Absolute and `~/` patterns may glob only their final segment, matching v1.
+      const match = Effect.fn("ConfigInstructionPlugin.match")(function* (pattern: string) {
+        const expanded = pattern.startsWith("~/") ? join(home, pattern.slice(2)) : pattern
+        const matches = isAbsolute(expanded)
+          ? yield* fs
+              .scan(basename(expanded), { cwd: dirname(expanded), absolute: true, include: "file", dot: true })
+              .pipe(Effect.orElseSucceed(() => [] as string[]))
+          : yield* fs.globUp(expanded, relativeStart, relativeStop)
+        // Glob order follows directory listing order; sort so prompts stay stable across scans.
+        return [...new Set(matches)].toSorted()
+      })
+
+      const fetchRemote = Effect.fn("ConfigInstructionPlugin.fetchRemote")(function* (urls: string[]) {
+        const files = yield* Effect.forEach(
+          urls,
+          (url) =>
+            HttpClientRequest.get(url).pipe(
+              http.execute,
+              Effect.flatMap((response) => response.text),
+              Effect.timeout("5 seconds"),
+              Effect.map((content) => new InstructionDiscovery.File({ path: url, content })),
+              Effect.catch((error) =>
+                Effect.logWarning("failed to fetch instruction URL", { url, error }).pipe(Effect.as(undefined)),
+              ),
+            ),
+          { concurrency: 4 },
+        )
+        return files.filter((file): file is InstructionDiscovery.File => file !== undefined)
+      })
+
       const isolate = <A, E, R>(source: string, effect: Effect.Effect<A, E, R>) =>
         effect.pipe(
           Effect.catchCause((cause) =>
@@ -88,23 +151,37 @@ export const Plugin = define({
         )
 
       const refresh = Effect.fn("ConfigInstructionPlugin.refresh")(
-        function* (file?: string) {
+        function* (input: { readonly file?: string; readonly config?: boolean }) {
+          // Remote instructions are fetched only when config loads, not on every file change.
+          if (input.config) {
+            const items = new Set(
+              (yield* config.entries()).flatMap((entry) =>
+                entry.type === "document" ? (entry.info.instructions ?? []) : [],
+              ),
+            )
+            configured.patterns = [...items].filter((item) => !remote(item))
+            configured.remote = yield* fetchRemote([...items].filter(remote))
+          }
           const sources = yield* Effect.all({
             global: isolate("global", globalSource()),
             project: isolate("project", projectSource()),
+            configured: isolate("configured", configuredSource()),
           })
           loaded.current =
-            Array.isArray(sources.global) && Array.isArray(sources.project)
-              ? { type: "available", files: [...sources.global, ...sources.project] }
+            Array.isArray(sources.global) && Array.isArray(sources.project) && Array.isArray(sources.configured)
+              ? {
+                  type: "available",
+                  files: [...sources.global, ...sources.project, ...sources.configured, ...configured.remote],
+                }
               : { type: "unavailable" }
-          if (!file) return
+          if (!input.file) return
           yield* Effect.logDebug("instructions rescanned", {
-            file,
+            file: input.file,
             instructions:
               loaded.current.type === "available" ? loaded.current.files.map((item) => item.path) : "unavailable",
           })
         },
-        (effect, ..._args: [file?: string]) => lock.withPermit(effect),
+        (effect, ..._args: [input: { readonly file?: string; readonly config?: boolean }]) => lock.withPermit(effect),
       )
 
       // Editor saves arrive as bursts of watcher events; settle before rescanning once. Subscribe
@@ -112,10 +189,16 @@ export const Plugin = define({
       const updates = yield* PubSub.subscribe(changes)
       yield* Stream.fromSubscription(updates).pipe(
         Stream.debounce("100 millis"),
-        Stream.runForEach((file) => refresh(file).pipe(Effect.andThen(discovery.reload()))),
+        Stream.runForEach((file) => refresh({ file }).pipe(Effect.andThen(discovery.reload()))),
         Effect.forkScoped({ startImmediately: true }),
       )
-      yield* refresh()
+      // Subscribe before the first config read so an update between them is not lost.
+      yield* ctx.event.subscribe().pipe(
+        Stream.filter((event) => event.type === "config.updated"),
+        Stream.runForEach(() => refresh({ config: true }).pipe(Effect.andThen(discovery.reload()))),
+        Effect.forkScoped({ startImmediately: true }),
+      )
+      yield* refresh({ config: true })
       yield* discovery.transform((editor) => {
         if (loaded.current.type === "unavailable") {
           editor.unavailable()
@@ -140,4 +223,8 @@ export const Plugin = define({
 function ancestorDirectories(start: string, stop: string): string[] {
   if (sameDirectory(start, stop)) return [start]
   return [start, ...ancestorDirectories(dirname(start), stop)]
+}
+
+function remote(item: string) {
+  return item.startsWith("https://") || item.startsWith("http://")
 }
