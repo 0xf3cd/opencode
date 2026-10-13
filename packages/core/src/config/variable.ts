@@ -4,7 +4,6 @@ import os from "os"
 import path from "path"
 import { Effect } from "effect"
 import { FSUtil } from "@opencode/util/fs-util"
-import { InvalidError } from "../v1/config/error.js"
 
 type ParseSource =
   | {
@@ -19,7 +18,6 @@ type ParseSource =
 
 type SubstituteInput = ParseSource & {
   text: string
-  missing?: "error" | "empty"
   env?: Record<string, string>
 }
 
@@ -56,24 +54,18 @@ const substituteFiles = Effect.fnUntraced(function* (input: SubstituteInput, tex
     const filePath = token.slice("{file:".length, -1)
     const expandedPath = filePath.startsWith("~/") ? path.join(os.homedir(), filePath.slice(2)) : filePath
     const resolvedPath = path.isAbsolute(expandedPath) ? expandedPath : path.resolve(configDir, expandedPath)
+    // Like a missing {env:}, an unavailable file substitutes an empty value so one stale
+    // reference does not take down every other config entry for the Location.
     const fileContent = yield* fs.readFileString(resolvedPath).pipe(
-      Effect.catch((error) => {
-        if (input.missing === "empty") return Effect.succeed("")
-
-        const message = `bad file reference: "${token}"`
-        return Effect.fail(
-          new InvalidError(
-            {
-              path: configSource,
-              message:
-                error._tag === "PlatformError" && error.reason._tag === "NotFound"
-                  ? `${message} ${resolvedPath} does not exist`
-                  : message,
-            },
-            { cause: error },
-          ),
-        )
-      }),
+      Effect.catch((error) =>
+        Effect.logWarning("configuration file reference unavailable", {
+          source: configSource,
+          reference: token,
+          path: resolvedPath,
+          reason: error.reason._tag,
+          action: "substituted empty value",
+        }).pipe(Effect.as("")),
+      ),
     )
 
     out += JSON.stringify(fileContent.trim()).slice(1, -1)

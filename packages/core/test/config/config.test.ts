@@ -1341,6 +1341,79 @@ describe("Config", () => {
     ),
   )
 
+  it.live("substitutes an empty value for a missing file reference and recovers when it appears", () => {
+    const output: Array<Record<string, unknown>> = []
+    const logger = Logger.map(Logger.formatStructured, (entry) => {
+      if (!Array.isArray(entry.message) || entry.message[0] !== "configuration file reference unavailable") return
+      const details = entry.message[1]
+      if (typeof details === "object" && details !== null) output.push(details as Record<string, unknown>)
+    })
+    return Effect.acquireUseRelease(
+      Effect.promise(() => tmpdir()),
+      (tmp) =>
+        Effect.gen(function* () {
+          const global = path.join(tmp.path, "global")
+          const project = path.join(tmp.path, "project")
+          const file = path.join(global, "opencode.json")
+          const secret = path.join(global, "secrets", "firecrawl-key")
+          yield* Effect.promise(async () => {
+            await fs.mkdir(global, { recursive: true })
+            await fs.mkdir(project, { recursive: true })
+            await fs.writeFile(
+              file,
+              JSON.stringify({
+                username: "kept",
+                mcp: {
+                  servers: {
+                    firecrawl: {
+                      type: "remote",
+                      url: "https://mcp.firecrawl.dev/v2/mcp",
+                      headers: { Authorization: "Bearer {file:secrets/firecrawl-key}" },
+                    },
+                  },
+                },
+              }),
+            )
+          })
+          return yield* Effect.gen(function* () {
+            const config = yield* Config.Service
+            const bus = yield* Bus.Service
+            const watcher = yield* Watcher.Test
+            const headers = Effect.gen(function* () {
+              const server = Config.latest(yield* config.entries(), "mcp")?.servers?.firecrawl
+              return server?.type === "remote" ? server.headers : undefined
+            })
+
+            expect(Config.latest(yield* config.entries(), "username")).toBe("kept")
+            expect(yield* headers).toEqual({ Authorization: "Bearer " })
+            expect(output).toEqual([
+              {
+                source: file,
+                reference: "{file:secrets/firecrawl-key}",
+                path: secret,
+                reason: "NotFound",
+                action: "substituted empty value",
+              },
+            ])
+
+            const changed = yield* bus
+              .subscribe(Event.Updated)
+              .pipe(Stream.take(1), Stream.runCollect, Effect.forkScoped)
+            yield* Effect.sleep("10 millis")
+            yield* Effect.promise(async () => {
+              await fs.mkdir(path.dirname(secret), { recursive: true })
+              await fs.writeFile(secret, "fc-key\n")
+            })
+            yield* watcher.emit({ type: "update", path: secret })
+
+            expect(yield* Fiber.join(changed)).toHaveLength(1)
+            expect(yield* headers).toEqual({ Authorization: "Bearer fc-key" })
+          }).pipe(Effect.provide(testLayer(project, global, project, undefined, Watcher.testLayer)))
+        }),
+      (tmp) => Effect.promise(() => tmp[Symbol.asyncDispose]()),
+    ).pipe(Effect.provide(Logger.layer([logger])))
+  })
+
   it.live("does not load legacy config.json files", () =>
     Effect.acquireDisposable(Effect.promise(() => tmpdir())).pipe(
       Effect.flatMap((tmp) =>
