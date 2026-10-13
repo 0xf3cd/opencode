@@ -22,7 +22,6 @@ import {
   type ToolCallPart,
   type ToolDefinition,
 } from "../schema/index.js"
-import { effectiveCacheFormat } from "../cache-policy.js"
 import { classifyProviderFailure } from "../provider-error.js"
 import { isRecord, JsonObject, optionalArray, optionalNull, ProviderShared } from "./shared.js"
 import { cacheControl } from "./utils/cache.js"
@@ -805,7 +804,7 @@ const lowerOptions = (request: LLMRequest, supportsStore: boolean) => {
 
 export const fromRequest = Effect.fn("OpenAIChat.fromRequest")(function* (
   request: LLMRequest,
-  options: LoweringOptions = {},
+  options: Pick<LoweringOptions, "assistant"> = {},
 ) {
   // `fromRequest` returns the provider body only. Endpoint, auth, framing,
   // validation, and HTTP execution are composed by `Route.make`.
@@ -829,9 +828,7 @@ export const fromRequest = Effect.fn("OpenAIChat.fromRequest")(function* (
     request.model.compatibility?.zaiToolStream ?? detectZaiToolStream(provider, baseURL, request.model.id)
   const hasHistory = hasToolHistory(request.messages)
   const hasActiveTools = flattened.tools.length > 0
-  const format = effectiveCacheFormat(request.model)
-  const cache = format === "anthropic" || format === "alibaba" ? cacheControl() : undefined
-  const lowering = { ...options, cacheControl: cache }
+  const lowering = { ...options, cacheControl: cacheControl() }
   return {
     model: request.model.id,
     messages: yield* lowerMessages(flattened.request, lowering),

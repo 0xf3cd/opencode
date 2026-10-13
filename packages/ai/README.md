@@ -1264,13 +1264,15 @@ LLM.request({
 
 ### Provider behavior table
 
-| Protocol                | `cache: "auto"`                                                           |
-| ----------------------- | ------------------------------------------------------------------------- |
-| Anthropic Messages      | emits up to 4 `cache_control` markers (4-breakpoint cap enforced)         |
-| Bedrock Converse        | emits up to 4 `cachePoint` blocks (4-breakpoint cap enforced)             |
-| OpenRouter              | emits up to 4 `cache_control` markers                                     |
-| OpenAI Chat / Responses | no-op (implicit caching above 1024 tokens)                                |
-| Gemini                  | no-op (implicit caching on 2.5+; explicit `CachedContent` is out-of-band) |
+| Protocol / Provider               | `cache: "auto"`                                                                          |
+| --------------------------------- | ---------------------------------------------------------------------------------------- |
+| Anthropic Messages                | emits up to 4 `cache_control` markers (`cacheFormat: "anthropic"`)                       |
+| Bedrock Converse (Claude)         | emits up to 4 `cachePoint` blocks (`cacheFormat: "bedrock"`)                             |
+| OpenRouter / Vercel AI Gateway    | `anthropic/*` → `cacheFormat: "anthropic"`; `qwen/*` → `cacheFormat: "alibaba"`          |
+| Alibaba Chat                      | `qwen*` → `cacheFormat: "alibaba"` (`cache_control` on system + messages, skips tools)   |
+| DigitalOcean                      | emits up to 4 `cache_control` markers (`cacheFormat: "anthropic"`)                       |
+| OpenAI Chat / Responses           | no-op unless `compatibility.cacheFormat` is set (implicit caching above 1024 tokens)     |
+| Gemini                            | no-op (implicit caching on 2.5+; explicit `CachedContent` is out-of-band)                |
 
 Normalized cache usage is read back into `response.usage.cacheReadInputTokens` and `cacheWriteInputTokens` across every provider.
 
