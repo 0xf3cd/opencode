@@ -49,4 +49,13 @@ describe("ConfigWatch.plan", () => {
       ),
     ).toContainEqual({ path: directory, type: "entries", names: ["custom.json"] })
   })
+
+  test("watches file references by name unless a config root already covers them", () => {
+    const present = { ...sources, project: [{ path: root, present: true }] }
+    const secrets = path.resolve("watch-plan-secrets")
+    expect(ConfigWatch.plan(present, [path.join(root, "token.txt")])).toEqual(ConfigWatch.plan(present))
+    expect(
+      Array.from(ConfigWatch.plan(present, [path.join(secrets, "a-key"), path.join(secrets, "b-key")]).values()),
+    ).toContainEqual({ path: secrets, type: "entries", names: ["a-key", "b-key"] })
+  })
 })

@@ -19,6 +19,8 @@ type ParseSource =
 type SubstituteInput = ParseSource & {
   text: string
   env?: Record<string, string>
+  /** Collects every resolved {file:} path, readable or not, so callers can watch them. */
+  references?: Set<string>
 }
 
 /** Apply {env:VAR} and {file:path} substitutions to config text. */
@@ -54,6 +56,7 @@ const substituteFiles = Effect.fnUntraced(function* (input: SubstituteInput, tex
     const filePath = token.slice("{file:".length, -1)
     const expandedPath = filePath.startsWith("~/") ? path.join(os.homedir(), filePath.slice(2)) : filePath
     const resolvedPath = path.isAbsolute(expandedPath) ? expandedPath : path.resolve(configDir, expandedPath)
+    input.references?.add(resolvedPath)
     // Like a missing {env:}, an unavailable file substitutes an empty value so one stale
     // reference does not take down every other config entry for the Location.
     const fileContent = yield* fs.readFileString(resolvedPath).pipe(

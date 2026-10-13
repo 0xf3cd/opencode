@@ -137,16 +137,16 @@ export const layer = (options?: Options) =>
         })
       })
 
-      const loadFile = Effect.fnUntraced(function* (filepath: string) {
+      const loadFile = Effect.fnUntraced(function* (filepath: string, references: Set<string>) {
         const text = yield* fs.readFileStringSafe(filepath)
         if (text === undefined) return
-        const substituted = yield* ConfigVariable.substitute({ type: "path", path: filepath, text })
+        const substituted = yield* ConfigVariable.substitute({ type: "path", path: filepath, text, references })
         const info = yield* parseInfo(substituted, filepath)
         if (!info) return
         return new Document({ type: "document", path: AbsolutePath.make(filepath), info })
       })
 
-      const loadWellknownEntry = Effect.fnUntraced(function* (entry: WellKnown.Entry) {
+      const loadWellknownEntry = Effect.fnUntraced(function* (entry: WellKnown.Entry, references: Set<string>) {
         const auth = entry.manifest.auth
         const credential = (yield* credentials.list(entry.integrationID)).at(-1)
         const variables = auth && credential?.value.type === "key" ? { [auth.env]: credential.value.key } : undefined
@@ -168,6 +168,7 @@ export const layer = (options?: Options) =>
             dir: entry.origin,
             text: JSON.stringify(config),
             env: variables,
+            references,
           }).pipe(
             Effect.flatMap((text) => parseInfo(text, entry.origin)),
             Effect.map((info) => (info ? new Document({ type: "document", info }) : undefined)),
@@ -175,7 +176,7 @@ export const layer = (options?: Options) =>
         ).pipe(Effect.map((documents) => documents.filter((document) => document !== undefined)))
       })
 
-      const loadWellknown = Effect.fn("Config.loadWellknown")(function* () {
+      const loadWellknown = Effect.fn("Config.loadWellknown")(function* (references: Set<string>) {
         const entries = yield* wellknown
           .entries()
           .pipe(
@@ -183,10 +184,15 @@ export const layer = (options?: Options) =>
               Effect.logWarning("failed to discover wellknown config", { error }).pipe(Effect.as([] as const)),
             ),
           )
-        return yield* Effect.forEach(entries, loadWellknownEntry).pipe(Effect.map((documents) => documents.flat()))
+        return yield* Effect.forEach(entries, (entry) => loadWellknownEntry(entry, references)).pipe(
+          Effect.map((documents) => documents.flat()),
+        )
       })
 
-      const loadPreferences = Effect.fn("Config.loadPreferences")(function* (plist: AbsolutePath) {
+      const loadPreferences = Effect.fn("Config.loadPreferences")(function* (
+        plist: AbsolutePath,
+        references: Set<string>,
+      ) {
         const result = yield* processes
           .run(ChildProcess.make("plutil", ["-convert", "json", "-o", "-", plist], { stdin: "ignore" }), {
             timeout: "10 seconds",
@@ -201,28 +207,30 @@ export const layer = (options?: Options) =>
           source: plist,
           dir: path.dirname(plist),
           text: ConfigDiscovery.stripPreferenceMetadata(result.value.stdout.toString()),
+          references,
         })
         const info = yield* parseInfo(text, plist)
         return info ? [new Document({ type: "document", path: plist, info })] : []
       })
 
-      const loadDirectory = Effect.fnUntraced(function* (directory: AbsolutePath) {
+      const loadDirectory = Effect.fnUntraced(function* (directory: AbsolutePath, references: Set<string>) {
         return [
-          ...(yield* Effect.forEach(ConfigDiscovery.names, (file) => loadFile(path.join(directory, file))).pipe(
-            Effect.map((configs) => configs.filter((config): config is Document => config !== undefined)),
-          )),
+          ...(yield* Effect.forEach(ConfigDiscovery.names, (file) =>
+            loadFile(path.join(directory, file), references),
+          ).pipe(Effect.map((configs) => configs.filter((config): config is Document => config !== undefined)))),
           new Directory({ type: "directory", path: directory }),
         ]
       })
 
       const load = Effect.fn("Config.load")(function* (sources: ConfigDiscovery.Sources) {
-        const direct = yield* Effect.forEach(sources.direct, (filepath) => loadFile(filepath)).pipe(
+        const references = new Set<string>()
+        const direct = yield* Effect.forEach(sources.direct, (filepath) => loadFile(filepath, references)).pipe(
           Effect.orDie,
           Effect.map((entries) => entries.filter((entry): entry is Document => entry !== undefined)),
         )
 
         const explicit = sources.explicit
-          ? yield* loadFile(sources.explicit).pipe(
+          ? yield* loadFile(sources.explicit, references).pipe(
               Effect.map((config) => (config ? [config] : [])),
               Effect.orDie,
             )
@@ -234,6 +242,7 @@ export const layer = (options?: Options) =>
                 source: "OPENCODE_CONFIG_CONTENT",
                 dir: location.directory,
                 text: options.content,
+                references,
               }).pipe(
                 Effect.flatMap((text) => parseInfo(text, "OPENCODE_CONFIG_CONTENT")),
                 Effect.map((info) => (info ? [new Document({ type: "document", info })] : [])),
@@ -248,38 +257,50 @@ export const layer = (options?: Options) =>
         // MDM preferences rank below the system directory so their policies
         // carry the most file-based authority, matching V1 where they won.
         const systemSupplementary = [
-          ...(sources.preferences ? yield* loadPreferences(sources.preferences).pipe(Effect.orDie) : []),
-          ...(sources.system?.present ? yield* loadDirectory(sources.system.path).pipe(Effect.orDie) : []),
+          ...(sources.preferences ? yield* loadPreferences(sources.preferences, references).pipe(Effect.orDie) : []),
+          ...(sources.system?.present
+            ? yield* loadDirectory(sources.system.path, references).pipe(Effect.orDie)
+            : []),
         ]
-        const globalSupplementary = sources.global ? yield* loadDirectory(sources.global).pipe(Effect.orDie) : []
+        const globalSupplementary = sources.global
+          ? yield* loadDirectory(sources.global, references).pipe(Effect.orDie)
+          : []
         const projectSupplementary = yield* Effect.forEach(
           sources.project.filter((root) => root.present),
-          (root) => loadDirectory(root.path),
+          (root) => loadDirectory(root.path, references),
         ).pipe(
           Effect.orDie,
           Effect.map((entries) => entries.flat()),
         )
-        return [
-          ...systemSupplementary,
-          ...(yield* loadWellknown().pipe(Effect.orDie)),
-          ...globalSupplementary,
-          ...explicit,
-          ...direct,
-          ...projectSupplementary,
-          ...content,
-        ]
+        const wellknownEntries = yield* loadWellknown(references).pipe(Effect.orDie)
+        return {
+          entries: [
+            ...systemSupplementary,
+            ...wellknownEntries,
+            ...globalSupplementary,
+            ...explicit,
+            ...direct,
+            ...projectSupplementary,
+            ...content,
+          ],
+          references: Array.from(references),
+        }
       })
 
       const initial = yield* ConfigDiscovery.discover(options)
+      const loaded = yield* load(initial)
       let sources = initial
-      let configs = yield* load(initial)
+      let configs = loaded.entries
       const updates = yield* PubSub.unbounded<Watcher.Update>()
       const reloads = yield* PubSub.sliding<void>(1)
       // Readiness rescans recover writes made before a watch attached.
       const requestReload = PubSub.publish(reloads, undefined).pipe(Effect.asVoid)
       const watched = yield* FiberMap.make<string>()
-      const reconcile = Effect.fn("Config.reconcileWatches")(function* (sources: ConfigDiscovery.Sources) {
-        const plan = ConfigWatch.plan(sources)
+      const reconcile = Effect.fn("Config.reconcileWatches")(function* (
+        sources: ConfigDiscovery.Sources,
+        references: readonly string[],
+      ) {
+        const plan = ConfigWatch.plan(sources, references)
         for (const key of Array.from(watched, ([key]) => key)) {
           if (!plan.has(key)) yield* FiberMap.remove(watched, key)
         }
@@ -299,13 +320,13 @@ export const layer = (options?: Options) =>
         function* () {
           const discovered = yield* ConfigDiscovery.discover(options)
           const next = yield* load(discovered)
-          yield* reconcile(discovered)
+          yield* reconcile(discovered, next.references)
           const compatibilityChanged =
             !isDeepStrictEqual(sources.claude, discovered.claude) ||
             !isDeepStrictEqual(sources.agents, discovered.agents)
-          if (isDeepStrictEqual(configs, next) && !compatibilityChanged) return
+          if (isDeepStrictEqual(configs, next.entries) && !compatibilityChanged) return
           sources = discovered
-          configs = next
+          configs = next.entries
           yield* bus.publish(Event.Updated, {})
         },
         (effect) => reloadLock.withPermit(effect),
@@ -357,7 +378,7 @@ export const layer = (options?: Options) =>
         Effect.forever,
         Effect.forkScoped({ startImmediately: true }),
       )
-      yield* reloadLock.withPermit(reconcile(initial))
+      yield* reloadLock.withPermit(reconcile(initial, loaded.references))
 
       const update = Effect.fn("Config.update")(
         function* (patch: Patch) {
