@@ -324,7 +324,7 @@ export function createServerSessionEntries(props: {
       ...new Map([...previous, ...loaded].map((session) => [session.id, session])).values(),
     ])
 
-    // The local collection owns the five recent rows, including newly loaded ones.
+    // The local collection owns the recent rows, including newly loaded ones.
     return search ? entries(loaded, search) : []
   }
 
@@ -340,7 +340,7 @@ export function createServerSessionEntries(props: {
             session.id.toLowerCase() === search ||
             (session.title || props.untitled()).toLowerCase().includes(search),
         )
-        .slice(0, search ? 50 : ENTRY_LIMIT)
+        .slice(0, 50)
 
       return entries(matches, search)
     },

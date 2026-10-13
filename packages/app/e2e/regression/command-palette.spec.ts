@@ -40,10 +40,21 @@ test("home commands do not wait for session search", async ({ page }) => {
 })
 
 test("lists recent sessions before a query is entered", async ({ page }) => {
-  const { dialog } = await openCommandPalette(page, true)
+  const { dialog } = await openCommandPalette(page, true, [
+    ...Array.from({ length: 7 }, (_, index) => ({
+      ...paletteSession,
+      id: `ses_palette_recent_${index}`,
+      title: `Recent session ${index + 1}`,
+      time: { ...paletteSession.time, updated: paletteSession.time.updated - index - 1 },
+    })),
+    paletteSession,
+  ])
+
   const session = dialog.getByRole("option", { name: /Palette fixture session/ })
+  const seventh = dialog.getByRole("option", { name: /Recent session 7/ })
   await expect(dialog.getByText("Recent sessions", { exact: true })).toBeVisible()
   await expect(session).toHaveAttribute("aria-selected", "false")
+  await expect(seventh).toBeAttached()
   await session.click()
   await expect(dialog).toHaveCount(0)
   await expect(page.getByRole("heading", { name: paletteSession.title, exact: true })).toBeVisible()
