@@ -10,7 +10,7 @@
 //
 // Manual `cache: CacheHint` placements on individual parts are preserved and
 // count against the four-breakpoint budget; auto only fills remaining slots.
-import { CacheHint, type CachePolicy, type CachePolicyObject } from "./schema/options.js"
+import { CacheHint, type CachePolicy, type CachePolicyObject, type LanguageModel } from "./schema/options.js"
 import { LLMRequest, Message, ToolDefinition, type ContentPart, type ToolEntry } from "./schema/messages.js"
 import { effortUpdate } from "./effort-updates.js"
 
@@ -34,38 +34,8 @@ const resolve = (policy: CachePolicy | undefined): CachePolicyObject => {
   return policy
 }
 
-// Protocols whose wire format ignores inline cache markers (OpenAI's implicit
-// prefix caching, Gemini's implicit + out-of-band CachedContent). Skip the
-// whole policy pass for these — emitting hints would be harmless but pointless.
-const RESPECTS_INLINE_HINTS = new Set([
-  "alibaba-chat",
-  "alibaba-messages",
-  "anthropic-messages",
-  "anthropic-compatible-messages",
-  "bedrock-mantle-messages",
-  "cloudflare-ai-gateway-messages",
-  "google-vertex-messages",
-  "meta-messages",
-  "minimax-messages",
-  "moonshot-messages",
-  "vercel-ai-gateway-messages",
-  "zai-coding-messages",
-  "bedrock-converse",
-  "openrouter",
-  "digitalocean",
-])
-
-// OpenRouter and Vercel AI Gateway upstreams other than Anthropic and Alibaba Qwen cache without breakpoints.
-// Gemini uses only the last breakpoint, so a conversation-tail breakpoint writes a new cache every step and costs
-// more than none. Qwen ignores breakpoints on tool definitions and caches tools with the system prompt.
-const QWEN: CachePolicyObject = { system: true, messages: { tail: 1 } }
-const gatewayPolicy = (modelID: string): CachePolicyObject => {
-  // `~anthropic/claude-sonnet-latest` style IDs are OpenRouter aliases for the latest model in a family.
-  const id = modelID.replace(/^~/, "")
-  if (id.startsWith("anthropic/")) return AUTO
-  if (id.startsWith("qwen/") || id.startsWith("alibaba/qwen")) return QWEN
-  return NONE
-}
+export const effectiveCacheFormat = (model: LanguageModel) =>
+  model.compatibility?.cacheFormat ?? model.route.cacheFormat
 
 const makeHint = (ttlSeconds: number | undefined): CacheHint =>
   ttlSeconds !== undefined ? new CacheHint({ type: "ephemeral", ttlSeconds }) : new CacheHint({ type: "ephemeral" })
@@ -184,16 +154,10 @@ export const applyCachePolicy = (request: LLMRequest): LLMRequest => {
   return LLMRequest.update(request, { tools, system, messages })
 }
 
-// A declared cache format overrides the route allowlist and its model-ID heuristics.
+// Each protocol declares its default marker syntax, and providers or callers override it per model.
 const selectPolicy = (request: LLMRequest): CachePolicyObject => {
-  const format = request.model.compatibility?.cacheFormat
-  const route = request.model.route.id
-  const auto = request.cache === undefined || request.cache === "auto"
-  if (format === "alibaba") return auto ? QWEN : { ...resolve(request.cache), tools: false }
-  if (format === "anthropic") return resolve(request.cache)
-  if (!RESPECTS_INLINE_HINTS.has(route)) return NONE
-  if (!auto) return resolve(request.cache)
-  if (route === "openrouter" || route === "vercel-ai-gateway-messages") return gatewayPolicy(request.model.id)
-  if (route === "alibaba-chat") return request.model.id.toLowerCase().startsWith("qwen") ? QWEN : NONE
-  return AUTO
+  const format = effectiveCacheFormat(request.model)
+  if (format === undefined || format === "none") return NONE
+  const policy = resolve(request.cache)
+  return format === "alibaba" ? { ...policy, tools: false } : policy
 }

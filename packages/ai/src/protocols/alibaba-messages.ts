@@ -46,6 +46,7 @@ export const protocol = Protocol.make({
     }),
   },
   stream: AnthropicMessages.protocol.stream,
+  cacheFormat: AnthropicMessages.protocol.cacheFormat,
 })
 
 export * as AlibabaMessages from "./alibaba-messages.js"

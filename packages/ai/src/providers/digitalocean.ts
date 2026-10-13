@@ -1,6 +1,5 @@
 import type { ProviderPackage } from "../provider-package.js"
 import { OpenAIChat } from "../protocols/openai-chat.js"
-import { cacheControl } from "../protocols/utils/cache.js"
 import { AuthOptions, type ProviderAuthOption } from "../route/auth-options.js"
 import { Route, type RouteDefaultsInput } from "../route/client.js"
 import { Endpoint } from "../route/endpoint.js"
@@ -20,12 +19,9 @@ export type LanguageModelOptions = Omit<RouteDefaultsInput, "providerOptions"> &
 export type Settings = ProviderPackage.Settings & OpenAIProviderOptionsInput & { readonly apiKey?: string }
 
 export const protocol = Protocol.make({
+  ...OpenAIChat.protocol,
   id: "digitalocean-chat",
-  body: {
-    schema: OpenAIChat.protocol.body.schema,
-    from: (request) => OpenAIChat.fromRequest(request, { cacheControl: cacheControl() }),
-  },
-  stream: OpenAIChat.protocol.stream,
+  cacheFormat: "anthropic",
 })
 
 export const route = Route.make({

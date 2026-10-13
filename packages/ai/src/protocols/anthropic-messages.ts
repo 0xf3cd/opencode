@@ -1611,6 +1611,7 @@ export const protocol = Protocol.make({
     step,
   },
   supportsEffortUpdates,
+  cacheFormat: "anthropic",
 })
 
 export const transport = <

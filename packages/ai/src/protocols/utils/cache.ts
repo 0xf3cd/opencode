@@ -21,3 +21,11 @@ export const cacheControl = () => {
     return { type: "ephemeral" as const, ttl: ttlBucket(cache.ttlSeconds) }
   }
 }
+
+// OpenRouter and Vercel AI Gateway upstreams other than Anthropic and Alibaba Qwen cache without inline markers.
+export const gatewayCacheFormat = (modelID: string): "anthropic" | "alibaba" | undefined => {
+  const id = modelID.replace(/^~/, "")
+  if (id.startsWith("anthropic/")) return "anthropic"
+  if (id.startsWith("qwen/") || id.startsWith("alibaba/qwen")) return "alibaba"
+  return undefined
+}

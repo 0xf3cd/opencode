@@ -7,7 +7,7 @@ import { HttpOptions, ProviderID, type ModelID, type OpenString } from "../schem
 import type { ProviderPackage } from "../provider-package.js"
 import { SystemOne } from "../experimental/system-one.js"
 import { OpenAIChat } from "../protocols/openai-chat.js"
-import { cacheControl } from "../protocols/utils/cache.js"
+import { gatewayCacheFormat } from "../protocols/utils/cache.js"
 import { isRecord, ProviderShared } from "../protocols/shared.js"
 
 export const id = ProviderID.make("openrouter")
@@ -100,7 +100,7 @@ export const protocol = Protocol.make({
   body: {
     schema: OpenRouterBody,
     from: (request) =>
-      OpenAIChat.fromRequest(request, { cacheControl: cacheControl() }).pipe(
+      OpenAIChat.fromRequest(request).pipe(
         Effect.map((body) => {
           const sourceAssistants = request.messages.filter((message) => message.role === "assistant")
           let assistantIndex = 0
@@ -196,7 +196,10 @@ export const configure = (input: LanguageModelOptions = {}) => {
   return {
     id,
     model: (modelID: string | ModelID) =>
-      route.model<OpenRouterProviderOptionsInput>({ id: modelID, compatibility: { supportsPromptCacheKey: true } }),
+      route.model<OpenRouterProviderOptionsInput>({
+        id: modelID,
+        compatibility: { supportsPromptCacheKey: true, cacheFormat: gatewayCacheFormat(String(modelID)) },
+      }),
     experimental: { evaluation },
     configure,
   }

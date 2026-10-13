@@ -28,6 +28,10 @@ const CLAUDE_5M = [
 // Callers share the four-breakpoint budget across system, messages, and tools.
 export const BEDROCK_BREAKPOINT_CAP = 4
 
+export const supports = (modelID: string) =>
+  modelID.includes("anthropic.claude-") &&
+  (CLAUDE_5M.some((id) => modelID.includes(id)) || !LEGACY_CLAUDE.some((id) => modelID.includes(id)))
+
 export const breakpoints = (modelID: string) => {
   // Substring matching also handles regional prefixes and model-bearing ARNs.
   const short = CLAUDE_5M.some((id) => modelID.includes(id))
@@ -35,7 +39,7 @@ export const breakpoints = (modelID: string) => {
     ...newBreakpoints(BEDROCK_BREAKPOINT_CAP),
     // Assume modern Claude releases retain caching support; older generations need an explicit exception.
     // Other model families use implicit caching where available.
-    supported: modelID.includes("anthropic.claude-") && (short || !LEGACY_CLAUDE.some((id) => modelID.includes(id))),
+    supported: supports(modelID),
     ttl1h: !short,
   }
 }

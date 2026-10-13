@@ -12,7 +12,12 @@ import { normalizeToolHistory } from "../tool-history.js"
 import { sanitizeSurrogates } from "../utils/sanitize.js"
 import * as ProviderShared from "../protocols/shared.js"
 import { ToolSchemaProjection } from "../protocols/utils/tool-schema.js"
-import type { LanguageModelSanitizerCompatibility, ProtocolID, ProviderOptions } from "../schema/index.js"
+import type {
+  LanguageModelCacheFormatCompatibility,
+  LanguageModelSanitizerCompatibility,
+  ProtocolID,
+  ProviderOptions,
+} from "../schema/index.js"
 import {
   AIError,
   CompactionResponse,
@@ -59,6 +64,7 @@ export interface Route<
   readonly body: RouteBody<Body>
   readonly supportsEffortUpdates?: (request: LLMRequest) => boolean
   readonly sanitizer?: LanguageModelSanitizerCompatibility
+  readonly cacheFormat?: LanguageModelCacheFormatCompatibility
   readonly with: {
     <Next extends CompactionOperations | undefined>(
       patch: RoutePatch<Body, Prepared> & { readonly compact: Next },
@@ -390,6 +396,7 @@ function makeFromTransport<Body, Prepared, Frame, Event, State>(
       body: protocol.body,
       supportsEffortUpdates: protocol.supportsEffortUpdates,
       sanitizer: protocol.sanitizer,
+      cacheFormat: protocol.cacheFormat,
       with: (patch: RoutePatch<Body, Prepared>) => {
         const { compact, id, provider, providerMetadataKey, auth, transport, endpoint, ...defaults } = patch
         return build({

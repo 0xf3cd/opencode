@@ -4,6 +4,7 @@ import { ProviderConfigurationError, ProviderID, type ModelID } from "../schema/
 import * as BedrockConverse from "../protocols/bedrock-converse.js"
 import type { BedrockCredentials } from "../protocols/bedrock-converse.js"
 import { BedrockAuth } from "../protocols/utils/bedrock-auth.js"
+import { BedrockCache } from "../protocols/utils/bedrock-cache.js"
 
 export const id = ProviderID.make("amazon-bedrock")
 
@@ -57,7 +58,8 @@ export const configure = (input: Config = {}) => {
   const route = configuredRoute(input)
   return {
     id,
-    model: (modelID: string | ModelID) => route.model({ id: modelID }),
+    model: (modelID: string | ModelID) =>
+      route.model({ id: modelID, compatibility: { cacheFormat: BedrockCache.supports(modelID) ? "bedrock" : "none" } }),
     configure,
   }
 }

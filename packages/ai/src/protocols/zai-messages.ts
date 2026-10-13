@@ -34,6 +34,7 @@ export const protocol = Protocol.make({
   id: "zai-messages",
   body: { schema: Body, from: fromRequest },
   stream: AnthropicMessages.protocol.stream,
+  cacheFormat: AnthropicMessages.protocol.cacheFormat,
 })
 
 export * as ZAIMessages from "./zai-messages.js"

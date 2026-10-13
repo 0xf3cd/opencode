@@ -873,6 +873,7 @@ export const protocol = Protocol.make({
     step,
     onHalt: (state) => Effect.succeed(onHalt(state)),
   },
+  cacheFormat: "bedrock",
 })
 
 export const route = Route.make({

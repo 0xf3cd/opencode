@@ -12,6 +12,7 @@ import { AnthropicMessages } from "../protocols/anthropic-messages.js"
 import { OpenAIChat } from "../protocols/openai-chat.js"
 import { OpenResponses } from "../protocols/open-responses.js"
 import { optionalNull, ProviderShared } from "../protocols/shared.js"
+import { gatewayCacheFormat } from "../protocols/utils/cache.js"
 import { gatewayProtocol } from "../protocols/utils/gateway-protocol.js"
 import type { ProviderPackage } from "../provider-package.js"
 import { Auth } from "../route/auth.js"
@@ -261,7 +262,10 @@ export const configure = (input: Options = {}) => {
     messagesRoute.with(configured).model<ProviderOptionsInput>({
       id: modelID,
       // Recorded Gateway translations for non-Claude models return thinking with empty signatures.
-      compatibility: { requireSignature: modelID.startsWith("anthropic/") },
+      compatibility: {
+        requireSignature: modelID.startsWith("anthropic/"),
+        cacheFormat: gatewayCacheFormat(String(modelID)) ?? "none",
+      },
     })
   const responses = (modelID: string | ModelID) =>
     responsesRoute.with(configured).model<ProviderOptionsInput>({ id: modelID })

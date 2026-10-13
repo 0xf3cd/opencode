@@ -4,7 +4,6 @@ import { AIError, LLMEvent, type LanguageModelCompatibility, type LLMRequest } f
 import { classifyProviderFailure } from "../provider-error.js"
 import { OpenAIChat } from "./openai-chat.js"
 import { JsonObject, optionalArray, optionalNull, ProviderShared } from "./shared.js"
-import { cacheControl } from "./utils/cache.js"
 
 // ---------------------------------------------------------------------------
 // Public options and request body
@@ -186,7 +185,6 @@ const MARKER = "__ENCRYPTED_REASONING__"
 const fromRequest = Effect.fn("VeniceChat.fromRequest")(function* (request: LLMRequest) {
   const options = yield* ProviderShared.validateWith(Schema.decodeUnknownEffect(Options))(request.providerOptions ?? {})
   const body = yield* OpenAIChat.fromRequest(request, {
-    cacheControl: cacheControl(),
     assistant: (source, message) => {
       if (message.role !== "assistant") return message
       const parts = source.content.filter(
