@@ -29,6 +29,7 @@ import type {
 } from "@opencode/client/promise"
 import type { SessionUserActions, SessionUserAttachmentReference, SessionUserComment } from "../actions"
 import { attached, typeLabel } from "../components/message-file"
+import type { VoiceDelegation } from "./voice-delegation"
 
 export async function writeClipboard(text: string): Promise<boolean> {
   const body = typeof document === "undefined" ? undefined : document.body
@@ -255,6 +256,8 @@ export function CurrentUserMessageDisplay(props: {
   actions?: SessionUserActions
   comments?: SessionUserComment[]
   references?: SessionUserAttachmentReference[]
+  /** Set when a voice call sent this prompt on the user's behalf; `text` is then its display text. */
+  voice?: VoiceDelegation
 }) {
   const data = useData()
   const dialog = useDialog()
@@ -363,6 +366,7 @@ export function CurrentUserMessageDisplay(props: {
     <div
       data-component="user-message"
       data-pending={waiting() ? "true" : undefined}
+      data-voice={props.voice ? "true" : undefined}
       data-timeline-part-id={props.text ? `${props.message.id}:text:0` : undefined}
     >
       <Show
@@ -374,12 +378,27 @@ export function CurrentUserMessageDisplay(props: {
         }
       >
         <div data-slot="user-message-body">
+          <Show when={props.voice}>
+            <span data-slot="user-message-voice-badge">
+              <Tooltip appearance="compact" value={i18n.t("ui.message.voice")} placement="top" gutter={4}>
+                <span role="img" aria-label={i18n.t("ui.message.voice")}>
+                  <Icon name="waveform" size="small" />
+                </span>
+              </Tooltip>
+            </span>
+          </Show>
           <div data-slot="user-message-text" dir="auto" data-comments={comments().length > 0 ? "true" : undefined}>
             <CurrentHighlightedText text={props.text} files={inlineFiles()} agents={agents()} />
             <Show when={comments().length > 0}>
               <UserMessageComments comments={comments()} bounded />
             </Show>
           </div>
+          <Show when={props.voice?.callLogAttached}>
+            <span data-slot="user-message-voice-caption" class="text-12-regular text-text-weak">
+              <Icon name="paperclip" size="small" />
+              {i18n.t("ui.message.callLogAttached")}
+            </span>
+          </Show>
         </div>
       </Show>
       {renderAttachments()}

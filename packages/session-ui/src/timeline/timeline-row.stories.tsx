@@ -22,6 +22,7 @@ import {
   revertDocument,
   streamingDocument,
   thinkingDocument,
+  voiceDelegationDocument,
 } from "../storybook/current-session-fixtures"
 
 export default {
@@ -446,6 +447,17 @@ export const PromptWithAttachments = {
       document={attachmentsAndCommentsDocument}
       presentation={attachmentsAndCommentsPresentation}
       width="480px"
+    />
+  ),
+}
+
+export const VoiceMessages = {
+  render: () => (
+    <CurrentSessionTimelineStory
+      title="Voice messages"
+      description="Prompts a voice call delegated read as the voice agent's framing, or the user's words when it has none."
+      document={voiceDelegationDocument}
+      width="620px"
     />
   ),
 }

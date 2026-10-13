@@ -2,6 +2,14 @@ import { additionalIcons, additionalIconViewBox } from "./icon/additional-icons"
 
 // Consumers center the SVG viewport, so each icon must center its artwork within its viewBox.
 const icons = {
+  waveform: {
+    viewBox: "0 0 16 16",
+    body: `<path d="M2 6.5V9.5M5 4V12M8 2V14M11 5V11M14 6.5V9.5" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>`,
+  },
+  paperclip: {
+    viewBox: "0 0 16 16",
+    body: `<path d="M13.5 7.5L8.25 12.75C6.87 14.13 4.63 14.13 3.25 12.75C1.87 11.37 1.87 9.13 3.25 7.75L8.5 2.5C9.42 1.58 10.91 1.58 11.83 2.5C12.75 3.42 12.75 4.91 11.83 5.83L6.75 10.91C6.29 11.37 5.54 11.37 5.08 10.91C4.62 10.45 4.62 9.71 5.08 9.25L9.75 4.58" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"/>`,
+  },
   lock: {
     viewBox: "0 0 16 16",
     body: `<rect x="3.5" y="7" width="9" height="7" rx="1" stroke="currentColor"/><path d="M5 7V5a3 3 0 0 1 6 0v2M8 10v1" stroke="currentColor" stroke-linecap="round"/>`,

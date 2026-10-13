@@ -1,5 +1,5 @@
 import type { SessionMessageAssistant, SessionMessageAssistantTool, SessionMessageUser } from "@opencode/client/promise"
-import { Match, Switch, type ComponentProps } from "solid-js"
+import { createMemo, Match, Switch, type ComponentProps } from "solid-js"
 import type { SessionUserActions, SessionUserAttachmentReference, SessionUserComment } from "../actions"
 import { AssistantReasoningContent, AssistantTextContent, CurrentUserMessageDisplay } from "./message-content"
 import {
@@ -9,6 +9,7 @@ import {
   ToolDisplay,
 } from "../tools/tool-renderer"
 import { currentToolError, currentToolInput, currentToolMetadata, currentToolOutput } from "./current-tool-state"
+import { parseVoiceDelegation } from "./voice-delegation"
 
 export type { SessionUserActions, SessionUserAttachmentReference, SessionUserComment } from "../actions"
 
@@ -26,11 +27,17 @@ export function SessionUserMessage(props: {
   historicalModel: SessionMessageAssistant["model"]
   actions?: SessionUserActions
 }) {
+  // A prompt with presentation metadata came from this app's composer, never from a voice call.
+  const voice = createMemo(() =>
+    props.displayText === undefined ? parseVoiceDelegation(props.message.text) : undefined,
+  )
+
   return (
     <CurrentUserMessageDisplay
       sessionID={props.sessionID}
       message={props.message}
-      text={props.displayText ?? props.message.text}
+      text={props.displayText ?? voice()?.text ?? props.message.text}
+      voice={voice()}
       comments={props.comments}
       references={props.references}
       agent={props.historicalAgent}

@@ -1117,6 +1117,63 @@ export const attachmentsAndCommentsPresentation = {
   },
 } satisfies Record<string, SessionUserPresentation>
 
+// Prompts as the iOS app's voice calls send them: the full header on a call's first delegation, the short
+// marker after it, and a call log attached as a file reference.
+const voiceHeader =
+  "Voice delegation. The user is on a voice call with a voice agent, which hands their requests to you. Instruction is the user's own spoken words since the previous delegation, transcribed from speech, so it may contain recognition errors and disfluencies: resolve meaning from the complete utterance, not a disfluent prefix. Voice, when present, is how the voice agent framed the request. Transcript delta is the surrounding voice conversation, both sides, for context, not additional commands."
+
+export const voiceDelegationDocument = document([
+  user(
+    "msg_user_voice_framed",
+    `${voiceHeader}\n${JSON.stringify(
+      {
+        instruction: "uh can you figure out why the upload test keeps failing on CI",
+        transcript_delta: [
+          "user: uh can you figure out why the upload test keeps failing on CI",
+          "assistant: Checking why the upload test fails on CI.",
+        ],
+        voice: "Checking why the upload test fails on CI.",
+      },
+      null,
+      2,
+    )}`,
+    100_000,
+  ),
+  assistant({
+    id: "msg_assistant_voice_framed",
+    offset: 101_000,
+    completed: 104_000,
+    content: [
+      { type: "text", text: "The upload test times out because the fixture server starts after the first request." },
+    ],
+  }),
+  user(
+    "msg_user_voice_continued",
+    `Voice delegation (continued). Same fields as before.\n${JSON.stringify(
+      {
+        call_log_attached: true,
+        context: 'Session "Reproducing missing file reference 500 error locally" in project "opencode".',
+        instruction:
+          "Once the fix and verification are complete, push the changes and create a pull request for the fix.",
+        transcript_delta: [
+          "assistant: Okay. On it. I'll try to fix that.",
+          "user: Also push a PR once you're done",
+          "assistant: I've started.",
+        ],
+      },
+      null,
+      2,
+    )}\nAttached file: \`/tmp/opencode/uploads/voice-call-5f0c2a1e.json\``,
+    105_000,
+  ),
+  assistant({
+    id: "msg_assistant_voice_continued",
+    offset: 106_000,
+    completed: 108_000,
+    content: [{ type: "text", text: "Pushed the fix and opened a pull request." }],
+  }),
+] satisfies SessionMessageInfo[])
+
 export const revertDocument = document([
   user("msg_user_revert_base", "Add a compact Session summary.", 90_000),
   assistant({
