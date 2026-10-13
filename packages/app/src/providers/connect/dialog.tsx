@@ -2,7 +2,10 @@ import { Button } from "@opencode/ui/button"
 import { Badge } from "@opencode/ui/badge"
 import { useDialog } from "@opencode/ui/context/dialog"
 import { Icon } from "@opencode/ui/icon"
+import { IconButton } from "@opencode/ui/icon-button"
+import { InlineInput } from "@opencode/ui/inline-input"
 import { List } from "@opencode/ui/list"
+import { Menu } from "@opencode/ui/menu"
 import { RadioGroup, RadioItem } from "@opencode/ui/radio"
 import { Spinner } from "@opencode/ui/spinner"
 import { TextField } from "@opencode/ui/text-field"
@@ -36,6 +39,7 @@ import { useIntegrations } from "@/providers/catalog/integrations"
 import { CustomProviderForm } from "@/providers/credentials/dialog"
 import { ProviderModelGroup, ProviderModelIcon } from "@/providers/models/provider-group"
 import type { ModelSelection } from "@/providers/models/selection"
+import { activeProviderAccount, providerAccounts, type ProviderAccount } from "@/settings/providers/accounts"
 import { decode64 } from "@/runtime/persistence/base64"
 import { SettingsList } from "@/settings/list"
 import { useTabs } from "@/shell/tabs/tabs"
@@ -43,7 +47,6 @@ import { Persist, persisted } from "@/runtime/persistence/storage"
 import { Persistence } from "@/runtime/persistence/schema"
 import { Schema } from "effect"
 import {
-  CONSOLE_INTEGRATION,
   CONSOLE_PROVIDERS,
   consoleIntegration,
   createProviderConnectionController,
@@ -89,6 +92,8 @@ export const DialogConnectProvider: Component<{
     modelProvider?: { id: string; name: string }
     authorization: boolean
     chatgptWelcome: boolean
+    // A provider with existing accounts, waiting for the user to add another or switch to one.
+    accounts?: string
   }>({
     completed: false,
     authorization: false,
@@ -113,6 +118,11 @@ export const DialogConnectProvider: Component<{
   const select = (provider?: string) => {
     back.current = reset
     controller.select(provider)
+  }
+
+  const pick = (provider: string, connected: boolean) => {
+    if (!connected) return select(provider)
+    setState("accounts", provider)
   }
 
   function Content() {
@@ -145,8 +155,25 @@ export const DialogConnectProvider: Component<{
             />
           )}
         </Match>
+        <Match keyed when={state.accounts}>
+          {(provider) => (
+            <ProviderAccounts
+              provider={provider}
+              directory={props.directory}
+              setBack={(handler) => (back.current = handler)}
+              onBack={() => setState("accounts", undefined)}
+              onAdd={() => select(provider)}
+              onDone={() => {
+                props.onConnected?.(provider)
+
+                if (props.onDone) setState("completed", true)
+                dialog.close()
+              }}
+            />
+          )}
+        </Match>
         <Match when={true}>
-          <ProviderPicker directory={props.directory} onSelect={select} onPrepare={holdFocus} />
+          <ProviderPicker directory={props.directory} onSelect={pick} onPrepare={holdFocus} />
         </Match>
       </Switch>
     )
@@ -191,7 +218,7 @@ export const DialogConnectProvider: Component<{
               </div>
             )}
           </Match>
-          <Match when={controller.selected()}>
+          <Match when={controller.selected() || state.accounts}>
             <button
               type="button"
               class="flex size-5 items-center justify-center rounded-sm text-v2-icon-icon-muted hover:bg-v2-overlay-simple-overlay-hover focus-visible:bg-v2-overlay-simple-overlay-hover focus-visible:outline-none"
@@ -217,7 +244,11 @@ export const DialogConnectProvider: Component<{
   )
 }
 
-function ProviderPicker(props: { directory?: string; onSelect: (provider: string) => void; onPrepare?: () => void }) {
+function ProviderPicker(props: {
+  directory?: string
+  onSelect: (provider: string, connected: boolean) => void
+  onPrepare?: () => void
+}) {
   const integrations = useIntegrations(() => props.directory)
   const language = useLanguage()
 
@@ -232,29 +263,11 @@ function ProviderPicker(props: { directory?: string; onSelect: (provider: string
   const featured = ["opencode-go", "opencode", "anthropic", "openai", "google", "openrouter", "vercel"]
   const custom = () => ({ id: CUSTOM_ID, name: language.t("dialog.provider.custom.label") })
 
-  // Only a stored credential hides a provider: environment and config connections can still be
-  // replaced by a sign-in. OpenCode Zen stays until a Console account (not a key) is connected.
-  const consoleAccount = createMemo(() =>
-    integrations
-      .list()
-      .find((integration) => integration.id === CONSOLE_INTEGRATION)
-      ?.connections.some((connection) => connection.type === "credential" && connection.method === "oauth"),
-  )
-
   const all = createMemo(() => {
     language.locale()
     const query = store.filter.trim().toLowerCase()
 
-    const values = [
-      custom(),
-      ...integrations
-        .list()
-        .filter((integration) =>
-          integration.id === CONSOLE_INTEGRATION
-            ? !consoleAccount()
-            : !integration.connections.some((connection) => connection.type === "credential"),
-        ),
-    ]
+    const values = [custom(), ...integrations.list()]
 
     if (!query) return values
 
@@ -285,9 +298,18 @@ function ProviderPicker(props: { directory?: string; onSelect: (provider: string
 
   onMount(() => search?.focus({ preventScroll: true }))
 
+  const connected = (provider: string) =>
+    integrations
+      .list()
+      .find((integration) => integration.id === provider)
+      ?.connections.some((connection) => !connection.status) ?? false
+
   const connect = (provider: string) => {
     props.onPrepare?.()
-    props.onSelect(provider)
+    props.onSelect(
+      provider,
+      providerAccounts(integrations.list().find((integration) => integration.id === provider)).length > 0,
+    )
   }
 
   const move = (event: KeyboardEvent, direction: number) => {
@@ -373,6 +395,10 @@ function ProviderPicker(props: { directory?: string; onSelect: (provider: string
                             {language.t("settings.providers.tag.custom")}
                           </span>
                         </Show>
+                        <Show when={connected(provider.id)}>
+                          <Icon name="check" size="small" class="ml-auto shrink-0 text-v2-icon-icon-muted" />
+                          <span class="sr-only">{language.t("dialog.provider.tag.connected")}</span>
+                        </Show>
                         <Show when={store.connecting === provider.id}>
                           <Spinner class="ml-auto size-4 shrink-0 text-v2-icon-icon-muted" />
                         </Show>
@@ -393,6 +419,270 @@ function ProviderPicker(props: { directory?: string; onSelect: (provider: string
           class="pointer-events-none absolute inset-x-0 bottom-0 h-10"
           style={{ background: "linear-gradient(to bottom, transparent, var(--v2-background-bg-layer-01))" }}
         />
+      </div>
+    </div>
+  )
+}
+
+function ProviderAccounts(props: {
+  provider: string
+  directory?: string
+  setBack: (handler: () => void) => void
+  onBack: () => void
+  onAdd: () => void
+  onDone: () => void
+}) {
+  const language = useLanguage()
+  const platform = usePlatform()
+  const sdk = useServerSDK()
+  const data = useData()
+  const integrations = useIntegrations(() => props.directory)
+  const [store, setStore] = createStore<{
+    pending?: string
+    menu?: string
+    editor?: { id: string; draft: string; saving: boolean }
+  }>({})
+  const integration = () => integrations.list().find((item) => item.id === props.provider)
+  const accounts = () => providerAccounts(integration())
+  const name = () => integration()?.name ?? props.provider
+  let input: HTMLInputElement | undefined
+
+  props.setBack(props.onBack)
+
+  const refresh = () => {
+    const location = props.directory ? { directory: props.directory } : undefined
+    data.location.integration.invalidate(location)
+    data.location.provider.invalidate(location)
+    data.location.model.invalidate(location)
+
+    return Promise.all([
+      data.location.integration.sync(location),
+      data.location.provider.sync(location),
+      data.location.model.sync(location),
+    ])
+  }
+
+  const failed = (error: unknown) =>
+    showToast({
+      title: language.t("common.requestFailed"),
+      description: error instanceof Error ? error.message : String(error),
+    })
+
+  const choose = async (account: ProviderAccount) => {
+    if (store.pending) return
+
+    if (account.status?.url) return platform.openExternal(account.status.url)
+
+    if (account.status) return props.onAdd()
+
+    if (activeProviderAccount(integration())?.id === account.id) return props.onDone()
+
+    setStore("pending", account.id)
+    await sdk.api.credential
+      .activate({ credentialID: account.id })
+      .then(refresh)
+      .then(() => {
+        showToast({
+          variant: "success",
+          icon: "circle-check",
+          title: language.t("settings.providers.account.switched.title", { provider: name() }),
+          description: language.t("settings.providers.account.switched.description", { account: account.label }),
+        })
+        props.onDone()
+      })
+      .catch(failed)
+      .finally(() => setStore("pending", undefined))
+  }
+
+  const remove = async (account: ProviderAccount) => {
+    if (store.pending) return
+    const final = accounts().length === 1
+    setStore("pending", account.id)
+    await sdk.api.credential
+      .remove({ credentialID: account.id })
+      .then(refresh)
+      .then(() => {
+        showToast({
+          variant: "success",
+          icon: "circle-check",
+          title: language.t(
+            final ? "provider.disconnect.toast.disconnected.title" : "settings.providers.account.removed.title",
+            final ? { provider: name() } : { account: account.label },
+          ),
+          description: language.t(
+            final
+              ? "provider.disconnect.toast.disconnected.description"
+              : "settings.providers.account.removed.description",
+            { provider: name() },
+          ),
+        })
+
+        if (final) props.onBack()
+      })
+      .catch(failed)
+      .finally(() => setStore("pending", undefined))
+  }
+
+  const edit = (account: ProviderAccount) => {
+    setStore("editor", { id: account.id, draft: account.label, saving: false })
+    requestAnimationFrame(() => {
+      input?.focus()
+      input?.select()
+    })
+  }
+
+  const closeEditor = () => {
+    if (store.editor?.saving) return
+    setStore("editor", undefined)
+  }
+
+  const rename = async () => {
+    const editor = store.editor
+
+    if (!editor || editor.saving) return
+    const label = editor.draft.trim()
+
+    if (!label || label === accounts().find((account) => account.id === editor.id)?.label) return closeEditor()
+
+    setStore("editor", "saving", true)
+    const saved = await sdk.api.credential
+      .update({ credentialID: editor.id, label })
+      .then(refresh)
+      .then(() => true)
+      .catch((error: unknown) => {
+        failed(error)
+
+        return false
+      })
+
+    if (saved) return setStore("editor", undefined)
+    setStore("editor", "saving", false)
+  }
+
+  const row =
+    "flex min-h-9 w-full items-center gap-2 rounded-md px-3 py-2.5 text-left text-[13px] leading-text-compact tracking-[-0.04px] hover:bg-v2-overlay-simple-overlay-hover focus-visible:bg-v2-overlay-simple-overlay-hover focus-visible:outline-none"
+
+  return (
+    <div class="flex min-h-0 flex-1 flex-col">
+      <div class="flex h-10 shrink-0 items-start gap-2 px-3">
+        <ProviderModelIcon
+          provider={{ id: props.provider, name: name() }}
+          class="mt-0.5 shrink-0 text-v2-icon-icon-base"
+        />
+        <div class="text-[15px] font-[530] leading-5 tracking-[-0.13px] text-v2-text-text-base">
+          <DialogTitle>{language.t("provider.connect.title", { provider: name() })}</DialogTitle>
+        </div>
+      </div>
+      <div class="flex min-h-0 flex-1 flex-col gap-4 overflow-y-auto">
+        <div class="px-3 text-[13px] font-[440] leading-5 tracking-[-0.04px] text-v2-text-text-muted">
+          {language.t("dialog.provider.account.description", { provider: name() })}
+        </div>
+        <button
+          type="button"
+          data-action="provider-account-add"
+          class={row}
+          disabled={store.pending !== undefined}
+          onClick={props.onAdd}
+        >
+          <Icon name="plus" size="small" class="shrink-0 text-v2-icon-icon-base" />
+          <span class="font-[530] text-v2-text-text-base">{language.t("settings.providers.account.add")}</span>
+        </button>
+        <section class="flex flex-col">
+          <div class="px-3 pb-2 text-[13px] font-[440] leading-text-compact tracking-[-0.04px] text-v2-text-text-muted">
+            {language.t("settings.providers.account.group")}
+          </div>
+          <For each={accounts()}>
+            {(account, index) => (
+              <div
+                data-provider-account={account.id}
+                class="group flex min-h-9 items-center gap-1 rounded-md pr-1 hover:bg-v2-overlay-simple-overlay-hover focus-within:bg-v2-overlay-simple-overlay-hover"
+                classList={{ "bg-v2-overlay-simple-overlay-hover": store.menu === account.id }}
+              >
+                <Show
+                  when={store.editor?.id !== account.id}
+                  fallback={
+                    <InlineInput
+                      ref={input}
+                      aria-label={language.t("common.rename")}
+                      dir="auto"
+                      value={store.editor?.draft ?? ""}
+                      disabled={store.editor?.saving}
+                      class="min-w-0 flex-1 px-3 text-[13px] font-[530] leading-text-compact tracking-[-0.04px] text-v2-text-text-base outline-none"
+                      style={{ "--inline-input-shadow": "none", "border-radius": "0", "text-align": "start" }}
+                      onInput={(event) => setStore("editor", "draft", event.currentTarget.value)}
+                      onKeyDown={(event) => {
+                        // Keeps Escape and Enter from reaching the dialog.
+                        event.stopPropagation()
+
+                        if (event.isComposing || event.keyCode === 229) return
+
+                        if (event.key === "Enter") {
+                          event.preventDefault()
+                          void rename()
+
+                          return
+                        }
+
+                        if (event.key !== "Escape") return
+                        event.preventDefault()
+                        closeEditor()
+                      }}
+                      onBlur={closeEditor}
+                    />
+                  }
+                >
+                  <button
+                    type="button"
+                    class="flex min-h-9 min-w-0 flex-1 items-center gap-2 px-3 py-2.5 text-left text-[13px] leading-text-compact tracking-[-0.04px] focus-visible:outline-none"
+                    disabled={store.pending !== undefined}
+                    aria-busy={store.pending === account.id}
+                    onClick={() => void choose(account)}
+                  >
+                    <span class="min-w-0 truncate font-[530] text-v2-text-text-base">{account.label}</span>
+                    <Show when={account.status}>
+                      <span class="min-w-0 truncate font-[440] text-v2-state-fg-warning">
+                        {language.t("dialog.provider.account.signInRequired")}
+                      </span>
+                    </Show>
+                    <Show
+                      when={store.pending === account.id}
+                      fallback={
+                        <Show when={index() === 0 && !account.status}>
+                          <Icon name="check" size="small" class="ml-auto shrink-0 text-v2-icon-icon-base" />
+                          <span class="sr-only">{language.t("settings.providers.account.active")}</span>
+                        </Show>
+                      }
+                    >
+                      <Spinner class="ml-auto size-4 shrink-0 text-v2-icon-icon-muted" />
+                    </Show>
+                  </button>
+                </Show>
+                <Menu
+                  gutter={4}
+                  modal={false}
+                  placement="bottom-end"
+                  open={store.menu === account.id}
+                  onOpenChange={(open) => setStore("menu", open ? account.id : undefined)}
+                >
+                  <Menu.Trigger
+                    as={IconButton}
+                    variant="ghost-muted"
+                    size="small"
+                    icon={<Icon name="outline-dots" />}
+                    disabled={store.pending !== undefined || store.editor?.id === account.id}
+                    aria-label={language.t("common.moreOptions")}
+                  />
+                  <Menu.Portal>
+                    <Menu.Content>
+                      <Menu.Item onSelect={() => edit(account)}>{language.t("common.rename")}</Menu.Item>
+                      <Menu.Item onSelect={() => void remove(account)}>{language.t("common.delete")}</Menu.Item>
+                    </Menu.Content>
+                  </Menu.Portal>
+                </Menu>
+              </div>
+            )}
+          </For>
+        </section>
       </div>
     </div>
   )
