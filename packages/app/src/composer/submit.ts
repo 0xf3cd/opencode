@@ -391,7 +391,10 @@ function currentSelection(input: ComposerSubmitInput): ComposerSelection | undef
 }
 
 function clearSubmission(input: ComposerSubmitInput, submission: ReturnType<typeof createComposerSubmission>) {
+  const unchanged = submission.unchanged()
   submission.clear()
+
+  if (!unchanged) return
   submission.target().mode.set("normal")
   input.setMode("normal")
   input.closePopover()

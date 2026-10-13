@@ -347,6 +347,37 @@ describe("Composer submission", () => {
     expect(state.retry.current()?.id).toMatch(/^msg_/)
   })
 
+  test("preserves edits typed while model selection is in flight and sends the captured snapshot", async () => {
+    const state = createMemoryComposerState({ prompt: "ship it" }).capture()
+    const switching = Promise.withResolvers<void>()
+    const committed = Promise.withResolvers<void>()
+    const sent: string[] = []
+
+    const target = session({
+      calls: [],
+      current: () => ({ agent: "build", model: { providerID: "provider-1", id: "model-1", variant: "balanced" } }),
+      switchModel: async () => {
+        switching.resolve()
+        await committed.promise
+      },
+      prompt: async (value) => {
+        sent.push(value.text)
+      },
+    })
+
+    const submission = submitInput(active(state, target))
+    const first = submission.submit(new Event("submit"))
+    await switching.promise
+
+    const edited: Prompt = [{ type: "text", content: "ship it and also run tests", start: 0, end: 26 }]
+    state.set(edited, 26)
+    committed.resolve()
+    await first
+
+    expect(sent).toEqual(["ship it"])
+    expect(state.current()).toEqual(edited)
+  })
+
   test("applies the captured agent and model before a custom command without passing over its overrides", async () => {
     const state = createMemoryComposerState({ prompt: "/review changes" }).capture()
     const calls: string[] = []
