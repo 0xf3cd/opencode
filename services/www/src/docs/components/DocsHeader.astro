@@ -74,6 +74,7 @@ const searchEnabled = import.meta.env.PROD
 
 <script is:inline>
   let pagefind
+  let pagefindLanguage
 
   document.addEventListener("keydown", (event) => {
     if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === "k") {
@@ -110,6 +111,11 @@ const searchEnabled = import.meta.env.PROD
       const pagefindPath = dialog?.dataset.pagefindPath
       if (!pagefindPath) return
       const api = pagefind ?? (pagefind = await import(pagefindPath))
+      // Pagefind loads the index for the page language once. Client-side navigation can change the language,
+      // for example through the language picker or history navigation, so reset it when the page language changes.
+      const language = document.documentElement.lang
+      if (pagefindLanguage !== undefined && pagefindLanguage !== language) await api.destroy()
+      pagefindLanguage = language
       const search = await api.search(query)
       const pages = await Promise.all(search.results.slice(0, 8).map((result) => result.data()))
       results.replaceChildren(
