@@ -1767,6 +1767,8 @@ testEffect(resourceMcpLayer(new ConfigMCP.Local({ type: "local", command: ["unus
       expect((yield* service.servers()).map((server) => server.name)).toEqual([Mcp.ServerName.make("resources")])
       expect(yield* service.tools()).toEqual([])
     }),
+  // Spawns and connects the stdio server three times, which is slow on Windows CI.
+  30_000,
 )
 
 test("restores runtime MCP config when a transform is disposed", async () => {

@@ -1,7 +1,7 @@
 import path from "path"
 import fs from "fs/promises"
 import { writeFileSync } from "node:fs"
-import { describe, expect } from "bun:test"
+import { describe, expect, setDefaultTimeout } from "bun:test"
 import { Document, Event, Info } from "@opencode/schema/config"
 import { Agent } from "@opencode/core/agent"
 import { Command } from "@opencode/core/command"
@@ -37,6 +37,8 @@ import { PluginTestLayer } from "../plugin/fixture"
 import { emptyCredentialNode, emptyWellknownNode } from "../fixture/config-nodes"
 import { location } from "../fixture/location"
 import { tmpdir } from "../fixture/tmpdir"
+
+setDefaultTimeout(30_000)
 
 const it = testEffect(
   Layer.merge(
@@ -366,8 +368,9 @@ function title(value: string) {
   return value.charAt(0).toUpperCase() + value.slice(1)
 }
 
+// Watcher delivery and reloads can take seconds on loaded CI runners.
 const waitUntil = Effect.fnUntraced(function* (condition: Effect.Effect<boolean>) {
-  for (let attempt = 0; attempt < 100; attempt++) {
+  for (let attempt = 0; attempt < 500; attempt++) {
     if (yield* condition) return
     yield* Effect.sleep("10 millis")
   }

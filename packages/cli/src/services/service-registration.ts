@@ -36,7 +36,18 @@ export const register = Effect.fnUntraced(function* (options: {
     found.url === info.url &&
     found.pid === info.pid &&
     found.password === info.password
-  yield* fs.writeFileString(temp, encoded, { mode: 0o600 }).pipe(Effect.andThen(fs.rename(temp, options.file)))
+  yield* fs.writeFileString(temp, encoded, { mode: 0o600 }).pipe(
+    Effect.andThen(
+      fs.rename(temp, options.file).pipe(
+        // Windows refuses to replace a file while another process has it open, as discovering clients briefly do.
+        Effect.retry({
+          while: (error) => process.platform === "win32" && error.reason._tag !== "NotFound",
+          schedule: Schedule.spaced("20 millis"),
+          times: 50,
+        }),
+      ),
+    ),
+  )
   yield* current.pipe(
     Effect.catchCause((cause) =>
       Effect.logWarning("managed service registration check failed; shutting down", {
