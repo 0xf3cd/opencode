@@ -39,9 +39,6 @@ const endEpsilon = 0.5
 
 const upwardKeys = new Set(["up", "page-up", "home"])
 
-// The reading line, below the sticky title, whose row names the current turn.
-const activeTurnLine = 100
-
 const cache = new Map<
   string,
   {
@@ -98,6 +95,7 @@ export function createTimelineVirtualizer(input: Input) {
   const language = useLanguage()
   const active = () => input.active?.() !== false
   const isDesktop = createMediaQuery("(min-width: 768px)")
+  const headerBarHeight = 48
   const topOffset = () => (input.showHeader() ? 64 : isDesktop() ? 0 : 16)
   const ownerSessionKey = input.sessionKey()
   const entry = cache.get(ownerSessionKey)
@@ -195,7 +193,7 @@ export function createTimelineVirtualizer(input: Input) {
   let reportOffset: ((offset: number, scrolling: boolean) => void) | undefined
   let reportRect: ((rect: { width: number; height: number }) => void) | undefined
   let batchingColdSizes = false
-  const [activeUserMessageID, setActiveUserMessageID] = createSignal<string>()
+  const [viewport, setViewport] = createStore({ top: 0, height: 0, visibleUserMessageIDs: new Set<string>() })
 
   const virtualizer = createVirtualizer<HTMLDivElement, HTMLDivElement>({
     get count() {
@@ -203,10 +201,15 @@ export function createTimelineVirtualizer(input: Input) {
     },
     getScrollElement: () => listRoot() ?? null,
     observeElementRect: (instance, callback) => {
-      reportRect = callback
+      reportRect = (rect) => {
+        batch(() => {
+          setViewport("height", rect.height)
+          callback(rect)
+        })
+      }
 
       return observeElementRect(instance, (rect) => {
-        if (active()) callback(rect)
+        if (active()) reportRect?.(rect)
       })
     },
     // Route navigation detaches and reattaches the scroll element, which drops its offset.
@@ -217,7 +220,9 @@ export function createTimelineVirtualizer(input: Input) {
         // scrolling keeps its own offset. Range selection uses the logical offset.
         batch(() => {
           const logicalOffset = offset + rendering.scrollAdjustment
-          callback(rendering.scrollAdjustment ? Math.max(0, logicalOffset) : offset, scrolling)
+          const top = rendering.scrollAdjustment ? Math.max(0, logicalOffset) : offset
+          setViewport("top", top)
+          callback(top, scrolling)
           // Reconcile both start boundaries in one native write. Gradually
           // clamping row translations lets the compositor paint between
           // corrections and makes the content oscillate at the top.
@@ -350,6 +355,7 @@ export function createTimelineVirtualizer(input: Input) {
       })
       batchingColdSizes = false
       pinAnchor()
+      scheduleVisibleTurns()
 
       if (coldPending) pinColdBottom()
       settleColdBottom()
@@ -494,6 +500,76 @@ export function createTimelineVirtualizer(input: Input) {
   )
 
   const virtualRowKeys = createMemo(() => virtualizer.getVirtualItems().map((item) => String(item.key)))
+
+  const visibleUserMessageIDs = () => viewport.visibleUserMessageIDs
+  let visibleTurnsFrame: number | undefined
+
+  const updateVisibleTurns = () => {
+    if (!active()) return
+    // The solid title bar covers the first 48px; overscan and turn gaps are not visible conversation content.
+    const header = input.showHeader() ? headerBarHeight : 0
+    const top = viewport.top + header
+    const bottom = viewport.top + viewport.height
+    const list = rows()
+    const visible = virtualizer.getVirtualItems().flatMap((item) => {
+      if (item.end <= top || item.start >= bottom) return []
+      const row = list[item.index]
+
+      if (!row || Predicate.isTagged(row, "TurnGap") || Predicate.isTagged(row, "TurnDivider")) return []
+      return [{ item, row }]
+    })
+    const root = listRoot()
+    let rootTop: number | undefined
+    const prompts = visible.flatMap((entry) => {
+      if (!Predicate.isTagged(entry.row, "UserMessage")) return []
+
+      if (entry.item.start >= top && entry.item.end <= bottom) return [entry.row.userMessageID]
+
+      if (!root?.isConnected) return []
+      const element = virtualizer.elementsCache.get(entry.item.key)
+
+      // Bubble bounds exclude the invisible copy controls beneath a prompt.
+      const bubbles = element?.querySelectorAll<HTMLElement>(
+        '[data-slot="user-message-text"], [data-slot="user-message-attachments"], [data-slot="user-message-comments"]',
+      )
+
+      if (!bubbles) return []
+      rootTop ??= root.getBoundingClientRect().top
+
+      return [...bubbles].some((bubble) => {
+        const box = bubble.getBoundingClientRect()
+
+        return box.height > 0 && box.bottom > rootTop! + header && box.top < rootTop! + viewport.height
+      })
+        ? [entry.row.userMessageID]
+        : []
+    })
+    const ids = new Set(prompts.length ? prompts : visible[0] ? [visible[0].row.userMessageID] : [])
+
+    if (
+      viewport.visibleUserMessageIDs.size === ids.size &&
+      [...ids].every((id) => viewport.visibleUserMessageIDs.has(id))
+    )
+      return
+    setViewport("visibleUserMessageIDs", ids)
+  }
+
+  const scheduleVisibleTurns = () => {
+    if (visibleTurnsFrame !== undefined) return
+    visibleTurnsFrame = requestAnimationFrame(() => {
+      visibleTurnsFrame = undefined
+      updateVisibleTurns()
+    })
+  }
+
+  createEffect(() => {
+    if (!active()) return
+    viewport.top
+    viewport.height
+    input.showHeader()
+    virtualRowKeys()
+    scheduleVisibleTurns()
+  })
 
   createEffect(() => {
     if (!active()) return
@@ -771,8 +847,6 @@ export function createTimelineVirtualizer(input: Input) {
     settleColdBottom()
     input.onScheduleScrollState(root)
     input.onHistoryScroll()
-    const item = virtualizer.getVirtualItemForOffset(scrollTop + activeTurnLine)
-    setActiveUserMessageID(item ? rows()[item.index]?.userMessageID : undefined)
   }
 
   function View(props: ViewProps) {
@@ -839,7 +913,9 @@ export function createTimelineVirtualizer(input: Input) {
               contentMeasureFrame = requestAnimationFrame(() => {
                 contentMeasureFrame = undefined
 
-                if (active() && element.isConnected) virtualizer.measureElement(element)
+                if (!active() || !element.isConnected) return
+                virtualizer.measureElement(element)
+                scheduleVisibleTurns()
               })
             })}
           </div>
@@ -894,7 +970,7 @@ export function createTimelineVirtualizer(input: Input) {
           onScroll={handleListScroll}
           onClick={input.onSelectionInteraction}
           class="relative min-w-0 w-full h-full"
-          style={{ "--sticky-accordion-top": input.showHeader() ? "48px" : "0px" }}
+          style={{ "--sticky-accordion-top": input.showHeader() ? `${headerBarHeight}px` : "0px" }}
         >
           <Show when={input.showHeader()} fallback={<div aria-hidden="true" class="h-4 md:hidden" />}>
             {props.header}
@@ -937,6 +1013,7 @@ export function createTimelineVirtualizer(input: Input) {
     })
 
     while (cache.size > 16) cache.delete(cache.keys().next().value!)
+    if (visibleTurnsFrame !== undefined) cancelAnimationFrame(visibleTurnsFrame)
     coldPending = false
     contentObserver?.disconnect()
     viewportObserver?.disconnect()
@@ -949,7 +1026,7 @@ export function createTimelineVirtualizer(input: Input) {
   })
 
   return {
-    activeUserMessageID,
+    visibleUserMessageIDs,
     disclosure: {
       patchGroupKeys,
       value: (key: string) => toolOpen[key],

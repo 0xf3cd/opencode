@@ -6,6 +6,7 @@ import { fixture, installTimelineSettings, mockStressTimeline } from "../utils/s
 import {
   assistantMessage,
   messageUpdated,
+  renderedPartID,
   sessionID,
   setupTimeline,
   status,
@@ -70,27 +71,64 @@ test.describe("timeline history", () => {
     await expect.poll(positions).toEqual(before)
   })
 
-  test("navigates every turn from the user index and previews unloaded replies on hover", async ({ page }) => {
+  test("navigates every turn, highlights visible turns, and previews unloaded replies on hover", async ({ page }) => {
     const messages = Array.from({ length: 40 }, (_, index) => {
       const value = String(index).padStart(4, "0")
       const id = `msg_0${value}_turn_a_user`
 
       return [
-        userMessage([userText(`Prompt number ${index}`, { id: `prt_0${value}_turn_prompt` })], {
-          id,
-          created: 1690000000000 + index * 10_000,
-        }),
-        assistantMessage([{ id: `prt_0${value}_turn_text`, type: "text", text: `Response number ${index}` }], {
-          id: `msg_0${value}_turn_b_assistant`,
-          parentID: id,
-          created: 1690000001000 + index * 10_000,
-        }),
+        userMessage(
+          [
+            userText(
+              index === 39
+                ? ["Prompt number 39", ...Array.from({ length: 40 }, () => "Long tail prompt content.")].join("\n\n")
+                : `Prompt number ${index}`,
+              { id: `prt_0${value}_turn_prompt` },
+            ),
+          ],
+          {
+            id,
+            created: 1690000000000 + index * 10_000,
+          },
+        ),
+        assistantMessage(
+          [
+            {
+              id: `prt_0${value}_turn_text`,
+              type: "text",
+              text:
+                index === 0
+                  ? "Response number 0\n\nEarlier reply remains visible.\n\nMore of the same reply."
+                  : index === 1
+                    ? [
+                        "Response number 1",
+                        ...Array.from({ length: 45 }, () => "A long reply for the reading-only fallback."),
+                      ].join("\n\n")
+                    : `Response number ${index}`,
+            },
+          ],
+          {
+            id: `msg_0${value}_turn_b_assistant`,
+            parentID: id,
+            created: 1690000001000 + index * 10_000,
+          },
+        ),
       ]
     }).flat()
     const loads: (string | undefined)[] = []
     await setupTimeline(page, {
       sessionMessages: messages,
       pageMessages: pageMessagesFrom({ [sessionID]: messages }),
+      inbox: [
+        {
+          id: "msg_99999_queued_user",
+          sessionID,
+          type: "user",
+          time: { created: 1690000500000 },
+          delivery: "queue",
+          payload: { text: "Queued prompt", files: [], agents: [] },
+        },
+      ],
       onMessages: (request) => {
         if (request.phase === "start") loads.push(request.before)
       },
@@ -99,7 +137,7 @@ test.describe("timeline history", () => {
     const navigator = page.locator('[data-component="session-turn-navigator"]')
     const turns = navigator.locator("[data-turn]")
     const preview = navigator.locator('[data-slot="session-turn-navigator-preview"]')
-    // The index lists every turn without paging the transcript.
+    // The index lists every transcript turn, not queued input, without paging the transcript.
     await expect(turns).toHaveCount(40)
     expect(loads).toEqual([undefined])
 
@@ -114,10 +152,50 @@ test.describe("timeline history", () => {
     await expect(preview).not.toContainText("Response number 1")
     expect(loads).toEqual([undefined])
 
+    const activeIndexes = () =>
+      navigator
+        .locator('[data-state="active"]')
+        .evaluateAll((elements) => elements.map((el) => Number(el.getAttribute("data-index"))))
+
     await turns.nth(0).click()
     await expect(page.locator("#message-msg_00000_turn_a_user")).toBeInViewport()
     await timelineScroller(page).hover()
-    await expect(turns.nth(0)).toHaveAttribute("data-state", "active")
+    await expect(page.locator("#message-msg_00001_turn_a_user")).toBeInViewport()
+    await expect.poll(activeIndexes).toEqual([0, 1])
+
+    // A reply-only turn is not highlighted while a different prompt remains visible.
+    const replyID = renderedPartID("prt_00000_turn_text")
+    await timelineScroller(page).evaluate((scroller, id) => {
+      const reply = scroller.querySelector(`[data-timeline-part-id="${id}"]`)
+
+      if (!reply) throw new Error("Expected the first reply")
+      scroller.scrollTop += reply.getBoundingClientRect().top - scroller.getBoundingClientRect().top
+    }, replyID)
+    await expect(page.locator("#message-msg_00000_turn_a_user")).not.toBeInViewport()
+    await expect(page.locator(`[data-timeline-part-id="${replyID}"]`)).toBeInViewport()
+    await expect.poll(activeIndexes).toEqual([1])
+
+    // With no bubbles visible, the preceding turn alone stays highlighted.
+    const longReplyID = renderedPartID("prt_00001_turn_text")
+    const longReply = page.locator(`[data-timeline-part-id="${longReplyID}"]`)
+    await expect
+      .poll(() => longReply.evaluate((element) => element.offsetHeight))
+      .toBeGreaterThan(await timelineScroller(page).evaluate((element) => element.clientHeight))
+    await timelineScroller(page).evaluate((scroller, id) => {
+      const reply = scroller.querySelector(`[data-timeline-part-id="${id}"]`)
+
+      if (!reply) throw new Error("Expected the long reply")
+      scroller.scrollTop += reply.getBoundingClientRect().top - scroller.getBoundingClientRect().top + 120
+    }, longReplyID)
+    await expect(page.locator("#message-msg_00001_turn_a_user")).not.toBeInViewport()
+    await expect(page.locator("#message-msg_00002_turn_a_user")).not.toBeInViewport()
+    await expect(longReply).toBeInViewport()
+    await expect.poll(activeIndexes).toEqual([1])
+
+    // Clicking a long prompt (>1024 chars, non-immediate render) highlights it and keeps active emphasis while hovered.
+    await turns.nth(39).click()
+    await expect(page.locator("#message-msg_00039_turn_a_user")).toBeInViewport()
+    await expect(turns.nth(39)).toHaveAttribute("data-state", "active")
     expect(loads.length).toBeGreaterThan(1)
   })
 

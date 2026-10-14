@@ -15,14 +15,23 @@ const railDelay = 1000
 // A pointer resting this long on an unloaded turn fetches its reply; sweeping across the rail fetches nothing.
 const replyHoverDelay = 150
 
+const previewHoverDelay = 100
+
+const hoverRadius = 6
+
+const tickWidths = { default: [7, 12], active: [12, 20], hovered: [14, 22] }
+
+const tickSpanWidth = Math.max(...Object.values(tickWidths).flat())
+
 type TurnNavigatorProps = {
   sessionID: string
+  /** Loaded messages that have timeline rows; excludes queued inbox items. */
   messages: Accessor<SessionMessageInfo[]>
   /** Whether the loaded messages reach the start of the session, making the index redundant. */
   complete: Accessor<boolean>
   assistantMessagesByParent: Accessor<Map<string, SessionMessageAssistant[]>>
   revertMessageID: Accessor<string | undefined>
-  activeUserMessageID: Accessor<string | undefined>
+  visibleUserMessageIDs: Accessor<ReadonlySet<string>>
   onSelect: (id: string) => void
 }
 
@@ -76,7 +85,7 @@ export function TurnNavigator(props: TurnNavigatorProps) {
       ref={root}
       data-component="session-turn-navigator"
       aria-hidden="true"
-      class="absolute start-0 top-14 bottom-20 z-[50] flex w-5 flex-col justify-center pointer-events-none"
+      class="absolute start-0 top-14 bottom-20 z-[50] flex w-4 flex-col justify-center pointer-events-none"
     >
       <Show when={state.engaged && (props.complete() || state.index)}>
         <TurnRail {...props} index={state.index} root={root!} />
@@ -89,9 +98,10 @@ function TurnRail(props: TurnNavigatorProps & { index?: Map<string, string>; roo
   const sdk = useServerSDK()
   // Fetched replies by user message ID; null while loading or when the turn has no reply text.
   const [state, setState] = createStore<{
-    hover?: { id: string; top: number }
+    hover?: { id: string; top: number; position: number }
+    showPreview: boolean
     replies: Record<string, string | null>
-  }>({ replies: {} })
+  }>({ showPreview: false, replies: {} })
 
   const loaded = createMemo(
     () =>
@@ -131,8 +141,28 @@ function TurnRail(props: TurnNavigatorProps & { index?: Map<string, string>; roo
     onCleanup(() => clearTimeout(timer))
   })
 
-  const active = createSelector(props.activeUserMessageID)
+  const active = createSelector(props.visibleUserMessageIDs, (id: string, visible) => visible.has(id))
   const hovered = createSelector(() => state.hover?.id)
+  const hovering = createMemo(() => !!state.hover)
+
+  // Only the first preview waits; moving along an already engaged rail switches it immediately.
+  createEffect(() => {
+    if (!hovering()) {
+      setState("showPreview", false)
+
+      return
+    }
+
+    const timer = setTimeout(() => setState("showPreview", true), previewHoverDelay)
+    onCleanup(() => clearTimeout(timer))
+  })
+
+  const tickScale = (id: string, index: number, proximity: number) => {
+    // Hovered active ticks keep active color (`data-state`), while width expands to the hovered target.
+    const widths = hovered(id) ? tickWidths.hovered : active(id) ? tickWidths.active : tickWidths.default
+
+    return (widths[0] + (widths[1] - widths[0]) * (hovered(id) ? 1 : proximity)) / tickSpanWidth
+  }
 
   const preview = createMemo(() => {
     const hover = state.hover
@@ -156,16 +186,23 @@ function TurnRail(props: TurnNavigatorProps & { index?: Map<string, string>; roo
     const tick = turnAt(event)
     const id = tick?.dataset.turn
 
-    if (!tick || !id || state.hover?.id === id) return
+    if (!tick || !id) return
     const box = tick.getBoundingClientRect()
-    setState("hover", { id, top: box.top + box.height / 2 - props.root.getBoundingClientRect().top })
+    const position = Number(tick.dataset.index) + (event.clientY - box.top) / box.height - 0.5
+
+    if (state.hover?.id === id && Math.abs(state.hover.position - position) < 0.05) return
+    setState("hover", {
+      id,
+      top: box.top + box.height / 2 - props.root.getBoundingClientRect().top,
+      position,
+    })
   }
 
   return (
     <Show when={turns().length > 1}>
       <div
-        // Hovering the rail widens it and doubles every tick; ticks size from per-state widths times the rail scale.
-        class="flex max-h-full min-h-0 w-5 cursor-pointer flex-col py-1 pointer-events-auto transition-[width] duration-150 [--rail-faint:var(--v2-icon-icon-faint)] [--rail-scale:1] hover:w-9 hover:[--rail-faint:var(--v2-icon-icon-muted)] hover:[--rail-scale:2] motion-reduce:transition-none"
+        // Keep the expanded hit area while the visual emphasis follows the pointer locally.
+        class="flex max-h-full min-h-0 w-4 cursor-pointer flex-col py-1 pointer-events-auto transition-[width] duration-150 hover:w-8 animate-in fade-in [animation-duration:180ms] [animation-timing-function:ease-out] motion-reduce:animate-none motion-reduce:transition-none"
         onPointerMove={hover}
         onPointerLeave={() => setState("hover", undefined)}
         onClick={(event) => {
@@ -175,32 +212,56 @@ function TurnRail(props: TurnNavigatorProps & { index?: Map<string, string>; roo
         }}
       >
         <For each={turns()}>
-          {(id) => (
-            <div
-              data-turn={id}
-              data-state={hovered(id) ? "hovered" : active(id) ? "active" : undefined}
-              class="flex h-2 min-h-0 w-full shrink items-center ps-1 [--tick-color:var(--rail-faint)] [--tick-width:8px] data-[state=active]:[--tick-color:var(--v2-icon-icon-base)] data-[state=active]:[--tick-width:12px] data-[state=hovered]:[--tick-color:var(--v2-text-text-base)] data-[state=hovered]:[--tick-width:14px]"
-            >
-              <span class="block h-0.5 w-[calc(var(--tick-width)*var(--rail-scale))] rounded-full bg-(--tick-color) transition-[width,background-color] duration-150 motion-reduce:transition-none" />
-            </div>
-          )}
+          {(id, index) => {
+            const proximity = createMemo(() => {
+              if (!state.hover) return 0
+              const distance = Math.abs(index() - state.hover.position)
+
+              if (distance >= hoverRadius) return 0
+              return (1 + Math.cos((distance / hoverRadius) * Math.PI)) / 2
+            })
+
+            return (
+              <div
+                data-turn={id}
+                data-index={index()}
+                // Active color wins so a clicked or visible turn still reads as active under the pointer.
+                data-state={active(id) ? "active" : hovered(id) ? "hovered" : "default"}
+                class="flex h-2.5 min-h-0 w-full shrink items-center ps-2.5 [--tick-color:var(--v2-background-bg-layer-04)] [--tick-opacity:1] [[data-color-scheme=dark]_&]:data-[state=default]:[--tick-opacity:0.7] data-[state=active]:[--tick-color:var(--v2-icon-icon-muted)] [[data-color-scheme=dark]_&]:data-[state=active]:[--tick-color:var(--v2-icon-icon-base)] data-[state=hovered]:[--tick-color:var(--v2-icon-icon-faint)] [[data-color-scheme=dark]_&]:data-[state=hovered]:[--tick-color:var(--v2-icon-icon-muted)]"
+              >
+                <span
+                  class="block h-0.5 shrink-0 origin-left bg-(--tick-color) transition-[transform,background-color,opacity] duration-150 ease-out rtl:origin-right motion-reduce:transition-none"
+                  style={{
+                    width: `${tickSpanWidth}px`,
+                    transform: `scaleX(${tickScale(id, index(), proximity())})`,
+                    opacity: "var(--tick-opacity)",
+                  }}
+                />
+              </div>
+            )
+          }}
         </For>
       </div>
-      <Show when={preview()}>
+      <Show when={state.showPreview && preview()}>
         {(item) => (
           <div
             data-slot="session-turn-navigator-preview"
-            class="absolute start-11 w-[320px] max-w-[calc(100vw-4rem)] -translate-y-1/2 rounded-lg bg-v2-background-bg-base px-3 py-2"
-            style={{ top: `${item().top}px`, "box-shadow": "var(--v2-elevation-raised)" }}
+            class="pointer-events-none absolute start-11 top-0 w-[320px] max-w-[calc(100vw-4rem)] transition-transform duration-100 ease-out motion-reduce:transition-none"
+            style={{ transform: `translateY(${item().top}px)` }}
           >
-            <p class="line-clamp-2 text-[13px] font-[530] leading-text-compact text-v2-text-text-base">
-              {item().prompt}
-            </p>
-            <Show when={item().response}>
-              {(text) => (
-                <p class="mt-1 line-clamp-3 text-[13px] leading-text-compact text-v2-text-text-muted">{text()}</p>
-              )}
-            </Show>
+            <div
+              class="-translate-y-1/2 rounded-lg bg-v2-background-bg-base px-3 py-2 animate-in fade-in duration-150 ease-out motion-reduce:animate-none"
+              style={{ "box-shadow": "var(--v2-elevation-raised)" }}
+            >
+              <p class="line-clamp-2 text-[13px] font-[530] leading-text-compact text-v2-text-text-base">
+                {item().prompt}
+              </p>
+              <Show when={item().response}>
+                {(text) => (
+                  <p class="mt-1 line-clamp-3 text-[13px] leading-text-base text-v2-text-text-muted">{text()}</p>
+                )}
+              </Show>
+            </div>
           </div>
         )}
       </Show>
