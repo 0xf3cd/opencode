@@ -285,7 +285,7 @@ export const connectProvider = Effect.fnUntraced(function* (input: {
   }
   // Refresh tokens rotate and the row is shared across connections: only drop it while it still holds ours.
   let presented = found.value.refresh
-  const oauthProvider = provider({
+  return provider({
     config: input.config,
     invalidate: async (scope) => {
       if (scope === "verifier" || scope === "discovery") return
@@ -325,38 +325,6 @@ export const connectProvider = Effect.fnUntraced(function* (input: {
       saveCodeVerifier: async () => {},
     },
   })
-  return {
-    ...oauthProvider,
-    onUnauthorized: (context) =>
-      run(
-        credentials.lock(
-          id,
-          Effect.gen(function* () {
-            const current = yield* Effect.promise(read)
-            // A late 401 refers to the request's old token, not necessarily the stored token.
-            if (current && current.access !== context.token) return current
-            const challenge = extractWWWAuthenticateParams(context.response)
-            const result = yield* Effect.tryPromise({
-              try: () =>
-                auth(oauthProvider, {
-                  serverUrl: context.serverUrl,
-                  resourceMetadataUrl: challenge.resourceMetadataUrl,
-                  scope: challenge.scope,
-                  fetchFn: (url, init) =>
-                    context.fetchFn(url, {
-                      ...init,
-                      // Bound OAuth network work without interrupting persistence after token rotation.
-                      signal: AbortSignal.timeout(30_000),
-                    }),
-                }),
-              catch: (error) => error,
-            })
-            if (result !== "AUTHORIZED") return yield* Effect.fail(new UnauthorizedError())
-            return yield* Effect.promise(read)
-          }),
-        ).pipe(Effect.asVoid),
-      ),
-  } satisfies OAuthClientProvider
 })
 
 export const authorize = (input: {
