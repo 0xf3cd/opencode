@@ -1,0 +1,405 @@
+---
+title: "اختصارات المفاتيح"
+---
+
+خصّص الاختصارات في `cli.json`:
+
+```json title="cli.json"
+{
+  "keybinds": {
+    "leader": "ctrl+space",
+    "command.palette.show": "ctrl+k",
+    "app.exit": ["ctrl+c", "ctrl+d"],
+    "app.debug": false
+  },
+  "leader": {
+    "timeout": 1500
+  }
+}
+```
+
+استخدم سلسلة نصية لمفتاح واحد:
+
+```json
+{
+  "keybinds": {
+    "command.palette.show": "ctrl+k"
+  }
+}
+```
+
+افصل البدائل بفواصل:
+
+```json
+{
+  "keybinds": {
+    "app.exit": "ctrl+c,ctrl+d"
+  }
+}
+```
+
+عطّل اختصارًا باستخدام `"none"` أو `false`:
+
+```json
+{
+  "keybinds": {
+    "app.debug": "none",
+    "help.show": false
+  }
+}
+```
+
+استخدم كائنًا للتحكم في سلوك الحدث:
+
+```json
+{
+  "keybinds": {
+    "prompt.paste": {
+      "key": "ctrl+v",
+      "preventDefault": false
+    }
+  }
+}
+```
+
+القيمة الافتراضية لـ `leader` هي `ctrl+x`. ويشير `<leader>` في أي اختصار آخر إلى ذلك المفتاح.
+
+```json
+{
+  "keybinds": {
+    "leader": "ctrl+space",
+    "model.list": "<leader>m"
+  },
+  "leader": {
+    "timeout": 2000
+  }
+}
+```
+
+تُرفض معرّفات الأوامر غير المعروفة.
+
+## التطبيق
+
+| المعرّف | الافتراضي | الوصف |
+| --- | --- | --- |
+| `leader` | `ctrl+x` | مفتاح القائد لتركيبات الاختصارات |
+| `app.exit` | `ctrl+c,ctrl+d,<leader>q` | الخروج من التطبيق |
+| `app.debug` | `none` | إظهار لوحة التصحيح أو إخفاؤها |
+| `app.console` | `none` | إظهار وحدة التحكم أو إخفاؤها |
+| `app.scrap` | `none` | فتح شاشة المسودة (scrap) |
+| `app.toggle.animations` | `none` | تشغيل الحركات أو إيقافها |
+| `app.toggle.file_context` | `none` | تشغيل سياق الملف أو إيقافه |
+| `app.toggle.diffwrap` | `none` | تشغيل لف الأسطر في الفروقات أو إيقافه |
+| `app.toggle.paste_summary` | `none` | تشغيل ملخص اللصق أو إيقافه |
+| `command.palette.show` | `ctrl+p` | عرض الأوامر المتاحة |
+| `help.show` | `none` | فتح مربع حوار المساعدة |
+| `docs.open` | `none` | فتح التوثيق |
+| `opencode.settings` | `none` | فتح الإعدادات |
+| `server.pair` | `none` | إقران جهاز |
+| `service.restart` | `none` | إعادة تشغيل الخدمة |
+
+## الواجهة المصغّرة
+
+لا يعمل الأمر `app.clear` إلا في [`opencode mini`](/cli). اضغط `ctrl+l` لمسح الشاشة الظاهرة وإعادة رسم الموجّه. وتحتفظ
+الطرفية بسجل التمرير.
+
+```json title="cli.json"
+{
+  "keybinds": {
+    "app.clear": "ctrl+l"
+  }
+}
+```
+
+| المعرّف | الافتراضي | الوصف |
+| --- | --- | --- |
+| `app.clear` | `ctrl+l` | مسح الشاشة |
+
+## عارض الفروقات
+
+اضغط `d` (`diff.switch_source`) لاختيار **All** أو **Committed** أو **Uncommitted** أو **Last turn** (داخل جلسة)، أو اختر
+**Base** لتغيير فرع المقارنة. تُحفظ الاختيارات حتى الخروج من واجهة TUI. اضبط النطاق المبدئي باستخدام
+[`diffs.source` في `cli.json`](/cli/config#diffs).
+
+تتحكم اختصارات التمرير والتنقل بين الصفحات والانتقال إلى البداية أو النهاية في الفروقات دائمًا. لا يوجد مفتاح لتبديل تركيز
+لوحة المفاتيح: انقر الملفات لفتحها، وانقر المجلدات لتوسيعها أو طيّها، واستخدم عجلة الفأرة لتمرير شجرة الملفات.
+
+استخدم `n` / `p` أو `alt+down` / `alt+up` (المفتاح Option على macOS) للتنقل بين الملفات. وداخل عارض الفروقات، تتنقل
+اختصارات Alt بين الملفات لا بين علامات تبويب الجلسات.
+
+اضغط `m` لوسم الملف بأنه رُوجع وطيّ متن الرقعة (patch) الخاصة به. وفي عرض جميع الملفات، اضغط `m` مجددًا لإزالة الوسم
+وإعادة فتح الرقعة. ينتقل عرض الملف الواحد تلقائيًا إلى الملف التالي عند وسم الملف بأنه رُوجع، لكنه يبقى على الملف الأخير
+بدلًا من العودة إلى البداية. ولا تؤدي إزالة الوسم إلى الانتقال أبدًا.
+
+انقر بزر الفأرة الأيمن على ملف في الشريط الجانبي أو على عنوان الفروقات الخاص به لاختيار **Mark complete** (أو
+**Mark incomplete**). يغيّر ذلك حالة المراجعة نفسها التي يغيّرها `m`. ولا يؤدي إكمال ملف آخر من قائمته إلى تحديده أو
+تجاوز الملف الذي تقرؤه حاليًا.
+
+تدعم بدائل `diff.help` التي تتضمن Shift الطرفياتِ التي تبلّغ عن المعدِّل Shift عند الضغط على `?`.
+
+| المعرّف | الافتراضي | الوصف |
+| --- | --- | --- |
+| `diff.open` | `none` | فتح عارض الفروقات |
+| `diff.close` | `escape,q` | إغلاق عارض الفروقات |
+| `diff.down` | `j,down` | التحرك لأسفل في عارض الفروقات |
+| `diff.up` | `k,up` | التحرك لأعلى في عارض الفروقات |
+| `diff.page.down` | `pagedown,ctrl+f` | التمرير صفحة لأسفل في عارض الفروقات |
+| `diff.page.up` | `pageup,ctrl+b` | التمرير صفحة لأعلى في عارض الفروقات |
+| `diff.half_page.down` | `ctrl+d` | التمرير نصف صفحة لأسفل في عارض الفروقات |
+| `diff.half_page.up` | `ctrl+u` | التمرير نصف صفحة لأعلى في عارض الفروقات |
+| `diff.first` | `gg,home` | الانتقال إلى بداية الفروقات |
+| `diff.last` | `shift+g,end` | الانتقال إلى نهاية الفروقات |
+| `diff.next_hunk` | `]` | الانتقال إلى المقطع (hunk) التالي |
+| `diff.previous_hunk` | `[` | الانتقال إلى المقطع (hunk) السابق |
+| `diff.next_file` | `n,alt+down` | الانتقال إلى الملف التالي في الفروقات |
+| `diff.previous_file` | `p,alt+up` | الانتقال إلى الملف السابق في الفروقات |
+| `diff.toggle_file_tree` | `b` | إظهار شجرة الملفات في عارض الفروقات أو إخفاؤها |
+| `diff.single_patch` | `s` | تشغيل عرض الرقعة الواحدة أو إيقافه |
+| `diff.switch_source` | `d` | اختيار نطاق مراجعة الفروقات |
+| `diff.toggle_view` | `v` | التبديل بين العرض المقسوم والموحّد في عارض الفروقات |
+| `diff.mark_reviewed` | `m` | وسم الملف المحدد بأنه رُوجع أو إزالة الوسم |
+| `diff.help` | `?,shift+?,shift+/` | عرض مزيد من اختصارات عارض الفروقات |
+
+ما زالت إدخالات التهيئة القديمة `diff.toggle` و`diff.expand` و`diff.expand_all` و`diff.collapse` و`diff.switch_focus`
+مقبولة، لكنها لم تعد تسجّل أي اختصارات.
+
+## المظهر والتنقل
+
+| المعرّف | الافتراضي | الوصف |
+| --- | --- | --- |
+| `prompt.editor` | `<leader>e` | فتح محرر خارجي |
+| `theme.switch` | `none` | عرض السمات المتاحة |
+| `theme.switch_mode` | `none` | التبديل بين الوضعين الفاتح والداكن للسمة |
+| `theme.mode.lock` | `none` | تثبيت وضع السمة أو إلغاء تثبيته |
+| `session.sidebar.toggle` | `<leader>b` | إظهار الشريط الجانبي أو إخفاؤه |
+| `terminal.toggle` | `<leader>t` | إظهار جزء الطرفية أو إخفاؤه |
+| `session.toggle.scrollbar` | `none` | إظهار شريط تمرير الجلسة أو إخفاؤه |
+| `opencode.status` | `<leader>s` | عرض الحالة |
+| `opencode.debug` | `none` | عرض معلومات التصحيح |
+
+## الجلسات
+
+| المعرّف | الافتراضي | الوصف |
+| --- | --- | --- |
+| `session.export` | `<leader>x` | تصدير الجلسة إلى المحرر |
+| `session.copy` | `none` | نسخ نص محادثة الجلسة |
+| `session.move` | `none` | نقل الجلسة |
+| `session.new` | `<leader>n` | إنشاء جلسة جديدة |
+| `session.list` | `<leader>l` | عرض جميع الجلسات |
+| `open.menu` | `ctrl+o` | فتح الجلسات والمشاريع الأخيرة |
+| `session.tab.next` | `ctrl+tab,alt+down` | الانتقال إلى علامة تبويب الجلسة المفتوحة التالية |
+| `session.tab.previous` | `ctrl+shift+tab,alt+up` | الانتقال إلى علامة تبويب الجلسة المفتوحة السابقة |
+| `session.tab.history.back` | `none` | الرجوع في سجل علامات تبويب الجلسات |
+| `session.tab.history.forward` | `ctrl+i` | التقدم في سجل علامات تبويب الجلسات |
+| `session.tab.next_unread` | `alt+shift+down` | الانتقال إلى علامة تبويب الجلسة غير المقروءة التالية |
+| `session.tab.previous_unread` | `alt+shift+up` | الانتقال إلى علامة تبويب الجلسة غير المقروءة السابقة |
+| `session.tab.close` | `<leader>w` | إغلاق علامة تبويب الجلسة الحالية |
+| `session.tab.reopen` | `ctrl+shift+t` | إعادة فتح آخر علامة تبويب جلسة مغلقة |
+| `session.timeline` | `<leader>g` | عرض الخط الزمني للجلسة |
+| `session.fork` | `none` | تفريع الجلسة من رسالة |
+| `session.rename` | `ctrl+r` | إعادة تسمية الجلسة |
+| `session.delete` | `ctrl+d` | حذف الجلسة |
+| `session.share` | `none` | مشاركة الجلسة الحالية |
+| `session.unshare` | `none` | إلغاء مشاركة الجلسة الحالية |
+| `session.interrupt` | `escape` | مقاطعة الجلسة الحالية |
+| `session.background` | `ctrl+b` | نقل أدوات الجلسة المعطِّلة إلى الخلفية |
+| `session.compact` | `<leader>c` | ضغط سياق الجلسة |
+| `session.aside` | `none` | طرح سؤال جانبي |
+| `session.cd` | `none` | تغيير دليل العمل |
+| `session.queued_prompts` | `<leader>q` | إدارة الموجّهات في قائمة الانتظار |
+| `queued_prompt.undo` | `ctrl+u` | التراجع عن موجّه في قائمة الانتظار |
+| `queued_prompt.delete` | `ctrl+d` | حذف موجّه من قائمة الانتظار |
+| `session.toggle.exploration_grouping` | `none` | تشغيل تجميع استدعاءات الأدوات المترابطة أو إيقافه |
+| `session.child.first` | `down` | إظهار أداة اختيار الوكلاء الفرعيين أو إخفاؤها |
+| `session.child.next` | `right` | الانتقال إلى الجلسة الفرعية التالية |
+| `session.child.previous` | `left` | الانتقال إلى الجلسة الفرعية السابقة |
+| `session.parent` | `up` | الانتقال إلى الجلسة الأم |
+| `session.pin.toggle` | `ctrl+f` | تثبيت الجلسة في قائمة الجلسات أو إلغاء تثبيتها |
+| `session.quick_switch.1` | `<leader>1` | الانتقال إلى الجلسة في الخانة السريعة 1 |
+| `session.quick_switch.2` | `<leader>2` | الانتقال إلى الجلسة في الخانة السريعة 2 |
+| `session.quick_switch.3` | `<leader>3` | الانتقال إلى الجلسة في الخانة السريعة 3 |
+| `session.quick_switch.4` | `<leader>4` | الانتقال إلى الجلسة في الخانة السريعة 4 |
+| `session.quick_switch.5` | `<leader>5` | الانتقال إلى الجلسة في الخانة السريعة 5 |
+| `session.quick_switch.6` | `<leader>6` | الانتقال إلى الجلسة في الخانة السريعة 6 |
+| `session.quick_switch.7` | `<leader>7` | الانتقال إلى الجلسة في الخانة السريعة 7 |
+| `session.quick_switch.8` | `<leader>8` | الانتقال إلى الجلسة في الخانة السريعة 8 |
+| `session.quick_switch.9` | `<leader>9` | الانتقال إلى الجلسة في الخانة السريعة 9 |
+| `session.tab.select.1` | `<leader>1,ctrl+1` | الانتقال إلى علامة تبويب الجلسة 1 |
+| `session.tab.select.2` | `<leader>2,ctrl+2` | الانتقال إلى علامة تبويب الجلسة 2 |
+| `session.tab.select.3` | `<leader>3,ctrl+3` | الانتقال إلى علامة تبويب الجلسة 3 |
+| `session.tab.select.4` | `<leader>4,ctrl+4` | الانتقال إلى علامة تبويب الجلسة 4 |
+| `session.tab.select.5` | `<leader>5,ctrl+5` | الانتقال إلى علامة تبويب الجلسة 5 |
+| `session.tab.select.6` | `<leader>6,ctrl+6` | الانتقال إلى علامة تبويب الجلسة 6 |
+| `session.tab.select.7` | `<leader>7,ctrl+7` | الانتقال إلى علامة تبويب الجلسة 7 |
+| `session.tab.select.8` | `<leader>8,ctrl+8` | الانتقال إلى علامة تبويب الجلسة 8 |
+| `session.tab.select.9` | `<leader>9,ctrl+9` | الانتقال إلى علامة تبويب الجلسة 9 |
+| `session.tab.select.10` | `<leader>0,ctrl+0` | الانتقال إلى علامة تبويب الجلسة 10 |
+
+## النماذج والوكلاء
+
+| المعرّف | الافتراضي | الوصف |
+| --- | --- | --- |
+| `stash.delete` | `ctrl+d` | حذف عنصر من المخبأ (stash) |
+| `model.dialog.provider` | `ctrl+a` | فتح قائمة المزوّدين من مربع حوار النماذج |
+| `model.dialog.favorite` | `ctrl+f` | إضافة النموذج إلى المفضلة أو إزالته منها |
+| `model.list` | `<leader>m` | عرض النماذج المتاحة |
+| `model.cycle_recent` | `f2` | النموذج التالي من النماذج المستخدمة مؤخرًا |
+| `model.cycle_recent_reverse` | `shift+f2` | النموذج السابق من النماذج المستخدمة مؤخرًا |
+| `model.cycle_favorite` | `none` | النموذج المفضل التالي |
+| `model.cycle_favorite_reverse` | `none` | النموذج المفضل السابق |
+| `mcp.list` | `none` | عرض خوادم MCP |
+| `provider.connect` | `none` | ربط تكامل |
+| `agent.list` | `<leader>a` | عرض الوكلاء |
+| `agent.cycle` | `shift+tab` | الوكيل التالي |
+| `agent.cycle.reverse` | `none` | الوكيل السابق |
+| `variant.cycle` | `ctrl+t` | التنقل بين متغيرات النموذج |
+| `variant.list` | `none` | عرض متغيرات النموذج |
+
+## التنقل في الجلسة
+
+| المعرّف | الافتراضي | الوصف |
+| --- | --- | --- |
+| `session.page.up` | `pageup,ctrl+alt+b` | تمرير الرسائل صفحة واحدة لأعلى |
+| `session.page.down` | `pagedown,ctrl+alt+f` | تمرير الرسائل صفحة واحدة لأسفل |
+| `session.line.up` | `ctrl+alt+y` | تمرير الرسائل سطرًا واحدًا لأعلى |
+| `session.line.down` | `ctrl+alt+e` | تمرير الرسائل سطرًا واحدًا لأسفل |
+| `session.half.page.up` | `ctrl+alt+u` | تمرير الرسائل نصف صفحة لأعلى |
+| `session.half.page.down` | `ctrl+alt+d` | تمرير الرسائل نصف صفحة لأسفل |
+| `session.first` | `ctrl+g,home,alt+home` | الانتقال إلى الرسالة الأولى |
+| `session.last` | `ctrl+alt+g,end` | الانتقال إلى الرسالة الأخيرة |
+| `session.message.next` | `none` | الانتقال إلى الرسالة التالية |
+| `session.message.previous` | `none` | الانتقال إلى الرسالة السابقة |
+| `session.message.user.next` | `none` | الانتقال إلى رسالة المستخدم التالية |
+| `session.message.user.previous` | `none` | الانتقال إلى رسالة المستخدم السابقة |
+| `session.messages_last_user` | `alt+end` | الانتقال إلى آخر رسالة من المستخدم |
+| `messages.copy` | `<leader>y` | نسخ الرسالة |
+| `session.undo` | `<leader>u` | التراجع عن الرسالة |
+| `session.redo` | `<leader>r` | إعادة الرسالة |
+| `session.toggle.thinking` | `none` | إظهار كتل التفكير أو إخفاؤها |
+
+## أوامر الموجّه
+
+| المعرّف | الافتراضي | الوصف |
+| --- | --- | --- |
+| `prompt.submit` | `none` | إرسال الموجّه |
+| `prompt.queue` | `<leader>return` | وضع الموجّه في قائمة الانتظار |
+| `prompt.editor_context.clear` | `none` | مسح سياق المحرر |
+| `prompt.images.view` | `<leader>i` | عرض الصور المرفقة |
+| `prompt.skills` | `none` | فتح أداة اختيار المهارات |
+| `prompt.stash` | `none` | تخبئة الموجّه |
+| `prompt.stash.pop` | `none` | استرجاع الموجّه المخبّأ |
+| `prompt.stash.list` | `none` | عرض الموجّهات المخبّأة |
+
+## تحرير الإدخال
+
+| المعرّف | الافتراضي | الوصف |
+| --- | --- | --- |
+| `prompt.clear` | `ctrl+c` | مسح حقل الإدخال |
+| `prompt.paste` | `{"key":"ctrl+v","preventDefault":false}` (`ctrl+v`; `preventDefault: false`) | اللصق من الحافظة |
+| `input.submit` | `return` | إرسال الإدخال |
+| `input.newline` | `shift+return,ctrl+return,alt+return,ctrl+j` | إدراج سطر جديد في الإدخال |
+| `input.move.left` | `left,ctrl+b` | تحريك المؤشر يسارًا في الإدخال |
+| `input.move.right` | `right,ctrl+f` | تحريك المؤشر يمينًا في الإدخال |
+| `input.move.up` | `up` | تحريك المؤشر لأعلى في الإدخال |
+| `input.move.down` | `down` | تحريك المؤشر لأسفل في الإدخال |
+| `input.select.left` | `shift+left` | التحديد يسارًا في الإدخال |
+| `input.select.right` | `shift+right` | التحديد يمينًا في الإدخال |
+| `input.select.up` | `shift+up` | التحديد لأعلى في الإدخال |
+| `input.select.down` | `shift+down` | التحديد لأسفل في الإدخال |
+| `input.line.home` | `ctrl+a` | الانتقال إلى بداية السطر في الإدخال |
+| `input.line.end` | `ctrl+e` | الانتقال إلى نهاية السطر في الإدخال |
+| `input.select.line.home` | `ctrl+shift+a` | التحديد حتى بداية السطر في الإدخال |
+| `input.select.line.end` | `ctrl+shift+e` | التحديد حتى نهاية السطر في الإدخال |
+| `input.visual.line.home` | `alt+a` | الانتقال إلى بداية السطر المرئي في الإدخال |
+| `input.visual.line.end` | `alt+e` | الانتقال إلى نهاية السطر المرئي في الإدخال |
+| `input.select.visual.line.home` | `alt+shift+a` | التحديد حتى بداية السطر المرئي في الإدخال |
+| `input.select.visual.line.end` | `alt+shift+e` | التحديد حتى نهاية السطر المرئي في الإدخال |
+| `input.buffer.home` | `none` | الانتقال إلى بداية المخزن المؤقت في الإدخال |
+| `input.buffer.end` | `none` | الانتقال إلى نهاية المخزن المؤقت في الإدخال |
+| `input.select.buffer.home` | `shift+home` | التحديد حتى بداية المخزن المؤقت في الإدخال |
+| `input.select.buffer.end` | `shift+end` | التحديد حتى نهاية المخزن المؤقت في الإدخال |
+| `input.delete.line` | `ctrl+shift+d` | حذف السطر في الإدخال |
+| `input.delete.to.line.end` | `ctrl+k` | الحذف حتى نهاية السطر في الإدخال |
+| `input.delete.to.line.start` | `ctrl+u` | الحذف حتى بداية السطر في الإدخال |
+| `input.backspace` | `backspace,shift+backspace` | حذف المحرف السابق في الإدخال |
+| `input.delete` | `ctrl+d,delete,shift+delete` | حذف محرف في الإدخال |
+| `input.undo` | `ctrl+-,super+z` | التراجع في الإدخال |
+| `input.redo` | `ctrl+.,super+shift+z` | الإعادة في الإدخال |
+| `input.word.forward` | `alt+f,alt+right,ctrl+right` | الانتقال كلمة للأمام في الإدخال |
+| `input.word.backward` | `alt+b,alt+left,ctrl+left` | الانتقال كلمة للخلف في الإدخال |
+| `input.select.word.forward` | `alt+shift+f,alt+shift+right` | تحديد كلمة للأمام في الإدخال |
+| `input.select.word.backward` | `alt+shift+b,alt+shift+left` | تحديد كلمة للخلف في الإدخال |
+| `input.delete.word.forward` | `alt+d,alt+delete,ctrl+delete` | حذف كلمة للأمام في الإدخال |
+| `input.delete.word.backward` | `ctrl+w,ctrl+backspace,alt+backspace` | حذف كلمة للخلف في الإدخال |
+| `input.select.all` | `super+a` | تحديد الكل في الإدخال |
+| `prompt.history.previous` | `up` | العنصر السابق في السجل |
+| `prompt.history.next` | `down` | العنصر التالي في السجل |
+
+## مربع الكتابة
+
+| المعرّف | الافتراضي | الوصف |
+| --- | --- | --- |
+| `composer.subagent.up` | `up` | الوكيل الفرعي السابق |
+| `composer.subagent.down` | `down` | الوكيل الفرعي التالي |
+| `composer.subagent.select` | `return` | الانتقال إلى الوكيل الفرعي |
+| `composer.subagent.interrupt` | `ctrl+d` | مقاطعة الوكيل الفرعي |
+| `composer.shell.up` | `up` | أمر shell السابق |
+| `composer.shell.down` | `down` | أمر shell التالي |
+| `composer.shell.select` | `return` | عرض مخرجات shell |
+| `composer.shell.kill` | `ctrl+d` | إنهاء أمر shell |
+
+حدّد أمرًا قيد التشغيل في علامة التبويب **Shell** واضغط **Enter**، أو انقر عليه، لعرض ما التُقط من stdout وstderr.
+استخدم **↑/↓** أو **Page Up/Down** أو **Home** للتمرير، و**End** لمتابعة المخرجات الجديدة، و**Esc** للعودة دون إيقاف الأمر.
+يعرض العارض المخرجات الأخيرة ويبقى مفتوحًا بعد انتهاء الأمر، ولا يتضمن المخرجات المعاد توجيهها إلى ملف.
+
+## مربعات الحوار والإكمال التلقائي
+
+| المعرّف | الافتراضي | الوصف |
+| --- | --- | --- |
+| `dialog.select.prev` | `up,ctrl+p` | الانتقال إلى العنصر السابق في مربع الحوار |
+| `dialog.select.next` | `down,ctrl+n` | الانتقال إلى العنصر التالي في مربع الحوار |
+| `dialog.select.page_up` | `pageup` | الانتقال صفحة لأعلى في مربع الحوار |
+| `dialog.select.page_down` | `pagedown` | الانتقال صفحة لأسفل في مربع الحوار |
+| `dialog.select.home` | `home` | الانتقال إلى العنصر الأول في مربع الحوار |
+| `dialog.select.end` | `end` | الانتقال إلى العنصر الأخير في مربع الحوار |
+| `dialog.select.submit` | `return` | تأكيد العنصر المحدد في مربع الحوار |
+| `dialog.prompt.submit` | `return` | إرسال إدخال مربع الحوار |
+| `dialog.worktree.generate` | `tab` | توليد اسم worktree |
+| `dialog.move_session.new` | `ctrl+a` | worktree جديد |
+| `dialog.move_session.move` | `ctrl+m` | نقل الجلسة إلى worktree |
+| `dialog.move_session.delete` | `ctrl+d` | حذف worktree |
+| `dialog.move_session.refresh` | `ctrl+r` | تحديث قائمة worktrees |
+| `prompt.autocomplete.prev` | `up,ctrl+p` | الانتقال إلى عنصر الإكمال التلقائي السابق |
+| `prompt.autocomplete.next` | `down,ctrl+n` | الانتقال إلى عنصر الإكمال التلقائي التالي |
+| `prompt.autocomplete.hide` | `escape` | إخفاء الإكمال التلقائي |
+| `prompt.autocomplete.select` | `return` | اختيار عنصر الإكمال التلقائي |
+| `prompt.autocomplete.complete` | `tab` | إكمال عنصر الإكمال التلقائي |
+| `permission.prompt.fullscreen` | `ctrl+f` | عرض طلب الإذن بملء الشاشة أو إلغاؤه |
+| `plugins.toggle` | `return` | تفعيل الإضافة أو تعطيلها |
+| `dialog.mcp.toggle` | `space` | تفعيل خادم MCP أو تعطيله |
+| `dialog.plugins.update` | `ctrl+u` | تحديث الإضافة من مربع حوار الإضافات |
+| `dialog.plugins.check` | `ctrl+r` | التحقق من وجود تحديثات للإضافات |
+
+## الطرفية والإضافات
+
+| المعرّف | الافتراضي | الوصف |
+| --- | --- | --- |
+| `terminal.suspend` | `ctrl+z` | تعليق الطرفية |
+| `terminal.title.toggle` | `none` | تشغيل تحديث عنوان الطرفية أو إيقافه |
+| `plugins.list` | `none` | فتح مربع حوار مدير الإضافات |
+
+## لوحة Which-Key
+
+| المعرّف | الافتراضي | الوصف |
+| --- | --- | --- |
+| `which-key.toggle` | `ctrl+alt+k` | إظهار لوحة which-key أو إخفاؤها |
+| `which-key.layout.toggle` | `ctrl+alt+shift+k` | تبديل تخطيط which-key |
+| `which-key.pending.toggle` | `ctrl+alt+shift+p` | إظهار معاينة الاختصارات المعلّقة في which-key أو إخفاؤها |
+| `which-key.group.previous` | `ctrl+alt+left,ctrl+alt+[` | مجموعة which-key السابقة |
+| `which-key.group.next` | `ctrl+alt+right,ctrl+alt+]` | مجموعة which-key التالية |
+| `which-key.scroll.up` | `ctrl+alt+up,ctrl+alt+p` | تمرير which-key لأعلى |
+| `which-key.scroll.down` | `ctrl+alt+down,ctrl+alt+n` | تمرير which-key لأسفل |
+| `which-key.page.up` | `ctrl+alt+pageup` | تمرير which-key صفحة لأعلى |
+| `which-key.page.down` | `ctrl+alt+pagedown` | تمرير which-key صفحة لأسفل |
+| `which-key.home` | `ctrl+alt+home` | الانتقال إلى أول اختصار في which-key |
+| `which-key.end` | `ctrl+alt+end` | الانتقال إلى آخر اختصار في which-key |

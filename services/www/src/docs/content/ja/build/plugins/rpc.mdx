@@ -1,0 +1,219 @@
+---
+title: "RPC"
+---
+
+プラグインは、サーバー上で実行され、ほかのプラグインやクライアントから呼び出せる独自のメソッドとイベントを公開できます。
+
+## 定義
+
+`Rpc.define` で、RPC のメソッド、エラー、イベントを列挙します。
+
+```ts title="src/rpc.ts"
+import { Rpc } from "@opencode/plugin/rpc"
+
+export const Acme = Rpc.define({
+  id: "acme",
+  methods: {
+    search: {
+      input: {
+        type: "object",
+        properties: { query: { type: "string" } },
+        required: ["query"],
+        additionalProperties: false,
+      },
+      output: {
+        type: "object",
+        properties: { text: { type: "string" } },
+        required: ["text"],
+        additionalProperties: false,
+      },
+      errors: {
+        not_found: {
+          type: "object",
+          properties: { query: { type: "string" } },
+          required: ["query"],
+          additionalProperties: false,
+        },
+      },
+    },
+  },
+  events: {
+    updated: {
+      schema: {
+        type: "object",
+        properties: {
+          itemID: { type: "string" },
+          text: { type: "string" },
+        },
+        required: ["itemID", "text"],
+        additionalProperties: false,
+      },
+    },
+  },
+})
+```
+
+### バリデーション
+
+RPC 定義は、メソッドの入出力、イベント、エラーの形状を記述します。次の 2 種類のスキーマ形式に対応しています。
+
+- JSON Schema：シンプルで、依存関係が不要です。
+- Standard Schema に準拠した任意のバリデーター
+  - Zod
+  - Valibot
+  - ArkType
+
+### 入力と出力
+
+各メソッドには、引数用の `input` スキーマと戻り値用の `output` スキーマを定義できます。メソッドが値を受け取らない、または返さない場合は、該当するスキーマを省略します。
+
+```ts
+search: {
+  input: {
+    type: "object",
+    properties: { query: { type: "string" } },
+    required: ["query"],
+  },
+  output: {
+    type: "object",
+    properties: { text: { type: "string" } },
+    required: ["text"],
+  },
+}
+```
+
+JSON Schema の値は TypeScript では `unknown` になるため、使用する前に型を絞り込んでください。Standard Schema では入力と出力の型が推論されます。
+
+### エラー
+
+想定される失敗に備えて、メソッドに `errors` マップを追加します。各キーがエラーの `type` になり、そのスキーマがエラーの `data` を定義します。
+
+```ts
+errors: {
+  not_found: {
+    type: "object",
+    properties: { query: { type: "string" } },
+    required: ["query"],
+    additionalProperties: false,
+  },
+}
+```
+
+`rpc.` で始まるエラー名は OpenCode が予約しています。
+
+### イベント
+
+トップレベルの `events` マップにイベントを追加します。各イベントには、サブスクライバーに送信するデータのスキーマを指定します。
+
+イベントデータはオブジェクトでなければなりません。データがない場合は、空のオブジェクトスキーマを使用します。
+
+```ts
+events: {
+  refreshed: {
+    schema: { type: "object", additionalProperties: false },
+  },
+}
+```
+
+スカラー値、配列、`null`、`undefined` はイベントデータとして使用できません。
+
+## 実装
+
+`setup` の中で実装を登録します。
+
+```ts title="src/index.ts"
+import { Plugin } from "@opencode/plugin"
+import { Acme } from "./rpc.js"
+
+export default Plugin.define({
+  id: "acme-plugin",
+  async setup(ctx) {
+    const registration = await ctx.rpc.register(Acme, {
+      search: async (input, context) => {
+        const { query } = input as { query: string }
+        const text = await findText(query, { signal: context.signal })
+        if (!text) return context.error("not_found", "Result not found", { query })
+        return { text }
+      },
+    })
+
+    const acme = ctx.rpc(Acme)
+    const result = await acme.search({ query: "hello" })
+
+    await registration.events.emit("updated", { itemID: "item-1", text: "ready" })
+  },
+})
+```
+
+RPC を登録すると、同じプラグインから `ctx.rpc(Acme)` で呼び出せます。
+
+第 2 引数には、キャンセル用の `signal` と、宣言済みのエラーを生成する `context.error(...)` が含まれます。エラーは return しても throw してもかまいません。
+
+1 つのプラグインで複数の RPC を登録できます。登録を破棄すると、その RPC は削除されます。
+
+## 呼び出し
+
+登録した RPC は、HTTP 経由またはほかのプラグインから呼び出せます。
+
+### HTTP
+
+OpenCode クライアントを作成し、`client.rpc` で RPC 用のサブクライアントを作成します。
+
+```ts
+import { OpenCode } from "@opencode/client"
+import { Acme } from "opencode-acme-plugin/rpc"
+
+const client = OpenCode.make({
+  baseUrl: "http://localhost:4096",
+})
+
+const acme = client.rpc(Acme)
+const result = await acme.search({ query: "hello" })
+```
+
+### プラグイン
+
+プラグインはすでに OpenCode クライアントを持っています。たとえば TUI プラグインでは、`context.client` から同じ RPC サブクライアントを作成できます。
+
+```ts title="src/tui.ts"
+import { Plugin } from "@opencode/plugin/tui"
+import { Acme } from "opencode-acme-plugin/rpc"
+
+export default Plugin.define({
+  id: "acme-tui",
+  async setup(context) {
+    const acme = context.client.rpc(Acme)
+    const result = await acme.search({ query: "hello" })
+    console.log(result)
+  },
+})
+```
+
+### サブスクライブ
+
+コールバックで受け取るには `events.on` を使用し、リスナーが不要になったらサブスクライブを解除します。
+
+```ts
+const unsubscribe = acme.events.on("updated", (event) => {
+  console.log(event.type, event.location.directory, event.data.text)
+})
+
+unsubscribe()
+```
+
+非同期イテラブルとして受け取るには、`events.subscribe("updated")` を使用します。
+
+```ts
+for await (const event of acme.events.subscribe("updated")) {
+  console.log(event.data.text)
+}
+```
+
+イベントのサブスクリプションはライブのみのため、接続が切れているサブスクライバーはその間のイベントを受け取れません。
+
+- サブスクライブには `updated` のようなローカル名を使用します。
+- 受信するイベントの type には、`rpc.acme.updated` のようにプレフィックスが付きます。
+- 各イベントには `data` と `location` が含まれます。
+- プラグインがアンロードされると、そのサブスクリプションは閉じられます。
+
+外部クライアントはすべてのロケーションのイベントを受信するため、必要に応じて `event.location` を確認してください。また、サーバー側のプラグインが設定され、実行中である必要があります。

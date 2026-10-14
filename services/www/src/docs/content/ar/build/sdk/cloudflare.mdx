@@ -1,0 +1,87 @@
+---
+title: "Cloudflare"
+---
+
+استخدم `@opencode/sdk/workerd` داخل Durable Object على Cloudflare. يستخدم هذا الملف التعريفي (profile) تخزين SQLite الخاص
+بالكائن، ويحفظ الأحداث الدائمة بشكل مستمر للتعافي بعد الإخلاء (eviction)، ويستبدل خدمات نظام الملفات المحلي والعمليات غير
+المتاحة.
+
+```sh
+bun add @opencode/sdk
+```
+
+احتفظ بمضيف واحد طوال عمر نسخة Durable Object بدلًا من إنشاء مضيف جديد لكل طلب.
+
+```ts
+import { OpenCodeWorkerd } from "@opencode/sdk/workerd"
+import myPlugin from "./my-plugin"
+
+export class OpenCodeDO {
+  private readonly opencode: Promise<OpenCodeWorkerd.Interface>
+
+  constructor(state: DurableObjectState) {
+    this.opencode = state.blockConcurrencyWhile(() =>
+      OpenCodeWorkerd.create({
+        storage: state.storage,
+        config: { default_agent: "build" },
+        plugins: [myPlugin],
+      }),
+    )
+  }
+
+  async fetch() {
+    const opencode = await this.opencode
+    return Response.json(await opencode.server.info())
+  }
+}
+```
+
+تمنع الدالة `blockConcurrencyWhile` وصول أي حدث إلى Durable Object حتى يصبح المضيف جاهزًا، وتعيد ضبط الكائن إذا فشلت
+التهيئة الأولية. ويمنح كائن Promise المحتفَظ به معالِجات الطلبات وصولًا مباشرًا إلى المضيف نفسه بعد البدء.
+
+```ts
+constructor(state: DurableObjectState) {
+  this.opencode = state.blockConcurrencyWhile(() =>
+    OpenCodeWorkerd.create({ storage: state.storage }),
+  )
+}
+```
+
+تختار أداة Wrangler تطبيقات OpenCode الآمنة على Workerd عبر شرط الحزمة `workerd`. وقد تُخلي Cloudflare كائن Durable Object
+دون تشغيل خطوات التنظيف، لذا لا تعتمد صحة العمل على استدعاء `close()`.
+
+```jsonc title="wrangler.jsonc"
+{
+  "compatibility_flags": ["nodejs_compat"]
+}
+```
+
+## التخصيص
+
+خصّص نسخة OpenCode الخاصة بك بتسجيل إضافات مضمَّنة في حزمة Worker. مرّر الإضافات إلى `OpenCodeWorkerd.create()` لتخصيص
+الوكلاء والنماذج والأدوات وغيرها من السلوكيات:
+
+```ts
+import { Plugin } from "@opencode/plugin"
+import { OpenCodeWorkerd } from "@opencode/sdk/workerd"
+
+const plugin = Plugin.define({
+  id: "customize-agent",
+  async setup(ctx) {
+    await ctx.agent.transform((agents) => {
+      agents.update("build", (agent) => {
+        agent.description = "Builds features and fixes bugs for our team"
+      })
+    })
+  },
+})
+
+await OpenCodeWorkerd.create({
+  storage: state.storage,
+  config: { default_agent: "build" },
+  plugins: [plugin],
+})
+```
+
+راجع [التوثيق الكامل للإضافات](/build/plugins) للتعرّف على خطّافات (hooks) الإضافات والتحويلات والأدوات وسياق الإضافة
+الكامل.

@@ -1,0 +1,78 @@
+---
+title: "SSO"
+description: "OIDC または SAML を使い、ID プロバイダー経由で OpenCode Console のワークスペースにサインインします。"
+---
+
+シングルサインオン（SSO）を設定すると、ワークスペースのメンバーはサインイン時に会社の ID プロバイダーを経由するようになります。オーナーと管理者が **Settings › Security** で設定でき、すべてのワークスペースで利用できます。
+
+| プロトコル | プロバイダー |
+| -------------- | -------------------------------------------------------------------------------------- |
+| OpenID Connect | Google Workspace、Microsoft Entra ID、Okta、Auth0、Ping Identity、その他の OIDC プロバイダー |
+| SAML 2.0       | Google Workspace、Microsoft Entra ID、Okta、その他の SAML プロバイダー |
+
+各ワークスペースに設定できる SSO 接続は 1 つです。
+
+## OIDC の設定
+
+1. **Settings › Security** を開いて **Configure SSO** をクリックし、**OpenID Connect** とお使いのプロバイダーを選択します。
+2. 表示される手順に従って、`openid`、`email`、`profile` のスコープを持つアプリをプロバイダーで作成します。
+3. **Issuer URL**（またはテナントやドメイン）と、**Client ID**、**Client Secret**、**Display Name** を入力し、**Save** をクリックします。
+4. 接続の **Callback URL** をコピーし、プロバイダーの許可されたリダイレクト URI に追加します。
+
+```text
+https://opencode.ai/console/auth/sso/ssoconn_.../callback
+```
+
+保存時に、Console は Issuer に到達できるかどうかを確認します。SSO は接続を保存した時点で有効になります。
+
+## SAML の設定
+
+1. **Settings › Security** を開いて **Configure SSO** をクリックし、**SAML 2.0** とお使いのプロバイダーを選択します。
+2. **ACS URL** と **SP Entity ID** をコピーし、プロバイダーに設定します。カスタムプロバイダーでは、代わりに **SP Metadata URL** を使うか、XML をダウンロードすることもできます。
+3. プロバイダーのメタデータを、URL、XML のアップロード、貼り付けのいずれかで追加します。**IdP Entity ID**、**IdP SSO URL**、**IdP Certificate** を手動で入力することもできます。
+4. 内容を確認し、**Activate SSO** をクリックします。
+
+```text
+ACS URL:       https://opencode.ai/console/auth/sso/ssoconn_.../callback
+SP Entity ID:  https://opencode.ai/console/auth/sso/ssoconn_.../metadata
+```
+
+プロバイダーはレスポンスまたはアサーションに署名し、ユーザーのメールアドレスを `email` 属性または NameID として送信する必要があります。
+
+## メールドメインの検証
+
+検証済みドメインのメールアドレスで [Console](https://opencode.ai/console) にサインインしたユーザーは、ID プロバイダーにリダイレクトされます。SSO が有効になったら、**Email domains** の下にある **Add domain** をクリックしてドメインを入力し、表示される TXT レコードを公開します。
+
+```text
+Name:   _opencode-console-challenge.example.com
+Type:   TXT
+Value:  oc-verify=...
+```
+
+レコードを公開したら、**Verify Domain** をクリックします。DNS の変更が反映されるまでには時間がかかることがあります。各ドメインは 1 つのワークスペースにのみ所属できます。
+
+## SSO の強制
+
+ワークスペースで SSO を設定すると、管理者とメンバーはワークスペースを開く際に SSO 経由でサインインする必要があり、Console は自動的にリダイレクトします。`/connect` で OpenCode を接続する場合も同じルールが適用されます。
+
+オーナーは SSO を使わずにサインインすることもできます。そのため、プロバイダーの設定を誤っても、ワークスペースの設定画面から締め出されることはありません。
+
+## 自動メンバーシップ
+
+検証済みドメインのユーザーは、SSO 経由で初めてサインインしたときに **Member** としてワークスペースに参加します。ただし、次の場合は自動的に追加されません。
+
+- 保留中の招待がある場合。代わりにその招待が使用されます。
+- ワークスペースが[ディレクトリ同期](/console/scim)を使用している場合。メンバーシップはディレクトリ同期によって決まります。
+- ワークスペースに [Go](/console/go) のサブスクリプションがある場合。
+
+SSO ワークスペースへの招待を受けたユーザーがリンクを開くと、ID プロバイダーにリダイレクトされます。
+
+## 既存のアカウント
+
+同じメールアドレスの Console アカウントをすでに持っているユーザーには、SSO と連携するために一度そのアカウントにサインインするよう求めます。招待されたユーザーとディレクトリ同期で追加されたユーザーは、自動的に連携されます。
+
+## 編集と削除
+
+接続の **Edit** をクリックすると、詳細を変更できます。シークレットまたは証明書を空欄のままにすると、現在の値が維持されます。OIDC と SAML を切り替えるには、接続を削除して新しく作成します。
+
+接続は **⋯ › Delete...** から削除します。メンバーは SSO 以外のサインイン方法に戻り、ディレクトリ同期は停止してそのトークンが取り消されます。メールドメインは保持されます。

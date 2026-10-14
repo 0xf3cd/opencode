@@ -1,0 +1,95 @@
+---
+title: "Websøgning"
+---
+
+Når du beder OpenCode om aktuelle oplysninger, kan den søge på nettet, læse resultaterne og medtage links til kilderne i sit svar.
+
+```text
+Find the latest Bun release and summarize the changes.
+```
+
+Første gang der søges, bliver du bedt om at tillade websøgning og vælge en udbyder. OpenCode husker dit valg i senere sessioner.
+
+## Udbydere
+
+OpenCode indeholder fem søgeudbydere:
+
+| Udbyder | ID | Miljøvariabel |
+| --- | --- | --- |
+| Exa | `exa` | `EXA_API_KEY` |
+| Firecrawl | `firecrawl` | `FIRECRAWL_API_KEY` |
+| Parallel | `parallel` | `PARALLEL_API_KEY` |
+| Tavily | `tavily` | `TAVILY_API_KEY` |
+| TinyFish | `tinyfish` | `TINYFISH_API_KEY` (valgfri) |
+
+Forbind en konto fra TUI'en med `/connect`, eller sæt udbyderens miljøvariabel, før du starter OpenCode.
+
+```bash
+$ TAVILY_API_KEY=your-key opencode
+```
+
+## Valg
+
+Angiv en udbyder i `opencode.jsonc` for at springe spørgsmålet om valg af udbyder over.
+
+```jsonc title="opencode.jsonc"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "websearch": {
+    "provider": "tavily",
+  },
+}
+```
+
+Brug `"random"` for automatisk at vælge en tilgængelig udbyder. Hver session bliver ved med at bruge den valgte udbyder, indtil udbyderen bliver rate-limited.
+
+```jsonc title="opencode.jsonc"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "websearch": {
+    "provider": "random",
+  },
+}
+```
+
+## Grænser
+
+Når en udbyder returnerer HTTP 429, prøver tilfældigt valg søgningen igen med en anden tilgængelig udbyder. Den rate-limitede udbyder venter i den periode, `Retry-After` angiver, eller 60 sekunder, hvis svaret ikke indeholder en gyldig periode.
+
+```text
+Exa returns HTTP 429
+→ Exa enters cooldown
+→ OpenCode retries with another provider
+```
+
+Hvis alle udbydere er i cooldown, fejler søgningen med det samme. Når en session flyttes, eller dens server genstartes, glemmes den udbyder, sessionen huskede; cooldowns deles af sessioner i samme arbejdsområde.
+
+## Tilladelser
+
+Websøgninger bruger tilladelseshandlingen `websearch` med søgeforespørgslen som ressource. Spørg før søgninger, der ikke udtrykkeligt er tilladt.
+
+```jsonc title="opencode.jsonc"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "permissions": [
+    {
+      "action": "websearch",
+      "resource": "*",
+      "effect": "ask",
+    },
+  ],
+}
+```
+
+Se [Tilladelser](/permissions) om regelrækkefølge og matchning.
+
+## Slå fra
+
+Sæt `websearch` til `false` for at fjerne websøgningsværktøjet fra modelanmodninger.
+
+```jsonc title="opencode.jsonc"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "websearch": false,
+}
+```

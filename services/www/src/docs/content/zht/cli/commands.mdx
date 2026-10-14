@@ -1,0 +1,581 @@
+---
+title: "指令"
+description: "opencode 命令列參考。"
+---
+
+每個指令都接受 `--help` 以列出完整的旗標清單，例如 `opencode run --help`。部分需要伺服器的指令接受 `--standalone` 以私有伺服器執行，或接受 `--server <url>` 以指定特定伺服器；支援哪些旗標請查看各指令的說明。
+
+## run
+
+傳送訊息並印出回覆，不開啟互動式介面。
+
+```bash
+$ opencode run "Explain this repository"
+```
+
+### CI
+
+在 CI 中，請以機密（secret）傳入供應商的 API 金鑰，並使用獨立模式，讓私有伺服器能取得該金鑰。例如，以下 GitHub Actions 工作會審查 checkout 下來的儲存庫：
+
+```yaml
+name: OpenCode review
+on: [pull_request]
+
+jobs:
+  review:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - run: npm install --global @opencode/cli
+      - run: opencode run --standalone --model anthropic/claude-sonnet-4-5 "Review this repository for correctness and summarize any issues."
+        env:
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+```
+
+選擇模型。
+
+```bash
+$ opencode run --model anthropic/claude-sonnet-4-5 "Refactor parseToken"
+```
+
+繼續上一個工作階段。
+
+```bash
+$ opencode run --continue "Now handle the expired case"
+```
+
+輸出以換行分隔的 JSON，方便指令碼使用。
+
+```bash
+$ opencode run --format json "List the TODO comments"
+```
+
+將檔案附加到訊息。
+
+```bash
+$ opencode run --file src/server.ts --file src/client.ts "Review these for bugs"
+```
+
+使用指定的代理執行。
+
+```bash
+$ opencode run --agent build "Fix the failing test"
+```
+
+查看所有子指令和旗標。
+
+```bash
+$ opencode run --help
+```
+
+## mini
+
+啟動精簡互動式介面，取代全螢幕 TUI。
+
+```bash
+$ opencode mini
+```
+
+繼續上一個工作階段。
+
+```bash
+$ opencode mini --continue
+```
+
+指定模型和初始提示詞來啟動。
+
+```bash
+$ opencode mini --model anthropic/claude-sonnet-4-5 --prompt "Summarize this repository"
+```
+
+查看所有子指令和旗標。
+
+```bash
+$ opencode mini --help
+```
+
+## session
+
+管理工作階段。
+
+```bash
+$ opencode session list
+```
+
+限制清單數量並輸出 JSON。
+
+```bash
+$ opencode session list --max-count 20 --format json
+```
+
+刪除工作階段及其子工作階段。
+
+```bash
+$ opencode session delete ses_9c1b08
+```
+
+將工作階段資料匯出為 JSON。
+
+```bash
+$ opencode session export ses_4f2a1c
+```
+
+匯出時遮蔽對話紀錄和檔案中的敏感資料。
+
+```bash
+$ opencode session export ses_4f2a1c --sanitize
+```
+
+從 JSON 檔案或 URL 匯入工作階段資料。
+
+```bash
+$ opencode session import session.json
+```
+
+匯入到指定的目錄。
+
+```bash
+$ opencode session import session.json --directory ~/code/project
+```
+
+查看所有子指令和旗標。
+
+```bash
+$ opencode session --help
+```
+
+## auth
+
+管理 AI 供應商和認證資訊。
+
+```bash
+$ opencode auth list
+```
+
+以 JSON 格式列出。
+
+```bash
+$ opencode auth list --format json
+```
+
+登入供應商。
+
+```bash
+$ opencode auth login anthropic
+```
+
+使用指定的身分驗證方式登入。
+
+```bash
+$ opencode auth login anthropic --method key
+```
+
+登出已儲存的帳戶。
+
+```bash
+$ opencode auth logout anthropic work
+```
+
+切換整合目前使用的帳戶。
+
+```bash
+$ opencode auth switch anthropic work
+```
+
+查看所有子指令和旗標。
+
+```bash
+$ opencode auth --help
+```
+
+## models
+
+列出所有可用的模型。
+
+```bash
+$ opencode models
+```
+
+查看所有子指令和旗標。
+
+```bash
+$ opencode models --help
+```
+
+## mcp
+
+管理 MCP（Model Context Protocol）伺服器。
+
+```bash
+$ opencode mcp list
+```
+
+新增遠端伺服器。
+
+```bash
+$ opencode mcp add context7 --url https://mcp.context7.com/mcp
+```
+
+將本機伺服器新增到全域設定。
+
+```bash
+$ opencode mcp add everything --global -- npx -y @modelcontextprotocol/server-everything
+```
+
+新增帶有環境變數的本機伺服器。
+
+```bash
+$ opencode mcp add everything --env LOG_LEVEL=debug -- npx -y @modelcontextprotocol/server-everything
+```
+
+新增帶有標頭的遠端伺服器。
+
+```bash
+$ opencode mcp add context7 --url https://mcp.context7.com/mcp --header CONTEXT7_API_KEY=secret
+```
+
+向支援 OAuth 的遠端伺服器進行身分驗證。
+
+```bash
+$ opencode mcp auth sentry
+```
+
+移除伺服器已儲存的 OAuth 認證資訊。
+
+```bash
+$ opencode mcp logout sentry
+```
+
+查看所有子指令和旗標。
+
+```bash
+$ opencode mcp --help
+```
+
+## plugin
+
+管理外掛。
+
+```bash
+$ opencode plugin list
+```
+
+包含內建的伺服器外掛。
+
+```bash
+$ opencode plugin list --builtin
+```
+
+安裝外掛並將它加入全域設定。
+
+```bash
+$ opencode plugin add @example/opencode-tui
+```
+
+檢查套件外掛是否有更新。
+
+```bash
+$ opencode plugin check
+```
+
+更新套件外掛。
+
+```bash
+$ opencode plugin update
+```
+
+從全域設定中移除外掛。
+
+```bash
+$ opencode plugin remove @example/opencode-tui
+```
+
+查看所有子指令和旗標。
+
+```bash
+$ opencode plugin --help
+```
+
+## stats
+
+顯示可分享的使用統計資料。
+
+```bash
+$ opencode stats
+```
+
+顯示最近 7 天的資料。
+
+```bash
+$ opencode stats --days 7
+```
+
+顯示模型用量。
+
+```bash
+$ opencode stats --models
+```
+
+顯示費用和 token 詳細資料。
+
+```bash
+$ opencode stats --cost
+```
+
+輸出 JSON 而不是報表。
+
+```bash
+$ opencode stats --json
+```
+
+查看所有子指令和旗標。
+
+```bash
+$ opencode stats --help
+```
+
+## serve
+
+啟動 API 和網頁伺服器。請參閱 [Web](/cli/web)。
+
+```bash
+$ opencode serve
+```
+
+在固定的連接埠上綁定所有網路介面。
+
+```bash
+$ opencode serve --hostname 0.0.0.0 --port 4096
+```
+
+允許來自其他來源的瀏覽器用戶端。
+
+```bash
+$ opencode serve --cors https://app.example.com
+```
+
+查看所有子指令和旗標。
+
+```bash
+$ opencode serve --help
+```
+
+## pair
+
+印出一次性連結，並為第一個連結產生 QR code，用來讓瀏覽器或應用程式登入伺服器。連結會在 5 分鐘後過期，且只能使用一次。
+
+```bash
+$ opencode pair
+```
+
+在連結中使用外部 URL。
+
+```bash
+$ opencode pair --url https://dev.example.com
+```
+
+透過 OpenTunnel 遠端位址，從任何地方進行配對。這會將伺服器公開到網際網路上，因此第一次啟用遠端存取時，指令會先說明這一點並請你同意。請參閱[遠端存取](/cli/web#remote-access)。
+
+```bash
+$ opencode pair --remote
+```
+
+不經提示直接同意，例如在沒有終端機的指令碼中使用。
+
+```bash
+$ opencode pair --remote --yes
+```
+
+查看所有子指令和旗標。
+
+```bash
+$ opencode pair --help
+```
+
+## service
+
+管理背景伺服器。請參閱 [Web](/cli/web)。
+
+```bash
+$ opencode service start
+```
+
+重新啟動。
+
+```bash
+$ opencode service restart
+```
+
+顯示狀態。
+
+```bash
+$ opencode service status
+```
+
+停止。
+
+```bash
+$ opencode service stop
+```
+
+讀取設定值。
+
+```bash
+$ opencode service get hostname
+```
+
+變更設定值。
+
+```bash
+$ opencode service set hostname 0.0.0.0
+```
+
+允許額外的 CORS 來源。
+
+```bash
+$ opencode service set cors https://app.example.com
+```
+
+將環境變數傳給伺服器處理程序。
+
+```bash
+$ opencode service set env OPENCODE_LOG_LEVEL DEBUG
+```
+
+將設定重設為預設值。
+
+```bash
+$ opencode service unset hostname
+```
+
+查看所有子指令和旗標。
+
+```bash
+$ opencode service --help
+```
+
+## reload
+
+重新載入設定，不必重新啟動伺服器。執行中的工作階段會在下一個步驟邊界改用新的服務繼續執行。
+
+```bash
+$ opencode reload
+```
+
+## api
+
+向執行中的伺服器發出請求。
+
+```bash
+$ opencode api GET /api/session
+```
+
+以查詢參數呼叫某個作業 ID。
+
+```bash
+$ opencode api session.list --param limit=10
+```
+
+傳送 JSON 本文。
+
+```bash
+$ opencode api session.create --data '{"title": "New session"}'
+```
+
+加入請求標頭。
+
+```bash
+$ opencode api GET /api/session -H "accept: application/json"
+```
+
+查看所有子指令和旗標。
+
+```bash
+$ opencode api --help
+```
+
+## acp
+
+透過 stdin 和 stdout 啟動 Agent Client Protocol 伺服器，供編輯器整合使用。伺服器會持續執行，直到用戶端關閉連線為止。
+
+```bash
+$ opencode acp
+```
+
+查看所有子指令和旗標。
+
+```bash
+$ opencode acp --help
+```
+
+## debug
+
+提供偵錯和疑難排解工具。
+
+```bash
+$ opencode debug agents
+```
+
+列出設定來源。
+
+```bash
+$ opencode debug config
+```
+
+顯示全域路徑。
+
+```bash
+$ opencode debug paths
+```
+
+印出單一路徑。
+
+```bash
+$ opencode debug paths db
+```
+
+查看所有子指令和旗標。
+
+```bash
+$ opencode debug --help
+```
+
+## upgrade
+
+將 OpenCode 升級到最新版本或指定版本。別名：`update`。
+
+```bash
+$ opencode upgrade
+```
+
+使用指定的套件管理員升級到指定版本。
+
+```bash
+$ opencode upgrade 2.0.21 --method bun
+```
+
+查看所有子指令和旗標。
+
+```bash
+$ opencode upgrade --help
+```
+
+## uninstall
+
+移除 OpenCode 及所有相關檔案。
+
+```bash
+$ opencode uninstall
+```
+
+預覽將被移除的項目。
+
+```bash
+$ opencode uninstall --dry-run
+```
+
+查看所有子指令和旗標。
+
+```bash
+$ opencode uninstall --help
+```

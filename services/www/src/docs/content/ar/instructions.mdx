@@ -1,0 +1,122 @@
+---
+title: "التعليمات"
+---
+
+أضف ملف `AGENTS.md` لتزويد OpenCode بإرشادات دائمة للمشروع. استخدمه لأوامر البناء، وملاحظات البنية المعمارية، واصطلاحات
+كتابة الشيفرة، ومتطلبات التحقق.
+
+```md title="AGENTS.md"
+# Project instructions
+
+- Run `bun typecheck` after changing TypeScript.
+- Keep database queries in `src/database`.
+- Do not edit generated files directly.
+```
+
+اعتمد ملفات تعليمات المشروع في المستودع (commit) ليتلقى كل من يعمل فيه الإرشادات نفسها.
+
+## النطاق
+
+ضع `AGENTS.md` في الدليل الذي ينبغي أن تنطبق عليه إرشاداته. يحمّل OpenCode الملف العام، ثم كل ملف `AGENTS.md` بدءًا من دليل
+مساحة العمل الحالي صعودًا نحو الدليل المنزلي. أما مساحات العمل الواقعة خارج الدليل المنزلي، فيتوقف البحث فيها عند جذر
+المشروع.
+
+```text
+~/.config/opencode/AGENTS.md
+~/code/my-project/AGENTS.md
+~/code/my-project/packages/AGENTS.md
+~/code/my-project/packages/web/AGENTS.md  ← current workspace
+```
+
+في هذا المثال، تُحمَّل الملفات الأربعة جميعها، وتُجمع بهذا الترتيب:
+
+```text
+~/.config/opencode/AGENTS.md
+packages/web/AGENTS.md
+packages/AGENTS.md
+AGENTS.md
+```
+
+ضع الإرشادات التي تنطبق في كل مكان في الملف العام، والإرشادات التي تشمل المستودع كله في جذر المشروع، والإرشادات الأكثر
+تحديدًا بالقرب من الشيفرة التي تخصها. يجمع OpenCode هذه الملفات، ولا يحل التعارضات بينها.
+
+إذا كانت مساحة العمل خارج جذر المشروع، فلا يُحمَّل إلا الملف العام. اضبط `OPENCODE_DISABLE_PROJECT_CONFIG=1` لتخطي اكتشاف
+ملفات `AGENTS.md` الخاصة بالمشروع دون تعطيل الملف العام.
+
+<Callout type="note">
+  لا يتعرّف OpenCode V2 إلا على `AGENTS.md`، ولا يستخدم `CLAUDE.md` بديلًا احتياطيًا.
+</Callout>
+
+## الاكتشاف
+
+تُكتشف ملفات التعليمات الواقعة أسفل مساحة العمل أثناء استكشاف الوكيل للمشروع. فقراءة ملف أو سرد محتويات دليل يحمّل أي ملفات
+`AGENTS.md` تقع بين ذلك الهدف ومساحة العمل.
+
+```text
+my-project/                         ← current workspace
+├── AGENTS.md                       loaded initially
+└── packages/
+    └── web/
+        ├── AGENTS.md               loaded when this area is read
+        └── src/
+            └── app.ts              read target
+```
+
+تُحمَّل الملفات المتداخلة بدءًا بالأقرب، ولا تتكرر ما دام إدخال التعليمات الخاص بها باقيًا في السجل الذي يراه النموذج. ولا
+تؤدي قراءة المنطقة نفسها مجددًا عادةً إلى إدراجها مرة أخرى. أما إذا أزال ضغط السياق أو التراجع ذلك الإدخال، فقد تحمّل قراءة
+لاحقة الملف من جديد.
+
+لا تُكتشف التعديلات على ملف متداخل تلقائيًا بعد تحميله. ابدأ جلسة جديدة عندما يلزم تطبيق النص المحدّث فورًا.
+
+## الترتيب
+
+يُرسل موجّه النظام الخاص بالوكيل أو المزوّد المحدد أولًا. ثم يجمع OpenCode التعليمات الأولية بهذا الترتيب:
+
+```text
+1. Agent or provider system prompt
+2. Built-in environment and date context
+3. Code Mode tool guidance, when enabled
+4. Global and project AGENTS.md files
+5. Available skill, reference, and MCP guidance
+6. Session-specific instruction entries supplied through the API
+```
+
+تُجمع هذه المصادر معًا ولا يتجاوز أحدها الآخر. أما ملفات `AGENTS.md` المتداخلة التي تُكتشف لاحقًا، فتُضاف إلى سجل الجلسة
+بترتيب اكتشافها.
+
+## التحديثات
+
+عدّل ملف `AGENTS.md` العام أو أي ملف مكتشف صعودًا أثناء عمل الجلسة لتحديث إرشاداتها.
+
+```bash
+$ printf '\n- Run the integration suite before committing.\n' >> AGENTS.md
+```
+
+قبل طلب النموذج التالي، يكتشف OpenCode التغيير ويضيف تحديثًا للتعليمات قبل تسليم المدخلات المعلّقة:
+
+```text
+AGENTS.md changes
+→ instruction update
+→ next prompt
+```
+
+- تؤدي إزالة جميع ملفات `AGENTS.md` المحيطة إلى إبلاغ الجلسة بأن التعليمات المحيطة السابقة لم تعد سارية.
+- يحتفظ الفشل المؤقت في القراءة بآخر تعليمات معروفة بدلًا من اعتبارها محذوفة.
+- يحتفظ نقل الجلسة بحالة تعليماتها، لذا تُقدَّم الإرشادات الموجودة في الوجهة على شكل تحديث.
+- يؤدي اعتماد التراجع في الجلسة إلى مسح حالة تعليماتها وإعادة تحميل التعليمات قبل الموجّه التالي.
+
+تظل قيم التعليمات ذات امتياز. إذ يستطيع العملاء معرفة المصادر التي تغيّرت، لكن لا يستطيعون رؤية محتواها.
+
+## التهيئة
+
+يقبل مخطط التهيئة في V2 مصفوفة `instructions`، لكن V2 لا يعالج حاليًا ملفاتها أو أنماط glob أو عناوين URL الواردة فيها. لذا لا
+تضيف هذه التهيئة أي تعليمات إلى النموذج بعد:
+
+```jsonc title="opencode.jsonc"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "instructions": ["CONTRIBUTING.md", "docs/guidelines/*.md", "https://example.com/instructions.md"],
+}
+```
+
+استخدم `AGENTS.md` للتعليمات الفعّالة في V2. وراجع [التهيئة](/config) لمعرفة مواقع ملفات التهيئة وترتيب أولويتها.

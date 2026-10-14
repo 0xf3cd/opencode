@@ -1,0 +1,102 @@
+---
+title: "API dei budget"
+description: "Leggi i budget mensili effettivi di tutti i membri del workspace e gestisci il budget personalizzato di ciascuno."
+---
+
+Leggi i budget mensili effettivi di tutti i membri del workspace e gestisci il budget personalizzato di ciascun membro da
+un'integrazione.
+
+## Guida rapida
+
+Crea nella [Console](https://opencode.ai/console) una chiave API di un [account di servizio](/console/api#service-accounts)
+con permessi **All**. Le chiavi Inference only non possono accedere ai dati dei budget né modificare i limiti.
+
+```bash
+export CONSOLE_URL="https://opencode.ai/console"
+export SERVICE_API_KEY="oc_sk_..."
+```
+
+Elenca i budget dei membri:
+
+```bash
+curl --fail-with-body \
+  "${CONSOLE_URL}/api/v1/budgets/members" \
+  --header "Authorization: Bearer ${SERVICE_API_KEY}" \
+  --header "Accept: application/json"
+```
+
+## Elenco dei budget dei membri
+
+```text
+GET /api/v1/budgets/members
+```
+
+La risposta include tutti i membri attuali, ordinati per email. Un limite con origine `custom` è un override del
+membro; l'origine `default` indica che il limite è ereditato dal valore predefinito del workspace. Limite e origine null
+indicano che il membro non ha limiti.
+
+```json
+[
+  {
+    "user_id": "user_...",
+    "email": "alice@example.com",
+    "limit_micro_cents": "7525000000",
+    "spent_micro_cents": "1250000000",
+    "exceeded": false,
+    "resets_at": "2026-10-01T00:00:00.000Z",
+    "source": "custom",
+    "updated_at": "2026-09-03T12:00:00.000Z"
+  }
+]
+```
+
+I campi monetari della risposta sono stringhe decimali espresse in microcent, così le integrazioni non perdono
+precisione. Un dollaro statunitense corrisponde a 100 milioni di microcent. La spesa e i timestamp di azzeramento si
+riferiscono al mese di calendario UTC corrente. `updated_at` è null quando non esiste un override personalizzato per il
+membro.
+
+## Impostare un budget personalizzato
+
+```text
+PUT /api/v1/budgets/members/:user_id
+```
+
+Imposta un budget mensile di $75.25 per un membro:
+
+```bash
+curl --fail-with-body --request PUT \
+  "${CONSOLE_URL}/api/v1/budgets/members/user_..." \
+  --header "Authorization: Bearer ${SERVICE_API_KEY}" \
+  --header "Content-Type: application/json" \
+  --data '{"budget_dollars":75.25}'
+```
+
+`budget_dollars` accetta un importo non negativo in dollari statunitensi, con al massimo due decimali. La PUT è
+idempotente e restituisce HTTP 204. Usa l'ID del membro restituito dall'operazione di elenco.
+
+## Ritorno al valore predefinito del workspace
+
+```text
+DELETE /api/v1/budgets/members/:user_id
+```
+
+Rimuovi l'override personalizzato:
+
+```bash
+curl --fail-with-body --request DELETE \
+  "${CONSOLE_URL}/api/v1/budgets/members/user_..." \
+  --header "Authorization: Bearer ${SERVICE_API_KEY}"
+```
+
+L'eliminazione di un override non elimina il membro. Da quel momento il membro eredita il budget predefinito del
+workspace oppure, se il workspace non ne ha uno, non ha più limiti. Ripetere la richiesta è sicuro e restituisce
+HTTP 204.
+
+## Errori
+
+| Stato | Significato                                                     |
+| ----- | --------------------------------------------------------------- |
+| `400` | ID del membro o importo del budget non validi.                  |
+| `401` | Chiave API di servizio mancante, non valida, scaduta o revocata. |
+| `403` | La chiave API non ha il permesso di gestire i budget.           |
+| `404` | Il membro non fa parte del workspace associato alla chiave API. |

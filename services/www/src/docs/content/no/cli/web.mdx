@@ -1,0 +1,112 @@
+---
+title: "Web"
+description: "Kjør OpenCode i nettleseren."
+---
+
+OpenCode leveres med et nettgrensesnitt som serveres fra den samme serveren som driver
+TUI-en. Det er tilgjengelig som standard og beskyttet med passord.
+
+## Tilgang
+
+```bash
+$ opencode pair
+
+  Open a link to connect. Links work once and expire in 5 minutes.
+
+  http://127.0.0.1:49374/auth/connect/...
+
+  █▀▀▀▀▀█ ...
+```
+
+Når du åpner en lenke i en nettleser, logges nettleseren inn med en øktinformasjonskapsel, og nettgrensesnittet lastes
+inn. Skanner du QR-koden fra OpenCode-appen, eller limer inn lenken i feltet for serveradresse i appen, kobles appen til
+på samme måte. Øktene varer i 30 dager. Endrer du serverpassordet, logges alle økter ut.
+
+### Over SSH
+
+Når serveren bare lytter på localhost, videresender du porten fra maskinen din og åpner
+den utskrevne lenken lokalt:
+
+```bash
+$ ssh -L 49374:127.0.0.1:49374 my-server
+```
+
+Som standard kjører serveren på port 49374 og lytter bare på localhost. Du kan endre
+denne konfigurasjonen med kommandoen `opencode service`.
+
+### Ekstern tilgang
+
+Vil du koble til fra hvor som helst, parer du via en ekstern adresse fra
+[OpenTunnel](https://github.com/anomalyco/opentunnel):
+
+```bash
+$ opencode pair --remote
+```
+
+Første gang kommandoen slår på ekstern tilgang, spør den før den går videre:
+
+```text
+▲  This will expose your OpenCode server to the internet.
+│  Traffic is end-to-end encrypted, and access requires your server password.
+│  To pair locally instead, run `opencode pair` without the --remote flag.
+│
+◆  Expose your server to the internet?
+│  ● Yes / ○ No
+```
+
+Uten en interaktiv terminal mislykkes kommandoen med mindre du angir `--yes` for å
+godta. Når du har godtatt, hopper senere kjøringer over spørsmålet, selv etter at ekstern tilgang
+er slått av med `opencode service set remote false`.
+
+## Konfigurer
+
+Sett et hvilket som helst alternativ med `opencode service set`:
+
+```bash
+# Listen on every network interface
+$ opencode service set hostname 0.0.0.0
+
+# Use a fixed port instead of the channel default
+$ opencode service set port 49374
+
+# Replace the generated password
+$ opencode service set password "a-long-secret"
+
+# Allow a web client served from another origin
+$ opencode service set cors https://app.example.com,https://other.example.com
+
+# Pass an environment variable to the server process
+$ opencode service set env OPENCODE_LOG_LEVEL DEBUG
+```
+
+Når du endrer en innstilling, stoppes bakgrunnsserveren. Slik tar du i bruk den nye konfigurasjonen:
+
+```bash
+$ opencode service start
+```
+
+## Frittstående
+
+`opencode serve` kjører den samme serveren i forgrunnen i stedet for via den
+delte bakgrunnstjenesten.
+
+```bash
+$ opencode serve --hostname 0.0.0.0 --port 4096
+server listening on http://0.0.0.0:4096
+server password <password>
+```
+
+Bruk den når du vil:
+
+- Kjøre OpenCode på en delt, alltid påslått eller ekstern vert, og deretter koble til klienter med
+  `opencode --server <url>`.
+- Styre vertsnavn, port og CORS-opprinnelser for én enkelt prosess.
+- Kjøre under en prosessovervåker som systemd, Docker eller et annet miljø som forventer
+  en prosess i forgrunnen.
+- Beholde en dedikert server i stedet for den delte bakgrunnstjenesten.
+
+Koble en klient til den med `--server`:
+
+```bash
+$ opencode --server http://127.0.0.1:4096
+```

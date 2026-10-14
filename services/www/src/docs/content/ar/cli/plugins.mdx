@@ -1,0 +1,61 @@
+---
+title: "الإضافات"
+---
+
+يحمّل CLI تلقائيًا الإضافات المهيّأة في `opencode.json(c)` التي توفّر مكوّنًا لواجهة TUI. لمعرفة كيفية بناء الإضافات،
+راجع [بناء الإضافات](/build/plugins). لا حاجة إلى إضافة الحزمة نفسها إلى `cli.json`، إذ يحصل CLI على قائمة الإضافات
+النشطة من خادم OpenCode المتصل به، لذا يعمل ذلك أيضًا عندما يكون الخادم بعيدًا.
+
+استخدم `cli.json` للإضافات الخاصة بـ CLI وحده. تعمل هذه الإضافات محليًا في الطرفية، وتبقى نشطة عند اتصال CLI بخادم
+بعيد:
+
+```json title="cli.json"
+{
+  "plugins": [
+    "opencode.example",
+    "opencode.example@1.0.0",
+    "@example/opencode-tui",
+    "@example/opencode-tui@1.0.0",
+    "./plugins/status",
+    "../plugins/status",
+    "/home/user/plugins/status",
+    "file:///home/user/plugins/status"
+  ]
+}
+```
+
+تُعالَج الإدخالات بالترتيب. أضف البادئة `-` إلى معرّف أو نمط حرف بدل (wildcard) لتعطيل الإضافات المطابقة:
+
+```json title="cli.json"
+{
+  "plugins": ["*", "-opencode.notifications", "-team.*"]
+}
+```
+
+مرّر خيارات الإضافة باستخدام صيغة الكائن:
+
+```json title="cli.json"
+{
+  "plugins": [
+    {
+      "package": "@example/opencode-tui",
+      "options": {
+        "compact": true
+      }
+    }
+  ]
+}
+```
+
+يكتشف OpenCode أيضًا الإضافات الموجودة في دليل التهيئة العام وفي أدلة `.opencode` الخاصة بالمشاريع. تستخدم كل إضافة
+البنية نفسها التي تستخدمها الحزمة المنشورة، مع إبقاء نقطتي الدخول الخاصتين بالخادم وبواجهة TUI معًا.
+
+```text title="Plugin discovery paths"
+<global-config>/plugins/status/index.ts
+<global-config>/plugins/status/tui.ts
+<project>/.opencode/plugins/status/index.ts
+<project>/.opencode/plugins/status/tui.ts
+```
+
+يمكن للإضافات المكتشَفة استيراد `@opencode/plugin/tui` مباشرةً، إذ يحلّ OpenCode الحزمة في بيئة التشغيل. راجع
+[بناء إضافات CLI](/build/plugins/cli) للاطلاع على أمثلة.

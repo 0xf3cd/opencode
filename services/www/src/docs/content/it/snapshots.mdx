@@ -1,0 +1,132 @@
+---
+title: "Snapshot"
+---
+
+Gli snapshot ti permettono di annullare insieme le modifiche recenti alla conversazione e ai file. Usali per rivedere il
+lavoro recente, ma affidati ai commit Git o ai backup per tutto ciò che è importante.
+
+## Flusso di lavoro
+
+Esegui `/undo` dopo una risposta che vuoi rivedere. OpenCode prepara il rollback, ripristina i file interessati e
+reinserisce nel compositore il prompt rimosso, così puoi modificarlo.
+
+```text
+/undo
+
+# Edit the restored prompt, then submit it again.
+Add validation without changing the public API.
+```
+
+L'invio del prompt modificato conferma il rollback preparato. Prima dell'invio, esegui `/redo` per annullarlo e
+ripristinare la conversazione e i file com'erano prima di `/undo`.
+
+```text
+/redo
+```
+
+Il terminale offre anche scorciatoie predefinite:
+
+| Azione | Comando | Scorciatoia |
+| --- | --- | --- |
+| Prepara il rollback del messaggio precedente | `/undo` | `<leader>u` |
+| Annulla il rollback preparato | `/redo` | `<leader>r` |
+
+Puoi anche selezionare un messaggio precedente e scegliere **Revert** per preparare un rollback fino a quel punto.
+
+## Acquisizione
+
+Per ogni step del modello, OpenCode tenta di creare uno snapshot subito prima della chiamata al modello e un altro quando
+lo step si conclude con un successo o un errore registrato. Il messaggio dell'assistente registra quali percorsi sono
+cambiati tra i due snapshot.
+
+```text
+before model step ── snapshot A
+model edits src/api.ts
+step finishes ────── snapshot B ── changed: src/api.ts
+```
+
+L'acquisizione avviene al meglio delle possibilità (best effort). Se uno dei due snapshot non è disponibile, la
+conversazione prosegue, ma per quello step potrebbero non esserci modifiche ai file da ripristinare.
+
+## Ambito
+
+Gli snapshot coprono la directory attiva della sessione all'interno di un worktree Git. Ad esempio, una sessione aperta in
+`packages/app` acquisisce i file idonei sotto `packages/app`, non le modifiche in altre parti del repository.
+
+| Contenuto | Acquisito | Esempio |
+| --- | --- | --- |
+| File tracciati nella directory attiva | Sì | `packages/app/src/app.tsx` |
+| File non tracciati e non ignorati, fino a 2 MiB ciascuno | Sì | `packages/app/notes.txt` |
+| File ignorati da Git | No | `packages/app/dist/app.js` |
+| Singoli file non tracciati più grandi di 2 MiB | No | `packages/app/debug.log` |
+| File al di fuori della directory attiva | No | `packages/server/src/index.ts` |
+| Metadati Git e altri effetti collaterali | No | commit, branch, database o processi |
+
+Gli snapshot del file system richiedono un repository Git. Al di fuori di un repository, `/undo` può comunque annullare la
+cronologia della conversazione, ma non può ripristinare i file.
+
+## Ripristino
+
+Un rollback ripristina solo i percorsi attribuiti agli step dell'assistente successivi al punto della conversazione
+selezionato. Ogni percorso torna allo stato precedente al primo step annullato; un file creato da quegli step viene
+rimosso se allora non esisteva.
+
+| Cronologia | `src/api.ts` | `src/new.ts` |
+| --- | --- | --- |
+| Punto selezionato | versione A | assente |
+| Step successivi dell'assistente | versione B | creato |
+| Dopo il rollback | versione A | rimosso |
+
+I percorsi non attribuiti a quegli step restano invariati. Le modifiche correnti a un percorso interessato possono essere
+sovrascritte, quindi controlla il riepilogo del ripristino e `git diff` prima di proseguire.
+
+```sh
+git diff --stat
+git diff
+```
+
+## Archiviazione
+
+OpenCode salva gli snapshot in locale, in un database di oggetti Git interno e separato, nella propria directory dei dati.
+L'acquisizione degli snapshot non crea commit, non sposta branch e non modifica intenzionalmente l'indice del tuo
+repository.
+
+```sh
+# Your repository remains an ordinary dirty worktree after capture.
+git status --short
+```
+
+Gli oggetti degli snapshot possono contenere il contenuto completo dei file tracciati e dei file non tracciati idonei.
+Tratta la directory dei dati di OpenCode come dati locali sensibili.
+
+## Impostazioni
+
+Gli snapshot sono abilitati per impostazione predefinita. Imposta `snapshots` su `false` nella tua
+[configurazione](/config#snapshots) per interrompere le acquisizioni future del file system.
+
+```jsonc title="opencode.jsonc"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "snapshots": false,
+}
+```
+
+Disabilitare gli snapshot non elimina quelli già salvati. Il rollback della conversazione resta disponibile, ma senza uno
+stato del file system acquisito non può ripristinare le relative modifiche ai file.
+
+## Sicurezza
+
+Gli snapshot sono una comodità, non una transazione né un backup:
+
+- I comandi della shell possono modificare servizi, processi, risorse di rete, database, lo stato di Git, output ignorati o
+  file al di fuori della directory attiva. Il ripristino di uno snapshot non annulla questi effetti.
+- Un lavoro interrotto o non riuscito può lasciare modifiche se l'acquisizione fallisce o se non esiste una coppia di
+  snapshot utilizzabile.
+- Il ripristino dei percorsi interessati ne sovrascrive il contenuto attuale. Anche l'annullamento di un rollback preparato
+  può sovrascrivere modifiche successive.
+- OpenCode rifiuta le operazioni di rollback mentre la sessione è in esecuzione, ma editor e comandi esterni possono
+  comunque modificare il worktree tra l'acquisizione e il ripristino.
+- La conferma di un rollback rimuove i messaggi dalla vista della conversazione attiva, non dalla cronologia persistente
+  della sessione né dagli snapshot già archiviati. Non è una cancellazione sicura.
+
+Esegui un commit o un backup del lavoro importante prima di usare `/undo` su un worktree con modifiche non committate.

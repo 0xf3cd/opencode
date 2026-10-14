@@ -1,0 +1,148 @@
+---
+title: "Fournisseurs"
+description: "Connectez des comptes de fournisseurs et gérez les identifiants depuis le CLI et le TUI."
+---
+
+Connectez un fournisseur dans le TUI, puis choisissez l'un de ses modèles :
+
+```text
+/connect
+/models
+```
+
+`/connect` liste les intégrations disponibles pour le serveur et le projet actuels. Sélectionnez un fournisseur, choisissez
+une méthode d'authentification s'il en propose plusieurs, puis suivez les instructions.
+
+## TUI
+
+Le TUI prend en charge les clés API, OAuth et les commandes d'authentification propres aux fournisseurs. OAuth ouvre une
+URL d'autorisation ou affiche un code à saisir ; appuyez sur `o` pour ouvrir l'URL et sur `c` pour copier les informations
+d'autorisation.
+
+```text
+/connect
+# Select OpenAI, then Codex device code (legacy).
+```
+
+Exécutez de nouveau `/connect` pour ajouter un autre compte. Sélectionner un fournisseur déjà connecté ouvre la liste de ses
+comptes, où vous pouvez activer, renommer ou supprimer un compte enregistré.
+
+## CLI
+
+Utilisez `auth login` pour accéder aux mêmes méthodes sans ouvrir le TUI. Sans argument de fournisseur, la commande ouvre
+un sélecteur de fournisseur interactif.
+
+```bash
+opencode auth login
+```
+
+Passez l'ID ou le nom d'une intégration pour ignorer le premier sélecteur. Utilisez `--method key` pour choisir
+explicitement la saisie d'une clé API.
+
+```bash
+opencode auth login anthropic --method key
+```
+
+Les ID de méthode sont propres à chaque fournisseur. Exécutez la commande sans `--method` pour afficher les méthodes
+disponibles lorsqu'un fournisseur en propose plusieurs.
+
+```bash
+opencode auth login openai
+```
+
+La saisie d'une clé API et les formulaires des fournisseurs nécessitent un terminal interactif, tout comme les méthodes
+OAuth qui vous demandent de coller un code d'autorisation.
+
+## Méthodes
+
+OpenCode reçoit les identifiants des fournisseurs par quatre méthodes d'intégration :
+
+| Méthode | Comportement |
+| --- | --- |
+| Clé API | Demande un secret et l'enregistre comme compte du fournisseur. |
+| OAuth | Fournit une URL à ouvrir dans le navigateur, un code d'appareil ou une invite de code d'autorisation, puis enregistre les tokens et les actualise lorsque c'est possible. |
+| Commande | Exécute une commande d'authentification fournie par le fournisseur et enregistre sa sortie standard comme clé. |
+| Environnement | Lit une variable prise en charge dans le processus serveur, sans l'enregistrer. |
+
+Les fournisseurs peuvent ajouter des formulaires aux méthodes par clé API et OAuth pour recueillir des informations
+obligatoires, comme le nom d'une ressource Azure ou un domaine GitHub Enterprise. Le CLI et le TUI affichent ces
+formulaires avant de lancer l'authentification.
+
+## Environnement
+
+Définissez la variable d'environnement prise en charge par le fournisseur sur le processus serveur qui exécute les
+requêtes aux modèles. Pour un serveur privé ponctuel, passez-la au démarrage du mode autonome.
+
+```bash
+ANTHROPIC_API_KEY=sk-ant-... opencode --standalone
+```
+
+Pour le serveur d'arrière-plan partagé, ajoutez la variable à son environnement géré. Cette opération arrête le service en
+cours d'exécution ; la prochaine commande OpenCode le redémarre avec la nouvelle valeur.
+
+```bash
+opencode service set env ANTHROPIC_API_KEY sk-ant-...
+opencode auth list
+```
+
+Les connexions par environnement apparaissent dans `auth list` avec le type `environment`. Ce ne sont pas des comptes :
+`auth logout` ne peut pas les supprimer, il faut donc retirer la variable pour vous déconnecter. Un compte enregistré a
+priorité sur une connexion par environnement pour la même intégration.
+
+```bash
+opencode auth list
+opencode service unset env ANTHROPIC_API_KEY
+```
+
+Certains fournisseurs cloud utilisent aussi leur chaîne native d'identifiants ambiants au lieu d'une variable de clé API :
+
+- Amazon Bedrock prend en charge la chaîne d'identifiants par défaut d'AWS, notamment les profils, les clés d'accès dans
+  l'environnement, l'identité web et les identifiants de conteneur. Il prend aussi en charge `AWS_BEARER_TOKEN_BEDROCK`.
+- Google Vertex utilise les Application Default Credentials et un projet identifiable. Par exemple, authentifiez-vous
+  avec `gcloud auth application-default login` et définissez `GOOGLE_CLOUD_PROJECT`.
+- Azure propose **Microsoft Entra ID (Azure CLI)** comme méthode de connexion lorsque `az` est installé. Exécutez d'abord
+  `az login`, puis sélectionnez cette méthode dans `/connect` ou `auth login azure`.
+
+```bash
+gcloud auth application-default login
+GOOGLE_CLOUD_PROJECT=my-project opencode
+```
+
+Consultez [Fournisseurs](/providers) pour la configuration propre à chaque fournisseur et côté serveur.
+
+## Comptes
+
+Chaque connexion réussie par clé API, OAuth ou commande crée un compte enregistré. Le compte le plus récent devient
+actif ; changez de compte actif à l'aide de son libellé ou de l'ID de ses identifiants.
+
+```bash
+opencode auth list
+opencode auth switch anthropic work
+```
+
+Supprimez un compte enregistré avec `auth logout`. Ces deux commandes ouvrent des sélecteurs lorsque leurs arguments sont
+omis.
+
+```bash
+opencode auth logout anthropic work
+```
+
+Dans le TUI, `/connect` permet les mêmes opérations sur les comptes enregistrés : ajout, activation, renommage et
+suppression.
+
+## Stockage
+
+Les clés API et les tokens OAuth enregistrés sont stockés dans la base de données SQLite du serveur. Pour le serveur
+local, affichez le chemin de sa base de données avec :
+
+```bash
+opencode debug paths db
+```
+
+Le chemin habituel pour la version stable est `~/.local/share/opencode/opencode.db` ; `XDG_DATA_HOME`, le canal de
+publication et `OPENCODE_DB` peuvent le modifier. Ne modifiez pas la base de données pour gérer les identifiants : utilisez
+`/connect` ou les commandes `auth`.
+
+Lors de la migration de sa base de données, V2 importe les identifiants pris en charge depuis l'ancien fichier `auth.json`
+du répertoire de données d'OpenCode. Les identifiants nouveaux ou mis à jour sont stockés dans SQLite et ne sont pas
+réécrits dans ce fichier.

@@ -1,0 +1,101 @@
+---
+title: "Effect"
+---
+
+`@opencode/sdk/effect`, Effect'e özgü gömülü SDK'dır. İşlemler türlü Effect ve Stream değerleri döndürür. Sahip olan
+Scope kapandığında yönlendirici, Location hizmetleri, fiber'lar ve eklenti kayıtları serbest bırakılır.
+
+```sh
+bun add @opencode/sdk effect
+```
+
+## Host oluşturma
+
+Host'u `Effect.scoped` içinde oluşturun, ardından üretilmiş API gruplarını veya `sessions` takma adını kullanın.
+
+```ts
+import { AbsolutePath, Location, OpenCode } from "@opencode/sdk/effect"
+import { Effect } from "effect"
+
+const program = Effect.scoped(
+  Effect.gen(function* () {
+    const opencode = yield* OpenCode.create()
+    const session = yield* opencode.sessions.create({
+      location: Location.Ref.make({ directory: AbsolutePath.make("/workspace") }),
+    })
+    yield* opencode.sessions.prompt({
+      sessionID: session.id,
+      text: "Review the current changes",
+    })
+    return session
+  }),
+)
+
+const session = await Effect.runPromise(program)
+```
+
+Gömülü host, `@opencode/client/effect` ile aynı şema değerlerini, bildirilmiş hataları, istek seçeneklerini ve
+Stream'leri kullanır.
+
+```ts
+const info = yield* opencode.server.info()
+const sessions = yield* opencode.sessions.list()
+```
+
+## Olay akışı
+
+Akış uç noktaları Effect `Stream` değerleri döndürür. Tüketicilerin arka planda çalışması gerekiyorsa onları host'un
+Scope'u içinde fork edin.
+
+```ts
+import { Effect, Stream } from "effect"
+
+yield* opencode.events.subscribe().pipe(
+  Stream.runForEach((event) => Effect.logInfo("OpenCode event", { type: event.type })),
+  Effect.forkScoped,
+)
+```
+
+## Özelleştirme
+
+OpenCode örneğinizi Effect eklentileri kaydederek özelleştirin. Ajanları, modelleri, araçları ve diğer davranışları
+özelleştirmek için gömülü host'u kullanın:
+
+```ts
+import { Plugin } from "@opencode/plugin/effect"
+import { Effect } from "effect"
+
+const plugin = Plugin.define({
+  id: "customize-agent",
+  effect: (ctx) =>
+    Effect.gen(function* () {
+      const agent = ctx.agent
+      yield* agent.transform((agents) => {
+        agents.update("build", (agent) => {
+          agent.description = "Builds features and fixes bugs for our team"
+        })
+      })
+    }),
+})
+
+yield* opencode.plugin(plugin)
+```
+
+Eklenti hook'ları, dönüşümler, araçlar ve eklenti bağlamının tamamı için
+[Effect eklenti dokümantasyonunun tamamına](/build/plugins/effect) bakın.
+
+## Layer
+
+Gömülü host'un bir uygulama hizmeti olması gerekiyorsa `OpenCode.layer()` kullanın.
+
+```ts
+import { OpenCode } from "@opencode/sdk/effect"
+import { Effect } from "effect"
+
+const program = Effect.gen(function* () {
+  const opencode = yield* OpenCode.Service
+  return yield* opencode.server.info()
+})
+
+const health = await Effect.runPromise(program.pipe(Effect.provide(OpenCode.layer())))
+```

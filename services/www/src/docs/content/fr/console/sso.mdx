@@ -1,0 +1,99 @@
+---
+title: "SSO"
+description: "Connectez-vous à un espace de travail OpenCode Console via votre fournisseur d'identité avec OIDC ou SAML."
+---
+
+L'authentification unique (SSO) fait passer les membres de l'espace de travail par le fournisseur d'identité de votre
+entreprise lors de leur connexion. Les propriétaires et les administrateurs la configurent dans **Settings › Security**,
+et elle est incluse dans tous les espaces de travail.
+
+| Protocole      | Fournisseurs                                                                                 |
+| -------------- | -------------------------------------------------------------------------------------------- |
+| OpenID Connect | Google Workspace, Microsoft Entra ID, Okta, Auth0, Ping Identity ou tout fournisseur OIDC     |
+| SAML 2.0       | Google Workspace, Microsoft Entra ID, Okta ou tout fournisseur SAML                          |
+
+Chaque espace de travail dispose d'une seule connexion SSO.
+
+## Configurer OIDC
+
+1. Ouvrez **Settings › Security**, cliquez sur **Configure SSO**, puis choisissez **OpenID Connect** et votre
+   fournisseur.
+2. Créez une application chez votre fournisseur en suivant les étapes affichées, avec les scopes `openid`, `email` et
+   `profile`.
+3. Saisissez l'**Issuer URL**, ou votre tenant ou domaine, ainsi que le **Client ID**, le **Client Secret** et un
+   **Display Name**, puis cliquez sur **Save**.
+4. Copiez la **Callback URL** de la connexion dans les URI de redirection autorisées de votre fournisseur.
+
+```text
+https://opencode.ai/console/auth/sso/ssoconn_.../callback
+```
+
+À l'enregistrement, la Console vérifie que l'émetteur (issuer) est joignable. Le SSO est actif dès que la connexion est
+enregistrée.
+
+## Configurer SAML
+
+1. Ouvrez **Settings › Security**, cliquez sur **Configure SSO**, puis choisissez **SAML 2.0** et votre fournisseur.
+2. Copiez l'**ACS URL** et le **SP Entity ID** chez votre fournisseur. Les fournisseurs personnalisés peuvent utiliser à
+   la place la **SP Metadata URL** ou télécharger le fichier XML.
+3. Ajoutez les métadonnées de votre fournisseur par URL, par import du fichier XML ou par copier-coller. Vous pouvez
+   aussi saisir manuellement l'**IdP Entity ID**, l'**IdP SSO URL** et l'**IdP Certificate**.
+4. Vérifiez les informations et cliquez sur **Activate SSO**.
+
+```text
+ACS URL:       https://opencode.ai/console/auth/sso/ssoconn_.../callback
+SP Entity ID:  https://opencode.ai/console/auth/sso/ssoconn_.../metadata
+```
+
+Votre fournisseur doit signer la réponse ou l'assertion, et envoyer l'adresse e-mail de l'utilisateur dans un attribut
+`email` ou comme NameID.
+
+## Vérifier les domaines de messagerie
+
+Les personnes qui se connectent à la [Console](https://opencode.ai/console) avec une adresse d'un domaine vérifié sont
+redirigées vers votre fournisseur d'identité. Une fois le SSO actif, cliquez sur **Add domain** sous **Email domains**,
+saisissez votre domaine et publiez l'enregistrement TXT affiché.
+
+```text
+Name:   _opencode-console-challenge.example.com
+Type:   TXT
+Value:  oc-verify=...
+```
+
+Cliquez sur **Verify Domain** une fois l'enregistrement publié. La propagation des modifications DNS peut prendre un
+certain temps. Chaque domaine ne peut appartenir qu'à un seul espace de travail.
+
+## Application du SSO
+
+Dès qu'un espace de travail dispose du SSO, les administrateurs et les membres doivent se connecter par ce biais pour
+ouvrir l'espace de travail, et la Console les redirige automatiquement. La connexion d'OpenCode avec `/connect` suit la
+même règle.
+
+Les propriétaires peuvent aussi se connecter sans SSO : un fournisseur mal configuré ne peut donc pas bloquer l'accès
+aux paramètres de l'espace de travail.
+
+## Adhésion automatique
+
+Les personnes d'un domaine vérifié rejoignent l'espace de travail avec le rôle **Member** lors de leur première
+connexion via le SSO. Elles ne sont pas ajoutées automatiquement dans les cas suivants :
+
+- Elles ont une invitation en attente : c'est alors l'invitation qui est utilisée.
+- L'espace de travail utilise la [synchronisation d'annuaire](/console/scim), qui détermine l'appartenance.
+- L'espace de travail a un abonnement [Go](/console/go).
+
+Les invitations à un espace de travail SSO redirigent la personne invitée vers votre fournisseur d'identité lorsqu'elle
+ouvre le lien.
+
+## Comptes existants
+
+Si une personne possède déjà un compte Console avec la même adresse e-mail, la Console lui demande de s'y connecter une
+fois pour l'associer au SSO. Les personnes invitées et celles ajoutées par la synchronisation d'annuaire sont associées
+automatiquement.
+
+## Modifier ou supprimer
+
+Cliquez sur **Edit** sur la connexion pour en modifier les informations. Laissez le secret ou le certificat vide pour
+conserver la valeur actuelle. Pour passer d'OIDC à SAML ou inversement, supprimez la connexion et créez-en une nouvelle.
+
+Supprimez la connexion via **⋯ › Delete...**. Les membres reviennent à leurs autres méthodes de connexion, et la
+synchronisation d'annuaire s'arrête et ses tokens sont révoqués. Les domaines de messagerie sont conservés.

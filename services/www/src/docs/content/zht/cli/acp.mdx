@@ -1,0 +1,330 @@
+---
+title: "ACP"
+description: "透過 Agent Client Protocol 用戶端使用 OpenCode。"
+---
+
+`opencode acp` 會將 OpenCode 作為 [Agent Client Protocol](https://agentclientprotocol.com) 代理執行，讓你可以在 Zed 等 ACP 用戶端中使用 OpenCode。以下範例將 OpenCode 加入 Zed：
+
+```json title="~/.config/zed/settings.json"
+{
+  "agent_servers": {
+    "OpenCode": {
+      "command": "opencode",
+      "args": ["acp"]
+    }
+  }
+}
+```
+
+其他 ACP 用戶端也使用相同的指令和 `acp` 引數，但設定檔和欄位名稱可能不同。如果圖形介面用戶端找不到 `opencode`，請將 `command` 設為 `which opencode` 印出的絕對路徑。
+
+## 身分驗證
+
+OpenCode 會使用它已經擁有的供應商認證資訊。請在啟動 ACP 用戶端之前，先在終端機中登入：
+
+```bash
+opencode auth login
+```
+
+OpenCode 提供一種驗證方式：`opencode-login`。預設情況下，這是代理驗證方式（agent auth method）。`authenticate` 請求只接受這種方式，而且不會收集認證資訊。如果提示詞因為供應商需要身分驗證而失敗，OpenCode 會回傳 ACP 的 `auth_required` 錯誤。
+
+如果用戶端將 `clientCapabilities.auth.terminal` 設為 `true`，這個驗證方式就會成為終端機驗證方式（terminal auth method）：
+
+```json
+{
+  "id": "opencode-login",
+  "name": "Login with opencode",
+  "description": "Run `opencode auth login` in the terminal",
+  "type": "terminal",
+  "args": ["--login"]
+}
+```
+
+用戶端不得將這個方式傳給 `authenticate`，而是應該在啟動 OpenCode 的指令中加上 `--login`，例如 `opencode acp --login`，並在終端機中執行。OpenCode 會執行 `opencode auth login` 流程後結束。結束狀態碼為 0 表示登入成功，接著用戶端會重新連線並再次傳送 `initialize`。
+
+如果用戶端將 `clientCapabilities._meta["terminal-auth"]` 設為 `true`，驗證方式中就會包含登入指令：
+
+```json
+{
+  "id": "opencode-login",
+  "name": "Login with opencode",
+  "description": "Run `opencode auth login` in the terminal",
+  "_meta": { "terminal-auth": { "command": "opencode", "args": ["auth", "login"], "label": "OpenCode Login" } }
+}
+```
+
+## 疑難排解
+
+`opencode acp` 會在 stdin 上等待 ACP 訊息，所以直接在終端機中執行時，看起來會像是卡住了。請改從 ACP 用戶端啟動它。
+
+如果用戶端回報處理程序已結束，或輸出了無效的協定內容，請在用戶端引數中的 `acp` 前面加上 `--print-logs`。OpenCode 會將 ACP 和私有伺服器的記錄寫入 stderr，stdout 則只會傳送 ACP 訊息。
+
+```bash
+opencode --print-logs acp
+```
+
+## 協定參考
+
+本節適用於 ACP 用戶端的開發者，列出 OpenCode 支援的 ACP 功能，以及 OpenCode 額外加入的 `_meta` 鍵。無法辨識這些鍵的用戶端可以忽略它們。訊息的定義請參閱 [ACP 文件](https://agentclientprotocol.com)。
+
+### 傳輸
+
+用戶端會以子處理程序的形式啟動 `opencode acp`。雙方透過 stdin 和 stdout 交換以換行分隔的 JSON-RPC 訊息，使用 ACP 協定版本 1。
+
+`opencode acp` 會啟動一個供自己使用的私有 OpenCode 伺服器。它不會連線到共用的背景服務，也不會為 ACP 開啟網路連接埠。一個處理程序可以服務多個 ACP 工作階段，並會在用戶端關閉 stdin 時結束。
+
+### 功能
+
+OpenCode 的 `initialize` 回應包含以下代理功能：
+
+```json
+{
+  "loadSession": true,
+  "mcpCapabilities": { "http": true, "sse": false },
+  "promptCapabilities": { "embeddedContext": true, "image": true },
+  "sessionCapabilities": {
+    "additionalDirectories": {},
+    "close": {},
+    "delete": {},
+    "fork": {},
+    "list": {},
+    "resume": {}
+  }
+}
+```
+
+OpenCode 會讀取以下用戶端功能：
+
+| 功能 | 效果 |
+| --- | --- |
+| `auth.terminal` 設為 `true` | 驗證方式會是[終端機驗證方式](#authentication)。 |
+| `elicitation.form` | OpenCode 會以表單形式提出[問題](#questions)。 |
+| `session.compaction` | OpenCode 會透過 ACP 的更新回報[上下文壓縮](#compaction)。 |
+| `_meta["terminal-auth"]` 設為 `true` | 驗證方式會包含[登入指令](#authentication)。 |
+
+### 工作階段
+
+用戶端在建立工作階段時設定工作目錄。OpenCode 會使用該目錄的設定，包括其中的模型、代理、指令、技能、指示、外掛和 MCP 伺服器。
+
+- `cwd` 必須是絕對路徑。OpenCode 會以 invalid params 錯誤拒絕相對路徑的 `cwd`。
+- `session/load` 會重播已儲存的訊息；`session/resume` 和 `session/fork` 則不會重播。
+- 若要載入、恢復或分支工作階段，用戶端必須將該工作階段的目錄作為 `cwd` 傳入。OpenCode 會以 invalid params 錯誤拒絕不同的 `cwd`。
+- `session/list` 每頁最多回傳 100 個工作階段，並接受 `cwd` 篩選條件和 `cursor`。
+- `session/close` 會中斷進行中的工作，並將工作階段與 ACP 處理程序分離。OpenCode 會保留已儲存的工作階段。
+- `session/delete` 會像 `session/cancel` 一樣結束進行中的提示詞，然後移除工作階段。刪除不存在的工作階段也會成功。
+- 一個工作階段一次只能執行一個提示詞。在第一個提示詞仍在進行時傳送第二個 `session/prompt`，OpenCode 會回傳錯誤。
+
+### 取消
+
+`session/cancel` 會以 `stopReason: "cancelled"` 結束進行中的提示詞。對該提示詞請求傳送 `$/cancel_request` 也有相同效果。OpenCode 會拒絕待處理的權限請求，並將取消後仍未完成的工具呼叫回報為 `failed`。
+
+### 額外目錄
+
+用戶端可以在 `session/new`、`session/load`、`session/resume` 和 `session/fork` 中傳入 `additionalDirectories`：
+
+```json
+{ "cwd": "/work/app", "additionalDirectories": ["/work/shared"], "mcpServers": [] }
+```
+
+- 每個項目都必須是絕對路徑，且不能包含 `*` 或 `?`。
+- OpenCode 允許以外部目錄的形式存取每個根目錄內的內容。讀取、編輯和 shell 的權限規則仍然適用。
+- 依照 [additional directories RFD](https://agentclientprotocol.com/rfds/additional-directories) 的規範，每個請求中的清單都會取代工作階段先前的清單。
+- OpenCode 會將這些授權儲存在工作階段上，因此其他 OpenCode 用戶端使用該工作階段時同樣適用。OpenCode 建立子工作階段時，也會複製這些授權。
+
+`session/list` 會在 `additionalDirectories` 中回傳每個工作階段已儲存的清單。
+
+### 設定選項
+
+新的工作階段會使用該目錄的預設模型和主代理。`session/new`、`session/load`、`session/resume` 和 `session/fork` 的回應包含以下設定選項：
+
+| ID | 類別 | 值 |
+| --- | --- | --- |
+| `model` | `model` | 已啟用的模型，格式為 `provider/model`。加上 `/variant` 後綴也會同時設定 effort。 |
+| `effort` | `thought_level` | 模型的變體和 `default`。只有具備變體的模型才會出現。 |
+| `mode` | `mode` | 可見的主代理。 |
+
+`session/set_config_option` 接受字串值：
+
+```json
+{ "sessionId": "ses_123", "configId": "model", "value": "anthropic/claude-sonnet-4" }
+```
+
+`session/set_mode` 同樣會設定代理。當可用的模型或代理變更時，OpenCode 會傳送 `config_option_update`；其他用戶端變更工作階段的模型或代理時，也會傳送一次。
+
+### 提示詞內容
+
+提示詞可以包含文字、圖片、內嵌資源和資源連結。OpenCode 會忽略音訊區塊，其他區塊的處理方式如下：
+
+| 區塊 | OpenCode 的處理方式 |
+| --- | --- |
+| `text` | 傳送給模型。 |
+| 受眾只有 `assistant` 的 `text` | 以獨立的上下文傳送給模型，不放在使用者訊息中。 |
+| 受眾只有 `user` 的 `text` | 不納入模型的輸入。 |
+| 包含 `data` 的 `image` | 附加到提示詞。 |
+| 只有 `uri` 的 `image` | 當作資源連結處理。 |
+| 包含 `text` 的 `resource` | 將文字內嵌在資源路徑或 URI 之後。 |
+| 包含 `blob` 的 `resource` | 如果有 `mimeType` 就附加，否則捨棄。 |
+| 指向 `file://` URI 的 `resource_link` | 附加該檔案。如果檔案不存在或無法讀取，則改為傳送 Markdown 連結。 |
+| 指向帶有 `path` 查詢參數的 `zed://` URI 的 `resource_link` | 附加位於 `path` 的檔案。 |
+| 指向其他 URI 的 `resource_link` | 傳送 Markdown 連結，例如 `[spec](https://example.com/spec.md)`。 |
+
+受眾來自區塊的 `annotations`。OpenCode 會拒絕既沒有 `data` 也沒有 `uri` 的 `image` 區塊。以下區塊只作為模型的上下文：
+
+```json
+{ "type": "text", "text": "Open file: src/app.ts", "annotations": { "audience": ["assistant"] } }
+```
+
+### 指令
+
+在 `session/new`、`session/load`、`session/resume` 或 `session/fork` 之後，OpenCode 會傳送 `available_commands_update`，其中包含該目錄的指令和內建的 `compact` 指令。指令變更時，會再傳送一次更新。
+
+```json
+{
+  "sessionUpdate": "available_commands_update",
+  "availableCommands": [{ "name": "compact", "description": "Compact the session" }]
+}
+```
+
+如果提示詞以 `/` 加上可用指令的名稱開頭，OpenCode 會執行該指令，並將其餘文字作為引數。其他以 `/` 開頭的文字則會當作一般提示詞傳送。`/compact` 會執行[上下文壓縮](/compaction)。
+
+### MCP 伺服器
+
+用戶端可以在 `session/new`、`session/load`、`session/resume` 和 `session/fork` 中傳入 stdio 和 HTTP MCP 伺服器。在 `opencode acp` 處理程序的存續期間，OpenCode 會將這些伺服器加入工作階段所在的目錄，因此該目錄中的其他工作階段也能使用。OpenCode 會直接轉傳 HTTP 標頭，不會對這些伺服器使用 OAuth。OpenCode 不會宣告支援透過 SSE 的 MCP，也不支援透過 ACP 的 MCP。
+
+```json
+{ "type": "http", "name": "docs", "url": "https://mcp.example.com", "headers": [] }
+```
+
+### 權限
+
+權限請求提供三個選項：
+
+```json
+[
+  { "optionId": "once", "kind": "allow_once", "name": "Allow once" },
+  { "optionId": "always", "kind": "allow_always", "name": "Always allow" },
+  { "optionId": "reject", "kind": "reject_once", "name": "Reject" }
+]
+```
+
+當請求會變更檔案時，如果 OpenCode 能產生變更預覽，就會附上 `diff` 內容。
+
+### 問題
+
+如果用戶端宣告支援 `elicitation.form`，OpenCode 會以表單模式的 `elicitation/create` 提出問題。如果 OpenCode 已將對應的工具呼叫以 `session/update` 傳送給此工作階段，請求中就會包含 `toolCallId`。
+
+```json
+{
+  "mode": "form",
+  "sessionId": "ses_123",
+  "toolCallId": "call_1",
+  "message": "Which package manager?",
+  "requestedSchema": {
+    "type": "object",
+    "properties": { "pm": { "type": "string", "oneOf": [{ "const": "bun", "title": "Bun" }] } },
+    "required": ["pm"]
+  }
+}
+```
+
+- OpenCode 絕不會傳送可能收集機密資訊的表單。
+- 如果欄位除了選項之外也接受自行輸入的答案，結構描述會額外加入選用的 `<key>_custom` 字串屬性。在單選情況下，非空白的自訂答案會取代已選取的選項；在多選情況下，OpenCode 會將它加入已選取的選項中。
+- 如果使用者拒絕或取消表單，OpenCode 會取消該問題。
+
+如果 OpenCode 無法顯示問題，會取消該問題，並告知模型在沒有答案的情況下繼續。
+
+### 上下文壓縮
+
+如果用戶端宣告支援 `session.compaction`，OpenCode 會使用 ACP [session compaction](https://agentclientprotocol.com/rfds/session-compaction) RFD（目前為 Preview 階段）中的 `compaction_update` 和 `compaction_summary_chunk` 更新來回報上下文壓縮。用戶端載入工作階段時，OpenCode 會將每次已完成或失敗的壓縮各重播為一則更新。
+
+```json
+{
+  "sessionUpdate": "compaction_update",
+  "compactionId": "msg_123",
+  "status": "completed",
+  "summary": [{ "type": "text", "text": "..." }]
+}
+```
+
+其他用戶端則會收到[壓縮標記](#compaction-marker)。子工作階段的壓縮也一樣。
+
+### 用量
+
+提示詞回應中包含 [end-turn usage](https://agentclientprotocol.com/rfds/end-turn-token-usage) RFD（目前為草案）中的 `usage`。`usage` 是該提示詞在此工作階段中所有模型呼叫的總和，不包含子工作階段。
+
+```json
+{ "stopReason": "end_turn", "usage": { "inputTokens": 1200, "outputTokens": 340, "totalTokens": 1540 }, "_meta": {} }
+```
+
+在回應之前，OpenCode 會傳送 [session usage](https://agentclientprotocol.com/rfds/session-usage) RFD 中的 `usage_update`。只有在提示詞使用了 token，且 OpenCode 知道模型的上下文大小時才會傳送。`cost` 是工作階段的總費用，單位為 USD。
+
+```json
+{ "sessionUpdate": "usage_update", "used": 1540, "size": 200000, "cost": { "amount": 0.012, "currency": "USD" } }
+```
+
+### 子工作階段
+
+提示詞執行期間，OpenCode 會將子工作階段的更新，以 `session/update` 通知的形式傳送到該提示詞所屬的工作階段。每則更新都帶有 `_meta["opencode/child-session"]`。OpenCode 會在工具呼叫 ID 前面加上 `<childSessionId>:` 前綴；如果子工作階段有標題，也會在工具呼叫標題前面加上子工作階段的標題。
+
+```json
+{
+  "sessionUpdate": "tool_call",
+  "toolCallId": "ses_child:call_1",
+  "title": "Explore the codebase: src/app.ts",
+  "_meta": {
+    "opencode/child-session": { "id": "ses_child", "parentID": "ses_123", "depth": 1, "title": "Explore the codebase" }
+  }
+}
+```
+
+| 欄位 | 類型 | 說明 |
+| --- | --- | --- |
+| `id` | `string` | 子工作階段的 ID。 |
+| `parentID` | `string` | 子工作階段的父工作階段 ID。 |
+| `depth` | `number` | 提示詞所屬工作階段的子工作階段為 1，該子工作階段的子工作階段為 2，依此類推。 |
+| `title` | `string` | 子工作階段的標題。子工作階段沒有標題時，OpenCode 會省略此欄位。 |
+
+來自子工作階段的權限請求，會在 `toolCall._meta` 上帶有相同的鍵。提示詞結束後，OpenCode 會停止傳送子工作階段的更新，但子工作階段的權限請求和問題仍會送達用戶端。
+
+### 重試狀態
+
+當模型呼叫失敗且 OpenCode 排定重試時，會傳送帶有 `_meta["opencode/retry"]` 的 `session_info_update`。重試開始時，OpenCode 會傳送 `"opencode/retry": null`。收到提示詞回應時，請清除所有重試狀態。
+
+```json
+{
+  "sessionUpdate": "session_info_update",
+  "_meta": {
+    "opencode/retry": {
+      "attempt": 1,
+      "nextRetryAt": "2026-10-02T12:00:05.000Z",
+      "error": { "type": "provider.rate-limit", "message": "Rate limit exceeded", "status": 429 }
+    }
+  }
+}
+```
+
+| 欄位 | 類型 | 說明 |
+| --- | --- | --- |
+| `attempt` | `number` | 重試的次數編號。 |
+| `nextRetryAt` | `string` | 下一次嘗試的時間，採用 ISO 8601 格式。 |
+| `error` | `object` | 包含 `type` 和 `message`。如果供應商有傳送，還會包含 `status` 和 `response.body`。 |
+
+### 壓縮標記
+
+如果用戶端沒有宣告支援 `session.compaction`，OpenCode 會以帶有 `_meta["opencode/compaction"]` 的 `session_info_update` 回報壓縮進度。子工作階段的壓縮一律使用這個標記。
+
+```json
+{
+  "sessionUpdate": "session_info_update",
+  "_meta": { "opencode/compaction": { "status": "started", "messageId": "msg_123", "reason": "auto" } }
+}
+```
+
+| 欄位 | 類型 | 說明 |
+| --- | --- | --- |
+| `status` | `string` | `started`、`completed` 或 `failed`。被取消的壓縮會是 `failed`。 |
+| `messageId` | `string` | 用來配對壓縮的開始與結束。請將它視為不透明的鍵。 |
+| `reason` | `string` | `auto` 或 `manual`。 |
+| `error` | `object` | `status` 為 `failed` 時才會出現。格式與[重試](#retry-status)的 `error` 相同。 |
+
+標記不包含摘要。自動壓縮可能在沒有 `started` 標記的情況下就失敗。用戶端載入工作階段時，OpenCode 會將每次已完成或失敗的壓縮各重播為一個標記。

@@ -1,0 +1,95 @@
+---
+title: "Búsqueda web"
+---
+
+Pide a OpenCode información actualizada y podrá buscar en la web, leer los resultados e incluir enlaces a las fuentes en su respuesta.
+
+```text
+Find the latest Bun release and summarize the changes.
+```
+
+La primera búsqueda te pide que permitas la búsqueda web y elijas un proveedor. OpenCode recuerda tu elección en las siguientes sesiones.
+
+## Proveedores
+
+OpenCode incluye cinco proveedores de búsqueda:
+
+| Proveedor | ID | Variable de entorno |
+| --- | --- | --- |
+| Exa | `exa` | `EXA_API_KEY` |
+| Firecrawl | `firecrawl` | `FIRECRAWL_API_KEY` |
+| Parallel | `parallel` | `PARALLEL_API_KEY` |
+| Tavily | `tavily` | `TAVILY_API_KEY` |
+| TinyFish | `tinyfish` | `TINYFISH_API_KEY` (opcional) |
+
+Conecta una cuenta desde la TUI con `/connect` o define la variable de entorno del proveedor antes de iniciar OpenCode.
+
+```bash
+$ TAVILY_API_KEY=your-key opencode
+```
+
+## Selección
+
+Define un proveedor en `opencode.jsonc` para omitir la pregunta de selección.
+
+```jsonc title="opencode.jsonc"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "websearch": {
+    "provider": "tavily",
+  },
+}
+```
+
+Usa `"random"` para elegir automáticamente un proveedor disponible. Cada sesión sigue usando el proveedor seleccionado hasta que este alcanza su límite de solicitudes.
+
+```jsonc title="opencode.jsonc"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "websearch": {
+    "provider": "random",
+  },
+}
+```
+
+## Límites
+
+Cuando un proveedor devuelve HTTP 429, la selección aleatoria reintenta la búsqueda con otro proveedor disponible. El proveedor limitado espera el periodo indicado en `Retry-After`, o 60 segundos si la respuesta no incluye un periodo válido.
+
+```text
+Exa returns HTTP 429
+→ Exa enters cooldown
+→ OpenCode retries with another provider
+```
+
+Si todos los proveedores están en periodo de espera, la búsqueda falla de inmediato. Al mover una sesión o reiniciar su servidor, se olvida el proveedor que tenía asignado; los periodos de espera se comparten entre las sesiones del mismo espacio de trabajo.
+
+## Permisos
+
+Las búsquedas web usan la acción de permiso `websearch`, con la consulta de búsqueda como recurso. Pide confirmación antes de las búsquedas que no estén permitidas explícitamente.
+
+```jsonc title="opencode.jsonc"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "permissions": [
+    {
+      "action": "websearch",
+      "resource": "*",
+      "effect": "ask",
+    },
+  ],
+}
+```
+
+Consulta [Permisos](/permissions) para conocer el orden de las reglas y cómo se evalúan las coincidencias.
+
+## Desactivar
+
+Asigna `false` a `websearch` para quitar la herramienta de búsqueda web de las solicitudes al modelo.
+
+```jsonc title="opencode.jsonc"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "websearch": false,
+}
+```

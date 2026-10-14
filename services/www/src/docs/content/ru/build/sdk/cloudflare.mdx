@@ -1,0 +1,87 @@
+---
+title: "Cloudflare"
+---
+
+Внутри Cloudflare Durable Object используйте `@opencode/sdk/workerd`. Этот профиль хранит данные в SQLite-хранилище
+объекта, сохраняет durable-события для восстановления после вытеснения и заменяет недоступные в этой среде сервисы
+локальной файловой системы и процессов.
+
+```sh
+bun add @opencode/sdk
+```
+
+Держите один хост на все время жизни экземпляра Durable Object, а не создавайте новый для каждого запроса.
+
+```ts
+import { OpenCodeWorkerd } from "@opencode/sdk/workerd"
+import myPlugin from "./my-plugin"
+
+export class OpenCodeDO {
+  private readonly opencode: Promise<OpenCodeWorkerd.Interface>
+
+  constructor(state: DurableObjectState) {
+    this.opencode = state.blockConcurrencyWhile(() =>
+      OpenCodeWorkerd.create({
+        storage: state.storage,
+        config: { default_agent: "build" },
+        plugins: [myPlugin],
+      }),
+    )
+  }
+
+  async fetch() {
+    const opencode = await this.opencode
+    return Response.json(await opencode.server.info())
+  }
+}
+```
+
+`blockConcurrencyWhile` не пропускает к Durable Object никакие события, пока хост не будет готов, и сбрасывает объект,
+если инициализация завершилась ошибкой. Сохраненный Promise дает обработчикам запросов прямой доступ к тому же хосту
+после запуска.
+
+```ts
+constructor(state: DurableObjectState) {
+  this.opencode = state.blockConcurrencyWhile(() =>
+    OpenCodeWorkerd.create({ storage: state.storage }),
+  )
+}
+```
+
+Wrangler выбирает реализации OpenCode, безопасные для Workerd, по условию пакета `workerd`. Cloudflare может вытеснить
+Durable Object, не выполнив очистку, поэтому корректность работы не зависит от вызова `close()`.
+
+```jsonc title="wrangler.jsonc"
+{
+  "compatibility_flags": ["nodejs_compat"]
+}
+```
+
+## Настройка
+
+Настраивайте экземпляр OpenCode, регистрируя плагины, включенные в сборку вашего Worker. Передайте плагины в
+`OpenCodeWorkerd.create()`, чтобы изменить агентов, модели, инструменты и другое поведение:
+
+```ts
+import { Plugin } from "@opencode/plugin"
+import { OpenCodeWorkerd } from "@opencode/sdk/workerd"
+
+const plugin = Plugin.define({
+  id: "customize-agent",
+  async setup(ctx) {
+    await ctx.agent.transform((agents) => {
+      agents.update("build", (agent) => {
+        agent.description = "Builds features and fixes bugs for our team"
+      })
+    })
+  },
+})
+
+await OpenCodeWorkerd.create({
+  storage: state.storage,
+  config: { default_agent: "build" },
+  plugins: [plugin],
+})
+```
+
+Хуки, преобразования, инструменты и полный контекст плагина описаны в [документации по плагинам](/build/plugins).

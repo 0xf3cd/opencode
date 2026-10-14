@@ -1,0 +1,224 @@
+---
+title: "정책"
+description: "이름이 지정된 리소스에 대한 OpenCode 동작을 허용하거나 거부하며, 조직 정책이 최종 결정권을 갖습니다."
+---
+
+정책은 OpenCode가 이름이 지정된 리소스에 대해 특정 동작을 수행할 수 있는지 결정합니다. 정책은 `policies` 아래에
+작성하며, 연결된 [OpenCode Console](/console) 워크스페이스에서 전달받을 수도 있습니다.
+
+정책은 [권한](/permissions)과 별개입니다. 권한은 `allow`, `deny`, `ask`를 지정할 수 있는 에이전트별 도구 규칙입니다.
+정책은 허용 또는 거부 두 가지뿐이고, 확인을 요청하지 않으며, 권한과 제공자가 허용하는 범위를 좁히기만 합니다.
+
+## 구성
+
+`opencode.jsonc`에 다음 구문을 추가하면 특정 제공자를 모든 곳에서 거부합니다.
+
+```jsonc
+{
+  "$schema": "https://opencode.ai/config.json",
+  "policies": [{ "action": "provider.use", "resource": "openai", "effect": "deny" }],
+}
+```
+
+거부된 제공자는 유효한 자격 증명이 있더라도 카탈로그와 모델 선택 목록에서 사라집니다.
+
+이전 릴리스에서는 `experimental.policies`에서 정책을 읽었습니다. 이 키는 여전히 동작하며 `policies`에 병합됩니다.
+
+```jsonc
+{
+  "experimental": {
+    "policies": [{ "action": "provider.use", "resource": "openai", "effect": "deny" }],
+  },
+}
+```
+
+## 구문
+
+각 구문에는 세 가지 필드가 있습니다.
+
+| 필드 | 값 | 의미 |
+| --- | --- | --- |
+| `action` | `provider.use`, `tool.use`, `integration.use` | 제어할 작업 |
+| `resource` | 문자열 또는 와일드카드 패턴 | 구문이 적용되는 대상. 동작에 따라 다름 |
+| `effect` | `allow`, `deny` | 구문이 일치할 때의 결정 |
+
+유효성 검사에 실패한 구문은 서버 로그에 경고를 남기고 제외되며, 나머지 목록은 계속 적용됩니다. `deny`를 수정한 뒤에는
+로그를 확인하세요.
+
+## 일치 규칙
+
+리소스에는 권한과 같은 방식의 값 전체 와일드카드를 사용합니다. `*`는 0개 이상의 문자와, `?`는 한 문자와 일치합니다.
+
+```jsonc
+{
+  "policies": [{ "action": "provider.use", "resource": "company-*", "effect": "deny" }],
+}
+```
+
+이 구문은 `company-us`와 `company-eu`를 거부합니다. ` *`로 끝나는 패턴은 인수 없는 값과도 일치하므로,
+`shell:git push *`는 인수 없는 `git push`도 포함합니다.
+
+## 순서
+
+여러 구문이 일치하면 마지막 구문이 적용됩니다. 구체성에 따른 규칙은 없으므로, 넓은 구문을 먼저 두고 예외를 그 뒤에
+두세요. 일치하는 구문이 없으면 동작이 허용됩니다.
+
+```jsonc
+{
+  "policies": [
+    { "action": "provider.use", "resource": "*", "effect": "deny" },
+    { "action": "provider.use", "resource": "anthropic", "effect": "allow" },
+  ],
+}
+```
+
+이 경우 Anthropic만 사용할 수 있습니다.
+
+## 제공자
+
+`provider.use`는 제공자를 사용할 수 있는지 여부 자체를 제어합니다. 리소스는 제공자 ID입니다. `anthropic`, `openai`,
+`opencode` 또는 [`providers`](/providers)에서 정의한 사용자 지정 ID를 사용할 수 있습니다.
+
+```jsonc
+{
+  "providers": {
+    "company-ai": {
+      "package": "@opencode/ai/providers/openai-compatible",
+      "settings": { "baseURL": "https://ai.company.example/v1" },
+    },
+  },
+  "policies": [
+    { "action": "provider.use", "resource": "*", "effect": "deny" },
+    { "action": "provider.use", "resource": "company-ai", "effect": "allow" },
+  ],
+}
+```
+
+`providers` 항목은 엔드포인트를 구성하고, 정책 구문은 이를 OpenCode가 사용하는 유일한 제공자로 만듭니다. 정책은
+제공자가 어떤 경로로 알려졌는지와 관계없이 적용됩니다. 카탈로그 데이터, 환경 변수, 저장된 계정, 기본 제공 플러그인,
+구성 모두 해당합니다.
+
+V1의 `enabled_providers`와 `disabled_providers` 목록 대신 `provider.use`를 사용하세요. V1 파일도 계속 로드됩니다.
+[V1에서 마이그레이션](/migrate-v1#supported-fields-without-direct-native-equivalents)을 참고하세요.
+
+## 도구
+
+`tool.use` 구문은 [권한](/permissions) 검사를 강제로 거부합니다. 리소스는 `<action>:<value>` 형식이며, 도구가 확인하는
+모든 리소스와 비교됩니다.
+
+```jsonc
+{
+  "policies": [
+    { "action": "tool.use", "resource": "shell:git push *", "effect": "deny" },
+    { "action": "tool.use", "resource": "edit:*.env", "effect": "deny" },
+    { "action": "tool.use", "resource": "webfetch:*", "effect": "deny" },
+  ],
+}
+```
+
+거부된 검사는 확인을 요청하지 않고 `Blocked by configuration policy`로 실패합니다. 에이전트 규칙과 저장된 승인 이후에
+적용되므로, `ask`와 "Allow always" 승인을 모두 재정의합니다.
+
+| 패턴 | 차단 대상 |
+| --- | --- |
+| `shell:*` | 모든 셸 명령 |
+| `read:*/.ssh/*` | SSH 관련 파일 읽기 |
+| `external_directory:*` | 위치(Location)나 worktree 밖으로의 모든 접근 |
+| `subagent:general` | 특정 서브에이전트 실행 |
+| `github_delete_repository:*` | 특정 MCP 도구 |
+| `*` | 아직 거부되지 않은 모든 것 |
+
+`allow`를 지정한 `tool.use` 구문은 접근 권한을 부여하지 않습니다. 앞에 있는 더 넓은 `deny`를 해제할 뿐이며, 그 뒤에는
+에이전트 자체의 규칙이 결정합니다.
+
+```jsonc
+{
+  "policies": [
+    { "action": "tool.use", "resource": "shell:*", "effect": "deny" },
+    { "action": "tool.use", "resource": "shell:git status *", "effect": "allow" },
+  ],
+}
+```
+
+`git status`는 에이전트의 `shell` 규칙에 따라 처리되고, 다른 모든 명령은 차단됩니다.
+
+## 통합
+
+`integration.use`는 MCP 서버, 스킬, 플러그인의 로드 여부를 제어합니다. 리소스는 통합 유형과 ID로 구성됩니다.
+
+| 리소스 | 적용 대상 |
+| --- | --- |
+| `mcp:<server>` | 구성된 이름으로 지정한 [MCP 서버](/mcp-servers) |
+| `skill:<id>` | ID로 지정한 [스킬](/skills) |
+| `plugin:<target>` | 버전 없는 패키지 이름 또는 절대 경로로 지정한 [플러그인](/plugins) |
+
+```jsonc
+{
+  "policies": [
+    { "action": "integration.use", "resource": "mcp:*", "effect": "deny" },
+    { "action": "integration.use", "resource": "mcp:github", "effect": "allow" },
+    { "action": "integration.use", "resource": "plugin:opencode-acme-cli", "effect": "deny" },
+  ],
+}
+```
+
+거부된 MCP 서버나 스킬은 어떻게 구성되었든 제거되며, 거부된 플러그인은 로드되지 않습니다.
+
+## 우선순위
+
+일반 설정에서는 가장 가까운 구성이 우선합니다. 정책은 그 반대입니다. 더 넓은 범위의 구성에 있는 구문이 나중에
+평가되므로, 좁은 범위의 구문을 재정의합니다. 관리형 구성과 연결된 Console이 항상 최종 결정권을 갖습니다.
+
+| 권한 수준 | 소스 |
+| --- | --- |
+| 1 (가장 높음) | 연결된 OpenCode Console 워크스페이스 |
+| 2 | macOS 관리형 환경설정(`/Library/Managed Preferences/ai.opencode.managed.plist`) |
+| 3 | 시스템 `opencode.json(c)`(`/Library/Application Support/opencode`, `/etc/opencode`, `%ProgramData%\opencode`) |
+| 4 | 전역 `~/.config/opencode/opencode.json(c)` |
+| 5 | 직접 위치한 `opencode.json(c)`. 바깥 디렉터리가 안쪽 디렉터리보다 우선 |
+| 6 (가장 낮음) | `.opencode/opencode.json(c)`. 바깥 디렉터리가 안쪽 디렉터리보다 우선 |
+
+전역에서 거부한 제공자는 저장소에서 다시 활성화할 수 없습니다.
+
+```jsonc title="~/.config/opencode/opencode.jsonc"
+{
+  "policies": [{ "action": "provider.use", "resource": "openai", "effect": "deny" }],
+}
+```
+
+```jsonc title="project/opencode.jsonc"
+{
+  "policies": [{ "action": "provider.use", "resource": "openai", "effect": "allow" }],
+}
+```
+
+`openai`는 계속 거부됩니다. 한 파일 안에서는 구문이 작성된 순서를 유지합니다.
+
+## Console
+
+[OpenCode Console](/console)의 워크스페이스는 Providers 및 Tools 정책을 구문으로 변환해 워크스페이스 구성과 함께
+반환합니다. OpenCode는 이 구문을 직접 작성된 모든 구문 뒤에 추가하므로 Console 정책이 최종 결정권을 갖습니다. 조직의
+`deny`는 저장소나 사용자의 `allow`로 해제할 수 없으며, 조직의 `allow`는 권한 수준이 낮은 `deny`를 해제합니다.
+
+이 구문으로 거부된 경우 메시지에 워크스페이스 이름이 표시됩니다.
+
+```text
+Blocked by Acme's policy
+```
+
+구문은 연결된 계정을 따릅니다.
+
+| 이벤트 | 결과 |
+| --- | --- |
+| Console 정책 변경 | 다음 가져오기 시 적용(약 1분마다) |
+| 다른 워크스페이스로 전환 | 해당 워크스페이스의 구문으로 대체 |
+| 연결 해제 | 구문 삭제 |
+| Console에 연결할 수 없음 | 해당 연결의 마지막 구문이 계속 적용 |
+
+Console 플러그인과 정책 플러그인은 `plugins`에서 비활성화할 수 없습니다. [플러그인 제어](/plugins#control)를
+참고하세요.
+
+<Callout type="note">
+  정책은 엔드포인트나 자격 증명을 구성하지 않으며, 사용할 수 없는 제공자를 사용할 수 있게 만들지도 않습니다. 또한
+  플러그인 코드를 샌드박스로 격리하지 않습니다. 거부된 제공자는 일반적인 제공자 및 모델 경로에서 차단됩니다.
+</Callout>

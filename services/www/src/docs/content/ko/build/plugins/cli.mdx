@@ -1,0 +1,649 @@
+---
+title: "CLI"
+---
+
+CLI 플러그인은 명령, 라우트, 슬롯, Markdown 렌더러, 알림, 로컬 상태로 터미널을 확장합니다.
+
+```ts title="src/tui.ts"
+import { Plugin } from "@opencode/plugin/tui"
+
+export default Plugin.define({
+  id: "acme.cli",
+  setup(context) {
+    context.ui.toast.show({ message: "CLI plugin loaded", variant: "success" })
+  },
+})
+```
+
+`@opencode/plugin/tui`를 직접 가져오세요. OpenCode가 런타임에 이 import를 확인하므로, 로컬 CLI 플러그인에서 OpenCode
+체크아웃의 절대 경로를 지정할 필요가 없습니다.
+
+## 컨텍스트
+
+`setup`은 구성, 앱 메타데이터, 현재 위치, OpenCode 클라이언트, 캐시된 데이터, 테마 토큰, OpenTUI 렌더러, 그리고 아래에
+설명된 UI API를 받습니다.
+
+```ts
+setup(context) {
+  const compact = context.options.compact === true
+  const location = context.location ?? context.data.location.default()
+  const version = context.app.version
+  const channel = context.app.channel
+  const client = context.client
+  const renderer = context.renderer
+  const theme = context.theme
+}
+```
+
+플러그인이 소유한 리소스를 정리하는 함수를 반환하세요.
+
+```ts
+setup(context) {
+  const stop = context.data.on("session.execution.succeeded", () => {})
+  return () => stop()
+}
+```
+
+## 클라이언트
+
+`context.client`는 생성된 OpenCode 클라이언트이며, 원격 서버를 포함해 연결된 서버를 호출할 수 있습니다.
+
+```ts
+const response = await context.client.plugin.list({
+  location: context.location ?? context.data.location.default(),
+})
+const plugins = response.data
+```
+
+## 이벤트
+
+특정 타입의 이벤트 하나에는 `data.on`을, 모든 서버 이벤트에는 `data.listen`을 사용합니다. 둘 다 구독 해제 함수를
+반환합니다.
+
+```ts
+const stopPermission = context.data.on("permission.asked", (event) => {
+  context.ui.toast.show({ message: `Permission ${event.data.id}` })
+})
+const stopAll = context.data.listen(({ details }) => console.log(details.type))
+
+return () => {
+  stopPermission()
+  stopAll()
+}
+```
+
+## 세션
+
+세션 데이터는 목록, 조회, 계층 구조, 비용, 상태, 동기화, 무효화 기능을 제공합니다.
+
+```ts
+const sessions = context.data.session.list()
+const session = context.data.session.get(sessionID)
+const rootID = context.data.session.root(sessionID)
+const familyIDs = context.data.session.family(sessionID)
+const cost = context.data.session.cost(sessionID)
+const status = context.data.session.status(sessionID)
+await context.data.session.sync(sessionID)
+context.data.session.invalidate(sessionID)
+```
+
+대기 중인 인박스 항목과 메시지에는 목록, 조회, 동기화, 무효화 API가 있습니다.
+
+```ts
+await context.data.session.pending.sync(sessionID)
+const pending = context.data.session.pending.list(sessionID)
+context.data.session.pending.invalidate(sessionID)
+
+await context.data.session.message.sync(sessionID)
+const messages = context.data.session.message.list(sessionID)
+const message = context.data.session.message.get(sessionID, messageID)
+context.data.session.message.invalidate(sessionID)
+```
+
+세션의 권한 요청을 읽고 새로 고칠 수 있습니다.
+
+```ts
+await context.data.session.permission.sync(sessionID)
+const requests = context.data.session.permission.list(sessionID) ?? []
+context.data.session.permission.invalidate(sessionID)
+```
+
+특정 위치의 폼을 나열하고, 새로 고치고, 응답하거나 취소할 수 있습니다.
+
+```ts
+import type { FormCancelInput, FormReplyInput } from "@opencode/client"
+
+async function handleForm(reply: FormReplyInput, cancel: FormCancelInput) {
+  const location = context.location
+  await context.data.session.form.sync(sessionID, location)
+  const forms = context.data.session.form.list(sessionID, location) ?? []
+  await context.data.session.form.reply(reply, location)
+  await context.data.session.form.cancel(cancel, location)
+  context.data.session.form.invalidate(sessionID, location)
+}
+```
+
+## 프로젝트와 셸
+
+프로젝트와 저장된 권한은 목록, 조회, 동기화, 무효화 작업을 지원합니다.
+
+```ts
+await context.data.project.sync()
+const projects = context.data.project.list()
+const project = context.data.project.get(projectID)
+context.data.project.invalidate()
+
+await context.data.project.permission.sync(projectID)
+const saved = context.data.project.permission.list(projectID) ?? []
+context.data.project.permission.invalidate(projectID)
+```
+
+셸 데이터는 위치 범위의 목록, 조회, 동기화, 무효화 작업을 지원합니다.
+
+```ts
+await context.data.shell.sync(context.location)
+const shells = context.data.shell.list(context.location)
+const shell = context.data.shell.get(shellID)
+context.data.shell.invalidate(context.location)
+```
+
+## 위치 데이터
+
+위치 상태는 기본 위치와 새로 고침 제어 기능을 제공합니다.
+
+```ts
+const location = context.data.location.default()
+await context.data.location.sync(location)
+context.data.location.invalidate(location)
+```
+
+버전 관리 상태는 특정 위치의 저장소 정보를 제공합니다.
+
+```ts
+await context.data.location.vcs.sync(context.location)
+const vcs = context.data.location.vcs.info(context.location)
+const branch = vcs?.branch.current
+context.data.location.vcs.invalidate(context.location)
+```
+
+에이전트, 명령, 통합, 모델, 제공자, 디렉터리 참조, 스킬, MCP 데이터는 모두 `list`, `sync`, `invalidate` 메서드를
+공유합니다.
+
+```ts
+const location = context.location
+await Promise.all([
+  context.data.location.agent.sync(location),
+  context.data.location.command.sync(location),
+  context.data.location.integration.sync(location),
+  context.data.location.model.sync(location),
+  context.data.location.provider.sync(location),
+  context.data.location.reference.sync(location),
+  context.data.location.skill.sync(location),
+  context.data.location.mcp.server.sync(location),
+  context.data.location.mcp.resource.sync(location),
+])
+
+const agents = context.data.location.agent.list(location) ?? []
+const commands = context.data.location.command.list(location) ?? []
+const integrations = context.data.location.integration.list(location) ?? []
+const models = context.data.location.model.list(location) ?? []
+const providers = context.data.location.provider.list(location) ?? []
+const references = context.data.location.reference.list(location) ?? []
+const skills = context.data.location.skill.list(location) ?? []
+const servers = context.data.location.mcp.server.list(location) ?? []
+const resources = context.data.location.mcp.resource.list(location) ?? []
+
+context.data.location.model.invalidate(location)
+```
+
+## 주의 알림
+
+주의 알림(attention) 요청은 터미널 포커스 여부에 따라 시스템 알림을 표시하거나, 구성된 소리를 재생하거나, 둘 다 할
+수 있습니다.
+
+```ts
+const result = await context.attention.notify({
+  title: "OpenCode",
+  message: "Session done",
+  notification: { when: "blurred" },
+  sound: { name: "done", volume: 0.5, when: "always" },
+})
+console.log(result.ok, result.notification, result.sound, result.skipped)
+```
+
+## 테마와 렌더러
+
+OpenTUI 요소에는 시맨틱 테마 토큰을 사용하고, 렌더러 전용 헬퍼에는 `context.renderer`를 전달하세요.
+
+```tsx
+const Status = () => <text fg={context.theme.text.base}>Ready</text>
+const renderer = context.renderer
+```
+
+## Solid 컴포넌트
+
+라우트, 대화 상자, 슬롯이 렌더링하는 JSX 안에서 현재 컨텍스트에 접근하려면 `usePlugin`을 사용하세요.
+
+```tsx
+import { usePlugin } from "@opencode/plugin/tui"
+
+function Status() {
+  const context = usePlugin()
+  return <text fg={context.theme.text.base}>{context.app.version}</text>
+}
+```
+
+## Markdown
+
+언어별로 펜스 코드 블록 렌더러를 등록합니다. 반환된 함수를 호출하면 등록이 해제됩니다.
+
+```ts
+const unregister = context.markdown.registerCodeBlockRenderer("acme", (_token, render) => render.defaultRender())
+return unregister
+```
+
+## 명령과 키맵
+
+팔레트 명령, 슬래시 명령, 키보드 명령을 반응형 키맵 레이어에 등록합니다.
+
+```ts
+context.keymap.layer(() => ({
+  mode: "global",
+  priority: 10,
+  commands: [
+    {
+      id: "acme.status",
+      title: "Show Acme status",
+      group: "Acme",
+      bind: "ctrl+g",
+      palette: true,
+      slash: { name: "acme", aliases: ["status"], arguments: true },
+      enabled: () => true,
+      suggested: true,
+      run: async (input) => context.ui.toast.show({ message: input ?? "Ready" }),
+    },
+  ],
+  bindings: ["acme.status"],
+}))
+```
+
+`layer`는 `setup`에서(`await` 이후 포함) 또는 컴포넌트에서 호출하세요. 각 레이어는 다음 중 하나가 처음 발생할 때
+제거됩니다.
+
+- 플러그인이 비활성화되거나, 다시 로드되거나, 설정에 실패한 경우
+- 레이어를 만든 컴포넌트나 반응형 계산(슬롯, 라우트, 대화 상자 등)이 해제된 경우
+
+레이어 팩토리는 순수 함수여야 합니다. OpenCode는 초기 명령 형태를 검증하기 위해 의존성 추적 없이 한 번 평가한 다음,
+이후에는 반응형으로 평가합니다. ID가 없는 팔레트 명령처럼 초기 명령 형태에 오류가 있으면 `layer()`에서 예외가
+발생합니다. 바인딩 파싱 오류는 OpenTUI가 처리합니다. 이후 반응형 업데이트에서 발생한 오류는 Solid의 오류 처리 방식을
+따릅니다.
+
+```ts
+async setup(context) {
+  const settings = await loadSettings()
+  context.keymap.layer(() => ({
+    mode: "global",
+    commands: [{ id: "acme.sync", title: "Sync Acme", palette: true, run: () => sync(settings) }],
+  }))
+}
+```
+
+레이어는 하나의 OpenTUI 렌더러블을 대상으로 지정할 수 있으며, 명령에서 `false`를 반환하면 키보드 디스패치가 계속
+진행됩니다.
+
+```ts
+context.keymap.layer(() => ({
+  target: () => panel,
+  commands: [{ bind: "escape", run: (_input, event) => (event ? false : undefined) }],
+}))
+```
+
+명령을 디스패치하거나, 단축키와 명령 상태를 확인하거나, 임시 입력 모드를 추가할 수 있습니다.
+
+```ts
+context.keymap.dispatch("acme.status", "verbose")
+const shortcuts = context.keymap.shortcuts("acme.status")
+const commands = context.keymap.commands()
+const pending = context.keymap.pending()
+const active = context.keymap.active()
+const currentMode = context.keymap.mode.current()
+const popMode = context.keymap.mode.push("acme-search")
+popMode()
+```
+
+## 저장소
+
+영구 저장소는 JSON을 재시작 후에도 유지하며 여러 TUI 인스턴스 간에 동기화합니다.
+
+```ts
+const [settings, updateSettings] = context.storage.store("settings", {
+  initial: { compact: false },
+})
+await updateSettings((draft) => {
+  draft.compact = true
+})
+```
+
+메모리 저장소는 플러그인을 다시 로드해도 유지되지만 TUI를 종료하면 삭제됩니다.
+
+```ts
+const [state, updateState] = context.storage.memory("state", {
+  initial: { count: 0 },
+})
+updateState((draft) => {
+  draft.count++
+})
+```
+
+## 대화 상자와 토스트 알림
+
+알림, 확인, 텍스트 입력, 선택에는 Promise 기반 대화 상자를 사용하세요.
+
+```ts
+await context.ui.dialog.alert({ title: "Acme", message: "Ready" })
+const confirmed = await context.ui.dialog.confirm({
+  title: "Continue?",
+  message: "Run the Acme action?",
+  label: { confirm: "Run", cancel: "Cancel" },
+})
+const name = await context.ui.dialog.prompt({ title: "Name", placeholder: "release" })
+const mode = await context.ui.dialog.select({
+  title: "Mode",
+  current: "safe",
+  options: [
+    { title: "Safe", value: "safe", description: "Ask before changes" },
+    { title: "Fast", value: "fast", disabled: false, category: "Advanced" },
+  ],
+})
+```
+
+### 선택 검색
+
+일치 판정과 결과 순서를 직접 제어하려면 `search`를 전달하세요. 이 함수는 빈 검색어를 포함해 모든 검색어에 대해
+실행되며, 활성화된 옵션만 받습니다. 결과는 반환된 순서대로 나열되고 각 카테고리는 인라인으로 표시됩니다.
+
+```ts
+const project = await context.ui.dialog.select({
+  title: "Projects",
+  options: [
+    { title: "Alpha", value: "alpha", category: "Recent" },
+    { title: "Beta", value: "beta", category: "Pinned" },
+  ],
+  search: (query, options) =>
+    options
+      .filter((option) => option.title.toLowerCase().includes(query.toLowerCase()))
+      .toSorted((left, right) => right.title.localeCompare(left.title)),
+})
+```
+
+### 선택 작업
+
+작업은 하단 영역에 표시되며, 키 바인딩, 클릭, 또는 Tab으로 포커스한 뒤 Enter를 눌러 실행합니다. 기본적으로 작업은
+선택된 값을 받으며, 선택된 항목이 없으면 사용할 수 없습니다. 선택이 필요 없는 작업에는 `selection: "none"`을
+사용하세요.
+
+```ts
+await context.ui.dialog.select({
+  title: "Projects",
+  options: [{ title: "Alpha", value: "alpha" }],
+  actions: [
+    { bind: "ctrl+o", title: "Inspect", onTrigger: (value) => context.ui.toast.show({ message: value }) },
+    { bind: "ctrl+a", title: "Close", side: "right", selection: "none", onTrigger: () => context.ui.dialog.clear() },
+  ],
+})
+```
+
+- 작업을 실행해도 대화 상자가 닫히거나 Promise가 완료되지 않습니다.
+- Enter를 누르거나 옵션을 클릭하면 선택된 값으로 이행됩니다.
+- Escape, `clear()`, 또는 다른 대화 상자를 표시하면 `undefined`로 이행됩니다.
+- `ctrl+n`이나 `ctrl+p`는 바인딩하지 마세요. 대화 상자가 탐색용으로 예약해 두었으며, 대화 상자 자체 바인딩이 우선
+  적용됩니다.
+
+사용자 지정 JSX 대화 상자는 크기를 설정하고 스스로 닫을 수 있습니다.
+
+```tsx
+context.ui.dialog.set({ size: "large", centered: true })
+context.ui.dialog.show(
+  () => (
+    <box>
+      <text>Acme</text>
+    </box>
+  ),
+  () => console.log("closed"),
+)
+context.ui.dialog.clear()
+```
+
+토스트 알림은 제목, 메시지, 변형(variant), 표시 시간을 지원합니다.
+
+```ts
+context.ui.toast.show({
+  title: "Acme",
+  message: "Saved",
+  variant: "success",
+  duration: 3000,
+})
+```
+
+## 라우트와 탭
+
+JSX 라우트를 등록하고, 현재 라우트를 확인하고, 홈, 세션, 플러그인 페이지로 이동할 수 있습니다.
+
+```tsx
+const unregister = context.ui.router.register({
+  name: "dashboard",
+  render: ({ data }) => <text>{String(data?.title ?? "Acme")}</text>,
+})
+const current = context.ui.router.current()
+context.ui.router.navigate({ type: "plugin", name: "dashboard", data: { title: "Status" } })
+context.ui.router.navigate({ type: "session", sessionID })
+context.ui.router.navigate({ type: "home" })
+return unregister
+```
+
+세션 탭이 활성화되어 있으면 탭을 나열하고, 열고, 포커스하고, 이동하고, 닫을 수 있습니다. `open`은 포커스를 변경하지
+않으며, `focus`는 필요하면 탭을 엽니다.
+
+```ts
+if (context.ui.tabs.enabled()) {
+  context.ui.tabs.open(backgroundSessionID)
+  context.ui.tabs.focus(sessionID)
+  const tabs = context.ui.tabs.list()
+  context.ui.tabs.move(backgroundSessionID, tabs.length - 1)
+  context.ui.tabs.close(sessionID)
+  context.ui.tabs.close()
+}
+```
+
+## 모델
+
+프롬프트에서 선택된 모델을 읽고 변형(variant)을 변경합니다. `current()`와 `variant.list()`는 Solid 계산 안에서 읽으면
+반응형으로 동작합니다. `variant`가 `undefined`이면 모델의 기본값을 뜻합니다.
+
+```ts
+const selected = context.ui.model.current()
+const variants = context.ui.model.variant.list()
+context.ui.model.variant.set("high")
+context.ui.model.variant.set(undefined)
+```
+
+선택된 모델이 없거나 모델에 해당 변형이 없으면 `variant.set`은 `false`를 반환합니다. 이를 명령에 바인딩하면 기본
+제공되는 변형 순환 동작을 대체할 수 있습니다. 예를 들어 모델 기본값을 건너뛰도록 만들 수 있습니다.
+
+```ts
+context.keymap.layer(() => ({
+  commands: [
+    {
+      id: "acme.variant.cycle",
+      title: "Cycle variants",
+      bind: "tab",
+      run() {
+        const variants = context.ui.model.variant.list()
+        if (variants.length === 0) return
+        const index = variants.indexOf(context.ui.model.current()?.variant ?? "")
+        context.ui.model.variant.set(variants[(index + 1) % variants.length])
+      },
+    },
+  ],
+}))
+```
+
+## 슬롯
+
+슬롯은 `app`, `home.footer`, `home.footer.status`, `prompt.footer`, `prompt.footer.status`, `prompt.footer.file`,
+`session.composer.top`, `sidebar.content`, `sidebar.footer` 위치에 JSX를 삽입하거나 대체합니다.
+
+```tsx
+return context.ui.slot({
+  append: "sidebar.content",
+  render: ({ sessionID }) => <text>{context.data.session.get(sessionID)?.title}</text>,
+})
+```
+
+배치 방식으로 `prepend`, `append`, `before`, `after`, `replace` 중 하나를 사용합니다.
+
+```tsx
+context.ui.slot({ prepend: "home.footer", render: () => <text>Before footer content</text> })
+context.ui.slot({ append: "home.footer", render: () => <text>After footer content</text> })
+context.ui.slot({ before: "home.footer", render: () => <text>Before footer slot</text> })
+context.ui.slot({ after: "home.footer", render: () => <text>After footer slot</text> })
+context.ui.slot({ replace: "home.footer", render: () => <text>New footer</text> })
+```
+
+기본 제공 하단 행을 대체하지 않고 내용을 추가하려면 `home.footer.status`를 사용하세요. 상태 영역에 추가한 내용은
+OpenCode의 상태 표시기 뒤, 버전 앞에 표시됩니다.
+
+```tsx
+context.ui.slot({ append: "home.footer.status", render: () => <text>SYNCED</text> })
+```
+
+### 세션 패널
+
+`session.panel`에 컴포넌트를 추가한 다음 명령에서 패널을 엽니다. 크기, 포커스, 전체 화면 표시는 호스트가 담당하고,
+패널의 내용은 플러그인이 담당합니다. 선택된 이름은 `panel.name`으로 모든 추가 항목에 전달되며, 각 항목이 렌더링 여부를
+결정합니다.
+
+```tsx
+import { Show } from "solid-js"
+
+context.ui.slot({
+  append: "session.panel",
+  render: (panel) => (
+    <Show when={panel.name === "acme.review"}>
+      <ReviewPanel panel={panel} />
+    </Show>
+  ),
+})
+
+context.ui.slot({
+  append: "app",
+  render: () => {
+    context.keymap.layer(() => ({
+      mode: "global",
+      commands: [
+        {
+          id: "acme.review",
+          title: "Open review",
+          slash: { name: "review" },
+          run: () => {
+            context.ui.panel.open("acme.review")
+          },
+        },
+      ],
+    }))
+    return null
+  },
+})
+```
+
+- 세션 밖에서 열면 `false`를 반환합니다.
+- 일반 슬롯이므로 다섯 가지 배치 방식과 기존 대체 순서 규칙이 모두 적용됩니다.
+- 독립적으로 선택할 수 있는 추가 항목에는 `append`를 사용해 서로 공존하도록 하세요. `replace`는 여전히 슬롯 전체를
+  차지합니다.
+- 이름은 공유되는 선택 값일 뿐, 등록을 통해 독점하는 것이 아닙니다. 충돌을 피하려면 `acme.review`처럼 플러그인 접두사를
+  붙인 이름을 사용하세요. 일치하는 렌더러가 없는 이름으로 열면 슬롯이 비어 있게 됩니다.
+- 표시 방식을 변경해도 마운트된 추가 항목은 유지됩니다. 패널을 닫으면 해제되며, 플러그인을 비활성화하면 일반적인 슬롯
+  정리 과정에서 해당 플러그인의 추가 항목이 제거됩니다.
+- 패널의 키보드 레이어와 입력 모드는 패널이 입력을 소유하는 동안에만 활성화됩니다.
+
+슬롯은 반응형 속성 `name`, `sessionID`, `width`, `presentation`, `focused`와 함께 `focus`, `close`,
+`toggleFullscreen` 작업을 받습니다. 터미널 폭이 좁으면 호스트가 전체 화면을 유지하므로, 사이드 패널을 표시할 공간이
+충분해질 때까지 `toggleFullscreen`은 아무 효과가 없습니다.
+
+```tsx
+import type { PanelInput } from "@opencode/plugin/tui/context"
+import { usePlugin } from "@opencode/plugin/tui"
+
+function ReviewPanel(props: { panel: PanelInput }) {
+  const context = usePlugin()
+  context.keymap.layer(() => ({
+    commands: [
+      {
+        id: "acme.review.fullscreen",
+        bind: "f",
+        run: props.panel.toggleFullscreen,
+      },
+    ],
+  }))
+  return <text>Reviewing {props.panel.sessionID}</text>
+}
+```
+
+처음부터 전체 화면으로 표시하도록 요청하거나, 활성 패널을 확인하거나, 다른 플러그인의 패널에 영향을 주지 않고 자신의
+패널을 닫을 수 있습니다.
+
+```ts
+context.ui.panel.open("acme.review", { presentation: "fullscreen" })
+const current = context.ui.panel.current()
+context.ui.panel.close()
+```
+
+## 포맷
+
+표시용으로 파일 시스템 경로를 포맷합니다. 홈 디렉터리 축약도 포함됩니다.
+
+```ts
+const displayPath = context.ui.format.path(context.location?.directory ?? "/home/me/project")
+```
+
+## 게시와 로드
+
+CLI 플러그인은 `./tui`로 노출하고, 플러그인이 JSX를 렌더링한다면 OpenTUI 피어 의존성을 추가하세요.
+
+```json title="package.json"
+{
+  "name": "opencode-acme-plugin",
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts",
+    "./tui": "./src/tui.tsx"
+  },
+  "dependencies": {
+    "@opencode/plugin": "latest"
+  },
+  "peerDependencies": {
+    "@opentui/core": ">=0.5.8",
+    "@opentui/solid": ">=0.5.8",
+    "solid-js": ">=1.9.0"
+  }
+}
+```
+
+자동으로 로드되도록 [메인 플러그인](/build/plugins)과 함께 `./tui`를 내보내세요.
+
+```ts title="src/index.ts"
+import { Plugin } from "@opencode/plugin"
+
+export default Plugin.define({
+  id: "acme.server",
+  setup() {},
+})
+```
+
+CLI 전용 패키지는 원격 서버에 연결할 때도 활성 상태를 유지하도록 [`cli.json`](/cli/plugins)에 구성하세요.
+
+```json title="cli.json"
+{
+  "plugins": ["opencode-acme-plugin"]
+}
+```

@@ -1,0 +1,133 @@
+---
+title: "Effect"
+---
+
+`@opencode/client/effect` คือไคลเอนต์สำหรับ HTTP API ของ OpenCode ที่ออกแบบมาสำหรับ Effect โดยเฉพาะ คืนค่าเป็น Effect และ Stream ที่มีชนิดข้อมูลกำกับ และ decode การตอบกลับเป็นค่า schema ของ OpenCode
+
+```sh
+bun add @opencode/client effect
+```
+
+## สร้างไคลเอนต์
+
+สร้างไคลเอนต์ด้วย URL ของเซิร์ฟเวอร์ แล้วเรียกเมธอดที่จัดกลุ่มตามทรัพยากรของ API
+
+```ts
+import { AbsolutePath, Location, OpenCode } from "@opencode/client/effect"
+import { Effect } from "effect"
+import { FetchHttpClient } from "effect/http"
+
+const program = Effect.gen(function* () {
+  const client = yield* OpenCode.make({ baseUrl: "http://localhost:4096" })
+  const session = yield* client.session.create({
+    location: Location.Ref.make({ directory: AbsolutePath.make("/workspace") }),
+  })
+  yield* client.session.prompt({
+    sessionID: session.id,
+    text: "Review the current changes",
+  })
+  return session
+})
+
+const session = await Effect.runPromise(program.pipe(Effect.provide(FetchHttpClient.layer)))
+```
+
+## Header และคำขอ
+
+กำหนด header เริ่มต้นไว้ที่ `HttpClient` ที่ส่งเข้ามา การดำเนินการแบบเนทีฟใช้การ interrupt ตามปกติของ Effect ในการยกเลิก ส่วนเมธอด RPC รับตัวเลือก location, header และ signal ต่อการเรียกแต่ละครั้งได้เพิ่มเติม
+
+```ts
+import { HttpClient, HttpClientRequest } from "effect/http"
+
+const httpClient = yield * HttpClient.HttpClient
+const client =
+  yield *
+  OpenCode.make({ baseUrl: "https://opencode.example.com" }).pipe(
+    Effect.provideService(
+      HttpClient.HttpClient,
+      HttpClient.mapRequest(httpClient, (request) =>
+        HttpClientRequest.setHeaders(request, { authorization: `Bearer ${process.env.OPENCODE_TOKEN}` }),
+      ),
+    ),
+  )
+
+const sessions = yield * client.session.list()
+```
+
+## สตรีมอีเวนต์
+
+การดำเนินการแบบสตรีม เช่น `event.subscribe()` และ `session.log()` คืนค่าเป็น Effect Stream
+
+```ts
+import { Effect, Stream } from "effect"
+
+yield *
+  client.event.subscribe().pipe(Stream.runForEach((event) => Effect.logInfo("OpenCode event", { type: event.type })))
+```
+
+Stream อีเวนต์ทั้งแบบเนทีฟและแบบ RPC ใช้การเชื่อมต่อแบบ lazy ร่วมกันหนึ่งการเชื่อมต่อต่อไคลเอนต์ การสร้าง Stream ยังไม่เชื่อมต่อ จะเชื่อมต่อเมื่อเริ่มใช้ข้อมูล การหยุดผู้ใช้ข้อมูล (consumer) รายหนึ่งไม่กระทบรายอื่น และเมื่อผู้ใช้ข้อมูลรายสุดท้ายออกไป แหล่งข้อมูลจะปิดลง เมื่อแหล่งข้อมูลถึง EOF หรือล้มเหลว การ subscribe ที่มีอยู่จะสิ้นสุดลงโดยไม่ลองใหม่หรือเล่นซ้ำ (replay) อัตโนมัติ ผู้ใช้ข้อมูลแบบเนทีฟที่เข้ามาภายหลังจะได้รับ marker การเชื่อมต่อปัจจุบันก่อนอีเวนต์สด
+
+## RPC ปลั๊กอิน
+
+ใช้สัญญาที่ใช้ร่วมกันชุดเดียวกับไคลเอนต์แบบ Promise และปลั๊กอินฝั่งเซิร์ฟเวอร์:
+
+```ts
+import { Acme } from "opencode-acme-plugin/rpc"
+
+const acme = client.rpc(Acme)
+const result = yield * acme.search({ query: "hello" }, { location: { directory: "/workspace" } })
+
+yield *
+  acme.events
+    .subscribe("updated")
+    .pipe(
+      Stream.runForEach((event) =>
+        Effect.logInfo("Plugin event", { type: event.type, location: event.location, text: event.data.text }),
+      ),
+    )
+```
+
+อาร์กิวเมนต์และผลลัพธ์ของเมธอดอนุมานจากสัญญา อาร์กิวเมนต์ตัวที่สองซึ่งไม่บังคับใช้เก็บ `location`, `signal` และ `headers` หากไม่ระบุ location จะใช้ค่าเริ่มต้นตามปกติของคำขอ การเรียกจะถูก interrupt ไปพร้อมกับ Effect ที่ใช้ผลลัพธ์นั้น แผนผังข้อผิดพลาดของเมธอดจะอนุมานไว้ใน error channel ของ Effect ข้อผิดพลาดที่ประกาศไว้จะ decode ผ่าน schema ของข้อมูล subclient ที่มีชนิดข้อมูลจะถอด wrapper ข้อผิดพลาด HTTP RPC ทั่วไปออก ส่วนชนิด `rpc.*` ที่สงวนไว้ใช้ระบุความล้มเหลวของเฟรมเวิร์ก
+
+อีเวนต์ RPC เป็น Stream ที่มีชนิดข้อมูลกำกับ ไม่ใช่ listener `on` แบบ callback โดยรับอีเวนต์ของ RPC นั้นจากทุก location แต่ละอีเวนต์มี `location` เสมอ และมีชนิดที่ขึ้นต้นด้วย prefix ตามปกติ เช่น `rpc.acme.updated` ซึ่งต่างจาก handle ของปลั๊กอินฝั่งเซิร์ฟเวอร์ที่ผูกกับ location ของตัวเอง ดูนิยาม schema การลงทะเบียน และพฤติกรรมของการ subscribe แบบสดได้ที่[RPC ปลั๊กอิน Effect](/build/plugins/effect/rpc)
+
+## บริการเบื้องหลังภายในเครื่อง
+
+entrypoint `@opencode/client/effect/service` ซึ่งใช้ได้เฉพาะ Node ใช้ค้นหา เริ่ม ยืนยันตัวตน และหยุดบริการเบื้องหลังภายในเครื่องในรูปแบบ Effect
+
+```sh
+bun add @effect/platform-node
+```
+
+สร้างไคลเอนต์ที่ยืนยันตัวตนแล้วสำหรับบริการที่ ensure ไว้
+
+```ts
+import { NodeFileSystem } from "@effect/platform-node"
+import { OpenCode } from "@opencode/client/effect"
+import { Service } from "@opencode/client/effect/service"
+import { Effect } from "effect"
+import { FetchHttpClient, HttpClient, HttpClientRequest } from "effect/http"
+
+const program = Effect.gen(function* () {
+  const endpoint = yield* Service.ensure()
+  const httpClient = yield* HttpClient.HttpClient
+  const client = yield* OpenCode.make({ baseUrl: endpoint.url }).pipe(
+    Effect.provideService(
+      HttpClient.HttpClient,
+      HttpClient.mapRequest(httpClient, (request) => HttpClientRequest.setHeaders(request, Service.headers(endpoint))),
+    ),
+  )
+  return yield* client.server.info()
+})
+
+const health = await Effect.runPromise(
+  program.pipe(Effect.provide(FetchHttpClient.layer), Effect.provide(NodeFileSystem.layer)),
+)
+```
+
+ค้นหาบริการโดยไม่เริ่มทำงาน หรือหยุดอินสแตนซ์บริการที่ลงทะเบียนไว้ตัวนั้นโดยเฉพาะ
+
+```ts
+const endpoint = yield * Service.discover()
+yield * Service.stop()
+```

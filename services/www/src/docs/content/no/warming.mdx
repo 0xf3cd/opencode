@@ -1,0 +1,134 @@
+---
+title: "Oppvarming"
+---
+
+Øktoppvarming sender modellforespørsler med jevne mellomrom for å bevare prompt-cacher eller annen kortvarig tilstand hos
+leverandøren mens du tar en pause mellom prompter. Det er deaktivert som standard.
+
+Aktiver oppvarming i en hvilken som helst [OpenCode-konfigurasjonsfil](/config):
+
+```jsonc title="opencode.jsonc"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "warming": true,
+}
+```
+
+Med denne konfigurasjonen varmer OpenCode opp en nylig aktiv økt etter fire minutter uten modellforespørsler. Det
+fortsetter hvert fjerde minutt til det har gått 30 minutter siden den siste forespørselen som ikke var en
+oppvarmingsforespørsel.
+
+## Alternativer
+
+Bruk objektformen for å endre oppvarmingsprompten, ventetiden eller det aktive tidsvinduet:
+
+```jsonc title="opencode.jsonc"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "warming": {
+    "prompt": "Do not perform any work. Reply with exactly: OK",
+    "interval": "5 minutes",
+    "duration": "1 hour",
+  },
+}
+```
+
+| Felt | Standard | Formål |
+| --- | --- | --- |
+| `prompt` | Instruksjon om å holde økten i live | Legges til som en midlertidig brukermelding i hver oppvarmingsforespørsel. Standardprompten ber modellen om ikke å gjøre noe arbeid, ikke bruke verktøy og svare med `OK`. |
+| `interval` | `"4 minutes"` | Inaktiv tid før neste oppvarmingsforespørsel. |
+| `duration` | `"30 minutes"` | Tidsvindu for oppvarming, målt fra den siste modellforespørselen som ikke var en oppvarmingsforespørsel. |
+
+Felt du utelater i objektet, beholder standardverdiene. Dette endrer for eksempel bare intervallet:
+
+```jsonc title="opencode.jsonc"
+{
+  "warming": {
+    "interval": "2 minutes",
+  },
+}
+```
+
+## Varigheter
+
+`interval` og `duration` godtar strenger for varighet. Begge må gi endelige verdier større enn null. Ellers hopper
+OpenCode over oppvarmingen og logger en advarsel.
+
+```jsonc title="opencode.jsonc"
+{
+  "warming": {
+    "interval": "30 seconds",
+    "duration": "1 hour",
+  },
+}
+```
+
+## Tidsforløp
+
+Oppvarmingen starter etter en modellforespørsel som ikke er en oppvarmingsforespørsel. Når en oppvarmingsforespørsel er
+ferdig, starter neste ventetid, men det aktive tidsvinduet forlenges ikke.
+
+```text
+00:00  normal model request
+00:04  warming request
+00:08  warming request
+00:30  warming stops
+```
+
+All ny modellaktivitet som ikke er oppvarming, nullstiller begge tidtakerne. Hvis intervallet er like langt som eller
+lengre enn varigheten, utløper det aktive tidsvinduet før en oppvarmingsforespørsel blir sendt.
+
+```text
+00:00  normal model request
+00:20  normal model request; window restarts
+00:24  warming request
+00:50  warming stops
+```
+
+## Forespørsler
+
+En oppvarmingsforespørsel bruker den gjeldende modellen, agenten, instruksjonene og samtalekonteksten til økten. OpenCode
+legger til den konfigurerte prompten midlertidig, gjør ett modellkall og forkaster svaret.
+
+```text
+[current session context]
+[transient user message: keep-alive prompt]
+→ one model response, discarded
+```
+
+Forespørselen tar ikke imot inndata, legger ikke til meldinger i historikken og endrer ikke den varige tilstanden til
+økten. OpenCode utfører ikke lokale verktøykall og fortsetter ingen verktøyløkke. Standardprompten ber også modellen om
+ikke å bruke verktøy.
+
+## Feil
+
+Feil ved oppvarming logges uten at økten mislykkes eller endres. OpenCode venter til neste intervall før det prøver igjen,
+mens det opprinnelige aktive tidsvinduet fortsetter å telle ned.
+
+```text
+00:04  warming request fails; session is unchanged
+00:08  next warming attempt
+```
+
+## Kostnader
+
+Oppvarmingsforespørsler er ekte forespørsler til leverandøren. De kan bruke tokens, koste penger, telle mot
+hastighetsbegrensninger og mislykkes på samme måte som andre modellforespørsler.
+
+- Kortere intervaller gir flere forespørsler.
+- Lengre varigheter gir rom for flere oppvarmingsforespørsler.
+- Aktiver oppvarming bare når fordelen hos leverandøren er verdt den ekstra bruken.
+
+Med standardverdiene kan det for eksempel bli opptil sju oppvarmingsforsøk i løpet av ett sammenhengende vindu på 30
+minutter: etter 4, 8, 12, 16, 20, 24 og 28 minutter.
+
+## Deaktivering
+
+Sett `warming` til `false` for å deaktivere oppvarming eksplisitt. Hvis du utelater feltet, forblir oppvarming også
+deaktivert.
+
+```jsonc title="opencode.jsonc"
+{
+  "warming": false,
+}
+```

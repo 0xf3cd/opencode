@@ -1,0 +1,426 @@
+---
+title: "Indstillinger"
+description: "Konfigurer alle indstillinger for OpenCodes CLI og TUI."
+---
+
+CLI-indstillinger styrer kun terminalklienterne. De er adskilt fra server- og projektindstillingerne i
+`opencode.json(c)`.
+
+Tryk på `Ctrl+P`, og vælg **Open settings** for at ændre almindelige indstillinger fra TUI'en.
+
+<img src={`${import.meta.env.BASE_URL}assets/docs/cli/settings.png`} alt="Indstillingsdialogen i OpenCodes TUI" />
+
+## Konfigurationsfil
+
+OpenCode gemmer CLI-indstillinger i én global fil:
+
+```text
+~/.config/opencode/cli.json
+```
+
+Når `$XDG_CONFIG_HOME` er sat, bruger OpenCode:
+
+```text
+$XDG_CONFIG_HOME/opencode/cli.json
+```
+
+Der findes ingen projektlokal fil med CLI-indstillinger. Tilføj det publicerede JSON Schema for at få validering og
+autofuldførelse:
+
+```json title="cli.json"
+{
+  "$schema": "https://opencode.ai/v2/cli.json"
+}
+```
+
+OpenCode tilføjer `$schema`, når filen oprettes eller migreres. Ukendte indstillinger afvises, og gyldige ændringer
+genindlæses, mens TUI'en kører.
+
+## Inline-konfiguration
+
+Sæt `OPENCODE_CLI_CONFIG_CONTENT` for at anvende CLI-indstillinger fra inline JSON:
+
+```sh
+OPENCODE_CLI_CONFIG_CONTENT='{"tabs":{"mode":"off"}}' opencode
+```
+
+OpenCode fletter inline-indstillingerne oven på den globale `cli.json`. Indlejrede objekter flettes, mens arrays og
+skalarværdier fra miljøet erstatter de globale værdier. Inline-indstillingerne er bestemmende, så længe variablen er sat.
+
+## Udseende
+Vælg et tema, styr animationer i brugerfladen, og tilsidesæt terminalens markør:
+
+```json title="cli.json"
+{
+  "theme": {
+    "name": "tokyonight",
+    "mode": "system"
+  },
+  "animations": true,
+  "cursor": {
+    "style": "block",
+    "blinking": true
+  }
+}
+```
+
+<div class="docs-table-scroll" role="region" aria-label="Indstillinger for udseende" tabIndex={0}>
+
+| Indstilling       | Værdier                                 | Beskrivelse                                                              |
+| ----------------- | --------------------------------------- | ------------------------------------------------------------------------ |
+| `theme.name`      | streng                                  | Vælger et indbygget, brugerdefineret eller terminalafledt tema.          |
+| `theme.mode`      | `system`, `dark` eller `light`          | Følger terminalens udseende eller låser temaet til én farvetilstand.     |
+| `animations`      | boolesk                                 | Slår animationer i brugerfladen til.                                     |
+| `cursor.style`    | `block`, `underline`, `line`, `default` | Angiver markørens form. `default` bevarer terminalens egen markørform.   |
+| `cursor.blinking` | boolesk                                 | Styrer om markøren blinker. Har ingen effekt, når stilen er `default`.   |
+
+</div>
+
+Se [Tema](/cli/theme) for at vælge og oprette temaer.
+
+## Input
+
+Konfigurer musefangst, rulning, editorkontekst, indsættelser og forhåndsvisning af billeder i prompten:
+
+```json title="cli.json"
+{
+  "mouse": true,
+  "scroll": {
+    "speed": 3,
+    "acceleration": false
+  },
+  "prompt": {
+    "editor": true,
+    "paste": "compact",
+    "image_preview": false
+  }
+}
+```
+
+<div class="docs-table-scroll" role="region" aria-label="Indstillinger for input" tabIndex={0}>
+
+| Indstilling                | Værdier                         | Beskrivelse                                                                 |
+| -------------------------- | ------------------------------- | --------------------------------------------------------------------------- |
+| `mouse`                    | boolesk                         | Slår musefangst i terminalen til.                                           |
+| `scroll.speed`             | tal, mindst `0.001`             | Angiver en fast afstand pr. rulletrin.                                      |
+| `scroll.acceleration`      | boolesk                         | Accelererer gentagen rulning. Når den er slået til, har den forrang for hastigheden. |
+| `prompt.editor`            | boolesk                         | Medtager den aktive editorfil eller markering som kontekst i prompten.      |
+| `prompt.paste`             | `compact` eller `full`          | Viser store indsættelser som kompakte pladsholdere eller som fuld tekst.    |
+| `prompt.image_preview`     | boolesk                         | Viser forhåndsvisninger af vedhæftede billeder over promptfeltet.           |
+
+</div>
+
+## Sessioner
+
+Konfigurer hvordan sessioner vises i TUI'en i fuld skærm, og hvor nye sessioner starter:
+
+```json title="cli.json"
+{
+  "session": {
+    "sidebar": "auto",
+    "scrollbar": false,
+    "thinking": "hide",
+    "grouping": "auto",
+    "image_preview": false,
+    "tps": true,
+    "markdown": "rendered",
+    "new_location": "launch",
+    "permissions": "prompt"
+  }
+}
+```
+
+<div class="docs-table-scroll" role="region" aria-label="Indstillinger for sessioner" tabIndex={0}>
+
+| Indstilling             | Værdier                     | Beskrivelse                                                                  |
+| ----------------------- | --------------------------- | ---------------------------------------------------------------------------- |
+| `session.sidebar`       | `auto` eller `hide`         | Viser sidepanelet, når der er plads, eller skjuler det altid.                |
+| `session.scrollbar`     | boolesk                     | Viser rullepanelet i samtaleforløbet.                                        |
+| `session.thinking`      | `show` eller `hide`         | Viser eller skjuler modellens ræsonnement som standard.                      |
+| `session.grouping`      | `auto` eller `none`         | Grupperer relaterede elementer i forløbet eller viser hvert element for sig. |
+| `session.image_preview` | boolesk                     | Viser billeder fra brugerens vedhæftninger og værktøjsresultater i forløbet. |
+| `session.tps`           | boolesk                     | Viser output-tokens pr. sekund i assistentens bundlinje.                     |
+| `session.markdown`      | `source` eller `rendered`   | Viser Markdown-syntaksmarkører eller skjuler dem i renderet indhold.         |
+| `session.new_location`  | `launch` eller `inherit`    | Starter i den mappe, TUI'en blev startet fra, eller arver den aktive sessions placering. |
+| `session.permissions`   | `prompt` eller `autoaccept` | Spørger ved anmodninger om tilladelse eller accepterer alle automatisk.      |
+
+</div>
+
+## Faner
+
+Konfigurer den vedvarende fanebjælke for sessioner:
+
+```json title="cli.json"
+{
+  "tabs": {
+    "mode": "auto",
+    "scope": "cwd",
+    "layout": "horizontal",
+    "indicators": "status"
+  }
+}
+```
+
+Den ældre booleske indstilling `tabs.enabled` understøttes stadig: `true` svarer til `on`, og `false` svarer til `off`.
+OpenCode læser den uden at omskrive konfigurationsfilen.
+
+<div class="docs-table-scroll" role="region" aria-label="Indstillinger for faner" tabIndex={0}>
+
+| Indstilling       | Værdier                       | Beskrivelse                                                                   |
+| ----------------- | ----------------------------- | ----------------------------------------------------------------------------- |
+| `tabs.mode`       | `auto`, `on` eller `off`      | Bruger faner automatisk, altid eller aldrig. Auto skjuler dem i Herdr.        |
+| `tabs.scope`      | `cwd` eller `global`          | Holder separate faner pr. arbejdsmappe eller deler dem globalt.               |
+| `tabs.layout`     | `horizontal` eller `vertical` | Placerer fanerne i en vandret bjælke eller et lodret sidepanel.               |
+| `tabs.indicators` | `status` eller `numbers`      | Viser statusikoner eller altid fanenumre.                                     |
+
+</div>
+
+Talindikatorer beholder statusfarver og baggrundsanimationer. Genvejene Ctrl+tal skifter fane i begge
+indikatortilstande.
+
+## Diffs
+
+Konfigurer det indledende omfang og visningen af diffs:
+
+```json title="cli.json"
+{
+  "diffs": {
+    "source": "branch",
+    "wrap": "word",
+    "tree": true,
+    "single": false,
+    "view": "auto"
+  }
+}
+```
+
+<div class="docs-table-scroll" role="region" aria-label="Indstillinger for diffs" tabIndex={0}>
+
+| Indstilling    | Værdier                                       | Beskrivelse                                                    |
+| -------------- | --------------------------------------------- | -------------------------------------------------------------- |
+| `diffs.source` | `branch`, `committed`, `working` eller `turn` | Angiver det indledende omfang for gennemgangen.                |
+| `diffs.wrap`   | `word` eller `none`                           | Ombryder lange linjer ved ord eller lader dem være uombrudte.   |
+| `diffs.tree`   | boolesk                                       | Viser filtræet for diffet.                                     |
+| `diffs.single` | boolesk                                       | Viser kun patchen for den valgte fil.                          |
+| `diffs.view`   | `auto`, `split` eller `unified`               | Angiver layoutet. `auto` vælger ud fra den tilgængelige bredde. |
+
+</div>
+
+`branch` viser **All**: branchens commits og lokale ændringer. `committed` viser kun branchens commits, og `working`
+viser staged, unstaged og usporede ændringer. `turn` viser **Last turn**: de filer, sessionen ændrede i sin seneste tur.
+Visningen opdateres, når sessionen afslutter en tur, og falder tilbage til `branch`, når `/diff` ikke åbnes fra en
+session.
+
+Tryk på `d` i `/diff` for at ændre omfanget, eller vælg en sammenligningsbranch under **Base**. Disse valg gælder, indtil
+TUI'en afsluttes, og ændrer ikke `cli.json`.
+
+## Advarsler
+
+Slå systemnotifikationer og opmærksomhedslyde til uafhængigt af hinanden:
+
+```json title="cli.json"
+{
+  "attention": {
+    "notifications": true,
+    "sound": true,
+    "volume": 0.4,
+    "sound_pack": "opencode.default",
+    "sounds": {
+      "permission": "/home/me/sounds/permission.wav"
+    }
+  }
+}
+```
+
+<div class="docs-table-scroll" role="region" aria-label="Indstillinger for advarsler" tabIndex={0}>
+
+| Indstilling               | Værdier                | Beskrivelse                                                                                              |
+| ------------------------- | ---------------------- | -------------------------------------------------------------------------------------------------------- |
+| `attention.notifications` | boolesk                | Viser systemnotifikationer, normalt når terminalen ikke har fokus.                                       |
+| `attention.sound`         | boolesk                | Afspiller opmærksomhedslyde.                                                                             |
+| `attention.volume`        | tal fra `0` til `1`    | Angiver lydstyrken.                                                                                      |
+| `attention.sound_pack`    | streng                 | Vælger ID'et for den aktive lydpakke.                                                                    |
+| `attention.sounds`        | objekt                 | Tilsidesætter lydfiler for `default`, `question`, `permission`, `error`, `done` eller `subagent_done`.   |
+
+</div>
+
+En ugyldig eller ulæselig tilsidesættelse falder tilbage til den indbyggede lyd for den hændelse.
+
+Efter en opdatering viser TUI'en én gang højdepunkterne fra den nye udgivelse på startskærmen. Kør `/highlights` for at
+se dem igen, eller slå dialogen fra:
+
+```json title="cli.json"
+{
+  "highlights": false
+}
+```
+
+## Terminal
+
+Konfigurer integrationen med terminalen:
+
+```json title="cli.json"
+{
+  "terminal": {
+    "title": true,
+    "copy": "select"
+  }
+}
+```
+
+<div class="docs-table-scroll" role="region" aria-label="Indstillinger for terminal" tabIndex={0}>
+
+| Indstilling      | Værdier                 | Beskrivelse                                                                                              |
+| ---------------- | ----------------------- | -------------------------------------------------------------------------------------------------------- |
+| `terminal.title` | boolesk                 | Opdaterer terminalvinduets titel.                                                                        |
+| `terminal.copy`  | `manual` eller `select` | Kopierer manuelt eller straks efter markering. Platformens standard er `manual` på Windows og `select` andre steder. |
+
+</div>
+
+## Mini
+
+Gruppen `mini` styrer [`opencode mini`](/cli#mini), den minimale interaktive brugerflade:
+
+```json title="cli.json"
+{
+  "mini": {
+    "thinking": "show",
+    "tools": "hide",
+    "shell_output": "hide",
+    "turn_summary": "show",
+    "footer": "show",
+    "splash": "show",
+    "work_spinner": "block-soft-slide",
+    "mono": false,
+    "replay": true,
+    "replay_limit": 200
+  }
+}
+```
+
+<div class="docs-table-scroll" role="region" aria-label="Indstillinger for mini" tabIndex={0}>
+
+| Indstilling         | Værdier                        | Beskrivelse                                                                        |
+| ------------------- | ------------------------------ | ---------------------------------------------------------------------------------- |
+| `mini.thinking`     | `show` eller `hide`            | Viser eller skjuler modellens ræsonnement.                                         |
+| `mini.tools`        | `show` eller `hide`            | Viser eller skjuler værktøjskald og den assistenttekst, der kommer før dem.        |
+| `mini.shell_output` | `show` eller `hide`            | Viser eller skjuler rå output fra shell-værktøjet.                                 |
+| `mini.turn_summary` | `show` eller `hide`            | Viser eller skjuler oversigten over agent, model og varighed i scrollback-historikken. |
+| `mini.footer`       | `show` eller `hide`            | Viser eller skjuler vedvarende oplysninger om aktivitet, model, forbrug og kontekst. |
+| `mini.splash`       | `show` eller `hide`            | Viser eller skjuler splash-bannere ved start og afslutning.                        |
+| `mini.work_spinner` | spinner-ID                     | Vælger arbejdsanimationen i bundlinjen.                                            |
+| `mini.mono`         | boolesk                        | Bruger monokromt ASCII-output.                                                     |
+| `mini.replay`       | boolesk                        | Gendanner sessionshistorikken ved genoptagelse og ændring af terminalens størrelse. |
+| `mini.replay_limit` | positivt heltal                | Begrænser genafspilningen til de nyeste beskeder. Standardgrænsen er `200`.        |
+
+</div>
+
+Tilgængelige spinner-ID'er:
+
+```text
+block-soft-slide  block-soft-sweep  block-low-comet  block-low-duet
+block-shuttle     block-bridge      block-squeeze    small-toggle
+square-toggle     grow-shrink       quadrant-orbit   crosshatch
+density-wave      seed
+```
+
+Kommandolinjeflag for genafspilning i `mini` tilsidesætter disse indstillinger for det pågældende kald.
+
+## Tastaturgenveje
+
+Tilsidesæt en kommandos tastaturgenvej og leader-tastens timeout:
+
+```json title="cli.json"
+{
+  "keybinds": {
+    "leader": "ctrl+x",
+    "app.exit": ["ctrl+c", "ctrl+d", "<leader>q"],
+    "prompt.paste": {
+      "key": "ctrl+v",
+      "event": "press",
+      "preventDefault": false,
+      "fallthrough": false
+    },
+    "help.show": false
+  },
+  "leader": {
+    "timeout": 2000
+  }
+}
+```
+
+<div class="docs-table-scroll" role="region" aria-label="Indstillinger for tastaturgenveje" tabIndex={0}>
+
+| Indstilling                 | Værdier                                  | Beskrivelse                                                          |
+| --------------------------- | ---------------------------------------- | -------------------------------------------------------------------- |
+| `keybinds.leader`           | genvejsværdi                             | Angiver den tast, som `<leader>` henviser til i andre genveje.       |
+| `keybinds.<command>`        | genvejsværdi                             | Tilsidesætter genvejen for ét kommando-ID.                           |
+| `keybinds.*.key`            | tastestreng eller beskrivelsesobjekt     | Vælger tasten for en genvej angivet som objekt.                      |
+| `keybinds.*.event`          | `press` eller `release`                  | Begrænser en genvej angivet som objekt til én tastehændelse.         |
+| `keybinds.*.preventDefault` | boolesk                                  | Styrer om terminalens standardadfærd for tasten forhindres.          |
+| `keybinds.*.fallthrough`    | boolesk                                  | Lader handlere med lavere prioritet modtage samme hændelse.          |
+| `leader.timeout`            | positivt heltal                          | Angiver hvor mange millisekunder der ventes efter leader-tasten.     |
+
+</div>
+
+En genvejsværdi kan være en streng, et array af alternativer eller et objekt. Brug `"none"` eller `false` for at slå en
+genvej fra. Se [Tastaturgenveje](/cli/keybinds) for den tilladte tastesyntaks, alle kommando-ID'er og alle
+standardgenveje.
+
+## Plugins
+
+Indlæs plugins, der kun gælder terminalen, i rækkefølge:
+
+```json title="cli.json"
+{
+  "plugins": [
+    "-opencode.notifications",
+    {
+      "package": "./plugins/status",
+      "options": {
+        "compact": true
+      }
+    }
+  ]
+}
+```
+
+<div class="docs-table-scroll" role="region" aria-label="Indstillinger for plugins" tabIndex={0}>
+
+| Indstilling          | Værdier         | Beskrivelse                                                       |
+| -------------------- | --------------- | ----------------------------------------------------------------- |
+| `plugins`            | array           | Angiver ordnede aktiveringsdirektiver og eksterne plugins.        |
+| `plugins[].package`  | streng          | Angiver et pakkenavn, en lokal sti eller en fil-URL.              |
+| `plugins[].options`  | objekt          | Sender plugin-specifikke indstillinger til det pågældende plugin. |
+
+</div>
+
+Se [Plugins](/cli/plugins) for pakkeformer, lokal registrering, jokertegn og direktiver til at slå plugins fra.
+
+## Fejlsøgning og eksperimenter
+
+Slå diagnosticering til, eller tilvælg et eksperiment, der er tilgængeligt i øjeblikket:
+
+```json title="cli.json"
+{
+  "debug": {
+    "devtools": false,
+    "timing": false,
+    "turn_tokens": "verbose"
+  },
+  "experimental": {}
+}
+```
+
+<div class="docs-table-scroll" role="region" aria-label="Indstillinger for fejlsøgning og eksperimenter" tabIndex={0}>
+
+| Indstilling         | Værdier                                   | Beskrivelse                                                                         |
+| ------------------- | ----------------------------------------- | ----------------------------------------------------------------------------------- |
+| `debug.devtools`    | boolesk                                   | Viser DevTools-fejlsøgningsbjælken.                                                 |
+| `debug.timing`      | boolesk                                   | Viser diagnosticering af tid til første tegning i fejlsøgningsbjælken.              |
+| `debug.turn_tokens` | boolesk eller `verbose`                   | Viser tokenforbrug pr. tur. `verbose` medtager også input til værktøjskald.         |
+| `experimental`      | objekt, der mapper funktions-ID'er til booleske værdier | Slår eksperimenter til eller fra. De kan ændres eller fjernes uden varsel. |
+
+</div>
+
+Brug kun funktions-ID'er, der aktuelt er angivet i TUI'ens **Experiments**-dialog. Ukendte ID'er har ingen effekt.

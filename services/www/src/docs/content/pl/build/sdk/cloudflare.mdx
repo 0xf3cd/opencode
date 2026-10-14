@@ -1,0 +1,89 @@
+---
+title: "Cloudflare"
+---
+
+W Cloudflare Durable Object używaj `@opencode/sdk/workerd`. Ten profil korzysta z magazynu SQLite obiektu, zapisuje
+trwałe zdarzenia na potrzeby odtworzenia stanu po eksmisji obiektu i zastępuje niedostępne usługi lokalnego systemu
+plików i procesów.
+
+```sh
+bun add @opencode/sdk
+```
+
+Przechowuj jednego hosta przez cały czas życia instancji Durable Object, zamiast tworzyć nowego przy każdym żądaniu.
+
+```ts
+import { OpenCodeWorkerd } from "@opencode/sdk/workerd"
+import myPlugin from "./my-plugin"
+
+export class OpenCodeDO {
+  private readonly opencode: Promise<OpenCodeWorkerd.Interface>
+
+  constructor(state: DurableObjectState) {
+    this.opencode = state.blockConcurrencyWhile(() =>
+      OpenCodeWorkerd.create({
+        storage: state.storage,
+        config: { default_agent: "build" },
+        plugins: [myPlugin],
+      }),
+    )
+  }
+
+  async fetch() {
+    const opencode = await this.opencode
+    return Response.json(await opencode.server.info())
+  }
+}
+```
+
+`blockConcurrencyWhile` wstrzymuje wszystkie zdarzenia Durable Object, dopóki host nie będzie gotowy, i resetuje obiekt,
+jeśli inicjalizacja się nie powiedzie. Zachowany Promise daje handlerom żądań bezpośredni dostęp do tego samego hosta
+po starcie.
+
+```ts
+constructor(state: DurableObjectState) {
+  this.opencode = state.blockConcurrencyWhile(() =>
+    OpenCodeWorkerd.create({ storage: state.storage }),
+  )
+}
+```
+
+Wrangler wybiera bezpieczne dla Workerd implementacje OpenCode na podstawie warunku pakietu `workerd`. Cloudflare może
+wyeksmitować Durable Object bez uruchamiania czyszczenia, dlatego poprawność działania nie zależy od wywołania
+`close()`.
+
+```jsonc title="wrangler.jsonc"
+{
+  "compatibility_flags": ["nodejs_compat"]
+}
+```
+
+## Dostosowywanie
+
+Dostosuj swoją instancję OpenCode, rejestrując wtyczki dołączone do paczki Twojego Workera. Przekaż wtyczki do
+`OpenCodeWorkerd.create()`, aby dostosować agentów, modele, narzędzia i inne zachowania:
+
+```ts
+import { Plugin } from "@opencode/plugin"
+import { OpenCodeWorkerd } from "@opencode/sdk/workerd"
+
+const plugin = Plugin.define({
+  id: "customize-agent",
+  async setup(ctx) {
+    await ctx.agent.transform((agents) => {
+      agents.update("build", (agent) => {
+        agent.description = "Builds features and fixes bugs for our team"
+      })
+    })
+  },
+})
+
+await OpenCodeWorkerd.create({
+  storage: state.storage,
+  config: { default_agent: "build" },
+  plugins: [plugin],
+})
+```
+
+Hooki, transformacje i narzędzia wtyczek oraz pełny kontekst wtyczki opisano w
+[pełnej dokumentacji wtyczek](/build/plugins).

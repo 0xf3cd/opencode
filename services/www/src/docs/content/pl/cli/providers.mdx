@@ -1,0 +1,144 @@
+---
+title: "Dostawcy"
+description: "Łączenie kont dostawców i zarządzanie danymi uwierzytelniającymi z poziomu CLI i TUI."
+---
+
+Połącz się z dostawcą w TUI, a następnie wybierz jeden z jego modeli:
+
+```text
+/connect
+/models
+```
+
+`/connect` wyświetla integracje dostępne na bieżącym serwerze i w bieżącym projekcie. Wybierz dostawcę, wskaż metodę
+uwierzytelniania, jeśli jest ich kilka, i postępuj zgodnie z instrukcjami.
+
+## TUI
+
+TUI obsługuje klucze API, OAuth i polecenia uwierzytelniania dostawców. OAuth otwiera URL autoryzacji lub wyświetla kod
+do wpisania; naciśnij `o`, aby otworzyć URL, i `c`, aby skopiować dane autoryzacji.
+
+```text
+/connect
+# Select OpenAI, then Codex device code (legacy).
+```
+
+Uruchom `/connect` ponownie, aby dodać kolejne konto. Wybranie już połączonego dostawcy otwiera listę jego kont, na
+której możesz aktywować zapisane konto, zmienić jego nazwę lub je usunąć.
+
+## CLI
+
+`auth login` udostępnia te same metody dostawców bez otwierania TUI. Bez argumentu z nazwą dostawcy polecenie otwiera
+interaktywny wybór dostawcy.
+
+```bash
+opencode auth login
+```
+
+Podaj ID lub nazwę integracji, aby pominąć pierwszy wybór. Użyj `--method key`, aby jawnie wybrać wprowadzenie klucza
+API.
+
+```bash
+opencode auth login anthropic --method key
+```
+
+ID metod zależą od dostawcy. Jeśli dostawca oferuje kilka metod, uruchom polecenie bez `--method`, aby zobaczyć
+dostępne opcje.
+
+```bash
+opencode auth login openai
+```
+
+Wprowadzanie klucza API i formularze dostawców wymagają interaktywnego terminala. Wymagają go również metody OAuth, w
+których trzeba wkleić kod autoryzacji.
+
+## Metody
+
+OpenCode otrzymuje dane uwierzytelniające dostawców przez cztery metody integracji:
+
+| Metoda | Działanie |
+| --- | --- |
+| Klucz API | Prosi o sekret i zapisuje go jako konto dostawcy. |
+| OAuth | Udostępnia URL do otwarcia w przeglądarce, kod urządzenia lub pole na kod autoryzacji, a następnie zapisuje tokeny i odświeża je, jeśli jest to obsługiwane. |
+| Polecenie | Uruchamia polecenie uwierzytelniania dostarczone przez dostawcę i zapisuje jego standardowe wyjście jako klucz. |
+| Środowisko | Odczytuje obsługiwaną zmienną z procesu serwera bez zapisywania jej. |
+
+Dostawcy mogą dodawać do metod z kluczem API i OAuth formularze z wymaganymi danymi, takimi jak nazwa zasobu Azure lub
+domena GitHub Enterprise. CLI i TUI wyświetlają te formularze przed rozpoczęciem uwierzytelniania.
+
+## Środowisko
+
+Ustaw obsługiwaną przez dostawcę zmienną środowiskową w procesie serwera, który wykonuje żądania do modeli. W przypadku
+jednorazowego prywatnego serwera przekaż ją przy uruchamianiu trybu samodzielnego.
+
+```bash
+ANTHROPIC_API_KEY=sk-ant-... opencode --standalone
+```
+
+W przypadku współdzielonego serwera w tle dodaj zmienną do jego zarządzanego środowiska. To zatrzymuje działającą
+usługę; kolejne polecenie OpenCode uruchomi ją z nową wartością.
+
+```bash
+opencode service set env ANTHROPIC_API_KEY sk-ant-...
+opencode auth list
+```
+
+Połączenia przez środowisko pojawiają się w `auth list` z typem `environment`. Nie są to konta: `auth logout` nie może
+ich usunąć, więc aby się rozłączyć, usuń zmienną. Zapisane konto ma pierwszeństwo przed połączeniem przez środowisko dla
+tej samej integracji.
+
+```bash
+opencode auth list
+opencode service unset env ANTHROPIC_API_KEY
+```
+
+Niektórzy dostawcy chmurowi zamiast zmiennej z kluczem API korzystają też z natywnego łańcucha danych
+uwierzytelniających dostępnych w środowisku:
+
+- Amazon Bedrock obsługuje domyślny łańcuch danych uwierzytelniających AWS, w tym profile, klucze dostępu w zmiennych
+  środowiskowych, web identity i dane uwierzytelniające kontenera. Obsługuje również `AWS_BEARER_TOKEN_BEDROCK`.
+- Google Vertex używa Application Default Credentials i projektu, który da się ustalić. Na przykład uwierzytelnij się
+  poleceniem `gcloud auth application-default login` i ustaw `GOOGLE_CLOUD_PROJECT`.
+- Azure udostępnia metodę połączenia **Microsoft Entra ID (Azure CLI)**, gdy zainstalowano `az`. Najpierw uruchom
+  `az login`, a następnie wybierz tę metodę w `/connect` lub `auth login azure`.
+
+```bash
+gcloud auth application-default login
+GOOGLE_CLOUD_PROJECT=my-project opencode
+```
+
+Konfigurację specyficzną dla dostawców i po stronie serwera opisano w sekcji [Dostawcy](/providers).
+
+## Konta
+
+Każde udane logowanie kluczem API, przez OAuth lub poleceniem tworzy zapisane konto. Najnowsze konto staje się aktywne;
+aktywne konto przełączysz, podając jego etykietę lub ID danych uwierzytelniających.
+
+```bash
+opencode auth list
+opencode auth switch anthropic work
+```
+
+Zapisane konto usuniesz poleceniem `auth logout`. Oba polecenia otwierają listę wyboru, gdy pominiesz argumenty.
+
+```bash
+opencode auth logout anthropic work
+```
+
+W TUI `/connect` udostępnia te same operacje dodawania, aktywowania, zmiany nazwy i usuwania zapisanych kont.
+
+## Przechowywanie
+
+Zapisane klucze API i tokeny OAuth są przechowywane w bazie danych SQLite serwera. Ścieżkę bazy danych lokalnego
+serwera wyświetlisz poleceniem:
+
+```bash
+opencode debug paths db
+```
+
+Zwykle w wydaniu stabilnym jest to `~/.local/share/opencode/opencode.db`; ścieżkę mogą zmienić `XDG_DATA_HOME`, kanał
+wydania i `OPENCODE_DB`. Nie edytuj bazy danych, aby zarządzać danymi uwierzytelniającymi; używaj `/connect` lub poleceń
+`auth`.
+
+Podczas migracji bazy danych V2 importuje obsługiwane dane uwierzytelniające ze starszego pliku `auth.json` w katalogu
+danych OpenCode. Nowe i zaktualizowane dane uwierzytelniające są zapisywane w SQLite, a nie z powrotem w tym pliku.

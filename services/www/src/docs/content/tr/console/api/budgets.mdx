@@ -1,0 +1,100 @@
+---
+title: "Bütçe API'si"
+description: "Her çalışma alanı üyesinin geçerli aylık bütçesini okuyun ve her üyenin özel bütçesini yönetin."
+---
+
+Bir entegrasyondan her çalışma alanı üyesinin geçerli aylık bütçesini okuyun ve her üyenin özel bütçesini yönetin.
+
+## Hızlı başlangıç
+
+[Console'da](https://opencode.ai/console) **All** izinlerine sahip bir [hizmet hesabı](/console/api#service-accounts)
+API anahtarı oluşturun. Yalnızca çıkarım izinli (Inference only) anahtarlar bütçe verilerine erişemez ve limitleri
+değiştiremez.
+
+```bash
+export CONSOLE_URL="https://opencode.ai/console"
+export SERVICE_API_KEY="oc_sk_..."
+```
+
+Üye bütçelerini listeleyin:
+
+```bash
+curl --fail-with-body \
+  "${CONSOLE_URL}/api/v1/budgets/members" \
+  --header "Authorization: Bearer ${SERVICE_API_KEY}" \
+  --header "Accept: application/json"
+```
+
+## Üye bütçelerini listeleme
+
+```text
+GET /api/v1/budgets/members
+```
+
+Yanıt, e-posta adresine göre sıralanmış tüm mevcut üyeleri içerir. Kaynağı (`source`) `custom` olan bir limit, üyeye
+özel bir geçersiz kılmadır; `default` kaynağı ise çalışma alanı varsayılanından devralınır. Limit ve kaynak null ise
+üyenin harcaması sınırsızdır.
+
+```json
+[
+  {
+    "user_id": "user_...",
+    "email": "alice@example.com",
+    "limit_micro_cents": "7525000000",
+    "spent_micro_cents": "1250000000",
+    "exceeded": false,
+    "resets_at": "2026-10-01T00:00:00.000Z",
+    "source": "custom",
+    "updated_at": "2026-09-03T12:00:00.000Z"
+  }
+]
+```
+
+Entegrasyonların hassasiyet kaybetmemesi için yanıttaki parasal alanlar mikrosent cinsinden ondalık dizelerdir. Bir ABD
+doları 100,000,000 mikrosente eşittir. Harcama ve sıfırlama zaman damgaları geçerli UTC takvim ayını kapsar. Üyeye özel
+bir geçersiz kılma yoksa `updated_at` değeri null olur.
+
+## Özel bütçe ayarlama
+
+```text
+PUT /api/v1/budgets/members/:user_id
+```
+
+Bir üye için $75.25 tutarında aylık bütçe ayarlayın:
+
+```bash
+curl --fail-with-body --request PUT \
+  "${CONSOLE_URL}/api/v1/budgets/members/user_..." \
+  --header "Authorization: Bearer ${SERVICE_API_KEY}" \
+  --header "Content-Type: application/json" \
+  --data '{"budget_dollars":75.25}'
+```
+
+`budget_dollars`, en fazla iki ondalık basamaklı, negatif olmayan bir ABD doları tutarı kabul eder. PUT isteği
+idempotenttir ve HTTP 204 döndürür. Listeleme işleminin döndürdüğü üye ID'sini kullanın.
+
+## Çalışma alanı varsayılanına dönme
+
+```text
+DELETE /api/v1/budgets/members/:user_id
+```
+
+Özel geçersiz kılmayı kaldırın:
+
+```bash
+curl --fail-with-body --request DELETE \
+  "${CONSOLE_URL}/api/v1/budgets/members/user_..." \
+  --header "Authorization: Bearer ${SERVICE_API_KEY}"
+```
+
+Bir geçersiz kılmayı silmek üyeyi silmez. Üye bundan sonra çalışma alanının varsayılan bütçesini devralır; çalışma
+alanında varsayılan bütçe yoksa harcaması sınırsız olur. İsteği tekrarlamak güvenlidir ve HTTP 204 döndürür.
+
+## Hatalar
+
+| Durum | Anlamı |
+| ------ | ------ |
+| `400` | Geçersiz üye ID'si veya bütçe tutarı. |
+| `401` | Hizmet API anahtarı eksik, geçersiz, süresi dolmuş veya iptal edilmiş. |
+| `403` | API anahtarının bütçeleri yönetme izni yok. |
+| `404` | Üye, API anahtarının bağlı olduğu çalışma alanında değil. |

@@ -1,0 +1,173 @@
+---
+title: "Sıkıştırma"
+---
+
+Bağlam sıkıştırma, uzun bir oturumda eski konuşmayı bir özetle değiştirerek yer açar. Böylece oturum, modelin bağlam
+sınırını aştıktan sonra da devam edebilir.
+
+## Nasıl çalışır
+
+Bir oturum modelin bağlam sınırına yaklaştığında OpenCode, en son konuşma dışındaki her şeyi özetler; bu son kısım
+varsayılan olarak yaklaşık 15,000 token'dır. Özet hazır olduğunda bu son konuşmanın önüne yerleştirilir ve oturum
+oradan devam eder.
+
+```text
+before   [ system prompt ][ older conversation ............ ][ recent 15k ][ pending work ]
+after    [ system prompt ][ summary ][ recent 15k ][ pending work ]
+```
+
+Model özeti geçmiş konuşma olarak görür. Sonraki sıkıştırmalar baştan başlamak yerine aynı özeti günceller.
+
+## Başlatma
+
+Otomatik sıkıştırma varsayılan olarak açıktır:
+
+```jsonc title="opencode.jsonc"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "compaction": {
+    "auto": true,
+    "keep": { "tokens": 15000 },
+  },
+}
+```
+
+Sıkıştırma kayıplıdır. Son ayrıntıların birebir korunması önemliyse `keep.tokens` değerini artırın veya otomatik
+sıkıştırmadan önce sıkıştırmayı kendiniz isteyin.
+
+## Elle
+
+Geçmiş kısa olsa bile sıkıştırmayı istediğiniz zaman isteyebilirsiniz:
+
+```sh
+opencode api post /api/session/ses_example/compact --data '{}'
+```
+
+`api` komutu arka plan hizmetini bulur ve onunla kimlik doğrulaması yapar. Yanıtı, isteğin kabul edildiğini doğrular;
+özetin tamamlanmasını beklemez. Ne zaman bittiğini öğrenmek için `session.compaction.*` olaylarını izleyin. İşlemin
+tamamı için [API referansına](/api) bakın.
+
+| Kural | Davranış |
+| --- | --- |
+| Zamanlama | Bir sonraki güvenli noktada, hâlâ bekleyen istemlerden önce çalışır. |
+| Tekrarlar | Biri beklemedeyken yapılan istekler onunla birleştirilir. |
+| Otomasyon | `compaction.auto` değeri `false` olduğunda da çalışır. |
+
+Birebir aynı yeniden denemeyi idempotent yapmak için bir `id` iletin. Aynı ID'yi farklı bir istek için yeniden kullanmak
+çakışma döndürür.
+
+```sh
+opencode api post /api/session/ses_example/compact --data '{"id":"msg_compact_once"}'
+```
+
+## Ayarlar
+
+`compaction` ayarını herhangi bir [OpenCode yapılandırma dosyasına](/config) ekleyin:
+
+```jsonc title="opencode.jsonc"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "compaction": {
+    "auto": false,
+    "keep": { "tokens": 24000 },
+    "buffer": 16000,
+  },
+}
+```
+
+| Alan | Varsayılan | Davranış |
+| --- | ---: | --- |
+| `auto` | `true` | Bağlam sınırına yaklaşıldığında otomatik olarak sıkıştırır ve bir sağlayıcı isteği çok uzun olduğu için reddettiğinde bir kez kurtarma yapar. Elle sıkıştırma her zaman çalışır. |
+| `keep.tokens` | `15000` | Özetin yanında tutulan son konuşmanın yaklaşık boyutu. Daha büyük değerler daha fazla ayrıntı korur ancak yeni işler için daha az yer bırakır. |
+| `buffer` | Sınırın 10%'u | Modelin sınırının altında boş tutulacak token sayısı. Daha büyük değerler otomatik sıkıştırmayı daha erken başlatır. |
+
+`keep.tokens` ve `buffer` negatif olmayan tam sayılar kabul eder.
+
+## Sağlayıcılar
+
+OpenCode varsayılan olarak özeti oturumun modelini kullanarak kendisi yazar. Bazı sağlayıcılar ise konuşmayı kendi
+taraflarında sıkıştırabilir. Bunu sağlayıcı veya model bazında `settings.compaction` ile etkinleştirin:
+
+```jsonc title="opencode.jsonc"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "providers": {
+    "openai": {
+      "settings": { "compaction": { "type": "native" } },
+      "models": {
+        "gpt-4.1": { "settings": { "compaction": { "type": "summary" } } },
+      },
+    },
+  },
+}
+```
+
+Model ayarı sağlayıcı ayarını geçersiz kılar. `native` sağlayıcının sıkıştırmasını, `summary` ise OpenCode'un kendi
+sıkıştırmasını kullanır.
+
+Yerel sıkıştırmada OpenCode, konuşmayı sağlayıcının sıkıştırma uç noktasına gönderir. Sağlayıcı, eski konuşmanın yerini
+tutan opak, şifrelenmiş bir öğe döndürür. `keep.tokens` sınırına kadar son mesajlarınız ve ekleriniz bu öğenin yanında
+tutulur:
+
+```text
+before   [ older conversation ........................ ][ recent user messages ]
+after    [ encrypted checkpoint + recent user messages ]
+```
+
+| Konu | Davranış |
+| --- | --- |
+| Destek | OpenAI Responses modelleri. Destek, dağıtıma ve modele göre değişir. |
+| Eşik | Özet sıkıştırmayla aynı `auto` ve `buffer` ayarları. Elle istekler de çalışır. |
+| Taşınabilirlik | Şifrelenmiş bir kontrol noktası yalnızca aynı sağlayıcı, model ve uç noktayla çalışır. Model değiştirirseniz oturum bunun yerine orijinal konuşmadan devam eder. |
+| Çok uzun | Sağlayıcı bir sıkıştırmayı çok uzun olduğu için reddederse OpenCode daha küçük bir istekle yeniden dener. Özete geçmez. |
+
+## Özetler
+
+Özet, başka bir ajanın işi oradan devralabileceği şekilde yapılandırılır:
+
+```md
+## Objective
+Finish the authentication migration.
+
+## Next Move
+- Update the callback handler.
+- Verify the login flow.
+```
+
+Özet; hedefi ve gereksinimleri, kararları, tamamlanan ve devam eden işleri, engelleri ve sonraki adımları ve ilgili
+dosyaları kapsar. Yanında tutulan son konuşmada uzun araç çıktıları kısaltılır ve ek verileri kısa bir açıklamayla
+değiştirilir.
+
+Sıkıştırmadan sonra talimat dosyalarınızın güncel sürümleri oturumun baseline'ı olur; [Talimatlar](/instructions)
+sayfasına bakın.
+
+## Sınırlar
+
+| Sınır | Sonuç |
+| --- | --- |
+| Model | Sıkıştırma oturumun modelini kullanır. Ayrı bir sıkıştırma modeli yoktur. |
+| Geçmiş | Sıkıştırmanın yerine koyabileceği eski bir konuşma olması gerekir. Bir istek çoğunlukla sabit talimatlardan ve araç şemalarından oluşuyorsa yer açamaz. |
+| Boyut | Sıkıştırılacak konuşmanın kendisi çok uzunsa OpenCode kısaltılmış bir metin sürümü gönderir ve en eski mesajlaşmaları dışarıda bırakabilir. |
+| Kurtarma | Çok uzun olduğu için reddedilen bir istek sıkıştırılır ve bir kez yeniden denenir. İkinci ret hata olarak döndürülür. |
+| Depolama | Önceki mesajlar artık modele gönderilmese bile saklanmaya devam eder. |
+
+Örneğin bu durumda sıkıştırma yardımcı olamaz:
+
+```text
+128k context = 120k fixed instructions and tools + 8k conversation
+```
+
+## Geçiş
+
+V1, son turları koruma (tail-turn) ve budama (pruning) davranışını kullanıyordu. V2 ise özetleri ve
+`compaction.keep.tokens` ayarını kullanır:
+
+```jsonc
+{
+  "compaction": {
+    "keep": { "tokens": 15000 }
+  }
+}
+```
+
+Bu sayfadaki ayarlar ve davranışlar V2 için geçerlidir.

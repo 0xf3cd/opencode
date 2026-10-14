@@ -1,0 +1,418 @@
+---
+title: "MCP sunucuları"
+---
+
+OpenCode, [Model Context Protocol](https://modelcontextprotocol.io/) sunucularına bağlanır ve araçlar, istemler, kaynaklar ve talimatlar gibi yetenekleri kullanıma sunar. MCP araçları model bağlamını tüketir; bu yüzden yalnızca ihtiyaç duyduğunuz sunucuları ekleyin.
+
+## Kurulum
+
+Uzak bir sunucuyu, onu kullanacak projenin içinden ekleyin ve ardından bağlantısını kontrol edin:
+
+```sh
+opencode mcp add context7 --url https://mcp.context7.com/mcp
+opencode mcp list
+```
+
+Komut, sunucuyu projenin [yapılandırmasına](/config) yazar. Sunucuyu tüm projelerde kullanılabilir kılmak için `--global` bayrağını ekleyin:
+
+```sh
+opencode mcp add context7 --global --url https://mcp.context7.com/mcp
+```
+
+Uzak sunucular varsayılan olarak OAuth kullanır. Liste `needs authentication` gösteriyorsa OpenCode'u açın, `/mcps` komutunu çalıştırın, sunucuyu seçin ve oturum açın. Bağlanan bir sunucu ajanın kullanımına hazırdır:
+
+```text
+✓ context7  connected
+```
+
+## Yapılandırma
+
+Bir sunucuyu elle yapılandırmak için ona `mcp.servers` altında benzersiz bir ad verin. V2'de sunucu adları doğrudan `mcp` altına yazılmaz.
+
+```jsonc title="opencode.jsonc"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "mcp": {
+    "servers": {
+      "my-server": {
+        "type": "local",
+        "command": ["npx", "-y", "example-mcp-server"],
+      },
+    },
+  },
+}
+```
+
+Sunucular otomatik olarak bağlanır. Bir sunucuyu yapılandırmada tutup bağlanmasını engellemek için `enabled` alanını değil, `disabled` alanını kullanın:
+
+```jsonc
+{
+  "mcp": {
+    "servers": {
+      "my-server": {
+        "type": "local",
+        "command": ["npx", "-y", "example-mcp-server"],
+        "disabled": true,
+      },
+    },
+  },
+}
+```
+
+Önceliği daha yüksek bir proje yapılandırması, aynı adlı sunucu nesnesinin tamamını değiştirir. Ayrı bağlantılar veya hesaplar için farklı adlar kullanın; aksi takdirde gerekli tüm alanları geçersiz kılmada tekrar yazın:
+
+```jsonc title="opencode.jsonc"
+{
+  "mcp": {
+    "servers": {
+      "my-server": {
+        "type": "remote",
+        "url": "https://mcp.example.com/mcp",
+      },
+    },
+  },
+}
+```
+
+## Yerel
+
+Yerel sunucu, OpenCode'un MCP stdio aktarımı üzerinden başlattığı bir komuttur. `--` sonrasına bir komut yazarak ekleyin:
+
+```sh
+opencode mcp add everything -- npx -y @modelcontextprotocol/server-everything
+```
+
+Çalışma dizini veya ortam değişkenleri gibi süreç seçenekleri için yapılandırmayı kullanın:
+
+```jsonc title="opencode.jsonc"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "mcp": {
+    "servers": {
+      "everything": {
+        "type": "local",
+        "command": ["npx", "-y", "@modelcontextprotocol/server-everything"],
+        "cwd": ".",
+        "environment": {
+          "LOG_LEVEL": "info",
+          "MCP_API_KEY": "{env:MCP_API_KEY}",
+        },
+      },
+    },
+  },
+}
+```
+
+| Alan | Zorunlu | Açıklama |
+| --- | --- | --- |
+| `type` | Evet | `"local"` olmalıdır. |
+| `command` | Evet | Çalıştırılabilir dosya ve ardından argümanları. |
+| `cwd` | Hayır | Süreç dizini. Göreli yollar çalışma alanına göre çözümlenir; varsayılan değer de çalışma alanıdır. |
+| `environment` | Hayır | OpenCode'dan devralınan süreç ortamına eklenen dize değişkenleri. |
+| `disabled` | Hayır | `true` olduğunda bağlantıyı engeller. Varsayılan değer `false`. |
+| `codemode` | Hayır | Araçları Code Mode yerine doğrudan sunmak için `false` yapın. Varsayılan değer `true`. |
+| `timeout` | Hayır | Sunucu bazında zaman aşımı geçersiz kılmaları. |
+| `protocol` | Hayır | `legacy` (varsayılan), `auto` veya `2026-07-28`. [Protokol sürümü](#protocol-version) bölümüne bakın. |
+
+Ortam değişkeni ikamesi için `{env:NAME}` kullanın. `$NAME` gibi shell ifadeleri JSON dizelerinde genişletilmez:
+
+```jsonc
+{
+  "environment": {
+    "MCP_API_KEY": "{env:MCP_API_KEY}",
+  },
+}
+```
+
+## Uzak
+
+Uzak sunucu, MCP Streamable HTTP aktarımını kullanır ve mutlak bir URL gerektirir:
+
+```sh
+opencode mcp add context7 --url https://mcp.context7.com/mcp
+```
+
+Sunucu başlıklar veya başka seçenekler gerektiriyorsa yapılandırmayı kullanın. Gizli bilgileri dosyada değil, ortam değişkenlerinde saklayın:
+
+```jsonc title="opencode.jsonc"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "mcp": {
+    "servers": {
+      "context7": {
+        "type": "remote",
+        "url": "https://mcp.context7.com/mcp",
+        "oauth": false,
+        "headers": {
+          "CONTEXT7_API_KEY": "{env:CONTEXT7_API_KEY}",
+        },
+      },
+    },
+  },
+}
+```
+
+| Alan | Zorunlu | Açıklama |
+| --- | --- | --- |
+| `type` | Evet | `"remote"` olmalıdır. |
+| `url` | Evet | Mutlak Streamable HTTP uç noktası. |
+| `headers` | Hayır | Uç noktaya gönderilen dize HTTP başlıkları. |
+| `oauth` | Hayır | OAuth ayarları veya OAuth'u devre dışı bırakmak için `false`. |
+| `disabled` | Hayır | `true` olduğunda bağlantıyı engeller. Varsayılan değer `false`. |
+| `codemode` | Hayır | Araçları Code Mode yerine doğrudan sunmak için `false` yapın. Varsayılan değer `true`. |
+| `timeout` | Hayır | Sunucu bazında zaman aşımı geçersiz kılmaları. |
+| `protocol` | Hayır | `legacy` (varsayılan), `auto` veya `2026-07-28`. [Protokol sürümü](#protocol-version) bölümüne bakın. |
+
+`oauth: false` ayarını yalnızca sunucu sadece API anahtarı veya başka bir başlık tabanlı kimlik bilgisi kullanıyorsa kullanın:
+
+```jsonc
+{
+  "type": "remote",
+  "url": "https://mcp.example.com/mcp",
+  "oauth": false,
+  "headers": { "Authorization": "Bearer {env:MCP_API_KEY}" },
+}
+```
+
+## OAuth
+
+`oauth` değeri `false` olmadığı sürece uzak sunucularda OAuth etkindir. OpenCode yetkilendirme sunucusunu keşfeder, PKCE kullanır, token'ları yeniler ve destekleniyorsa dinamik istemci kaydını dener; kimlik bilgileri proje yapılandırmasının dışında kalır.
+
+Dinamik kayıt için yalnızca sunucu URL'sini yapılandırın:
+
+```jsonc title="opencode.jsonc"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "mcp": {
+    "servers": {
+      "sentry": {
+        "type": "remote",
+        "url": "https://mcp.sentry.dev/mcp",
+      },
+    },
+  },
+}
+```
+
+Sunucu kimlik doğrulama gerektiriyorsa `/mcps` komutunu çalıştırın, sunucuyu seçin ve yetkilendirmeyi tarayıcıda tamamlayın. Aynı akışı CLI da başlatabilir:
+
+```sh
+opencode mcp auth sentry
+```
+
+Bir sağlayıcı size istemci kimlik bilgileri verdiğinde V2'nin snake_case OAuth alanlarını kullanın:
+
+```jsonc title="opencode.jsonc"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "mcp": {
+    "servers": {
+      "company-tools": {
+        "type": "remote",
+        "url": "https://mcp.example.com/mcp",
+        "oauth": {
+          "client_id": "{env:MCP_CLIENT_ID}",
+          "client_secret": "{env:MCP_CLIENT_SECRET}",
+          "scope": "tools:read tools:execute",
+          "callback_port": 19876,
+          "redirect_uri": "http://127.0.0.1:19876/callback",
+        },
+      },
+    },
+  },
+}
+```
+
+| Alan | Açıklama |
+| --- | --- |
+| `client_id` | Önceden kaydedilmiş istemci ID'si. Dinamik kaydı denemek için belirtmeyin. |
+| `client_secret` | Önceden kaydedilmiş bir istemcinin gizli anahtarı. |
+| `scope` | İstenecek, boşlukla ayrılmış kapsamlar. |
+| `callback_port` | `1` ile `65535` arasında yerel geri çağırma portu. Varsayılan olarak kullanılabilir bir geçici port seçilir. |
+| `redirect_uri` | Yolu ve portu yerel geri çağırma dinleyicisine ulaşan, önceden kaydedilmiş bir loopback URI'si. |
+| `auth_server_metadata_url` | Yetkilendirme sunucusunun OAuth veya OpenID Connect meta veri belgesinin URL'si. MCP sunucusu, yetkilendirme sunucusunu belirten korumalı kaynak meta verilerini yayımlamıyorsa ayarlayın. |
+
+Yeniden oturum açmanız veya hesap değiştirmeniz gerektiğinde saklanan OAuth kimlik bilgilerini kaldırın:
+
+```sh
+opencode mcp logout sentry
+```
+
+## Zaman aşımları
+
+Zaman aşımları milisaniye cinsinden pozitif tam sayılardır. Varsayılanları `mcp.timeout` altında ayarlayın; bir sunucunun `timeout` nesnesi eşleşen varsayılanları geçersiz kılar.
+
+```jsonc title="opencode.jsonc"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "mcp": {
+    "timeout": {
+      "startup": 45000,
+      "catalog": 30000,
+      "execution": 600000,
+    },
+    "servers": {
+      "slow-tools": {
+        "type": "remote",
+        "url": "https://mcp.example.com/mcp",
+        "timeout": {
+          "catalog": 60000,
+        },
+      },
+    },
+  },
+}
+```
+
+| Zaman aşımı | Varsayılan | Uygulandığı yer |
+| --- | --- | --- |
+| `startup` | 30 saniye | Aktarım bağlantısı ve sunucu başlatma. |
+| `catalog` | 30 saniye | Araçları, istemleri, kaynakları ve kaynak şablonlarını listeleme. |
+| `execution` | 12 saat | Araç çağrıları, istem alma ve kaynak okumaları. |
+
+## Protokol sürümü
+
+OpenCode varsayılan olarak her sunucuyu klasik MCP `initialize` el sıkışmasıyla açar. 2026-07-28 revizyonu üzerine kurulmuş bir sunucuyla konuşmak için sunucunun `protocol` değerini ayarlayın:
+
+```jsonc title="opencode.jsonc"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "mcp": {
+    "servers": {
+      "modern": {
+        "type": "remote",
+        "url": "https://mcp.example.com/mcp",
+        "protocol": "auto",
+      },
+    },
+  },
+}
+```
+
+| Değer | Davranış |
+| --- | --- |
+| `legacy` | Varsayılan. `initialize` gönderir ve 2025-11-25'e kadarki protokol revizyonlarını konuşur. |
+| `auto` | 2026-07-28 revizyonu için `server/discover` ile yoklar; sunucu desteklemiyorsa `legacy` moduna geri döner. |
+| `2026-07-28` | 2026-07-28 revizyonunu zorunlu kılar. Eski sunucularda bağlantı başarısız olur. |
+
+Yerel bir `legacy` sunucuyu yoklamak kısa ömürlü ek bir süreç başlatır ve sunucu bilinmeyen istekleri yok sayıyorsa başlatma zaman aşımı kadar bekleyebilir. Bu yüzden `auto` ayarını yalnızca ihtiyaç duyan sunucularla sınırlı tutun.
+
+## Adlar
+
+OpenCode bir aracı `<server>_<tool>` olarak adlandırır. Harf, rakam, `_` ve `-` dışındaki karakterleri `_` ile değiştirir:
+
+```text
+server: context 7
+tool:   resolve.library/id
+name:   context_7_resolve_library_id
+```
+
+MCP istemleri, aynı normalleştirmeyle `<server>:<prompt>` adlı komutlara dönüşür. Örneğin:
+
+```text
+/context_7:find_docs
+```
+
+Normalleştirmeden sonra da benzersiz kalan kısa sunucu adları seçin. Varsayılan Code Mode'da araçlar normalleştirilmiş sunucu adına göre gruplanır:
+
+```text
+tools.context_7.resolve_library_id(...)
+```
+
+## İzinler
+
+Code Mode varsayılandır. Bir sunucunun araçlarının sağlayıcının yerel araç listesinde kalması gerekiyorsa `codemode` değerini `false` olarak ayarlayın:
+
+```jsonc
+{
+  "mcp": {
+    "servers": {
+      "context7": {
+        "type": "remote",
+        "url": "https://mcp.context7.com/mcp",
+        "codemode": false,
+      },
+    },
+  },
+}
+```
+
+Araçları, sunucularının bağlantısını kesmeden gizlemek veya reddetmek için izin eylemlerini kullanın. Normalleştirilmiş `<server>_<tool>` adını eşleştirin:
+
+```jsonc
+{
+  "permissions": [
+    {
+      "action": "context7_*",
+      "resource": "*",
+      "effect": "deny",
+    },
+  ],
+}
+```
+
+## Bağlam
+
+OpenCode, bir oturum adına yapılan çağrılarda oturum ID'sini `CallToolRequest.params._meta["ai.opencode/sessionID"]` içinde gönderir. Bu, stdio ve Streamable HTTP üzerinden hem doğrudan araçlar hem de Code Mode için geçerlidir:
+
+```json
+{
+  "method": "tools/call",
+  "params": {
+    "name": "lookup",
+    "arguments": { "query": "example" },
+    "_meta": { "ai.opencode/sessionID": "ses_..." }
+  }
+}
+```
+
+ID bir araç argümanı değil, istek meta verisidir; bu yüzden modelin gördüğü şemada yer almaz. Onu opak bir ilişkilendirme değeri olarak ele alın:
+
+| Kural | Davranış |
+| --- | --- |
+| Kimlik | MCP aktarım oturumunu değil, çağrıyı yapan OpenCode oturumunu tanımlar. |
+| Varlık | Oturum bağlamı olmayan çağrılarda bulunmayabilir. |
+| Güvenlik | Tek başına kimlik doğrulama veya yetkilendirme için kullanmayın. |
+| Gizlilik | Uzak sunucular ham ID'yi alır ve kaydedebilir veya saklayabilir. |
+
+## Yönetim
+
+Sunucuları ve güncel bağlantı durumlarını herhangi bir projeden listeleyin:
+
+```sh
+opencode mcp list
+```
+
+Sunucuları görüntülemek, bağlamak, bağlantılarını kesmek veya kimliklerini doğrulamak için OpenCode'da `/mcps` komutunu kullanın. Sunucu eklemek ve OAuth kimlik bilgilerini yönetmek için CLI'ı kullanın:
+
+```sh
+opencode mcp add sentry --url https://mcp.sentry.dev/mcp
+opencode mcp auth sentry
+opencode mcp logout sentry
+```
+
+Bir sunucuyu kaldırmak için, eklendiği proje veya genel yapılandırmadan girdisini silin:
+
+```jsonc
+{
+  "mcp": {
+    "servers": {},
+  },
+}
+```
+
+OAuth istemci ayarları, zaman aşımları, çalışma dizinleri veya kalıcı etkinleştirme için yapılandırmayı doğrudan düzenleyin:
+
+```jsonc
+{
+  "mcp": {
+    "servers": {
+      "sentry": {
+        "type": "remote",
+        "url": "https://mcp.sentry.dev/mcp",
+        "disabled": true,
+      },
+    },
+  },
+}
+```

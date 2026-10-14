@@ -1,0 +1,99 @@
+---
+title: "Inferens-API"
+description: "Kall OpenAI-, Anthropic- og Gemini-kompatible modeller gjennom inferens i Console med én autentiseringsheader."
+---
+
+Inferens i Console leverer OpenAI-, Anthropic- og Gemini-kompatible API-er fra `https://opencode.ai/inference`. Send en
+JSON-`POST`-forespørsel til endepunktet som passer modellens API-familie.
+
+```bash
+curl -X POST "https://opencode.ai/inference/openai/v1/chat/completions" \
+  -H "Authorization: Bearer <token>" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "model": "kimi-k2.6",
+    "messages": [{ "role": "user", "content": "Say hi" }]
+  }'
+```
+
+## Autentisering
+
+Erstatt `<token>` med en [nøkkel for en tjenestekonto](/console/api#service-accounts) som er opprettet i [Console](https://opencode.ai/console).
+Betalte modeller krever headeren; gratis chatmodeller kan kalles uten den.
+
+```text
+Authorization: Bearer <token>
+```
+
+## Endepunkter
+
+| API                     | Sti                                                       |
+| ----------------------- | --------------------------------------------------------- |
+| OpenAI Chat Completions | `/inference/openai/v1/chat/completions`                   |
+| OpenAI Responses        | `/inference/openai/v1/responses`                          |
+| Anthropic Messages      | `/inference/anthropic/v1/messages`                        |
+| Gemini                  | `/inference/google/v1beta/models/<model>:generateContent` |
+
+Hver modell leveres av én API-familie. Se tabellen over [modellendepunkter](/console/models#endpoints), eller hent den
+gjeldende listen:
+
+```bash
+curl https://opencode.ai/inference/v1/models
+```
+
+### OpenAI Chat Completions
+
+Åpne modeller som `kimi-k2.6`, `glm-5.1`, `minimax-m2.7` og gratismodellene bruker Chat Completions-API-et.
+
+```bash
+curl -X POST "https://opencode.ai/inference/openai/v1/chat/completions" \
+  -H "Authorization: Bearer <token>" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "model": "glm-5.1",
+    "messages": [{ "role": "user", "content": "Say hi" }]
+  }'
+```
+
+### OpenAI Responses
+
+GPT-modeller bruker Responses-API-et.
+
+```bash
+curl -X POST "https://opencode.ai/inference/openai/v1/responses" \
+  -H "Authorization: Bearer <token>" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "model": "gpt-5.5",
+    "input": "Say hi"
+  }'
+```
+
+### Anthropic Messages
+
+Claude- og Qwen-modeller bruker Messages-API-et. `max_tokens` er påkrevd.
+
+```bash
+curl -X POST "https://opencode.ai/inference/anthropic/v1/messages" \
+  -H "Authorization: Bearer <token>" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "model": "claude-sonnet-4-6",
+    "max_tokens": 1024,
+    "messages": [{ "role": "user", "content": "Say hi" }]
+  }'
+```
+
+### Gemini
+
+For Gemini-modeller angis modellen og metoden i stien. Erstatt `:generateContent` med `:streamGenerateContent` for å
+strømme svaret.
+
+```bash
+curl -X POST "https://opencode.ai/inference/google/v1beta/models/gemini-3.1-pro:generateContent" \
+  -H "Authorization: Bearer <token>" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "contents": [{ "parts": [{ "text": "Say hi" }] }]
+  }'
+```

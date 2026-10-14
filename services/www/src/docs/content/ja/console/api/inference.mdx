@@ -1,0 +1,95 @@
+---
+title: "推論 API"
+description: "1 つの認証ヘッダーで、Console の推論を通じて OpenAI、Anthropic、Gemini 互換のモデルを呼び出します。"
+---
+
+Console の推論は、`https://opencode.ai/inference` で OpenAI、Anthropic、Gemini 互換の API を提供します。モデルの API ファミリーに対応するエンドポイントに、JSON の `POST` リクエストを送信します。
+
+```bash
+curl -X POST "https://opencode.ai/inference/openai/v1/chat/completions" \
+  -H "Authorization: Bearer <token>" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "model": "kimi-k2.6",
+    "messages": [{ "role": "user", "content": "Say hi" }]
+  }'
+```
+
+## 認証
+
+`<token>` を、[Console](https://opencode.ai/console) で作成した[サービスアカウントのキー](/console/api#service-accounts)に置き換えます。有料モデルではこのヘッダーが必須ですが、無料のチャットモデルはヘッダーなしで呼び出せます。
+
+```text
+Authorization: Bearer <token>
+```
+
+## エンドポイント
+
+| API                     | パス |
+| ----------------------- | --------------------------------------------------------- |
+| OpenAI Chat Completions | `/inference/openai/v1/chat/completions`                   |
+| OpenAI Responses        | `/inference/openai/v1/responses`                          |
+| Anthropic Messages      | `/inference/anthropic/v1/messages`                        |
+| Gemini                  | `/inference/google/v1beta/models/<model>:generateContent` |
+
+各モデルは 1 つの API ファミリーで提供されます。[モデルのエンドポイント](/console/models#endpoints)の表を参照するか、最新の一覧を取得してください。
+
+```bash
+curl https://opencode.ai/inference/v1/models
+```
+
+### OpenAI Chat Completions
+
+`kimi-k2.6`、`glm-5.1`、`minimax-m2.7` などのオープンモデルと無料モデルは、Chat Completions API を使用します。
+
+```bash
+curl -X POST "https://opencode.ai/inference/openai/v1/chat/completions" \
+  -H "Authorization: Bearer <token>" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "model": "glm-5.1",
+    "messages": [{ "role": "user", "content": "Say hi" }]
+  }'
+```
+
+### OpenAI Responses
+
+GPT モデルは Responses API を使用します。
+
+```bash
+curl -X POST "https://opencode.ai/inference/openai/v1/responses" \
+  -H "Authorization: Bearer <token>" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "model": "gpt-5.5",
+    "input": "Say hi"
+  }'
+```
+
+### Anthropic Messages
+
+Claude と Qwen のモデルは Messages API を使用します。`max_tokens` は必須です。
+
+```bash
+curl -X POST "https://opencode.ai/inference/anthropic/v1/messages" \
+  -H "Authorization: Bearer <token>" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "model": "claude-sonnet-4-6",
+    "max_tokens": 1024,
+    "messages": [{ "role": "user", "content": "Say hi" }]
+  }'
+```
+
+### Gemini
+
+Gemini のモデルでは、パスにモデルとメソッドを含めます。レスポンスをストリーミングするには、`:generateContent` を `:streamGenerateContent` に置き換えます。
+
+```bash
+curl -X POST "https://opencode.ai/inference/google/v1beta/models/gemini-3.1-pro:generateContent" \
+  -H "Authorization: Bearer <token>" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "contents": [{ "parts": [{ "text": "Say hi" }] }]
+  }'
+```

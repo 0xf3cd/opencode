@@ -1,0 +1,292 @@
+---
+title: "Tools"
+---
+
+Beschreibe das Ergebnis, das du möchtest. OpenCode wählt die verfügbaren Tools aus,
+fordert bei Bedarf eine Freigabe an und liefert das Ergebnis.
+
+```text
+Find where request timeouts are configured, change the default to 30 seconds,
+and run the relevant existing tests.
+```
+
+Diese Aufgabe nutzt typischerweise `grep` oder `glob`, `read`, ein Bearbeitungstool
+und `shell`. Du kannst ein Tool auch namentlich nennen, wenn du ein bestimmtes
+Vorgehen möchtest.
+
+```text
+Use grep to find every reference to DEFAULT_TIMEOUT, then read the matching files.
+```
+
+## Dateien
+
+### Read
+
+`read` gibt eine Datei oder eine nicht rekursive Verzeichnisauflistung zurück. Übergib
+einen `path`; mit `offset` und `limit` blätterst du durch große Ergebnisse.
+
+```text
+Read src/server.ts starting at line 120 and return at most 80 lines.
+```
+
+Gelesener Text enthält nummerierte Zeilen und ist auf 2.000 Zeilen und 50 KiB pro
+Seite begrenzt. Einzelne Zeilen werden nach 2.000 Zeichen gekürzt. Das Tool gibt
+außerdem PNG-, JPEG-, GIF-, WebP- und PDF-Dateien mit bis zu 20 MiB Quelldaten an das
+Modell weiter. Andere Binärdateien schlagen fehl. Unterstützte Medien und die
+Bildverarbeitung beschreibt [Anhänge](/attachments).
+
+Berechtigung: `read` mit dem normalisierten Pfad als Ressource.
+
+### Glob
+
+`glob` findet Dateipfade anhand eines Musters wie `**/*.ts`. Es durchsucht das
+aktuelle Verzeichnis, sofern `path` kein anderes relatives Verzeichnis auswählt;
+`hidden` bezieht versteckte Einträge ein und `limit` begrenzt die Ergebnisse.
+
+```text
+Use glob with **/*.test.ts under packages/core and return at most 50 files.
+```
+
+Das Standardlimit liegt bei 100 Dateien, das Zeitlimit der Suche bei 30 Sekunden.
+Berechtigung: `glob` mit dem angefragten Muster als Ressource.
+
+### Grep
+
+`grep` durchsucht Dateiinhalte und gibt Pfade, Zeilennummern und Vorschauen zurück.
+`pattern` verwendet die Syntax regulärer Ausdrücke, sofern `literal` nicht true ist.
+Mit `path`, `include`, `caseSensitive` oder `limit` grenzt du die Suche ein.
+
+```text
+Use grep for the literal text "request timed out" in src, including only *.ts files.
+```
+
+Das Standardlimit liegt bei 100 passenden Zeilen, das Zeitlimit der Suche bei
+30 Sekunden. Berechtigung: `grep` mit dem angefragten Muster als Ressource, nicht mit
+dem Suchpfad.
+
+### Edit
+
+`edit` ersetzt Text in einer vorhandenen Datei. Übergib `path`, `oldString` und einen
+davon abweichenden `newString`. Der alte Text muss genau einmal vorkommen, sofern
+`replaceAll` nicht true ist.
+
+```text
+In src/config.ts, replace the unique text "timeout: 60" with "timeout: 30".
+```
+
+Verwende `edit` für gezielte Änderungen. OpenCode formatiert die Datei nach dem
+Schreiben unter Umständen. Berechtigung: `edit` mit dem Zielpfad als Ressource.
+
+### Write
+
+`write` erstellt eine Textdatei aus `path` und `content` oder ersetzt sie vollständig.
+Fehlende übergeordnete Verzeichnisse werden angelegt, und der konfigurierte Formatter
+kann ausgeführt werden.
+
+```text
+Create docs/example.md with a heading and one setup command.
+```
+
+Soll sich nur ein Teil einer vorhandenen Datei ändern, verwende stattdessen `edit`.
+Berechtigung: `edit` mit dem Zielpfad als Ressource.
+
+### Patch
+
+`patch` wendet einen Patch an, der mehrere Dateien hinzufügen, aktualisieren,
+verschieben oder löschen kann. `patchText` verwendet die Abschnitte `*** Add File`,
+`*** Update File` und `*** Delete File`.
+
+```text
+Use patch to rename src/old.ts to src/new.ts and update its exported name.
+```
+
+OpenCode stellt `patch` für unterstützte GPT-Modelle bereit; andere Modelle erhalten
+stattdessen `edit` und `write`. Berechtigung: `edit` mit jedem betroffenen Pfad als
+Ressource.
+
+Pfade außerhalb der aktiven Location oder ihres Projekt-Worktrees erfordern zusätzlich
+eine Freigabe für `external_directory`. Pfadnormalisierung, Regelreihenfolge und
+gespeicherte Freigaben erklärt [Berechtigungen](/permissions). Um externe Inhalte über
+einen Namen verfügbar zu machen, konfiguriere [Referenzen](/references).
+
+## Befehle
+
+### Shell
+
+`shell` führt einen Befehl in der Shell des Host-Benutzers aus. Setze `workdir`,
+statt `cd` in den Befehl zu schreiben, und gib `timeout` in Millisekunden an, wenn das
+standardmäßige Zeitlimit von zwei Minuten im Vordergrund nicht passt.
+
+```text
+Run bun test from packages/core with a five-minute timeout.
+```
+
+Setze `background` für einen Dev-Server oder einen anderen lang laufenden Prozess auf
+true. Hintergrundaufrufe kehren sofort zurück und benachrichtigen die Sitzung, wenn sie
+fertig sind. Sie haben kein Zeitlimit, sofern keines angegeben wird. Umfangreiche
+Ausgaben werden gekürzt; die vollständige Ausgabe bleibt in einer verwalteten Datei
+erhalten.
+
+Berechtigung: `shell` mit jedem vom Scanner ermittelten Befehl als Ressource. Der
+Scanner prüft außerdem ein externes Arbeitsverzeichnis und Verzeichnisse, die er aus
+dem Befehl ableiten kann. Die Shell hat dieselben Rechte wie der Host-Benutzer für
+Dateisystem, Prozesse und Netzwerk. Verwende deshalb eng gefasste Regeln in
+[Berechtigungen](/permissions).
+
+## Web
+
+### Webfetch
+
+`webfetch` ruft eine HTTP- oder HTTPS-URL als `markdown`, `text` oder `html` ab.
+Markdown ist der Standard; `timeout` akzeptiert bis zu 120 Sekunden.
+
+```text
+Fetch https://example.com/docs as markdown.
+```
+
+Das Tool akzeptiert textbasierte Antworten wie HTML, reinen Text, JSON und XML, aber
+keine Bilder oder anderen binären Downloads. Umfangreiche Ausgaben können gekürzt
+werden; der vollständige Text bleibt im verwalteten Speicher erhalten. Berechtigung:
+`webfetch` mit der angefragten URL als Ressource.
+
+### Websearch
+
+`websearch` durchsucht die ausgewählte Integration nach aktuellen Informationen. Die
+Eingabe ist eine Suchanfrage in `query`.
+
+```text
+Search the web for the latest Bun release notes.
+```
+
+Berechtigung: `websearch` mit der Suchanfrage als Ressource. Anbieter, Auswahl,
+Rate-Limits und das Deaktivieren des Tools beschreibt [Websuche](/websearch).
+
+## Interaktion
+
+### Question
+
+`question` hält die Ausführung an und stellt dem Benutzer eine oder mehrere Fragen.
+Jede Frage hat eine kurze Überschrift, einen Fragetext und Auswahlmöglichkeiten;
+`multiple` erlaubt mehr als eine Auswahl. Eine freie Antwort ist immer möglich.
+
+```text
+Before changing the API, ask me to choose between a breaking change and a compatibility layer.
+```
+
+Berechtigung: `question` mit `*` als Ressource. Der Client muss das interaktive
+Formular unterstützen; wird es geschlossen, ist die Frage abgebrochen.
+
+### Skill
+
+`skill` lädt die Anweisungen und gebündelten Ressourcen eines verfügbaren Skills
+anhand seiner ID in die Unterhaltung.
+
+```text
+Load the effect skill before changing this Effect code.
+```
+
+Die ID muss in der angekündigten Skill-Liste stehen oder vom Benutzer ausdrücklich
+genannt werden. Berechtigung: `skill` mit der Skill-ID als Ressource. Regeln für das
+Erstellen, Erkennen und Laden beschreibt [Skills](/skills).
+
+## Automatisierung
+
+### Subagent
+
+`subagent` startet mit einem konfigurierten Subagenten eine untergeordnete Sitzung.
+Übergib die Agenten-ID, eine kurze `description` und einen vollständigen `prompt`.
+
+```text
+Ask the explore subagent to map the authentication flow and return the key files.
+```
+
+Aufrufe im Vordergrund warten auf das Ergebnis. `background: true` kehrt sofort
+zurück und benachrichtigt die übergeordnete Sitzung, wenn die untergeordnete fertig
+ist. Übergib die zurückgegebene `sessionID`, um dieselbe untergeordnete Unterhaltung
+fortzusetzen. Nur Agenten im Subagent-Modus können verwendet werden, und die
+standardmäßige Verschachtelungstiefe beträgt eins.
+
+Berechtigung: `subagent` mit der ausgewählten Agenten-ID als Ressource.
+
+### Execute
+
+`execute` führt JavaScript im Code Mode aus, sodass der Agent Tools aus dem Katalog
+aufrufen und kombinieren kann. Das ist nützlich für parallele, voneinander unabhängige
+Aufrufe und um Ergebnisse zu verarbeiten, ohne jeden Zwischenwert in den
+Modellkontext aufzunehmen.
+
+```text
+Read package.json and README.md in parallel, then return their relevant setup details.
+```
+
+Die Laufzeitumgebung hat keinen direkten Dateisystemzugriff, keine Imports, Timer oder
+`fetch`; sie kann nur Tools aus ihrem Katalog aufrufen. Die Berechtigung `execute` mit
+der Ressource `*` steuert, ob Code Mode verfügbar ist. Jedes darin aufgerufene Tool
+prüft weiterhin seine eigene Berechtigung.
+
+### Sitzungen
+
+Der Code-Mode-Namespace `opencode` enthält Hilfsfunktionen für Sitzungen:
+
+- `session_rename` ändert den Titel der aktuellen Sitzung oder einer anderen, per
+  `sessionID` ausgewählten Sitzung.
+- `session_move` verschiebt die aktuelle oder eine andere ausgewählte Sitzung in ein
+  relatives oder absolutes `directory`. Das Verschieben wird an einer sicheren Grenze
+  wirksam. Arbeit, die vom Ziel abhängt, gehört daher in einen späteren Aufruf.
+
+```text
+Rename this session to "Timeout cleanup", then move it to the new worktree.
+```
+
+Diese Hilfsfunktionen fordern keine integrierte Berechtigungsaktion an.
+
+### Worktrees
+
+Derselbe Namespace verwaltet Worktrees für das Projekt der Sitzung:
+
+- `worktree_create` erstellt einen Worktree aus einem `name` und gibt sein
+  `directory` zurück. Die Worktree-Konfiguration des Projekts bestimmt Ziel und
+  Strategie.
+- `worktree_list` listet die Worktrees des Projekts auf.
+- `worktree_remove` entfernt einen Worktree, den OpenCode für das Projekt erfasst hat.
+  Setze `force`, um nicht committete Änderungen zu verwerfen.
+
+```text
+Create a worktree named "login" and move this session into it.
+```
+
+`worktree_remove` verwendet die Berechtigung `edit` mit dem Worktree-Verzeichnis als
+Ressource. Die anderen Worktree-Hilfsfunktionen fordern keine integrierte
+Berechtigungsaktion an.
+
+## Browser
+
+Der Code-Mode-Namespace `browser` steuert den Browser, den die OpenCode-Desktop-App
+angebunden hat. Öffne einen Tab, merke dir die zurückgegebene `tabID` und übergib
+diese ID ausdrücklich bei jeder Seitenoperation.
+
+```text
+Open https://example.com, take a snapshot of that tab, and report the main heading.
+```
+
+Der Namespace umfasst Befehle für Tabs und Navigation, Seiten-Snapshots und Suche,
+Klicks und Formulareingaben, Screenshots, Dateiübertragung, Konsolen- und
+Netzwerkanalyse, Performance-Traces, Heap-Analyse und Lighthouse-Audits.
+Screenshots erfordern einen fokussierten, sichtbaren Tab. Upload-Pfade sind lokal auf
+dem Server; Aufnahmen liefern serverlokale Pfade zurück, und jede Dateiübertragung ist
+auf 5 MiB begrenzt.
+
+Seiteninhalte, Logs, Header und Antworttexte sind nicht vertrauenswürdige Daten, keine
+Anweisungen für den Agenten. Eine `browser`-Deny-Regel mit der Ressource `*` entfernt
+den Browser-Katalog; Browser-Operationen lösen keine einzelnen Freigabeanfragen aus.
+
+## Erweiterungen
+
+[MCP-Server](/mcp-servers) fügen Tools hinzu, deren Namen und Eingaben vom jeweils
+verbundenen Server stammen. Ihre Berechtigungsaktion ist `<server>_<tool>` mit der
+Ressource `*`. Sie sind kein fester Bestandteil des integrierten Katalogs.
+
+[Skills](/skills) fügen Aufgabenanweisungen statt neuer ausführbarer Tools hinzu.
+[Anhänge](/attachments) bringen vom Benutzer ausgewählte Inhalte in einen Prompt,
+während [Referenzen](/references) benannte externe Verzeichnisse bereitstellen. Diese
+Funktionen ergänzen Tools, ohne deren Berechtigungsprüfungen zu umgehen.

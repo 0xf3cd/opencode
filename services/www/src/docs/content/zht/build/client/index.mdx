@@ -1,0 +1,137 @@
+---
+title: "JavaScript"
+---
+
+`@opencode/client` 是 OpenCode HTTP API 的 TypeScript 用戶端。當你的應用程式要透過網路連線到 OpenCode 伺服器時，就使用這個套件。它的原生型別與方法，和 [API 參考](/api)產生自同一份合約；外掛 RPC 的型別則來自匯入的 RPC 定義。
+
+## 安裝
+
+```sh
+bun add @opencode/client
+```
+
+## 建立用戶端
+
+使用伺服器 URL 建立用戶端，然後呼叫依 API 資源分組的方法：
+
+```ts
+import { OpenCode } from "@opencode/client"
+
+const client = OpenCode.make({
+  baseUrl: "http://localhost:4096",
+})
+
+const session = await client.session.create({
+  location: { directory: "/workspace" },
+})
+
+await client.session.prompt({
+  sessionID: session.id,
+  text: "Review the current changes",
+})
+```
+
+## 標頭與請求
+
+透過 `headers` 將預設的身分驗證標頭或應用程式標頭傳給 `OpenCode.make`。你也可以提供自訂的 `fetch` 實作。每個操作的最後一個引數都可以傳入請求選項，用來指定 `AbortSignal` 或個別請求的標頭。事件訂閱是例外：它只接受訂閱者本身的取消訊號，並使用基礎用戶端的標頭。
+
+```ts
+const client = OpenCode.make({
+  baseUrl: "https://opencode.example.com",
+  headers: {
+    authorization: `Bearer ${process.env.OPENCODE_TOKEN}`,
+  },
+})
+
+await client.session.list(undefined, {
+  signal: AbortSignal.timeout(10_000),
+})
+```
+
+## 串流事件
+
+串流端點會回傳非同步可迭代物件：
+
+```ts
+for await (const event of client.event.subscribe()) {
+  console.log(event.type)
+}
+```
+
+每個用戶端的原生事件訂閱者與 RPC 事件訂閱者共用一條延遲建立的連線。建立用戶端、handle 或可迭代物件時都不會開啟事件連線，開始讀取時才會建立。中斷迭代或中止某個訂閱者，只會結束該迭代器；最後一個訂閱者離開時，連線才會關閉。共用來源會等待所有使用中的訂閱者接收每個事件，因此消費端在執行耗時工作前應先自行緩衝。
+
+訂閱只接收即時事件，不會重播，也不會自動重新連線。來源失敗會結束目前所有訂閱，請在復原後重新訂閱。較晚加入的原生訂閱者會收到目前的 `server.connected` 標記，但不會收到過去的業務事件。
+
+## 外掛 RPC
+
+匯入外掛共用的合約，並傳給 `client.rpc`：
+
+```ts
+import { OpenCode } from "@opencode/client"
+import { Acme } from "opencode-acme-plugin/rpc"
+
+const acme = client.rpc(Acme)
+const result = await acme.search(
+  { query: "hello" },
+  { location: { directory: "/workspace" }, signal: AbortSignal.timeout(10_000) },
+)
+
+const unsubscribe = acme.events.on("updated", (event) => {
+  console.log(event.type, event.location.directory, event.data.text)
+})
+```
+
+方法的第二個選用引數用來放 `location`、`signal` 和 `headers`，與外掛定義的輸入分開。省略 location 時，會依照原生請求的預設行為：先使用基礎的 location 標頭，再退回伺服器的工作目錄。建立子用戶端時不會選定任何 location。
+
+方法會從定義推斷引數與結果的型別。Schema 解析屬於合約邊界的工作：呼叫端傳送合約接受的輸入表示形式，處理常式則收到解析後的值。Promise 用戶端接受 Standard Schema 或純 JSON Schema 定義，且不會在本機執行 schema 解析器，伺服器回傳的輸出已經過解析與轉換。Effect Schema 定義則需要搭配 Effect 用戶端。
+
+宣告的方法錯誤會像其他 Promise 用戶端端點的錯誤一樣被 reject，捕捉到的錯誤仍然沒有型別。具型別的子用戶端會移除通用的 HTTP RPC 錯誤包裝。保留的 `rpc.*` 框架錯誤仍是一般的 RPC 失敗；與此無關的身分驗證、傳輸和協定錯誤，則維持原本的用戶端表示形式。
+
+RPC 訂閱使用本地名稱，並接收該 RPC 在所有 location 的事件。請檢查必有的 `event.location` 來篩選事件。`events.subscribe` 與原生的非同步可迭代 API 一致：
+
+```ts
+for await (const event of acme.events.subscribe("updated")) {
+  console.log(event.data.text)
+}
+```
+
+`events.on` 是建立在同一個來源上的便利包裝，會回傳取消訂閱函式；非同步回呼會依序等待完成。回呼或來源失敗時會記錄錯誤並結束該監聽器。原生訂閱與具型別訂閱收到的都是相同的一般 `rpc.<rpcID>.<event>` 信封，事件資料直接是物件。即時訂閱不會重播錯過的事件。
+
+伺服器端必須設定好外掛並實作該 RPC；只匯入定義並不會註冊它。定義與註冊 API 請參閱[外掛 RPC](/build/plugins/rpc)。任何 HTTP 用戶端也都可以用 `{ "input": ... }` 呼叫通用的 `POST /api/rpc/{rpcID}/{method}` 路由，並收到 `{ "output": ... }`。省略 input/output 欄位代表沒有值。
+
+## 本機背景服務
+
+主要的用戶端進入點相容於瀏覽器，不包含本機處理程序管理。在 Node 應用程式中，請從 `@opencode/client/service` 匯入原生 Promise 服務 API。
+
+- `Service.discover()` 回傳一個健康且已註冊的端點，不會啟動處理程序。
+- `Service.ensure()` 回傳一個相容的服務，必要時會啟動一個。
+- `Service.stop()` 停止確切的那個已註冊服務執行個體。
+- `Service.headers(endpoint)` 為用戶端建立身分驗證標頭。
+
+```ts
+import { OpenCode } from "@opencode/client"
+import { Service } from "@opencode/client/service"
+
+const endpoint = await Service.ensure()
+const client = OpenCode.make({
+  baseUrl: endpoint.url,
+  headers: Service.headers(endpoint),
+})
+
+const info = await client.server.info()
+```
+
+`Service.ensure()` 可選擇性接受註冊檔、版本、服務指令和 `onStart` 回呼。`version` 可以是確切的值，也可以是相容性判斷函式：
+
+```ts
+const endpoint = await Service.ensure({
+  file: "/var/run/opencode/service.json",
+  version: (version) => version.startsWith("2."),
+  command: ["opencode", "serve", "--service"],
+  onStart(reason, previousVersion) {
+    console.log(reason, previousVersion)
+  },
+})
+```
+
+省略這些選項時，會使用標準的註冊路徑和 `opencode serve --service` 指令。

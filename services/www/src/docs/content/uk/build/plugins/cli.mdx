@@ -1,0 +1,645 @@
+---
+title: "CLI"
+---
+
+Плагіни CLI розширюють термінальний інтерфейс командами, маршрутами, слотами, рендерерами Markdown, сповіщеннями та
+локальним станом.
+
+```ts title="src/tui.ts"
+import { Plugin } from "@opencode/plugin/tui"
+
+export default Plugin.define({
+  id: "acme.cli",
+  setup(context) {
+    context.ui.toast.show({ message: "CLI plugin loaded", variant: "success" })
+  },
+})
+```
+
+Імпортуйте `@opencode/plugin/tui` напряму. OpenCode розв'язує цей імпорт під час виконання, тому локальним плагінам CLI не
+потрібен абсолютний шлях до робочої копії OpenCode.
+
+## Контекст
+
+`setup` отримує конфігурацію, метадані застосунку, поточне розташування, клієнт OpenCode, кешовані дані, токени теми,
+рендерер OpenTUI та описані нижче API інтерфейсу.
+
+```ts
+setup(context) {
+  const compact = context.options.compact === true
+  const location = context.location ?? context.data.location.default()
+  const version = context.app.version
+  const channel = context.app.channel
+  const client = context.client
+  const renderer = context.renderer
+  const theme = context.theme
+}
+```
+
+Поверніть функцію очищення для ресурсів, якими володіє плагін.
+
+```ts
+setup(context) {
+  const stop = context.data.on("session.execution.succeeded", () => {})
+  return () => stop()
+}
+```
+
+## Клієнт
+
+`context.client` — це згенерований клієнт OpenCode, який може звертатися до підключеного сервера, зокрема до віддаленого.
+
+```ts
+const response = await context.client.plugin.list({
+  location: context.location ?? context.data.location.default(),
+})
+const plugins = response.data
+```
+
+## Події
+
+Використовуйте `data.on` для однієї типізованої події або `data.listen` для всіх подій сервера; обидва методи повертають
+функцію скасування підписки.
+
+```ts
+const stopPermission = context.data.on("permission.asked", (event) => {
+  context.ui.toast.show({ message: `Permission ${event.data.id}` })
+})
+const stopAll = context.data.listen(({ details }) => console.log(details.type))
+
+return () => {
+  stopPermission()
+  stopAll()
+}
+```
+
+## Сесії
+
+Дані сесій надають список, пошук, ієрархію, вартість, стан, синхронізацію та інвалідацію.
+
+```ts
+const sessions = context.data.session.list()
+const session = context.data.session.get(sessionID)
+const rootID = context.data.session.root(sessionID)
+const familyIDs = context.data.session.family(sessionID)
+const cost = context.data.session.cost(sessionID)
+const status = context.data.session.status(sessionID)
+await context.data.session.sync(sessionID)
+context.data.session.invalidate(sessionID)
+```
+
+Для елементів вхідної черги, що очікують, і для повідомлень є API списку, пошуку, синхронізації та інвалідації.
+
+```ts
+await context.data.session.pending.sync(sessionID)
+const pending = context.data.session.pending.list(sessionID)
+context.data.session.pending.invalidate(sessionID)
+
+await context.data.session.message.sync(sessionID)
+const messages = context.data.session.message.list(sessionID)
+const message = context.data.session.message.get(sessionID, messageID)
+context.data.session.message.invalidate(sessionID)
+```
+
+Запити на дозвіл для сесії можна читати й оновлювати.
+
+```ts
+await context.data.session.permission.sync(sessionID)
+const requests = context.data.session.permission.list(sessionID) ?? []
+context.data.session.permission.invalidate(sessionID)
+```
+
+Форми в розташуванні можна отримати списком, оновити, відповісти на них або скасувати.
+
+```ts
+import type { FormCancelInput, FormReplyInput } from "@opencode/client"
+
+async function handleForm(reply: FormReplyInput, cancel: FormCancelInput) {
+  const location = context.location
+  await context.data.session.form.sync(sessionID, location)
+  const forms = context.data.session.form.list(sessionID, location) ?? []
+  await context.data.session.form.reply(reply, location)
+  await context.data.session.form.cancel(cancel, location)
+  context.data.session.form.invalidate(sessionID, location)
+}
+```
+
+## Проєкти й оболонки
+
+Проєкти та збережені дозволи підтримують операції списку, пошуку, синхронізації та інвалідації.
+
+```ts
+await context.data.project.sync()
+const projects = context.data.project.list()
+const project = context.data.project.get(projectID)
+context.data.project.invalidate()
+
+await context.data.project.permission.sync(projectID)
+const saved = context.data.project.permission.list(projectID) ?? []
+context.data.project.permission.invalidate(projectID)
+```
+
+Дані оболонок підтримують операції списку, пошуку, синхронізації та інвалідації в межах розташування.
+
+```ts
+await context.data.shell.sync(context.location)
+const shells = context.data.shell.list(context.location)
+const shell = context.data.shell.get(shellID)
+context.data.shell.invalidate(context.location)
+```
+
+## Дані розташування
+
+Стан розташування надає розташування за замовчуванням і засоби оновлення.
+
+```ts
+const location = context.data.location.default()
+await context.data.location.sync(location)
+context.data.location.invalidate(location)
+```
+
+Стан системи контролю версій надає відомості про репозиторій у розташуванні.
+
+```ts
+await context.data.location.vcs.sync(context.location)
+const vcs = context.data.location.vcs.info(context.location)
+const branch = vcs?.branch.current
+context.data.location.vcs.invalidate(context.location)
+```
+
+Дані агентів, команд, інтеграцій, моделей, провайдерів, посилань на каталоги, навичок і MCP мають спільні методи `list`,
+`sync` та `invalidate`.
+
+```ts
+const location = context.location
+await Promise.all([
+  context.data.location.agent.sync(location),
+  context.data.location.command.sync(location),
+  context.data.location.integration.sync(location),
+  context.data.location.model.sync(location),
+  context.data.location.provider.sync(location),
+  context.data.location.reference.sync(location),
+  context.data.location.skill.sync(location),
+  context.data.location.mcp.server.sync(location),
+  context.data.location.mcp.resource.sync(location),
+])
+
+const agents = context.data.location.agent.list(location) ?? []
+const commands = context.data.location.command.list(location) ?? []
+const integrations = context.data.location.integration.list(location) ?? []
+const models = context.data.location.model.list(location) ?? []
+const providers = context.data.location.provider.list(location) ?? []
+const references = context.data.location.reference.list(location) ?? []
+const skills = context.data.location.skill.list(location) ?? []
+const servers = context.data.location.mcp.server.list(location) ?? []
+const resources = context.data.location.mcp.resource.list(location) ?? []
+
+context.data.location.model.invalidate(location)
+```
+
+## Привернення уваги
+
+Запити на привернення уваги можуть показати системне сповіщення, відтворити налаштований звук або зробити і те, і інше —
+залежно від того, чи має термінал фокус.
+
+```ts
+const result = await context.attention.notify({
+  title: "OpenCode",
+  message: "Session done",
+  notification: { when: "blurred" },
+  sound: { name: "done", volume: 0.5, when: "always" },
+})
+console.log(result.ok, result.notification, result.sound, result.skipped)
+```
+
+## Тема й рендерер
+
+Використовуйте семантичні токени теми з елементами OpenTUI і передавайте `context.renderer` у допоміжні функції, що
+працюють із рендерером.
+
+```tsx
+const Status = () => <text fg={context.theme.text.base}>Ready</text>
+const renderer = context.renderer
+```
+
+## Компоненти Solid
+
+Використовуйте `usePlugin`, щоб отримати поточний контекст у JSX, який рендерить маршрут, діалог або слот.
+
+```tsx
+import { usePlugin } from "@opencode/plugin/tui"
+
+function Status() {
+  const context = usePlugin()
+  return <text fg={context.theme.text.base}>{context.app.version}</text>
+}
+```
+
+## Markdown
+
+Зареєструйте рендерер огороджених блоків коду для певної мови; повернена функція скасовує реєстрацію.
+
+```ts
+const unregister = context.markdown.registerCodeBlockRenderer("acme", (_token, render) => render.defaultRender())
+return unregister
+```
+
+## Команди й карти клавіш
+
+Реєструйте команди для палітри, слеш-команди та клавіатурні команди в реактивному шарі карти клавіш.
+
+```ts
+context.keymap.layer(() => ({
+  mode: "global",
+  priority: 10,
+  commands: [
+    {
+      id: "acme.status",
+      title: "Show Acme status",
+      group: "Acme",
+      bind: "ctrl+g",
+      palette: true,
+      slash: { name: "acme", aliases: ["status"], arguments: true },
+      enabled: () => true,
+      suggested: true,
+      run: async (input) => context.ui.toast.show({ message: input ?? "Ready" }),
+    },
+  ],
+  bindings: ["acme.status"],
+}))
+```
+
+Викликайте `layer` із `setup` (зокрема після `await`) або з компонента. Кожен шар видаляється за першої з таких подій:
+
+- Плагін вимкнено, перезавантажено або його налаштування завершилося помилкою.
+- Компонент чи реактивне обчислення, що створили шар (наприклад, слот, маршрут або діалог), звільнено.
+
+Фабрика шару має бути чистою функцією. OpenCode обчислює її один раз без відстеження залежностей, щоб перевірити
+початкову структуру команд, а потім — реактивно. Помилки початкової структури команд, як-от команда палітри без ID,
+викидаються з `layer()`. Помилки розбору сполучень клавіш обробляє OpenTUI. Помилки пізніших реактивних оновлень
+обробляються за правилами обробки помилок Solid.
+
+```ts
+async setup(context) {
+  const settings = await loadSettings()
+  context.keymap.layer(() => ({
+    mode: "global",
+    commands: [{ id: "acme.sync", title: "Sync Acme", palette: true, run: () => sync(settings) }],
+  }))
+}
+```
+
+Шар може бути прив'язаний до одного renderable-об'єкта OpenTUI, а команда може повернути `false`, щоб передати обробку
+натискання далі.
+
+```ts
+context.keymap.layer(() => ({
+  target: () => panel,
+  commands: [{ bind: "escape", run: (_input, event) => (event ? false : undefined) }],
+}))
+```
+
+Викликайте команди, переглядайте сполучення клавіш і стан команд або вмикайте тимчасовий режим введення.
+
+```ts
+context.keymap.dispatch("acme.status", "verbose")
+const shortcuts = context.keymap.shortcuts("acme.status")
+const commands = context.keymap.commands()
+const pending = context.keymap.pending()
+const active = context.keymap.active()
+const currentMode = context.keymap.mode.current()
+const popMode = context.keymap.mode.push("acme-search")
+popMode()
+```
+
+## Сховище
+
+Постійне сховище зберігає JSON між перезапусками й синхронізує його між екземплярами TUI.
+
+```ts
+const [settings, updateSettings] = context.storage.store("settings", {
+  initial: { compact: false },
+})
+await updateSettings((draft) => {
+  draft.compact = true
+})
+```
+
+Сховище в пам'яті переживає перезавантаження плагіна, але очищується після виходу з TUI.
+
+```ts
+const [state, updateState] = context.storage.memory("state", {
+  initial: { count: 0 },
+})
+updateState((draft) => {
+  draft.count++
+})
+```
+
+## Діалоги та спливні сповіщення
+
+Для попереджень, підтверджень, введення тексту та вибору використовуйте діалоги на основі промісів.
+
+```ts
+await context.ui.dialog.alert({ title: "Acme", message: "Ready" })
+const confirmed = await context.ui.dialog.confirm({
+  title: "Continue?",
+  message: "Run the Acme action?",
+  label: { confirm: "Run", cancel: "Cancel" },
+})
+const name = await context.ui.dialog.prompt({ title: "Name", placeholder: "release" })
+const mode = await context.ui.dialog.select({
+  title: "Mode",
+  current: "safe",
+  options: [
+    { title: "Safe", value: "safe", description: "Ask before changes" },
+    { title: "Fast", value: "fast", disabled: false, category: "Advanced" },
+  ],
+})
+```
+
+### Пошук у select
+
+Передайте `search`, щоб самостійно керувати зіставленням і порядком результатів. Функція виконується для кожного запиту, зокрема порожнього, і отримує лише ввімкнені варіанти. Результати показуються в повернутому порядку, а категорія кожного варіанта — в тому самому рядку.
+
+```ts
+const project = await context.ui.dialog.select({
+  title: "Projects",
+  options: [
+    { title: "Alpha", value: "alpha", category: "Recent" },
+    { title: "Beta", value: "beta", category: "Pinned" },
+  ],
+  search: (query, options) =>
+    options
+      .filter((option) => option.title.toLowerCase().includes(query.toLowerCase()))
+      .toSorted((left, right) => right.title.localeCompare(left.title)),
+})
+```
+
+### Дії в select
+
+Дії показуються в нижньому рядку діалогу й запускаються своїм сполученням клавіш, клацанням або фокусом через Tab і натисканням Enter. За замовчуванням вони отримують вибране значення й недоступні, якщо нічого не вибрано. Для дій, яким вибір не потрібен, використовуйте `selection: "none"`.
+
+```ts
+await context.ui.dialog.select({
+  title: "Projects",
+  options: [{ title: "Alpha", value: "alpha" }],
+  actions: [
+    { bind: "ctrl+o", title: "Inspect", onTrigger: (value) => context.ui.toast.show({ message: value }) },
+    { bind: "ctrl+a", title: "Close", side: "right", selection: "none", onTrigger: () => context.ui.dialog.clear() },
+  ],
+})
+```
+
+- Дія не закриває діалог і не завершує проміс.
+- Enter або клацання варіанта повертає вибране значення.
+- Escape, `clear()` або показ іншого діалогу повертає `undefined`.
+- Не призначайте `ctrl+n` і `ctrl+p`: діалог резервує їх для навігації, а його власні сполучення мають вищий пріоритет.
+
+Власні JSX-діалоги можуть задавати свій розмір і закривати себе самостійно.
+
+```tsx
+context.ui.dialog.set({ size: "large", centered: true })
+context.ui.dialog.show(
+  () => (
+    <box>
+      <text>Acme</text>
+    </box>
+  ),
+  () => console.log("closed"),
+)
+context.ui.dialog.clear()
+```
+
+Спливні сповіщення підтримують заголовок, повідомлення, варіант і тривалість.
+
+```ts
+context.ui.toast.show({
+  title: "Acme",
+  message: "Saved",
+  variant: "success",
+  duration: 3000,
+})
+```
+
+## Маршрути й вкладки
+
+Зареєструйте JSX-маршрут, перегляньте поточний маршрут і переходьте на головну сторінку, до сесії або на сторінку
+плагіна.
+
+```tsx
+const unregister = context.ui.router.register({
+  name: "dashboard",
+  render: ({ data }) => <text>{String(data?.title ?? "Acme")}</text>,
+})
+const current = context.ui.router.current()
+context.ui.router.navigate({ type: "plugin", name: "dashboard", data: { title: "Status" } })
+context.ui.router.navigate({ type: "session", sessionID })
+context.ui.router.navigate({ type: "home" })
+return unregister
+```
+
+Коли вкладки сесій увімкнено, вкладки можна отримати списком, відкривати, фокусувати, переміщувати й закривати. `open` не
+змінює фокус; `focus` за потреби відкриває вкладку.
+
+```ts
+if (context.ui.tabs.enabled()) {
+  context.ui.tabs.open(backgroundSessionID)
+  context.ui.tabs.focus(sessionID)
+  const tabs = context.ui.tabs.list()
+  context.ui.tabs.move(backgroundSessionID, tabs.length - 1)
+  context.ui.tabs.close(sessionID)
+  context.ui.tabs.close()
+}
+```
+
+## Модель
+
+Читайте вибрану для промпту модель і змінюйте її варіант. `current()` і `variant.list()` реактивні, якщо їх читати в
+обчисленні Solid. Значення `variant`, рівне `undefined`, означає варіант моделі за замовчуванням.
+
+```ts
+const selected = context.ui.model.current()
+const variants = context.ui.model.variant.list()
+context.ui.model.variant.set("high")
+context.ui.model.variant.set(undefined)
+```
+
+`variant.set` повертає `false`, якщо модель не вибрано або модель не має такого варіанта. Прив'яжіть його до команди, щоб
+замінити вбудоване перемикання варіантів — наприклад, щоб пропускати варіант за замовчуванням:
+
+```ts
+context.keymap.layer(() => ({
+  commands: [
+    {
+      id: "acme.variant.cycle",
+      title: "Cycle variants",
+      bind: "tab",
+      run() {
+        const variants = context.ui.model.variant.list()
+        if (variants.length === 0) return
+        const index = variants.indexOf(context.ui.model.current()?.variant ?? "")
+        context.ui.model.variant.set(variants[(index + 1) % variants.length])
+      },
+    },
+  ],
+}))
+```
+
+## Слоти
+
+Слоти вставляють або замінюють JSX у `app`, `home.footer`, `home.footer.status`, `prompt.footer`, `prompt.footer.status`,
+`prompt.footer.file`, `session.composer.top`, `sidebar.content` або `sidebar.footer`.
+
+```tsx
+return context.ui.slot({
+  append: "sidebar.content",
+  render: ({ sessionID }) => <text>{context.data.session.get(sessionID)?.title}</text>,
+})
+```
+
+Для розміщення використовуйте `prepend`, `append`, `before`, `after` або `replace`.
+
+```tsx
+context.ui.slot({ prepend: "home.footer", render: () => <text>Before footer content</text> })
+context.ui.slot({ append: "home.footer", render: () => <text>After footer content</text> })
+context.ui.slot({ before: "home.footer", render: () => <text>Before footer slot</text> })
+context.ui.slot({ after: "home.footer", render: () => <text>After footer slot</text> })
+context.ui.slot({ replace: "home.footer", render: () => <text>New footer</text> })
+```
+
+Використовуйте `home.footer.status`, щоб додати вміст до вбудованого нижнього рядка, не замінюючи його. Додані елементи
+стану показуються після індикаторів стану OpenCode і перед версією.
+
+```tsx
+context.ui.slot({ append: "home.footer.status", render: () => <text>SYNCED</text> })
+```
+
+### Панелі сесії
+
+Зареєструйте внесок у `session.panel`, а потім відкривайте панель командою. Розмір, фокус і повноекранний показ
+контролює хост; вміст — плагін. Вибрана назва передається кожному внеску як `panel.name`, і кожен внесок сам вирішує, чи
+рендеритися.
+
+```tsx
+import { Show } from "solid-js"
+
+context.ui.slot({
+  append: "session.panel",
+  render: (panel) => (
+    <Show when={panel.name === "acme.review"}>
+      <ReviewPanel panel={panel} />
+    </Show>
+  ),
+})
+
+context.ui.slot({
+  append: "app",
+  render: () => {
+    context.keymap.layer(() => ({
+      mode: "global",
+      commands: [
+        {
+          id: "acme.review",
+          title: "Open review",
+          slash: { name: "review" },
+          run: () => {
+            context.ui.panel.open("acme.review")
+          },
+        },
+      ],
+    }))
+    return null
+  },
+})
+```
+
+- Відкриття поза сесією повертає `false`.
+- Це звичайний слот: діють усі п'ять способів розміщення й наявні правила впорядкування замін.
+- Використовуйте `append` для внесків, які можна вибирати незалежно, щоб вони могли співіснувати. `replace`, як і раніше, повністю займає слот.
+- Назви — це спільні значення вибору, а не зареєстровані права. Щоб уникнути конфліктів, використовуйте назви з префіксом плагіна, як-от `acme.review`. Якщо відкрити назву, для якої немає рендерера, слот залишиться порожнім.
+- Зміна способу показу зберігає змонтовані внески. Закриття панелі звільняє їх; вимкнення плагіна видаляє його внески через звичайне очищення слотів.
+- Шари клавіатури та режими введення панелі активні лише тоді, коли введення належить панелі.
+
+Слот отримує реактивні властивості `name`, `sessionID`, `width`, `presentation` і `focused`, а також дії `focus`,
+`close` і `toggleFullscreen`. У вузьких терміналах хост залишає панель на весь екран; `toggleFullscreen` нічого не
+робить, доки не з'явиться достатньо місця для бічної панелі.
+
+```tsx
+import type { PanelInput } from "@opencode/plugin/tui/context"
+import { usePlugin } from "@opencode/plugin/tui"
+
+function ReviewPanel(props: { panel: PanelInput }) {
+  const context = usePlugin()
+  context.keymap.layer(() => ({
+    commands: [
+      {
+        id: "acme.review.fullscreen",
+        bind: "f",
+        run: props.panel.toggleFullscreen,
+      },
+    ],
+  }))
+  return <text>Reviewing {props.panel.sessionID}</text>
+}
+```
+
+Можна одразу запросити повноекранний показ, перевірити свою активну панель або закрити її, не зачіпаючи панелі інших
+плагінів.
+
+```ts
+context.ui.panel.open("acme.review", { presentation: "fullscreen" })
+const current = context.ui.panel.current()
+context.ui.panel.close()
+```
+
+## Форматування
+
+Форматуйте шляхи файлової системи для показу, зокрема зі скороченням домашнього каталогу.
+
+```ts
+const displayPath = context.ui.format.path(context.location?.directory ?? "/home/me/project")
+```
+
+## Публікація та завантаження
+
+Надайте плагін CLI через `./tui`; якщо плагін рендерить JSX, додайте peer-залежності OpenTUI.
+
+```json title="package.json"
+{
+  "name": "opencode-acme-plugin",
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts",
+    "./tui": "./src/tui.tsx"
+  },
+  "dependencies": {
+    "@opencode/plugin": "latest"
+  },
+  "peerDependencies": {
+    "@opentui/core": ">=0.5.8",
+    "@opentui/solid": ">=0.5.8",
+    "solid-js": ">=1.9.0"
+  }
+}
+```
+
+Експортуйте `./tui` поряд з [основним плагіном](/build/plugins), щоб він завантажувався автоматично.
+
+```ts title="src/index.ts"
+import { Plugin } from "@opencode/plugin"
+
+export default Plugin.define({
+  id: "acme.server",
+  setup() {},
+})
+```
+
+Налаштуйте пакет лише для CLI в [`cli.json`](/cli/plugins), щоб він залишався активним під час роботи з віддаленими
+серверами.
+
+```json title="cli.json"
+{
+  "plugins": ["opencode-acme-plugin"]
+}
+```

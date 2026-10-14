@@ -1,0 +1,341 @@
+---
+title: "เอเจนต์"
+---
+
+สร้างไฟล์ Markdown เพื่อเพิ่มเอเจนต์ที่นำกลับมาใช้ซ้ำได้ ตัวอย่างนี้เพิ่มผู้รีวิวแบบอ่านอย่างเดียวที่เอเจนต์หลักเรียกใช้เพื่อรีวิวโค้ดได้:
+
+```md title=".opencode/agents/reviewer.md"
+---
+description: Reviews changes for correctness and regressions
+mode: subagent
+model: anthropic/claude-sonnet-4-5#high
+permissions:
+  - action: edit
+    resource: "*"
+    effect: deny
+  - action: shell
+    resource: "*"
+    effect: deny
+---
+
+Review the current changes. List findings in severity order with file and line references.
+```
+
+สั่งให้เอเจนต์หลักใช้งาน:
+
+```text
+Use the reviewer subagent to review my current changes.
+```
+
+เอเจนต์รวม system prompt โมเดลที่ต้องการ สิทธิ์ และรายละเอียดการแสดงผลไว้เป็นโปรไฟล์ผู้ช่วยที่มีชื่อ
+
+## ตำแหน่งไฟล์
+
+บันทึกเอเจนต์แบบ Markdown ไว้ในตำแหน่งส่วนกลางเพื่อใช้กับทุกโปรเจกต์ หรือไว้ภายในโปรเจกต์:
+
+```text
+~/.config/opencode/agents/<name>.md
+.opencode/agents/<name>.md
+```
+
+OpenCode ค้นหาไดเรกทอรี `.opencode` ของโปรเจกต์ตั้งแต่ไดเรกทอรีปัจจุบันขึ้นไปจนถึงรากของโปรเจกต์ พาธที่ซ้อนกันจะกลายเป็นส่วนหนึ่งของ ID เอเจนต์:
+
+```text
+.opencode/agents/team/reviewer.md  →  team/reviewer
+```
+
+## รูปแบบ
+
+### Markdown
+
+frontmatter รับฟิลด์เดียวกับรายการในการกำหนดค่า `agents` ส่วนเนื้อหา Markdown จะกลายเป็น `system` prompt ของเอเจนต์:
+
+```md title=".opencode/agents/explainer.md"
+---
+description: Explains code without changing it
+mode: subagent
+---
+
+Explain the relevant code with short examples. Do not edit files.
+```
+
+### JSONC
+
+กำหนดเอเจนต์ไว้ใต้ `agents` ใน[ไฟล์กำหนดค่า OpenCode](/config)ไฟล์ใดก็ได้:
+
+```jsonc title="opencode.jsonc"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "agents": {
+    "reviewer": {
+      "description": "Reviews current changes",
+      "mode": "subagent",
+      "system": "Report findings in severity order.",
+      "permissions": [
+        { "action": "edit", "resource": "*", "effect": "deny" },
+      ],
+    },
+  },
+}
+```
+
+## การเลือกเอเจนต์
+
+ตั้งค่าเอเจนต์หลักที่จะใช้เมื่อเซสชันยังไม่ได้เลือกเอเจนต์:
+
+```jsonc title="opencode.jsonc"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "default_agent": "writer",
+  "agents": {
+    "writer": { "mode": "primary" },
+  },
+}
+```
+
+เอเจนต์เริ่มต้นที่เลือกต้องมีอยู่จริง มองเห็นได้ และรองรับการใช้เป็นเอเจนต์หลัก มิฉะนั้น OpenCode จะใช้ `build` และหากใช้ไม่ได้ จะใช้เอเจนต์แรกที่มองเห็นได้และใช้เป็นเอเจนต์หลักได้ การเปลี่ยนการตั้งค่านี้จะไม่แทนที่เอเจนต์ที่บันทึกไว้ในเซสชันที่มีอยู่แล้ว
+
+## โหมด
+
+ตั้งค่า `mode` ตามตำแหน่งที่เอเจนต์ควรทำงาน:
+
+```jsonc
+{
+  "agents": {
+    "reviewer": { "mode": "subagent" },
+  },
+}
+```
+
+| โหมด | พฤติกรรม |
+| --- | --- |
+| `primary` | ทำงานเป็นเอเจนต์หลักของเซสชัน เป็นค่าเริ่มต้นของเอเจนต์แบบกำหนดเองที่สร้างใหม่ |
+| `subagent` | ทำงานเฉพาะในเซสชันลูกผ่านเครื่องมือ `subagent` |
+| `all` | ทำงานได้ทั้งเป็นเอเจนต์หลักหรือเอเจนต์ย่อย |
+
+เอเจนต์ย่อย (subagent) ทำงานด้วยบริบทใหม่ในเซสชันลูกแบบเบื้องหน้าหรือเบื้องหลัง สิทธิ์ `subagent` ของเอเจนต์แม่จะกำหนดว่าเรียกใช้เอเจนต์ใดได้บ้าง ส่วนเอเจนต์ลูกใช้สิทธิ์ที่กำหนดไว้ของตัวเอง
+
+```jsonc
+{
+  "agents": {
+    "orchestrator": {
+      "permissions": [
+        { "action": "subagent", "resource": "*", "effect": "deny" },
+        { "action": "subagent", "resource": "reviewer", "effect": "allow" },
+      ],
+    },
+  },
+}
+```
+
+## เอเจนต์ในตัว
+
+OpenCode มีเอเจนต์ที่มองเห็นได้ดังนี้:
+
+| เอเจนต์ | โหมด | วัตถุประสงค์ |
+| --- | --- | --- |
+| **Build** (`build`) | `primary` | เอเจนต์เขียนโค้ดเริ่มต้น อนุญาตเครื่องมือโดยค่าเริ่มต้น แต่การอ่านไฟล์สภาพแวดล้อมที่ละเอียดอ่อนและการเข้าถึงนอก workspace จะขอการอนุมัติ |
+| **Plan** (`plan`) | `primary` | สำรวจและวางแผนโดยไม่แก้ไขไฟล์ปกติของโปรเจกต์ อาจเขียนไฟล์แผนของ OpenCode เมื่อได้รับคำขอ และคำสั่ง shell ยังคงควบคุมด้วยสิทธิ์ |
+| **General** (`general`) | `subagent` | จัดการงานค้นคว้าและงานหลายขั้นตอนด้วยการเข้าถึงเครื่องมืออย่างกว้างขวาง แต่เรียกใช้เอเจนต์ย่อยเพิ่มไม่ได้ |
+| **Explore** (`explore`) | `subagent` | ค้นหาและอ่านโค้ดหรือแหล่งข้อมูลบนเว็บโดยไม่แก้ไขไฟล์ |
+
+แทนที่เอเจนต์ในตัวได้โดยใช้ ID เดียวกัน:
+
+```jsonc
+{
+  "agents": {
+    "build": {
+      "permissions": [
+        { "action": "shell", "resource": "git push *", "effect": "ask" },
+      ],
+    },
+  },
+}
+```
+
+เอเจนต์ `compaction`, `title` และ `summary` ที่ซ่อนอยู่ทำงานด้านการบำรุงรักษา และเลือกใช้โดยตรงไม่ได้ V2 ไม่มีเอเจนต์ `scout` ในตัว
+
+## การรวมค่า
+
+นิยามเอเจนต์จะรวมกันตามลำดับการกำหนดค่า ค่าสเกลาร์ที่มาทีหลังจะแทนที่ค่าก่อนหน้า แมปของคำขอจะรวมกันตามคีย์ และกฎสิทธิ์จะต่อท้ายกัน:
+
+```jsonc
+{
+  "permissions": [
+    { "action": "shell", "resource": "*", "effect": "ask" },
+  ],
+  "agents": {
+    "build": {
+      "permissions": [
+        { "action": "shell", "resource": "git status", "effect": "allow" },
+      ],
+    },
+  },
+}
+```
+
+`permissions` ส่วนกลางจะมีผลก่อนกฎเฉพาะเอเจนต์ กฎของเอเจนต์ที่มาทีหลังจึงปรับแต่งกฎส่วนกลางได้
+
+## ตัวเลือก
+
+### คำอธิบาย
+
+`description` อธิบายวัตถุประสงค์ของเอเจนต์ ควรเพิ่มให้เอเจนต์ย่อย เพราะ OpenCode จะแสดงคำอธิบายนี้ให้โมเดลที่กำลังเลือกว่าจะเรียกใช้เอเจนต์ใด:
+
+```yaml
+description: Reviews database migrations for safety
+```
+
+### โหมด
+
+`mode` รับค่า `primary`, `subagent` หรือ `all` หากไม่ระบุในเอเจนต์แบบกำหนดเองที่สร้างใหม่ จะมีค่าเริ่มต้นเป็น `primary`:
+
+```yaml
+mode: all
+```
+
+### โมเดล
+
+`model` ใช้รูปแบบ `provider/model` และระบุ `#variant` ต่อท้ายได้:
+
+```yaml
+model: anthropic/claude-sonnet-4-5#high
+```
+
+การกำหนดค่าแบบ JSON ยังรับรูปแบบเต็มได้ด้วย:
+
+```jsonc
+{
+  "agents": {
+    "reviewer": {
+      "model": {
+        "providerID": "anthropic",
+        "model": "claude-sonnet-4-5",
+        "variant": "high",
+      },
+    },
+  },
+}
+```
+
+- เอเจนต์ย่อยใช้โมเดลที่กำหนดไว้ หรือสืบทอดโมเดลของเซสชันแม่หากไม่ได้กำหนด
+- เซสชันเก็บโมเดลที่เลือกไว้แยกต่างหาก การเลือกเอเจนต์หลักด้วย ID จะไม่เปลี่ยนโมเดลนั้น
+
+### System
+
+`system` ตั้งค่า system prompt ของเอเจนต์ ค่าที่ไม่ว่างจะแทนที่พรอมต์พื้นฐานของผู้ให้บริการสำหรับเอเจนต์นั้น:
+
+```jsonc
+{
+  "agents": {
+    "reviewer": { "system": "Review only. Do not modify files." },
+  },
+}
+```
+
+คำแนะนำของโปรเจกต์ สกิล ไดเรกทอรีอ้างอิง และแหล่งคำแนะนำอื่น ๆ ยังคงถูกเพิ่มเข้าไปตามปกติ ในเอเจนต์แบบ Markdown ให้เขียนข้อความนี้ในเนื้อหาของเอกสารแทนการใช้ฟิลด์ `system` ใน frontmatter
+
+### สิทธิ์
+
+`permissions` คือรายการกฎการจับคู่แบบเรียงลำดับ:
+
+```jsonc
+{
+  "agents": {
+    "reviewer": {
+      "permissions": [
+        { "action": "*", "resource": "*", "effect": "deny" },
+        { "action": "read", "resource": "src/**", "effect": "allow" },
+      ],
+    },
+  },
+}
+```
+
+| ฟิลด์ | ความหมาย |
+| --- | --- |
+| `action` | เครื่องมือหรือ action ของสิทธิ์ รองรับไวลด์การ์ด |
+| `resource` | พาธ คำสั่ง ID เอเจนต์ หรือค่าอื่นที่ action นั้นใช้จับคู่ รองรับไวลด์การ์ด |
+| `effect` | `allow`, `ask` หรือ `deny` |
+
+กฎสุดท้ายที่ตรงกันจะมีผล จึงควรวางกฎแบบกว้างไว้ก่อนข้อยกเว้น action ที่ใช้บ่อยได้แก่:
+
+| Action | ครอบคลุม |
+| --- | --- |
+| `shell` | คำสั่ง shell |
+| `edit` | เครื่องมือ edit, write และ patch |
+| `subagent` | เอเจนต์ลูก |
+| `read`, `glob`, `grep` | เครื่องมือค้นหาภายในเครื่อง |
+| `webfetch`, `websearch` | เครื่องมือเว็บ |
+| `skill` | การโหลดสกิล |
+
+สำหรับ resource ของ `read`, `edit` และ `external_directory` นั้น OpenCode จะขยาย `~` และ `$HOME`:
+
+```jsonc
+{ "action": "read", "resource": "~/notes/**", "effect": "allow" }
+```
+
+resource ของ shell ยังคงเป็นข้อความคำสั่งดิบ และจะไม่ขยายค่าเหล่านี้
+
+### จำนวนขั้นตอน
+
+`steps` ตั้งค่าจำนวนขั้นตอน (step) สูงสุดของโมเดลเป็นจำนวนเต็มบวก:
+
+```yaml
+steps: 8
+```
+
+ในขั้นตอนสุดท้าย OpenCode จะนำเครื่องมือออกและขอให้โมเดลสรุปเป็นข้อความ อินพุตใหม่จากผู้ใช้จะรีเซ็ตจำนวนขั้นตอนที่เหลือ
+
+### การซ่อน
+
+`hidden` นำเอเจนต์ออกจากรายการปกติ การค้นหาแบบโต้ตอบ และแคตตาล็อกเอเจนต์ย่อย:
+
+```yaml
+hidden: true
+```
+
+ตัวเลือกนี้ควบคุมการมองเห็น ไม่ใช่ความปลอดภัย ให้ใช้สิทธิ์เพื่อจำกัดพฤติกรรม
+
+### สี
+
+`color` ตั้งค่าสีของเอเจนต์ใน UI ด้วยค่า hex 6 หลัก:
+
+```yaml
+color: "#ff6b6b"
+```
+
+### การปิดใช้งาน
+
+`disabled` นำเอเจนต์ในตัวหรือเอเจนต์แบบกำหนดเองออก ณ จุดนั้นของการโหลดการกำหนดค่า:
+
+```jsonc
+{
+  "agents": {
+    "plan": { "disabled": true },
+  },
+}
+```
+
+### คำขอ
+
+`request` รับ header และ body แบบ JSON ที่จะซ้อนทับเพิ่มสำหรับแต่ละเอเจนต์:
+
+```jsonc
+{
+  "agents": {
+    "reviewer": {
+      "request": {
+        "headers": { "x-agent": "reviewer" },
+        "body": { "temperature": 0.1 },
+      },
+    },
+  },
+}
+```
+
+<Callout type="warning">
+  ตัวรันเซสชันของ V2 เก็บค่าเหล่านี้ไว้ แต่ยังไม่ส่งไปพร้อมคำขอไปยังโมเดล ให้กำหนดการตั้งค่าคำขอที่มีผลจริงไว้ที่ผู้ให้บริการ โมเดล หรือ variant ของโมเดลแทน
+</Callout>
+
+อย่าใช้ฟิลด์ระดับบนสุดแบบเดิม เช่น `temperature`, `top_p`, `prompt`, `permission`, `tools`, `disable` หรือ `maxSteps` ในการกำหนดค่าเอเจนต์ใหม่ของ V2

@@ -1,0 +1,98 @@
+---
+title: "واجهة API للاستدلال"
+description: "استدعِ النماذج المتوافقة مع OpenAI وAnthropic وGemini عبر الاستدلال في Console باستخدام ترويسة مصادقة واحدة."
+---
+
+يقدّم الاستدلال في Console واجهات API متوافقة مع OpenAI وAnthropic وGemini من `https://opencode.ai/inference`. أرسل طلب
+`POST` بصيغة JSON إلى نقطة النهاية المطابقة لعائلة API الخاصة بالنموذج.
+
+```bash
+curl -X POST "https://opencode.ai/inference/openai/v1/chat/completions" \
+  -H "Authorization: Bearer <token>" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "model": "kimi-k2.6",
+    "messages": [{ "role": "user", "content": "Say hi" }]
+  }'
+```
+
+## المصادقة
+
+ضع [مفتاح حساب خدمة](/console/api#service-accounts) أنشأته في [Console](https://opencode.ai/console) مكان `<token>`.
+تتطلب النماذج المدفوعة هذه الترويسة، بينما يمكن استدعاء نماذج المحادثة المجانية دونها.
+
+```text
+Authorization: Bearer <token>
+```
+
+## نقاط النهاية
+
+| API | المسار |
+| ----------------------- | --------------------------------------------------------- |
+| OpenAI Chat Completions | `/inference/openai/v1/chat/completions` |
+| OpenAI Responses | `/inference/openai/v1/responses` |
+| Anthropic Messages | `/inference/anthropic/v1/messages` |
+| Gemini | `/inference/google/v1beta/models/<model>:generateContent` |
+
+يُقدَّم كل نموذج عبر عائلة API واحدة. راجع جدول [نقاط نهاية النماذج](/console/models#endpoints)، أو اجلب القائمة الحية:
+
+```bash
+curl https://opencode.ai/inference/v1/models
+```
+
+### OpenAI Chat Completions
+
+تستخدم النماذج المفتوحة مثل `kimi-k2.6` و`glm-5.1` و`minimax-m2.7`، وكذلك النماذج المجانية، واجهة Chat Completions API.
+
+```bash
+curl -X POST "https://opencode.ai/inference/openai/v1/chat/completions" \
+  -H "Authorization: Bearer <token>" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "model": "glm-5.1",
+    "messages": [{ "role": "user", "content": "Say hi" }]
+  }'
+```
+
+### OpenAI Responses
+
+تستخدم نماذج GPT واجهة Responses API.
+
+```bash
+curl -X POST "https://opencode.ai/inference/openai/v1/responses" \
+  -H "Authorization: Bearer <token>" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "model": "gpt-5.5",
+    "input": "Say hi"
+  }'
+```
+
+### Anthropic Messages
+
+تستخدم نماذج Claude وQwen واجهة Messages API. والحقل `max_tokens` مطلوب.
+
+```bash
+curl -X POST "https://opencode.ai/inference/anthropic/v1/messages" \
+  -H "Authorization: Bearer <token>" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "model": "claude-sonnet-4-6",
+    "max_tokens": 1024,
+    "messages": [{ "role": "user", "content": "Say hi" }]
+  }'
+```
+
+### Gemini
+
+تأخذ نماذج Gemini النموذج والطريقة في المسار. ضع `:streamGenerateContent` مكان `:generateContent` لتلقّي
+الاستجابة متدفقةً.
+
+```bash
+curl -X POST "https://opencode.ai/inference/google/v1beta/models/gemini-3.1-pro:generateContent" \
+  -H "Authorization: Bearer <token>" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "contents": [{ "parts": [{ "text": "Say hi" }] }]
+  }'
+```

@@ -1,0 +1,342 @@
+---
+title: "Ajanlar"
+---
+
+Yeniden kullanılabilir bir ajan eklemek için bir Markdown dosyası oluşturun. Bu örnek, ana ajanın kod incelemeleri için başlatabileceği salt okunur bir inceleme ajanı ekler:
+
+```md title=".opencode/agents/reviewer.md"
+---
+description: Reviews changes for correctness and regressions
+mode: subagent
+model: anthropic/claude-sonnet-4-5#high
+permissions:
+  - action: edit
+    resource: "*"
+    effect: deny
+  - action: shell
+    resource: "*"
+    effect: deny
+---
+
+Review the current changes. List findings in severity order with file and line references.
+```
+
+Birincil ajanınızdan bu ajanı kullanmasını isteyin:
+
+```text
+Use the reviewer subagent to review my current changes.
+```
+
+Bir ajan; sistem istemini, model tercihini, izinleri ve görünüm ayrıntılarını adlandırılmış bir asistan profilinde birleştirir.
+
+## Konumlar
+
+Markdown ajanlarını tüm projeler için global olarak veya bir projenin içine kaydedin:
+
+```text
+~/.config/opencode/agents/<name>.md
+.opencode/agents/<name>.md
+```
+
+OpenCode, projedeki `.opencode` dizinlerini geçerli dizinden proje köküne kadar tarar. İç içe bir yol, ajan ID'sinin parçası olur:
+
+```text
+.opencode/agents/team/reviewer.md  →  team/reviewer
+```
+
+## Biçimler
+
+### Markdown
+
+Frontmatter, bir `agents` yapılandırma girdisiyle aynı alanları kabul eder. Markdown gövdesi ajanın `system` istemi olur:
+
+```md title=".opencode/agents/explainer.md"
+---
+description: Explains code without changing it
+mode: subagent
+---
+
+Explain the relevant code with short examples. Do not edit files.
+```
+
+### JSONC
+
+Ajanları herhangi bir [OpenCode yapılandırma dosyasında](/config) `agents` altında tanımlayın:
+
+```jsonc title="opencode.jsonc"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "agents": {
+    "reviewer": {
+      "description": "Reviews current changes",
+      "mode": "subagent",
+      "system": "Report findings in severity order.",
+      "permissions": [
+        { "action": "edit", "resource": "*", "effect": "deny" },
+      ],
+    },
+  },
+}
+```
+
+## Seçim
+
+Bir oturum ajan seçmediğinde kullanılacak birincil ajanı ayarlayın:
+
+```jsonc title="opencode.jsonc"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "default_agent": "writer",
+  "agents": {
+    "writer": { "mode": "primary" },
+  },
+}
+```
+
+Seçilen varsayılan ajan mevcut ve görünür olmalı, birincil ajan olarak kullanılabilmelidir. Aksi hâlde OpenCode önce `build` ajanını, ardından birincil olarak kullanılabilen ilk görünür ajanı kullanır. Bu ayarı değiştirmek, mevcut bir oturumda kayıtlı ajanı değiştirmez.
+
+## Modlar
+
+`mode` alanını ajanın nerede çalışması gerektiğine göre ayarlayın:
+
+```jsonc
+{
+  "agents": {
+    "reviewer": { "mode": "subagent" },
+  },
+}
+```
+
+| Mod | Davranış |
+| --- | --- |
+| `primary` | Bir oturumun ana ajanı olarak çalışır. Yeni bir özel ajan için varsayılan budur. |
+| `subagent` | Yalnızca `subagent` aracı aracılığıyla bir alt oturumda çalışır. |
+| `all` | Birincil ajan veya alt ajan olarak çalışabilir. |
+
+Alt ajanlar, ön planda veya arka planda çalışan alt oturumlarda temiz bir bağlamla çalışır. Üst ajanın `subagent` izinleri hangi ajanları başlatabileceğini belirler; alt ajan ise kendi yapılandırılmış izinlerini kullanır.
+
+```jsonc
+{
+  "agents": {
+    "orchestrator": {
+      "permissions": [
+        { "action": "subagent", "resource": "*", "effect": "deny" },
+        { "action": "subagent", "resource": "reviewer", "effect": "allow" },
+      ],
+    },
+  },
+}
+```
+
+## Yerleşik ajanlar
+
+OpenCode şu görünür ajanları içerir:
+
+| Ajan | Mod | Amaç |
+| --- | --- | --- |
+| **Build** (`build`) | `primary` | Varsayılan kodlama ajanı. Araçlara varsayılan olarak izin verilir; hassas ortam dosyalarının okunması ve çalışma alanı dışına erişim onay ister. |
+| **Plan** (`plan`) | `primary` | Normal proje dosyalarını düzenlemeden keşif ve planlama yapar. İstendiğinde OpenCode plan dosyalarını yazabilir; shell komutları izin denetimine tabi kalır. |
+| **General** (`general`) | `subagent` | Geniş araç erişimiyle araştırma ve çok adımlı işleri yürütür, ancak başka alt ajan başlatamaz. |
+| **Explore** (`explore`) | `subagent` | Dosyaları düzenlemeden kodda veya web kaynaklarında arama yapar ve bunları okur. |
+
+Yerleşik bir ajanı aynı ID'yi kullanarak geçersiz kılın:
+
+```jsonc
+{
+  "agents": {
+    "build": {
+      "permissions": [
+        { "action": "shell", "resource": "git push *", "effect": "ask" },
+      ],
+    },
+  },
+}
+```
+
+Gizli `compaction`, `title` ve `summary` ajanları bakım işlerini yürütür ve doğrudan seçilemez. V2'de yerleşik bir `scout` ajanı yoktur.
+
+## Birleştirme
+
+Ajan tanımları yapılandırma sırasına göre birleştirilir. Sonraki skaler değerler öncekilerin yerini alır, istek eşlemeleri anahtara göre birleştirilir ve izin kuralları listenin sonuna eklenir:
+
+```jsonc
+{
+  "permissions": [
+    { "action": "shell", "resource": "*", "effect": "ask" },
+  ],
+  "agents": {
+    "build": {
+      "permissions": [
+        { "action": "shell", "resource": "git status", "effect": "allow" },
+      ],
+    },
+  },
+}
+```
+
+Global `permissions` kuralları ajana özgü kurallardan önce uygulanır; böylece sonraki ajan kuralları bunları daraltabilir.
+
+## Seçenekler
+
+### Açıklama
+
+`description`, ajanın amacını açıklar. OpenCode bu açıklamayı hangi ajanın başlatılacağını seçen modele gösterdiği için alt ajanlara mutlaka ekleyin:
+
+```yaml
+description: Reviews database migrations for safety
+```
+
+### Mod
+
+`mode`; `primary`, `subagent` veya `all` değerlerini kabul eder. Yeni bir özel ajanda belirtilmezse varsayılan olarak `primary` olur:
+
+```yaml
+mode: all
+```
+
+### Model
+
+`model`, isteğe bağlı bir `#variant` ile birlikte `provider/model` biçimini kullanır:
+
+```yaml
+model: anthropic/claude-sonnet-4-5#high
+```
+
+JSON yapılandırması genişletilmiş biçimi de kabul eder:
+
+```jsonc
+{
+  "agents": {
+    "reviewer": {
+      "model": {
+        "providerID": "anthropic",
+        "model": "claude-sonnet-4-5",
+        "variant": "high",
+      },
+    },
+  },
+}
+```
+
+- Bir alt ajan, yapılandırılmış modelini kullanır; model yapılandırılmamışsa üst oturumun modelini devralır.
+- Bir oturum, seçilen modelini ayrı olarak saklar. Birincil bir ajanı ID'siyle seçmek bu modeli değiştirmez.
+
+### Sistem
+
+`system`, ajanın sistem istemini ayarlar. Boş olmayan bir değer, o ajan için sağlayıcının temel isteminin yerini alır:
+
+```jsonc
+{
+  "agents": {
+    "reviewer": { "system": "Review only. Do not modify files." },
+  },
+}
+```
+
+Proje talimatları, beceriler, referanslar ve diğer talimat kaynakları yine eklenir. Markdown ajanında bu metni `system` frontmatter alanı yerine belge gövdesine yazın.
+
+### İzinler
+
+`permissions`, sıralı bir eşleştirme kuralları listesidir:
+
+```jsonc
+{
+  "agents": {
+    "reviewer": {
+      "permissions": [
+        { "action": "*", "resource": "*", "effect": "deny" },
+        { "action": "read", "resource": "src/**", "effect": "allow" },
+      ],
+    },
+  },
+}
+```
+
+| Alan | Anlamı |
+| --- | --- |
+| `action` | Araç veya izin eylemi. Joker karakterler desteklenir. |
+| `resource` | Eylemin eşleştirdiği yol, komut, ajan ID'si veya başka bir değer. Joker karakterler desteklenir. |
+| `effect` | `allow`, `ask` veya `deny`. |
+
+Eşleşen son kural geçerli olur; bu nedenle geniş kapsamlı kuralları istisnalardan önce yazın. Yaygın eylemler şunlardır:
+
+| Eylem | Kapsamı |
+| --- | --- |
+| `shell` | Shell komutları |
+| `edit` | Düzenleme, yazma ve yama araçları |
+| `subagent` | Alt ajanlar |
+| `read`, `glob`, `grep` | Yerel keşif araçları |
+| `webfetch`, `websearch` | Web araçları |
+| `skill` | Beceri yükleme |
+
+`read`, `edit` ve `external_directory` kaynakları için OpenCode, `~` ve `$HOME` ifadelerini genişletir:
+
+```jsonc
+{ "action": "read", "resource": "~/notes/**", "effect": "allow" }
+```
+
+Shell kaynakları ham komut metni olarak kalır ve bu değerleri genişletmez.
+
+### Adımlar
+
+`steps`, model adımlarının pozitif bir üst sınırını belirler:
+
+```yaml
+steps: 8
+```
+
+Son adımda OpenCode araçları kaldırır ve modelden metin olarak bir özet yazmasını ister. Yeni kullanıcı girdisi adım hakkını sıfırlar.
+
+### Gizli
+
+`hidden`, bir ajanı normal listelerden, etkileşimli keşiften ve alt ajan kataloğundan kaldırır:
+
+```yaml
+hidden: true
+```
+
+Bu ayar güvenliği değil, görünürlüğü denetler. Davranışı kısıtlamak için izinleri kullanın.
+
+### Renk
+
+`color`, ajanın arayüz rengini altı haneli bir hex değeriyle ayarlar:
+
+```yaml
+color: "#ff6b6b"
+```
+
+### Devre dışı
+
+`disabled`, yerleşik veya özel bir ajanı yapılandırma yüklemesinin o noktasında kaldırır:
+
+```jsonc
+{
+  "agents": {
+    "plan": { "disabled": true },
+  },
+}
+```
+
+### İstek
+
+`request`, ajana özgü başlık ve JSON gövdesi katmanlarını kabul eder:
+
+```jsonc
+{
+  "agents": {
+    "reviewer": {
+      "request": {
+        "headers": { "x-agent": "reviewer" },
+        "body": { "temperature": 0.1 },
+      },
+    },
+  },
+}
+```
+
+<Callout type="warning">
+  V2 oturum çalıştırıcısı bu değerleri korur, ancak henüz model istekleriyle birlikte göndermez. Etkin istek ayarlarını
+  bunun yerine sağlayıcı, model veya model varyantı üzerinde yapılandırın.
+</Callout>
+
+Yeni V2 ajan yapılandırmasında `temperature`, `top_p`, `prompt`, `permission`, `tools`, `disable` veya `maxSteps` gibi eski üst düzey alanları kullanmayın.

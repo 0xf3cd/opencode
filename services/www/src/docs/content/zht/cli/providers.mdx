@@ -1,0 +1,123 @@
+---
+title: "供應商"
+description: "在 CLI 和 TUI 中連接供應商帳戶並管理認證資訊。"
+---
+
+在 TUI 中連接供應商，然後選擇它提供的模型：
+
+```text
+/connect
+/models
+```
+
+`/connect` 會列出目前伺服器和專案可用的整合。選擇供應商；如果該供應商提供多種身分驗證方式，請選擇其中一種，然後依照提示操作。
+
+## TUI
+
+TUI 支援 API 金鑰、OAuth，以及供應商提供的身分驗證指令。OAuth 會開啟授權 URL，或顯示一組需要輸入的代碼；按 `o` 開啟 URL，按 `c` 複製授權詳細資料。
+
+```text
+/connect
+# Select OpenAI, then Codex device code (legacy).
+```
+
+再次執行 `/connect` 可以新增其他帳戶。選擇已連接的供應商會開啟它的帳戶清單，你可以在其中啟用、重新命名或刪除已儲存的帳戶。
+
+## CLI
+
+使用 `auth login` 可以在不開啟 TUI 的情況下，使用相同的供應商驗證方式。未指定供應商引數時，指令會開啟互動式的供應商選擇器。
+
+```bash
+opencode auth login
+```
+
+傳入整合 ID 或名稱即可略過第一個選擇器。使用 `--method key` 可以明確選擇輸入 API 金鑰。
+
+```bash
+opencode auth login anthropic --method key
+```
+
+驗證方式的 ID 因供應商而異。如果供應商提供多種方式，不加 `--method` 執行指令即可查看可用的方式。
+
+```bash
+opencode auth login openai
+```
+
+輸入 API 金鑰和填寫供應商表單都需要互動式終端機。要求你貼上授權碼的 OAuth 方式也同樣需要。
+
+## 驗證方式
+
+OpenCode 透過四種整合方式取得供應商的認證資訊：
+
+| 方式 | 行為 |
+| --- | --- |
+| API 金鑰 | 提示你輸入密鑰，並將其儲存為供應商帳戶。 |
+| OAuth | 提供瀏覽器 URL、裝置代碼或授權碼提示，然後儲存 token，並在支援時自動更新。 |
+| 指令 | 執行供應商提供的身分驗證指令，並將其標準輸出儲存為金鑰。 |
+| 環境變數 | 從伺服器處理程序讀取支援的變數，但不會儲存。 |
+
+供應商可以在 API 金鑰和 OAuth 方式中加入表單，用來收集必要的資訊，例如 Azure 資源名稱或 GitHub Enterprise 網域。CLI 和 TUI 會在開始身分驗證之前顯示這些表單。
+
+## 環境變數
+
+在執行模型請求的伺服器處理程序上，設定供應商支援的環境變數。如果是一次性的私有伺服器，請在啟動獨立模式時傳入。
+
+```bash
+ANTHROPIC_API_KEY=sk-ant-... opencode --standalone
+```
+
+如果是共用的背景伺服器，請將變數加入它的受管理環境。這會停止正在執行的服務；下一個 OpenCode 指令會以新的值啟動服務。
+
+```bash
+opencode service set env ANTHROPIC_API_KEY sk-ant-...
+opencode auth list
+```
+
+透過環境變數建立的連線會以 `environment` 類型顯示在 `auth list` 中。這些連線不是帳戶：`auth logout` 無法移除它們，因此若要中斷連線，請取消設定該變數。對同一個整合而言，已儲存的帳戶優先於環境變數連線。
+
+```bash
+opencode auth list
+opencode service unset env ANTHROPIC_API_KEY
+```
+
+部分雲端供應商也會使用原生的環境認證資訊鏈，而不是 API 金鑰變數：
+
+- Amazon Bedrock 支援 AWS 預設的認證資訊鏈，包括設定檔、存取金鑰環境變數、Web 身分識別和容器認證資訊，也支援 `AWS_BEARER_TOKEN_BEDROCK`。
+- Google Vertex 使用 Application Default Credentials 和可解析的專案。例如，使用 `gcloud auth application-default login` 進行身分驗證，並設定 `GOOGLE_CLOUD_PROJECT`。
+- 安裝 `az` 後，Azure 會提供 **Microsoft Entra ID (Azure CLI)** 連線方式。請先執行 `az login`，再於 `/connect` 或 `auth login azure` 中選擇該方式。
+
+```bash
+gcloud auth application-default login
+GOOGLE_CLOUD_PROJECT=my-project opencode
+```
+
+各供應商專屬的設定與伺服器端設定，請參閱[供應商](/providers)。
+
+## 帳戶
+
+每次透過 API 金鑰、OAuth 或指令成功登入，都會建立一個已儲存的帳戶。最新的帳戶會成為使用中的帳戶；你可以依標籤或認證資訊 ID 切換使用中的帳戶。
+
+```bash
+opencode auth list
+opencode auth switch anthropic work
+```
+
+使用 `auth logout` 移除已儲存的帳戶。省略引數時，這兩個指令都會開啟選擇器。
+
+```bash
+opencode auth logout anthropic work
+```
+
+在 TUI 中，`/connect` 也提供相同的新增、啟用、重新命名和刪除已儲存帳戶的操作。
+
+## 儲存位置
+
+已儲存的 API 金鑰和 OAuth token 存放在伺服器的 SQLite 資料庫中。若是本機伺服器，可以用以下指令印出資料庫路徑：
+
+```bash
+opencode debug paths db
+```
+
+正式版通常的路徑是 `~/.local/share/opencode/opencode.db`；`XDG_DATA_HOME`、發行通道和 `OPENCODE_DB` 都可能改變這個路徑。請勿直接編輯資料庫來管理認證資訊，請使用 `/connect` 或 `auth` 指令。
+
+V2 在資料庫遷移期間，會從 OpenCode 資料目錄中舊版的 `auth.json` 匯入支援的認證資訊。新增和更新的認證資訊都會儲存在 SQLite 中，不會寫回該檔案。

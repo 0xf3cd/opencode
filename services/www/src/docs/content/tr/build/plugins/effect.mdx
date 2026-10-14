@@ -1,0 +1,1576 @@
+---
+title: "Effect"
+---
+
+`@opencode/plugin/effect`, OpenCode eklenti API'sinin Effect'e özgü sürümüdür. Bağlam işlemleri Effect veya Stream
+döndürür, geri çağırmalar Effect döndürür ve eklentinin ömrü `Scope` ile temsil edilir.
+
+OpenCode, eklentileri ve bunların `node_modules` bağımlılıklarını yüklerken `effect` paketini (dışa aktarılan `effect/*`
+alt yolları dahil) ve `@opencode/plugin` paketini çalışma zamanında sağlar. Bu paketleri eklentinize paketlemek (bundle)
+yerine, yerel tür denetimi ve testler için eş (peer) veya geliştirme (dev) bağımlılığı olarak yükleyin.
+
+```sh
+bun add --peer @opencode/plugin effect
+```
+
+Bir Effect eklentisini otomatik olarak yüklemek için `.opencode/plugins/` dizininden dışa aktarın.
+
+```ts title=".opencode/plugins/concise/index.ts"
+import { Plugin } from "@opencode/plugin/effect"
+import { Effect } from "effect"
+
+export default Plugin.define({
+  id: "example",
+  effect: (ctx) =>
+    Effect.gen(function* () {
+      const storage = ctx.storage
+      yield* storage.set("loaded", true)
+    }),
+})
+```
+
+Yayımlanmış paketler ve `.opencode/plugins/` dışındaki eklenti dizinleri, diğer sunucu eklentileriyle aynı `plugins`
+yapılandırmasını kullanır.
+
+```jsonc title="opencode.jsonc"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "plugins": [
+    "opencode-acme-effect-plugin",
+    "opencode-acme-effect-plugin@1.2.0",
+    "@acme/opencode-effect-plugin",
+    "./plugins/local-effect",
+    {
+      "package": "@acme/opencode-effect-plugin",
+      "options": { "agent": "reviewer", "strict": true },
+    },
+  ],
+}
+```
+
+Etkinleştirme, paket çözümleme ve yapılandırma öncelik sırası için [Eklentileri yapılandırma](/plugins) sayfasına bakın.
+
+```ts title="plugins/local-effect/index.ts"
+import { Plugin } from "@opencode/plugin/effect"
+import { Effect } from "effect"
+
+export default Plugin.define({
+  id: "local-effect",
+  effect: (ctx) =>
+    Effect.gen(function* () {
+      yield* Effect.logInfo("Effect plugin loaded", { version: ctx.app.version })
+    }),
+})
+```
+
+## Yaşam döngüsü
+
+`effect` fonksiyonu eklenti yüklendiğinde çalışır. Kapsamı (scope), eklenti yeniden yüklendiğinde veya kaldırıldığında
+kapanır; böylece kayıtlar, kapsamlı fiber'lar ve sonlandırıcılar (finalizer) birlikte serbest bırakılır.
+
+```ts
+import { Plugin } from "@opencode/plugin/effect"
+import { Effect } from "effect"
+
+export default Plugin.define({
+  id: "lifecycle",
+  effect: (ctx) =>
+    Effect.gen(function* () {
+      yield* Effect.logInfo("loaded", { version: ctx.app.version })
+      yield* Effect.addFinalizer(() => Effect.logInfo("unloaded"))
+    }),
+})
+```
+
+Arka plan işleri için kapsamlı fiber'lar kullanın. Eklenti kapsamı, temizlik sırasında fiber'ı kesintiye uğratır.
+
+```ts
+effect: (ctx) =>
+  Effect.gen(function* () {
+    const storage = ctx.storage
+    yield* Effect.repeat(
+      storage.set("heartbeat", { time: Date.now() }),
+      { schedule: Schedule.spaced("1 minute") },
+    ).pipe(Effect.forkScoped)
+  }),
+```
+
+### Bağlam
+
+Bağlam, bağlı OpenCode sunucusu için Effect istemcisini ve yalnızca eklentilere özgü dönüşümleri, hook'ları, depolamayı,
+yeniden yüklemeleri ve seçenekleri sunar. OpenCode'un özel Core hizmetlerini sunmaz.
+
+```ts
+effect: (ctx) =>
+  Effect.gen(function* () {
+    const plugins = ctx.plugin
+    const active = yield* plugins.list().pipe(Effect.orDie)
+    yield* Effect.logInfo("active plugins", { count: active.data.length })
+  }),
+```
+
+Eklenti tanımı ve bağlamın tamamı aşağıdaki gibi bildirilir.
+
+```ts
+interface Context {
+  readonly app: App
+  readonly location: Location.Info
+  readonly options: PluginOptions
+  readonly agent: AgentDomain
+  readonly aisdk: AISDKDomain
+  readonly command: CommandDomain
+  readonly event: EventDomain
+  readonly experimental: {
+    readonly terminal: Pick<ExperimentalApi<unknown>["persistentPty"], "read">
+  }
+  readonly integration: IntegrationDomain
+  readonly mcp: MCPDomain
+  readonly model: ModelDomain
+  readonly generate: GenerateApi<unknown>
+  readonly permission: PermissionDomain
+  readonly plugin: Pick<PluginApi<unknown>, "list">
+  readonly provider: ProviderDomain
+  readonly reference: ReferenceDomain
+  readonly rpc: RpcDomain
+  readonly session: SessionDomain
+  readonly shell: ShellDomain
+  readonly skill: SkillDomain
+  readonly storage: StorageDomain
+  readonly tool: ToolDomain
+  readonly vcs: VcsDomain
+  readonly websearch: WebSearchDomain
+  readonly worktree: WorktreeDomain
+}
+
+interface Plugin<R = Scope.Scope> {
+  readonly id: string
+  readonly effect: (context: Context) => Effect.Effect<void, never, R>
+}
+```
+
+### Seçenekler
+
+Seçenekleri `opencode.json(c)` dosyasında nesne biçimiyle iletin.
+
+```jsonc title="opencode.jsonc"
+{
+  "plugins": [
+    {
+      "package": "./plugins/company-effect",
+      "options": { "strict": true },
+    },
+  ],
+}
+```
+
+Seçenekleri `ctx.options` üzerinden okuyun. Bilinmeyen değerleri kullanmadan önce daraltın.
+
+```ts title="plugins/company-effect/index.ts"
+import { Plugin } from "@opencode/plugin/effect"
+import { Effect } from "effect"
+
+export default Plugin.define({
+  id: "company",
+  effect: (ctx) =>
+    Effect.gen(function* () {
+      const strict = ctx.options.strict === true
+      yield* Effect.logInfo("company plugin configured", { strict })
+    }),
+})
+```
+
+## Dönüşümler
+
+Dönüşümler, durumu bir düzenleyici (editor) aracılığıyla eşzamanlı olarak düzenler. OpenCode, dönüşümleri her alanda
+kayıt sırasına göre uygular. Önce kaynaklar sağlayıcıları ve değiştirilemez model tanımlarını ekler; ardından model
+dönüşümleri etkin sağlayıcıların adaylarını düzenler. Kaydı `yield*` ile çalıştırmak, onu eklenti kapsamında tutar.
+
+```ts title="plugins/models-effect/index.ts"
+import { Model, Plugin, Provider } from "@opencode/plugin/effect"
+import { Effect } from "effect"
+
+export default Plugin.define({
+  id: "company.models",
+  effect: (ctx) =>
+    Effect.gen(function* () {
+      const providerID = Provider.ID.make("acme")
+      const models = [{ ...Model.Info.default(providerID, Model.ID.make("reasoner")), name: "Acme Reasoner" }]
+      yield* ctx.provider.transform((editor) => {
+        editor.add({
+          info: {
+            ...Provider.Info.empty(providerID),
+            name: "Acme",
+            activation: "enabled",
+            package: "@opencode/ai/providers/openai-compatible",
+            settings: { baseURL: "http://127.0.0.1:8000/v1" },
+          },
+          models,
+        })
+      })
+    }),
+})
+```
+
+Bir model dönüşümü, etkin sağlayıcılara ait aday koleksiyonunun tamamına politika uygulayabilir.
+
+```ts title="plugins/model-budget-effect/index.ts"
+effect: (ctx) =>
+  Effect.gen(function* () {
+    yield* ctx.model.transform((editor) => {
+      editor
+        .list()
+        .filter((model) => model.cost.some((tier) => tier.output > 20))
+        .forEach((model) => {
+          editor.remove(model.providerID, model.id)
+        })
+    })
+  }),
+```
+
+Bir dönüşümün kullandığı harici durum değiştiğinde `reload` çağırın. Buradaki `loadFromSource()`,
+`{ info: Provider.Info, models: readonly Model.Info[] }` girdileri döndürür. Sağlayıcıların yeniden yüklenmesi, model
+sonucunun tamamını da geçersiz kılar.
+
+```ts title="plugins/models-effect/index.ts"
+effect: (ctx) =>
+  Effect.gen(function* () {
+    const provider = ctx.provider
+    const source = { providers: yield* loadFromSource() }
+
+    yield* provider.transform((editor) => {
+      source.providers.forEach((provider) => editor.add(provider))
+    })
+
+    yield* Effect.repeat(
+      Effect.gen(function* () {
+        source.providers = yield* loadFromSource()
+        yield* provider.reload()
+      }),
+      { schedule: Schedule.spaced("1 minute") },
+    ).pipe(Effect.forkScoped)
+  }),
+```
+
+## API
+
+### Ajan
+
+Tüm ajanları okuyun veya birini ID ile getirin. İstemci yanıtları, çözümlenmiş konumu ve şema verilerini içerir.
+
+```ts
+effect: (ctx) =>
+  Effect.gen(function* () {
+    const agent = ctx.agent
+    const agents = yield* agent.list().pipe(Effect.orDie)
+    const build = yield* agent.get({ agentID: Agent.ID.make("build") }).pipe(Effect.orDie)
+    yield* Effect.logInfo("agents", { count: agents.data.length, build: build.data.name })
+  }),
+```
+
+Ajanları dönüştürün veya yeniden yükleyin.
+
+```ts
+effect: (ctx) =>
+  Effect.gen(function* () {
+    const agent = ctx.agent
+    yield* agent.transform((editor) => {
+      editor.default("build")
+      editor.update("build", (item) => (item.description = "Builds features and fixes bugs"))
+      editor.remove("legacy")
+    })
+    yield* agent.reload()
+  }),
+```
+
+Şema: [`Agent.Info`](/api#schema-Agent.Info).
+
+```ts
+interface AgentEditor {
+  list(): readonly Types.DeepMutable<Agent.Info>[]
+  get(id: string): Types.DeepMutable<Agent.Info> | undefined
+  default(id: string | undefined): void
+  update(id: string, update: (agent: Types.DeepMutable<Agent.Info>) => void): void
+  remove(id: string): void
+}
+
+interface AgentDomain extends AgentApi<unknown> {
+  readonly transform: Transform<AgentEditor>
+  readonly reload: () => Effect.Effect<void>
+}
+```
+
+### Sağlayıcılar
+
+Kullanılabilir sağlayıcıları okuyun veya bir sağlayıcının meta verilerini ID ile inceleyin.
+
+```ts
+effect: (ctx) =>
+  Effect.gen(function* () {
+    const provider = ctx.provider
+    const providers = yield* provider.list().pipe(Effect.orDie)
+    const anthropic = yield* provider.get({ providerID: Provider.ID.make("anthropic") }).pipe(Effect.orDie)
+    yield* Effect.logInfo("providers", {
+      providers: providers.data.length,
+      anthropic: anthropic.data.name,
+    })
+  }),
+```
+
+Sağlayıcı dönüşümleri, sağlayıcı ayarlarını ve kaynak tanımlarını düzenler. Düzenleyici okumaları etkin olmayan
+sağlayıcıları da kapsar ve değiştirilemez tanımlar döndürür. `models.update` ise bir kaynak modelin size ait bir kopyasını
+düzenler.
+
+```ts
+effect: (ctx) =>
+  Effect.gen(function* () {
+    yield* ctx.provider.transform((editor) => {
+      editor.update("anthropic", (provider) => {
+        provider.headers = { ...provider.headers, "x-company": "engineering" }
+      })
+      editor.models.update("anthropic", "claude-sonnet-4-5", (model) => (model.name = "Team Sonnet"))
+      editor.models.remove("anthropic", "legacy-model")
+      editor.remove("legacy-provider")
+    })
+  }),
+```
+
+Bir kaynak envanterini `models.set` ile değiştirin, ardından yakalanan tanımlar değiştiğinde yeniden yükleyin.
+
+```ts
+effect: (ctx) =>
+  Effect.gen(function* () {
+    const provider = ctx.provider
+    const source = { models: yield* loadModels() }
+    yield* provider.transform((editor) => editor.models.set("acme", source.models))
+    source.models = yield* loadModels()
+    yield* provider.reload()
+  }),
+```
+
+Hesaba özgü keşif için envanteri yüklemekte kullanılan bağlantıyı `sourceConnection` olarak iletin. Başka bir bağlantı
+seçili olduğunda OpenCode, eklentiniz yenilenmiş envanteri yayımlayana kadar o sağlayıcıyı hariç tutar.
+
+```ts
+const connection = yield * ctx.integration.connection.active("acme")
+if (!connection) return
+const inventory = yield * loadInventory(connection)
+yield *
+  ctx.provider.transform((editor) => {
+    editor.add({ info: inventory.provider, models: inventory.models, sourceConnection: connection })
+  })
+```
+
+Şemalar: [`Provider.Info`](/api#schema-Provider.Info), [`Model.Info`](/api#schema-Model.Info).
+
+```ts
+interface ProviderRecord {
+  readonly provider: Provider.Info
+  readonly models: ReadonlyMap<string, Model.Info>
+  readonly sourceConnection?: ConnectionInfo
+}
+
+interface ProviderEditor {
+  list(): readonly ProviderRecord[]
+  get(providerID: string): ProviderRecord | undefined
+  add(input: { info: Provider.Info; models: readonly Model.Info[]; sourceConnection?: ConnectionInfo }): void
+  update(providerID: string, update: (provider: Types.DeepMutable<Provider.Info>) => void): void
+  remove(providerID: string): void
+  readonly models: {
+    set(providerID: string, models: readonly Model.Info[]): void
+    update(providerID: string, modelID: string, update: (model: Types.DeepMutable<Model.Info>) => void): void
+    remove(providerID: string, modelID: string): void
+  }
+}
+
+interface ProviderDomain extends ProviderApi<unknown> {
+  readonly transform: Transform<ProviderEditor>
+  readonly reload: () => Effect.Effect<void>
+}
+```
+
+### Modeller
+
+Kullanılabilir modelleri ve varsayılan seçimi okuyun.
+
+```ts
+effect: (ctx) =>
+  Effect.gen(function* () {
+    const model = ctx.model
+    const models = yield* model.list().pipe(Effect.orDie)
+    const selected = yield* model.default().pipe(Effect.orDie)
+    yield* Effect.logInfo("models", { count: models.data.length, selected: selected.data?.name })
+  }),
+```
+
+Model dönüşümleri, etkin sağlayıcılara ait aday koleksiyonunun tamamını düzenler. Devre dışı adaylar, tüm dönüşümler
+bitene kadar düzenlenebilir kalır. `update` yalnızca kullanılabilir bir sağlayıcının altına model ekleyebilir.
+
+```ts
+effect: (ctx) =>
+  Effect.gen(function* () {
+    yield* ctx.model.transform((editor) => {
+      editor.list("anthropic").forEach((model) => {
+        editor.update(model.providerID, model.id, (draft) => {
+          draft.enabled = draft.capabilities.tools
+        })
+      })
+      editor.default.set("anthropic", "claude-sonnet-4-5")
+      editor.remove("anthropic", "legacy-model")
+    })
+  }),
+```
+
+Geri çağırmalar, ham model geçersiz kılmalarını düzenler. Sağlayıcı varsayılanları, OpenCode sonucu kesinleştirdiğinde
+bir kez birleştirilir; değişmeyen okumalar bu sonucu yeniden kullanır. `editor.provider`, model dönüşümü çıktısını değil,
+etkin olmayan şablonlar dahil değiştirilemez kaynak tanımlarını okur.
+
+```ts
+effect: (ctx) =>
+  Effect.gen(function* () {
+    const model = ctx.model
+    yield* model.transform((editor) => {
+      const source = editor.provider.get("anthropic")?.models.get("claude-sonnet-4-5")
+      if (!source) return
+      editor.update("anthropic", source.id, (draft) => {
+        draft.limit.context = Math.min(draft.limit.context, source.limit.context)
+      })
+    })
+    yield* model.reload()
+  }),
+```
+
+Şema: [`Model.Info`](/api#schema-Model.Info).
+
+```ts
+interface ModelEditor {
+  list(providerID?: string): readonly Types.DeepMutable<Model.Info>[]
+  get(providerID: string, modelID: string): Types.DeepMutable<Model.Info> | undefined
+  update(providerID: string, modelID: string, update: (model: Types.DeepMutable<Model.Info>) => void): void
+  remove(providerID: string, modelID: string): void
+  readonly default: {
+    get(): { providerID: string; modelID: string } | undefined
+    set(providerID: string, modelID: string): void
+  }
+  readonly provider: {
+    list(): readonly ProviderRecord[]
+    get(providerID: string): ProviderRecord | undefined
+  }
+}
+
+interface ModelDomain extends ModelApi<unknown> {
+  readonly transform: Transform<ModelEditor>
+  readonly reload: () => Effect.Effect<void>
+}
+```
+
+### Komutlar
+
+Geçerli konumda kullanılabilir komutları okuyun.
+
+```ts
+effect: (ctx) =>
+  Effect.gen(function* () {
+    const command = ctx.command
+    const commands = yield* command.list().pipe(Effect.orDie)
+    yield* Effect.logInfo("commands", { names: commands.data.map((item) => item.name) })
+  }),
+```
+
+Mevcut komut dönüşümü yalnızca ekleme yapabilir. Bir yürütücü (executor) oturumu, istem eklerini ve teslim modunu alır.
+
+```ts
+effect: (ctx) =>
+  Effect.gen(function* () {
+    const command = ctx.command
+    const session = ctx.session
+    yield* command.transform((editor) => {
+      editor.add({
+        name: "security-review",
+        description: "Review changes for security issues",
+        execute: (input) =>
+          session.prompt({
+            ...input.prompt,
+            sessionID: input.sessionID,
+            text: `Review these changes for security issues.\n\n${input.prompt.text}`,
+            delivery: input.delivery,
+          }).pipe(Effect.asVoid),
+      })
+    })
+    yield* command.reload()
+  }),
+```
+
+Şemalar: [`Command.Info`](/api#schema-Command.Info),
+[`Session.Inbox.Delivery`](/api#schema-Session.Inbox.Delivery).
+
+```ts
+interface CommandInvocation {
+  readonly sessionID: Session.ID
+  readonly prompt: PromptInput.Prompt
+  readonly delivery: SessionInbox.Delivery
+}
+
+interface CommandDefinition {
+  readonly name: string
+  readonly description?: string
+  readonly execute: (input: CommandInvocation) => Effect.Effect<void, unknown>
+}
+
+interface CommandEditor {
+  add(definition: CommandDefinition): void
+}
+
+interface CommandDomain extends Pick<CommandApi<unknown>, "list"> {
+  readonly transform: Transform<CommandEditor>
+  readonly reload: () => Effect.Effect<void>
+}
+```
+
+### Entegrasyonlar
+
+Entegrasyonları okuyun ve varsa etkin kimlik bilgisini çözümleyin.
+
+```ts
+effect: (ctx) =>
+  Effect.gen(function* () {
+    const integration = ctx.integration
+    const integrations = yield* integration.list().pipe(Effect.orDie)
+    const github = yield* integration.get({ integrationID: Integration.ID.make("github") }).pipe(Effect.orDie)
+    const connection = yield* integration.connection.active("github")
+    const credential = connection ? yield* integration.connection.resolve(connection).pipe(Effect.orDie) : undefined
+    yield* Effect.logInfo("integration", {
+      count: integrations.data.length,
+      github: github.data.name,
+      credential: credential?.type,
+    })
+  }),
+```
+
+Bir anahtarla bağlanın veya bağlı API üzerinden bir OAuth girişimini yürütün.
+
+```ts
+effect: (ctx) =>
+  Effect.gen(function* () {
+    const integration = ctx.integration
+    const token = yield* Config.Redacted("GITHUB_TOKEN").pipe(Effect.orDie)
+    yield* integration.connect
+      .key({ integrationID: Integration.ID.make("github"), key: Redacted.value(token) })
+      .pipe(Effect.orDie)
+
+    const attempt = yield* integration.oauth
+      .connect({
+        integrationID: Integration.ID.make("acme"),
+        methodID: Integration.MethodID.make("oauth"),
+      })
+      .pipe(Effect.orDie)
+    const status = yield* integration.oauth
+      .status({
+        integrationID: Integration.ID.make("acme"),
+        attemptID: attempt.data.attemptID,
+      })
+      .pipe(Effect.orDie)
+    yield* Effect.logInfo("OAuth status", { status: status.data })
+  }),
+```
+
+Entegrasyonları ve kimlik doğrulama yöntemlerini dönüştürün. OAuth yöntemi geri çağırmaları birer Effect'tir ve kapsamlı
+kaynaklar edinebilir.
+
+```ts
+effect: (ctx) =>
+  Effect.gen(function* () {
+    const integration = ctx.integration
+    yield* integration.transform((editor) => {
+      editor.update("acme", (item) => (item.name = "Acme"))
+      editor.method.update({
+        integrationID: "acme",
+        method: { id: "device", type: "oauth", label: "Sign in with Acme" },
+        authorize: () =>
+          Effect.succeed({
+            mode: "code",
+            url: "https://acme.example/device",
+            instructions: "Enter the displayed code",
+            callback: (code) => exchangeCode(code),
+          }),
+      })
+    })
+    yield* integration.reload()
+  }),
+```
+
+Şemalar: [`Integration.Info`](/api#schema-Integration.Info), [`Integration.Method`](/api#schema-Integration.Method),
+[`Connection.Info`](/api#schema-Connection.Info), [`Form.Answer`](/api#schema-Form.Answer).
+
+```ts
+type IntegrationOAuthAuthorization = {
+  readonly url: string
+  readonly instructions: string
+  readonly expiresAt?: number
+} & (
+  | { readonly mode: "auto"; readonly callback: Effect.Effect<Credential.OAuth, unknown> }
+  | { readonly mode: "code"; readonly callback: (code: string) => Effect.Effect<Credential.OAuth, unknown> }
+)
+
+type IntegrationOAuthMethodRegistration = {
+  readonly integrationID: string
+  readonly method: IntegrationOAuthMethod
+  readonly authorize: (answer: Form.Answer) => Effect.Effect<IntegrationOAuthAuthorization, unknown, Scope.Scope>
+  readonly refresh?: (credential: Credential.OAuth) => Effect.Effect<Credential.OAuth, unknown>
+  readonly label?: (credential: Credential.OAuth) => string | undefined
+}
+
+interface IntegrationEditor {
+  list(): readonly IntegrationRef[]
+  get(id: string): IntegrationRef | undefined
+  update(id: string, update: (integration: IntegrationRef) => void): void
+  remove(id: string): void
+  readonly method: {
+    list(integrationID: string): readonly IntegrationMethod[]
+    update(input: IntegrationMethodRegistration): void
+    remove(integrationID: string, method: IntegrationMethod): void
+  }
+}
+
+interface IntegrationDomain extends Omit<IntegrationApi<unknown>, "wellknown"> {
+  readonly transform: Transform<IntegrationEditor>
+  readonly reload: () => Effect.Effect<void>
+  readonly connection: {
+    readonly active: (integrationID: string) => Effect.Effect<ConnectionInfo | undefined>
+    readonly resolve: (connection: ConnectionInfo) => Effect.Effect<Credential.Value | undefined, unknown>
+  }
+}
+```
+
+### MCP
+
+MCP sunucularını ve geçerli bağlantı durumlarını listeleyin.
+
+```ts
+effect: (ctx) =>
+  Effect.gen(function* () {
+    const mcp = ctx.mcp
+    const servers = yield* mcp.list().pipe(Effect.orDie)
+    yield* Effect.logInfo("MCP servers", { count: servers.data.length })
+  }),
+```
+
+Eklentiler MCP sunucularını yalnızca dönüşümler aracılığıyla yönetir. Bir sunucu eklemek veya değiştirmek için
+`editor.set`, yapılandırmasını değiştirmek için `editor.update`, kaldırmak için `editor.remove` kullanın. Yapılandırmayı
+`editor.list` ve `editor.get` ile inceleyin.
+
+```ts
+effect: (ctx) =>
+  Effect.gen(function* () {
+    const mcp = ctx.mcp
+    yield* mcp.transform((editor) => {
+      const servers = editor.list()
+      const docs = editor.get("docs")
+      editor.set("docs", { type: "remote", url: "https://mcp.example.com" })
+      editor.update("docs", (server) => (server.disabled = false))
+      editor.remove("legacy")
+    })
+  }),
+```
+
+Bir sunucuyu devre dışı bırakıp bağlantısını kesmek için dönüşümde `disabled: true` ayarlayın. Sunucuyu etkinleştirip
+OpenCode'un bağlanmasına izin vermek için `disabled: false` kullanın. OpenCode, sunucuların yaşam döngüsünü dönüştürülmüş
+yapılandırmaya göre uzlaştırır.
+
+Bir dönüşümün kullandığı harici durum değiştiğinde, dönüşümleri yeniden uygulamak ve sunucuları uzlaştırmak için
+`reload()` çağırın.
+
+```ts
+effect: (ctx) =>
+  Effect.gen(function* () {
+    const mcp = ctx.mcp
+    yield* mcp.reload()
+  }),
+```
+
+Şemalar: [`Mcp.Server`](/api#schema-Mcp.Server), [`Mcp.LocalConfigEncoded`](/api#schema-Mcp.LocalConfigEncoded),
+[`Mcp.RemoteConfigEncoded`](/api#schema-Mcp.RemoteConfigEncoded).
+
+```ts
+interface MCPEditor {
+  list(): readonly [string, Types.DeepMutable<Mcp.ServerConfig>][]
+  get(name: string): Types.DeepMutable<Mcp.ServerConfig> | undefined
+  set(name: string, config: Mcp.ServerConfig): void
+  update(name: string, update: (config: Types.DeepMutable<Mcp.ServerConfig>) => void): void
+  remove(name: string): void
+}
+
+interface MCPDomain extends Pick<McpApi<unknown>, "list"> {
+  readonly transform: Transform<MCPEditor>
+  readonly reload: () => Effect.Effect<void>
+}
+```
+
+### Eklentiler
+
+Geçerli konumdaki etkin, başarısız ve çözümlenmiş eklentileri listeleyin.
+
+```ts
+effect: (ctx) =>
+  Effect.gen(function* () {
+    const plugin = ctx.plugin
+    const plugins = yield* plugin.list().pipe(Effect.orDie)
+    yield* Effect.forEach(plugins.data, (item) => Effect.logInfo("plugin", item), { discard: true })
+  }),
+```
+
+Yalnızca etkin eklentilerle ilgileniyorsanız şema değerlerini bir Effect işlem hattında filtreleyin.
+
+```ts
+effect: (ctx) =>
+  Effect.gen(function* () {
+    const plugin = ctx.plugin
+    const active = yield* plugin.list().pipe(
+      Effect.orDie,
+      Effect.map((result) => result.data.filter((item) => item.status === "active")),
+    )
+    yield* Effect.logInfo("active plugin count", { count: active.length })
+  }),
+```
+
+Şemalar: [`Plugin.Info`](/api#schema-Plugin.Info), [`Plugin.Source`](/api#schema-Plugin.Source).
+
+```ts
+interface PluginApi<E = never> {
+  readonly list: PluginListOperation<E>
+}
+
+interface Context {
+  readonly plugin: PluginApi<unknown>
+}
+```
+
+### Referanslar
+
+Geçerli konumda kullanılabilir referansları okuyun.
+
+```ts
+effect: (ctx) =>
+  Effect.gen(function* () {
+    const reference = ctx.reference
+    const references = yield* reference.list().pipe(Effect.orDie)
+    yield* Effect.logInfo("references", { count: references.data.length })
+  }),
+```
+
+Yerel ve Git referansları ekleyin veya kaldırın, ardından harici durum değiştiğinde yeniden yükleyin. `get(name)`, o an
+yapılandırılmış kaynağı, ad yoksa `undefined` döndürür.
+
+```ts
+effect: (ctx) =>
+  Effect.gen(function* () {
+    const reference = ctx.reference
+    yield* reference.transform((editor) => {
+      editor.add("handbook", { type: "local", path: "/workspace/docs/handbook" })
+      editor.add("standards", { type: "git", repository: "https://github.com/acme/standards", branch: "main" })
+      const handbook = editor.get("handbook")
+      editor.remove("legacy")
+    })
+    yield* reference.reload()
+  }),
+```
+
+Şemalar: [`Reference.Info`](/api#schema-Reference.Info), [`Reference.LocalSource`](/api#schema-Reference.LocalSource),
+[`Reference.GitSource`](/api#schema-Reference.GitSource).
+
+```ts
+interface ReferenceEditor {
+  add(name: string, source: ReferenceLocalSource | ReferenceGitSource): void
+  remove(name: string): void
+  list(): readonly (readonly [string, ReferenceLocalSource | ReferenceGitSource])[]
+  get(name: string): ReferenceLocalSource | ReferenceGitSource | undefined
+}
+
+interface ReferenceDomain extends ReferenceApi<unknown> {
+  readonly transform: Transform<ReferenceEditor>
+  readonly reload: () => Effect.Effect<void>
+}
+```
+
+### Oturumlar
+
+Bir oturum oluşturun veya okuyun, ardından sonraki işlerde kullanılacak ajanı ve modeli seçin.
+
+```ts
+effect: (ctx) =>
+  Effect.gen(function* () {
+    const session = ctx.session
+    const created = yield* session.create({ title: "Review" }).pipe(Effect.orDie)
+    const current = yield* session.get({ sessionID: created.id }).pipe(Effect.orDie)
+    yield* session.switchAgent({ sessionID: current.id, agent: Agent.ID.make("build") }).pipe(Effect.orDie)
+    yield* session
+      .switchModel({
+        sessionID: current.id,
+        model: { providerID: Provider.ID.make("anthropic"), id: Model.ID.make("claude-sonnet-4-5") },
+      })
+      .pipe(Effect.orDie)
+  }),
+```
+
+İstemler, geçici üretim istekleri, komutlar veya sentetik mesajlar gönderin.
+
+```ts
+effect: (ctx) =>
+  Effect.gen(function* () {
+    const session = ctx.session
+    const created = yield* session.create({ title: "Automation" }).pipe(Effect.orDie)
+    yield* session.prompt({ sessionID: created.id, text: "Review the current changes" }).pipe(Effect.orDie)
+    const summary = yield* session
+      .generate({ sessionID: created.id, prompt: "Summarize this project" })
+      .pipe(Effect.orDie)
+    yield* session.command({ sessionID: created.id, command: "review", arguments: "--staged" }).pipe(Effect.orDie)
+    yield* session
+      .synthetic({ sessionID: created.id, text: `Summary generated: ${summary.text}`, resume: false })
+      .pipe(Effect.orDie)
+  }),
+```
+
+Geçici bir oturumu `remove` ile kaldırın. Kaldırma işlemi etkin yürütmeyi durdurur ve alt oturumları özyinelemeli olarak
+siler.
+
+```ts
+effect: (ctx) =>
+  Effect.gen(function* () {
+    const created = yield* ctx.session.create({ title: "Temporary worker" }).pipe(Effect.orDie)
+    yield* ctx.session.remove({ sessionID: created.id }).pipe(Effect.orDie)
+  }),
+```
+
+`compact` ile bağlam sıkıştırma isteyin. Bu çağrı tamamlanmış bir özet değil, kabul edilen gelen kutusu (inbox) öğesini
+döndürür. Sıkıştırma varsayılan olarak bir sonraki adım sınırında çalışır. Bunun yerine kuyruk sırasını korumak için
+`delivery: "queue"` iletin.
+
+```ts
+effect: (ctx) =>
+  Effect.gen(function* () {
+    const created = yield* ctx.session.create({ title: "Review" }).pipe(Effect.orDie)
+    const compaction = yield* ctx.session.compact({ sessionID: created.id }).pipe(Effect.orDie)
+  }),
+```
+
+Şemalar: [`Session.Info`](/api#schema-Session.Info), [`Model.Ref`](/api#schema-Model.Ref),
+[`Session.Inbox.User`](/api#schema-Session.Inbox.User),
+[`Session.Inbox.Synthetic`](/api#schema-Session.Inbox.Synthetic).
+
+```ts
+type SessionDomain = Pick<
+  SessionApi<unknown>,
+  | "create"
+  | "get"
+  | "remove"
+  | "switchAgent"
+  | "switchModel"
+  | "prompt"
+  | "generate"
+  | "command"
+  | "compact"
+  | "synthetic"
+  | "interrupt"
+  | "update"
+  | "move"
+  | "wait"
+  | "context"
+>
+```
+
+### Beceriler
+
+Geçerli konumdaki becerileri okuyun.
+
+```ts
+effect: (ctx) =>
+  Effect.gen(function* () {
+    const skill = ctx.skill
+    const skills = yield* skill.list()
+    yield* Effect.logInfo("skills", { ids: skills.data.map((item) => item.id) })
+  }),
+```
+
+Becerileri dönüştürün ve yeniden yükleyin. Markalı (branded) değerler için yeniden dışa aktarılan Effect şema
+oluşturucularını kullanın. `get(id)`, düzenleyicideki geçerli girdiyi, beceri yoksa `undefined` döndürür.
+
+```ts
+effect: (ctx) =>
+  Effect.gen(function* () {
+    const skill = ctx.skill
+    yield* skill.transform((editor) => {
+      editor.add(Skill.Info.make({
+        id: Skill.ID.make("review"),
+        name: Skill.Name.make("Review"),
+        description: "Review the current changes",
+        path: "/workspace/.opencode/skills/review/SKILL.md",
+        content: "Review the current changes for correctness and missing tests.",
+      }))
+      const review = editor.get("review")
+      editor.update("review", (item) => (item.autoinvoke = true))
+      editor.remove("legacy")
+    })
+    yield* skill.reload()
+  }),
+```
+
+Şema: [`Skill.Info`](/api#schema-Skill.Info).
+
+```ts
+interface SkillEditor {
+  list(): readonly Types.DeepMutable<Skill.Info>[]
+  get(id: string): Types.DeepMutable<Skill.Info> | undefined
+  add(skill: Skill.Info): void
+  update(id: string, update: (skill: Types.DeepMutable<Skill.Info>) => void): void
+  remove(id: string): void
+}
+
+interface SkillDomain extends SkillApi<unknown> {
+  readonly transform: Transform<SkillEditor>
+  readonly reload: () => Effect.Effect<void>
+}
+```
+
+### Depolama
+
+Eklenti ID'siyle sınırlı kalıcı JSON değerlerini saklayın, okuyun ve kaldırın.
+
+```ts
+effect: (ctx) =>
+  Effect.gen(function* () {
+    const storage = ctx.storage
+    yield* storage.set("settings", { strict: true })
+    const settings = yield* storage.get("settings")
+    yield* Effect.logInfo("settings", { settings })
+    yield* storage.remove("settings")
+  }),
+```
+
+Anahtarları önek ile ve imleç tabanlı sayfalama kullanarak tarayın.
+
+```ts
+effect: (ctx) =>
+  Effect.gen(function* () {
+    const storage = ctx.storage
+    const first = yield* storage.scan({ prefix: "cache/", limit: 100 })
+    const second = first.next
+      ? yield* storage.scan({ prefix: "cache/", after: first.next, limit: 100 })
+      : { entries: [] }
+    yield* Effect.logInfo("cache entries", { count: first.entries.length + second.entries.length })
+  }),
+```
+
+Depolama, Effect'in JSON türünü kabul eder ve doğrudan Effect döndürür.
+
+```ts
+interface StorageDomain {
+  readonly get: (key: string) => Effect.Effect<Schema.Json | undefined>
+  readonly set: (key: string, value: Schema.Json) => Effect.Effect<void>
+  readonly remove: (key: string) => Effect.Effect<void>
+  readonly scan: (options: StorageScanOptions) => Effect.Effect<StorageScanResult>
+}
+```
+
+### Araçlar
+
+Türlü araçları Effect `Schema` ile kaydedin. Yürütücü, çözümlenmiş (decode edilmiş) girdiyi alır ve türlü çıktı,
+görüntülenecek içerik veya meta veri içeren bir Effect döndürür.
+
+Düzenleyici `add`, `update` ve `remove` işlemlerini destekler. Dönüşüm geri çağırması eşzamanlıdır; Effect veya Promise
+döndürmemelidir. Harici verileri kayıttan veya yeniden yüklemeden önce yükleyin. OpenCode, etkin dönüşümleri yeni bir
+düzenleyici üzerinde kayıt sırasına göre yeniden oynatır. Aynı geçerli araç adı için sonraki geçerli bir kayıt, öncekini
+geçersiz kılar.
+
+```ts
+effect: (ctx) =>
+  Effect.gen(function* () {
+    const tool = ctx.tool
+    yield* tool.transform((editor) => {
+      editor.namespace({
+        name: "acme",
+        description: "Customer account tools",
+      })
+      editor.add({
+        name: "greeting",
+        description: "Create a greeting",
+        input: Schema.Struct({ name: Schema.String }),
+        output: Schema.Struct({ greeting: Schema.String }),
+        options: { namespace: "acme", codemode: true },
+        execute: ({ name }, context) =>
+          Effect.gen(function* () {
+            yield* context.progress({ status: "greeting" })
+            return { output: { greeting: `Hello ${name}!` } }
+          }),
+      })
+    })
+  }),
+```
+
+Geri çağırmanın yakaladığı kaynak verileri değiştirdikten sonra `yield* ctx.tool.reload()` çağırın. Yeniden yükleme,
+etkin dönüşümleri sıralarını değiştirmeden yeniden oynatır; eklentinin `effect` fonksiyonunu yeniden çalıştırmaz.
+
+Araçların, geçerli adlarını içeren bir `id` alanı vardır. Bu ID mevcut değilse `get()` `undefined` döndürür. `update`
+ve `remove` işlemlerini, ad alanı dahil geçerli araç adıyla kullanın (yukarıdaki örnekte `acme_greeting`). Ad
+alanlarındaki noktalar ve araç adlarındaki desteklenmeyen karakterler `_` olur. Bulunamayan adlar yok sayılır; araç
+oluşturmak için eksiksiz bir tanımla `add` çağırmanız gerekir. Güncellemeler adı ve ad alanını korur. Şemaları veya
+seçenekleri değiştirmek için iç içe değerleri değiştirmek yerine yenilerini atayın. Geçersiz güncellemeler günlüğe
+kaydedilir ve önceki tanım olduğu gibi kalır.
+
+```ts
+yield *
+  ctx.tool.transform((editor) => {
+    editor.update("acme_greeting", (tool) => {
+      tool.description = "Greet the user by name"
+    })
+    editor.remove("acme_obsolete")
+  })
+```
+
+Güncellemeler ve kaldırmalar, MCP kataloğu yenilendikten sonra da dahil olmak üzere eklemelerle birlikte sırayla yeniden
+oynatılır.
+
+`transform` kapsamlı bir kayıt döndürür. Dönüşümü kaldırmak ve kalan dönüşümlerden yeniden oluşturmak için
+`yield* registration.dispose` çalıştırın; böylece geçersiz kıldığı önceki tanım tekrar ortaya çıkar. Serbest bırakma
+idempotenttir ve eklenti kapsamının kapanması da kayıtlarını serbest bırakır.
+
+Her model isteği, araçların anlık görüntüsünü yakalar. Yeniden yükleme ve serbest bırakma, mevcut bir isteğin zaten
+yakaladığı tanımları veya yürütücüleri değil, gelecekteki anlık görüntüleri etkiler. Değiştirilebilir eklenti verilerini
+kapanım (closure) ile yakalayan yürütücüler bu verileri görmeye devam eder. Bir değerin o tanıma bağlı kalması
+gerekiyorsa değeri dönüşümün içinde yakalayın.
+
+Şemalar: [`Tool.Content`](/api#schema-Tool.Content), [`Tool.TextContent`](/api#schema-Tool.TextContent),
+[`Tool.FileContent`](/api#schema-Tool.FileContent).
+
+```ts
+interface ToolEditor {
+  list(): readonly (Tool.Info & { readonly id: string })[]
+  get(id: string): (Tool.Info & { readonly id: string }) | undefined
+  namespace(namespace: { name: string; description: string }): void
+  add<Input extends Tool.ValueSchema<any>, Output extends Tool.ValueSchema<any> | undefined>(
+    tool: Tool.Info<Input, Output>,
+  ): void
+  update(id: string, update: (tool: Types.Mutable<Tool.Info>) => void): void
+  remove(id: string): void
+}
+
+interface ToolDomain {
+  readonly list: () => Effect.Effect<readonly (Tool.Info & { readonly id: string })[]>
+  readonly transform: Transform<ToolEditor>
+  readonly reload: () => Effect.Effect<void>
+}
+```
+
+### VCS
+
+Depo bilgilerini, çalışma kopyası durumunu veya dosya farklarını okuyun.
+
+```ts
+effect: (ctx) =>
+  Effect.gen(function* () {
+    const vcs = ctx.vcs
+    const info = yield* vcs.get().pipe(Effect.orDie)
+    const branches = yield* vcs.branches({ search: "feature", limit: 10 }).pipe(Effect.orDie)
+    const changes = yield* vcs.status().pipe(Effect.orDie)
+    const diff = yield* vcs.diff({ mode: "working", context: 3 }).pipe(Effect.orDie)
+    yield* Effect.logInfo("vcs", { branch: info.data.branch.current, files: changes.data.length })
+  }),
+```
+
+Konuma özgü bir sağlayıcıyı kapsamlı bir dönüşümle kaydedin. Algılanan depo türüyle eşleşen sağlayıcılar otomatik olarak
+seçilir; farklı bir sağlayıcı seçmek için `editor.default.set` kullanın.
+
+```ts
+effect: (ctx) =>
+  Effect.gen(function* () {
+    const vcs = ctx.vcs
+    yield* vcs.transform((editor) => {
+      editor.add({
+        id: "custom",
+        name: "Custom VCS",
+        info: () => Effect.succeed({ branch: { current: "feature", default: "main" } }),
+        branches: (input) => readBranches(input),
+        status: (scope) => readStatus(scope.worktree),
+        diff: (input) => readDiff(input),
+      })
+      editor.default.set("custom")
+    })
+  }),
+```
+
+Sağlayıcı geri çağırmaları geçerli konumu, çalışma kopyasının kökünü, kanonik proje kökünü ve isteğe bağlı
+repository store'u alır. Diff geri çağırmaları ayrıca seçilen modu, istenen bağlam satırlarını ve bayt cinsinden çıktı
+bütçesini alır. Depo keşfi, OpenCode'un yerleşik Git ve Mercurial algılayıcılarını kullanmaya devam eder.
+
+Sağlayıcılar, `scope.worktree` içinde bir depo oluşturmak için isteğe bağlı olarak `init(scope)` uygulayabilir.
+Başlatma, sağlayıcıyı algılanan depo türüne göre değil, ID'ye göre seçer (varsayılan olarak Git). Konumda henüz bir depo
+olmasa bile `init` içeren bir sağlayıcı kaydedin. OpenCode, onu çağırmadan önce dizinin var olduğunu ve içinde depo
+bulunmadığını denetler, ardından projeyi yeniden keşfeder. Yeni depo biçimleri, bu geri çağırmanın ötesinde yine de keşif
+desteğine ihtiyaç duyar.
+
+Şemalar: [`Vcs.Info`](/api#schema-Vcs.Info), [`Vcs.FileStatus`](/api#schema-Vcs.FileStatus),
+[`FileDiff.Info`](/api#schema-FileDiff.Info).
+
+```ts
+interface VcsEditor {
+  add(definition: VcsDefinition): void
+  readonly default: {
+    get(): string | undefined
+    set(selection: string): void
+  }
+}
+
+interface VcsDomain extends Omit<VcsApi<unknown>, "init"> {
+  readonly transform: Transform<VcsEditor>
+  readonly reload: () => Effect.Effect<void>
+}
+
+interface VcsDefinition {
+  readonly init?: (scope: VcsScope) => Effect.Effect<void, unknown>
+  // Existing info, branches, status, and diff callbacks are required.
+}
+```
+
+### Web araması
+
+Sağlayıcıları listeleyin veya seçili sağlayıcı üzerinden bir sorgu çalıştırın.
+
+```ts
+effect: (ctx) =>
+  Effect.gen(function* () {
+    const websearch = ctx.websearch
+    const providers = yield* websearch.providers().pipe(Effect.orDie)
+    const results = yield* websearch
+      .query({ query: "OpenCode plugins", providerID: WebSearch.ID.make("internal") })
+      .pipe(Effect.orDie)
+    yield* Effect.logInfo("websearch", { providers: providers.data.length, results: results.data.results.length })
+  }),
+```
+
+Bir Effect yürütücüsü kaydedin ve varsayılan sağlayıcıyı seçin. Web aramasını devre dışı bırakmak için varsayılanı
+`false` olarak ayarlayın.
+
+```ts
+effect: (ctx) =>
+  Effect.gen(function* () {
+    const websearch = ctx.websearch
+    yield* websearch.transform((editor) => {
+      editor.add({
+        id: "internal",
+        name: "Internal search",
+        execute: ({ query }) => searchInternal(query),
+      })
+      editor.default.set("internal")
+    })
+    yield* websearch.reload()
+  }),
+```
+
+Şemalar: [`WebSearch.Provider`](/api#schema-WebSearch.Provider),
+[`WebSearch.Result`](/api#schema-WebSearch.Result).
+
+```ts
+interface WebSearchDefinition {
+  readonly id: string
+  readonly name: string
+  readonly execute: (input: WebSearch.ProviderInput) => Effect.Effect<readonly WebSearch.Result[], unknown>
+}
+
+interface WebSearchEditor {
+  add(definition: WebSearchDefinition): void
+  readonly default: {
+    get(): string | false | undefined
+    set(selection: string | false): void
+  }
+}
+
+interface WebSearchDomain extends WebsearchApi<unknown> {
+  readonly transform: Transform<WebSearchEditor>
+  readonly reload: () => Effect.Effect<void>
+}
+```
+
+### Olaylar
+
+Herkese açık sunucu olay aboneliği bir Effect `Stream` değeridir. Otomatik olarak kesintiye uğratılması için
+tüketicisini eklenti kapsamında fork edin.
+
+```ts
+effect: (ctx) =>
+  Effect.gen(function* () {
+    const event = ctx.event
+    yield* event.subscribe().pipe(
+      Stream.tap((item) => Effect.logDebug("OpenCode event", { type: item.type })),
+      Stream.runDrain,
+      Effect.forkScoped,
+    )
+  }),
+```
+
+Olay türlerini seçmek ve işlemek için Stream operatörlerini kullanın.
+
+```ts
+effect: (ctx) =>
+  Effect.gen(function* () {
+    const event = ctx.event
+    yield* event.subscribe().pipe(
+      Stream.filter((item) => item.type === "config.updated"),
+      Stream.runForEach(() => Effect.logInfo("configuration changed")),
+      Effect.forkScoped,
+    )
+  }),
+```
+
+Şema: [`V2EventEncoded`](/api#schema-V2EventEncoded).
+
+```ts
+type EventSubscribeOutput = OpenCodeEvent
+type EventSubscribeOperation<E = never> = () => Stream.Stream<EventSubscribeOutput, E>
+
+interface EventApi<E = never> {
+  readonly subscribe: EventSubscribeOperation<E>
+}
+
+interface EventDomain extends Pick<EventApi<unknown>, "subscribe"> {}
+```
+
+## Hook'lar
+
+Hook'lar canlı işlemlere müdahale eder. Birden fazla eklenti aynı hook'u kaydedebilir. OpenCode bunları eklenti sırasına
+göre çalıştırır; böylece sonraki hook'lar önceki değişiklikleri görür. Kayıtlar, eklenti kapsamı boyunca etkin kalır.
+
+```ts
+effect: (ctx) =>
+  Effect.gen(function* () {
+    const session = ctx.session
+    yield* session.hook("context", () => Effect.void)
+  }),
+```
+
+### Oturumlar
+
+Derlenmiş sistem talimatlarını, mesajları veya araçları model çağrısından hemen önce değiştirin. `context` ajan döngüsü
+için çalışır; `compaction`, `generate` ve `title` ise ilgili yardımcı istekler için çalışır. `compaction` ve `title`,
+model çağrısını atlayan bir `result` değeri kabul eder.
+
+```ts
+effect: (ctx) =>
+  Effect.gen(function* () {
+    const session = ctx.session
+    yield* session.hook("context", (event) =>
+      Effect.sync(() => {
+        event.system.push({ type: "text", text: "Keep the review focused on correctness." })
+        delete event.tools.write
+      }),
+    )
+    yield* session.hook("compaction", (event) =>
+      Effect.map(summarize(event.messages), (summary) => {
+        event.result = { summary }
+      }),
+    )
+  }),
+```
+
+Model isteği ayarlarını değiştirin ve isteğe bağlı olarak hook'u tek bir sağlayıcıyla sınırlayın. Olay, aşağıdaki HTTP
+hook'larıyla aynı `kind` değerini taşır.
+
+```ts
+effect: (ctx) =>
+  Effect.gen(function* () {
+    const session = ctx.session
+    yield* session.hook(
+      "model.request",
+      (event) => Effect.sync(() => (event.headers["x-plugin"] = "review")),
+      { providerID: "anthropic" },
+    )
+  }),
+```
+
+Sağlayıcıya özgü istekleri veya yanıtları değiştirin. Gövdeleri yalnızca bir kez okunabilen akışlardır; bir gövdeyi
+okumadan önce klonlayın veya değiştirin. Her iki hook da bir oturumun gönderdiği her istek için çalışır. İsteği hangi akışın
+gönderdiğine bağlı olarak `event.kind` değeri `"primary"`, `"compaction"`, `"title"` veya `"generate"` olur.
+
+```ts
+effect: (ctx) =>
+  Effect.gen(function* () {
+    const session = ctx.session
+    yield* session.hook("http.request", (event) =>
+      Effect.sync(() => {
+        event.request.headers.set("x-session-id", event.sessionID)
+        if (event.kind === "title") event.request.headers.set("x-priority", "background")
+      }),
+    )
+    yield* session.hook("http.response", (event) =>
+      Effect.sync(() => {
+        event.response = new Response(event.response.body, {
+          status: event.response.status,
+          headers: { ...Object.fromEntries(event.response.headers), "x-plugin": "review" },
+        })
+      }),
+    )
+  }),
+```
+
+WebSocket üzerinden akış yapan sağlayıcılar oturum başına tek bir bağlantıyı yeniden kullanır; bu nedenle HTTP hook'ları
+bu trafiği hiç görmez. Deneysel `experimental.ws.handshake` hook'u, bağlantı seçilmeden önce her model çağrısında bir kez
+çalışır ve bağlantının `url` ve `headers` değerlerini sunar. Bunlardan birini değiştirmek soketi yeniden açar. Bir
+WebSocket yolunun HTTP'ye geri döndüğü her istek için HTTP hook'ları yine çalışır.
+
+```ts
+effect: (ctx) =>
+  Effect.gen(function* () {
+    yield* ctx.session.hook(
+      "experimental.ws.handshake",
+      (event) =>
+        Effect.gen(function* () {
+          event.headers.authorization = `Bearer ${yield* mintToken(event.url)}`
+          delete event.headers["api-key"]
+        }),
+      { providerID: "azure" },
+    )
+  }),
+```
+
+`experimental.ws.send` ve `experimental.ws.receive` çerçevelerin (frame) kendisini sunar: `send`, sağlayıcı sürücüsü
+giden bir çerçeve oluşturduktan sonra çalışır; `receive` ise gelen her çerçevede, sürücü onu görmeden önce çalışır. Hook
+döndüğünde `frame` alanında ne varsa ağa gönderilen veya sürücüye ulaşan odur; OpenCode bunu doğrulamaz.
+
+```ts
+effect: (ctx) =>
+  Effect.gen(function* () {
+    yield* ctx.session.hook(
+      "experimental.ws.send",
+      (event) =>
+        Effect.sync(() => {
+          const body = JSON.parse(event.frame)
+          if (body.type === "response.create") body.metadata = { ...body.metadata, session: event.sessionID }
+          event.frame = JSON.stringify(body)
+        }),
+      { providerID: "openai" },
+    )
+  }),
+```
+
+Bir sağlayıcı hatası için yeniden deneme kararını geçersiz kılın veya milisaniye cinsinden gecikmesini değiştirin. Hook,
+OpenCode hatayı sınıflandırıp politikasını önerdikten sonra, ancak herhangi bir yeniden deneme planlanmadan önce çalışır.
+OpenCode'un bir sonraki denemeyi dahili olarak nasıl gerçekleştirdiğini sunmaz.
+
+```ts
+effect: (ctx) =>
+  Effect.gen(function* () {
+    yield* ctx.session.hook("retry", (event) =>
+      Effect.sync(() => {
+        if (event.error.status === 429) {
+          event.decision = { retry: true, delay: 10_000 }
+          return
+        }
+        if (event.error.type === "provider.invalid-request" && event.attempt === 2) {
+          event.decision = { retry: true, delay: 0 }
+          return
+        }
+        if (event.attempt >= 3) event.decision = { retry: false }
+      }),
+    )
+  }),
+```
+
+Başlangıçtaki `decision` değeri OpenCode'un politikasıdır. Bu nedenle hook'lar, normalde kalıcı sayılan bir sağlayıcı
+hatasını yeniden denenebilir hale getirebilir veya önerilen bir yeniden denemeyi veto edebilir. Birden fazla hook kayıt
+sırasına göre çalışır ve sonraki hook'lar geçerli kararı görür. Yerleşik en fazla deneme sayısı kesin bir sınır olarak
+kalır. `attempt`, önerilen fiziksel denemedir: ilk istek `1` numaralı denemedir, dolayısıyla ilk yeniden deneme `2`
+numaralı denemedir. Geçersiz gecikmeler (`NaN`, sonsuz veya negatif değerler) hesaplanan gecikmeye geri döner. Bağlam
+taşması kurtarma işlemi ayrı tutulur, çünkü aynı isteği yeniden denemek yerine konuşmayı sıkıştırır.
+
+#### Başvuru
+
+```ts
+interface SessionHooks {
+  readonly context: SessionContext
+  readonly compaction: SessionCompaction
+  readonly generate: SessionGenerate
+  readonly title: SessionTitle
+  readonly "model.request": SessionModelRequest
+  readonly "http.request": SessionHttpRequest
+  readonly "http.response": SessionHttpResponse
+  readonly "experimental.ws.handshake": SessionWebSocketHandshake
+  readonly "experimental.ws.send": SessionWebSocketSend
+  readonly "experimental.ws.receive": SessionWebSocketReceive
+  readonly retry: SessionRetry
+}
+
+type RetryDecision = { retry: false } | { retry: true; delay: number }
+
+interface SessionRetry {
+  readonly sessionID: string
+  readonly agent: string
+  readonly model: { providerID: string; id: string; variant?: string }
+  readonly error: { type: string; message: string; status?: number }
+  readonly attempt: number
+  decision: RetryDecision
+}
+
+interface SessionHookDomain {
+  readonly hook: ModelHooks<SessionHooks>
+}
+```
+
+### Shell
+
+Shell komutlarını, çalışma dizinlerini, zaman aşımlarını, çalıştırılabilir dosyaları veya ortam değişkenlerini
+yürütmeden önce değiştirin.
+
+```ts
+effect: (ctx) =>
+  Effect.gen(function* () {
+    const shell = ctx.shell
+    yield* shell.hook("create.before", (event) =>
+      Effect.sync(() => {
+        if (event.command === "npm") event.command = "bun"
+        event.timeout = Math.min(event.timeout, 60_000)
+        event.env.COMPANY_ENV = "development"
+      }),
+    )
+  }),
+```
+
+#### Başvuru
+
+```ts
+interface ShellCreateBefore {
+  command: string
+  cwd: string
+  timeout: number
+  shell: string
+  env: Record<string, string | undefined>
+}
+
+interface ShellHooks {
+  readonly "create.before": ShellCreateBefore
+}
+
+interface ShellHookDomain {
+  readonly hook: Hooks<ShellHooks>
+}
+```
+
+### Araçlar
+
+Öncesi (before) hook'ları girdiyi değiştirebilir veya `Tool.Error` ile başarısız olabilir.
+
+```ts
+effect: (ctx) =>
+  Effect.gen(function* () {
+    const tool = ctx.tool
+    yield* tool.hook("execute.before", (event) =>
+      event.tool === "write"
+        ? Effect.fail(new Tool.Error({ message: "Writes are disabled" }))
+        : Effect.logDebug("tool input", { tool: event.tool, input: event.input }),
+    )
+  }),
+```
+
+Sonrası (after) hook'ları başarılı sonuçları ve hataları inceleyebilir veya değiştirebilir.
+
+```ts
+effect: (ctx) =>
+  Effect.gen(function* () {
+    const tool = ctx.tool
+    yield* tool.hook("execute.after", (event) => {
+      if (event.status === "error") return Effect.logWarning("tool failed", { message: event.error.message })
+      return Effect.sync(() => {
+        event.result = { ...event.result, metadata: { observed: true } }
+      })
+    })
+  }),
+```
+
+#### Başvuru
+
+```ts
+interface ToolHooks {
+  readonly "execute.before": ToolExecuteBefore
+  readonly "execute.after": ToolExecuteAfter
+}
+
+interface ToolFailures extends Record<keyof ToolHooks, unknown> {
+  readonly "execute.before": Tool.Error
+  readonly "execute.after": never
+}
+
+interface ToolHookDomain {
+  readonly hook: Hooks<ToolHooks, ToolFailures>
+}
+```
+
+Ortak kayıt türleri, hangi işlemlerin eklenti kapsamı gerektirdiğini gösterir.
+
+```ts
+interface Registration {
+  readonly dispose: Effect.Effect<void>
+}
+
+type Hooks<Spec, Failures extends Record<keyof Spec, unknown> = Record<keyof Spec, never>> = <Name extends keyof Spec>(
+  name: Name,
+  callback: (input: Spec[Name]) => Effect.Effect<void, Failures[Name]>,
+) => Effect.Effect<Registration, never, Scope.Scope>
+
+type Transform<Input> = (callback: (input: Input) => void) => Effect.Effect<Registration, never, Scope.Scope>
+```
+
+## Yayımlama
+
+Paket olarak dağıtılan bir eklenti, yerel bir Effect eklentisiyle aynı varsayılan dışa aktarımı kullanır. Effect
+uygulamasını ana giriş noktasından dışa aktarın ve `effect` paketini `peerDependency` olarak bildirin.
+
+```json title="package.json"
+{
+  "name": "opencode-acme-effect-plugin",
+  "version": "1.0.0",
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "dependencies": {
+    "@opencode/plugin": "latest"
+  },
+  "peerDependencies": {
+    "effect": "^4.0.0"
+  }
+}
+```
+
+OpenCode; `effect`, dışa aktarılan `effect/*` alt yolları ve `@opencode/plugin` içe aktarımlarını (eklentinin
+`node_modules` dizinindeki bağımlılıklardan gelenler dahil) ana uygulamanın çalışma zamanı örneklerine yönlendirir.
+Böylece fiber'lar, günlükleyiciler ve `Schema` ayrıştırıcıları tek bir çalışma zamanı kopyasını paylaşır.
+
+- `effect` paketini yayımlanan eklenti çıktısına paketlemeyin. Bir paketleyiciyle (bundler) derliyorsanız `effect` ve
+  `effect/*` yollarını harici (external) olarak işaretleyin.
+- Eklentiler ve `node_modules` bağımlılıkları her zaman, eklentiyi çalıştıran OpenCode sürümünün `effect` örneğiyle
+  çalışır. Hedeflediğiniz OpenCode sürümüyle uyumlu `effect` API'lerini ve modül yollarını kullanın. Başka bir `effect`
+  ana sürümüyle (örneğin Effect 3) derlenmiş bağımlılıklar da ana uygulamanın `effect` örneğini alır ve desteklenmez.
+- Yalnızca herkese açık `effect` alt yolları sağlanır. Effect'in özel `internal` modüllerinden birini içe aktaran bir
+  eklenti, ilgili yolu belirten bir hatayla yüklenemez.
+- Derlenmiş OpenCode ikili dosyası, Effect'in HTTP API dokümantasyon sayfalarında kullanılan Scalar ve Swagger UI
+  varlıklarını içermez. Bu sayfaları bir eklentiden sunmaya çalışırsanız bunun yerine bir bilgilendirme gösterilir.
+
+Paketin giriş noktası, `effect` fonksiyonu içeren bir `Plugin.define` dışa aktarır.
+
+```ts title="src/index.ts"
+import { Plugin } from "@opencode/plugin/effect"
+import { Effect } from "effect"
+
+export default Plugin.define({
+  id: "acme.published",
+  effect: (ctx) =>
+    Effect.gen(function* () {
+      const storage = ctx.storage
+      yield* storage.set("installed", true)
+    }),
+})
+```
+
+Hedeflediğiniz OpenCode sürümüyle uyumlu sürümler kullanın ve yalnızca çalışma alanına bağlı bir kopyayı değil, yüklenmiş
+paketi test edin.
+
+```sh
+bun pm pack
+bun add ./opencode-acme-effect-plugin-1.0.0.tgz
+```

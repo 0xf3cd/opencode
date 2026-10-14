@@ -1,0 +1,101 @@
+---
+title: "Effect"
+---
+
+`@opencode/sdk/effect` to natywne dla Effect osadzone SDK. Operacje zwracają typowane wartości Effect i Stream,
+a zamknięcie nadrzędnego zakresu (`Scope`) zwalnia router, usługi Location, fibery i rejestracje wtyczek.
+
+```sh
+bun add @opencode/sdk effect
+```
+
+## Tworzenie hosta
+
+Utwórz hosta wewnątrz `Effect.scoped`, a następnie korzystaj z jego wygenerowanych grup API lub aliasu `sessions`.
+
+```ts
+import { AbsolutePath, Location, OpenCode } from "@opencode/sdk/effect"
+import { Effect } from "effect"
+
+const program = Effect.scoped(
+  Effect.gen(function* () {
+    const opencode = yield* OpenCode.create()
+    const session = yield* opencode.sessions.create({
+      location: Location.Ref.make({ directory: AbsolutePath.make("/workspace") }),
+    })
+    yield* opencode.sessions.prompt({
+      sessionID: session.id,
+      text: "Review the current changes",
+    })
+    return session
+  }),
+)
+
+const session = await Effect.runPromise(program)
+```
+
+Osadzony host używa tych samych wartości schematów, zadeklarowanych błędów, opcji żądań i strumieni Stream co
+`@opencode/client/effect`.
+
+```ts
+const info = yield* opencode.server.info()
+const sessions = yield* opencode.sessions.list()
+```
+
+## Strumieniowanie zdarzeń
+
+Endpointy strumieniowe zwracają wartości Effect `Stream`. Jeśli konsumenci mają działać w tle, uruchamiaj ich przez fork
+w zakresie (`Scope`) hosta.
+
+```ts
+import { Effect, Stream } from "effect"
+
+yield* opencode.events.subscribe().pipe(
+  Stream.runForEach((event) => Effect.logInfo("OpenCode event", { type: event.type })),
+  Effect.forkScoped,
+)
+```
+
+## Dostosowywanie
+
+Dostosuj swoją instancję OpenCode, rejestrując wtyczki Effect. Za pomocą osadzonego hosta możesz dostosować agentów,
+modele, narzędzia i inne zachowania:
+
+```ts
+import { Plugin } from "@opencode/plugin/effect"
+import { Effect } from "effect"
+
+const plugin = Plugin.define({
+  id: "customize-agent",
+  effect: (ctx) =>
+    Effect.gen(function* () {
+      const agent = ctx.agent
+      yield* agent.transform((agents) => {
+        agents.update("build", (agent) => {
+          agent.description = "Builds features and fixes bugs for our team"
+        })
+      })
+    }),
+})
+
+yield* opencode.plugin(plugin)
+```
+
+Hooki, transformacje i narzędzia wtyczek oraz pełny kontekst wtyczki opisano w
+[pełnej dokumentacji wtyczek Effect](/build/plugins/effect).
+
+## Layer
+
+Użyj `OpenCode.layer()`, gdy osadzony host ma być usługą aplikacji.
+
+```ts
+import { OpenCode } from "@opencode/sdk/effect"
+import { Effect } from "effect"
+
+const program = Effect.gen(function* () {
+  const opencode = yield* OpenCode.Service
+  return yield* opencode.server.info()
+})
+
+const health = await Effect.runPromise(program.pipe(Effect.provide(OpenCode.layer())))
+```

@@ -1,0 +1,293 @@
+---
+title: "Referencer"
+---
+
+Referencer giver OpenCode navngiven adgang til mapper uden for det aktuelle
+projekt. Tilføj en reference i `opencode.json` eller `opencode.jsonc`, og vedhæft
+dens alias i din klient, når du har brug for den.
+
+```jsonc title="opencode.jsonc"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "references": {
+    "docs": {
+      "path": "../product-docs",
+      "description": "Use for product behavior and terminology",
+    },
+  },
+}
+```
+
+Når du har vedhæftet `docs`, kan du bede agenten om at undersøge den relevante sti:
+
+```text
+Read the attached docs reference and summarize api/authentication.md.
+```
+
+Brug referencer til dokumentation, delte biblioteker, eksempler eller kildekode
+fra et andet repository.
+
+## Lokal
+
+Brug `path` til en lokal mappe:
+
+```jsonc
+{
+  "references": {
+    "design-system": {
+      "path": "../design-system",
+      "description": "Use when working with components or design tokens",
+    },
+  },
+}
+```
+
+Stier fungerer sådan:
+
+- Relative stier løses ud fra den mappe, der indeholder konfigurationsfilen.
+- Absolutte stier understøttes.
+- Stier relativt til hjemmemappen, f.eks. `~/docs`, understøttes.
+
+Brug strengformen, når der ikke er brug for andre felter:
+
+```jsonc
+{
+  "references": {
+    "docs": "../docs",
+    "shared": "~/work/shared",
+  },
+}
+```
+
+<Callout type="note">
+  En streng i kortform er kun en lokal sti, når den starter med `.`, `/` eller `~`. Skriv `./docs`, ikke `docs`; en
+  værdi som `docs` alene tolkes som et Git-repository.
+</Callout>
+
+## Git
+
+Brug `repository` til et fjernt Git-repository:
+
+```jsonc
+{
+  "references": {
+    "effect": {
+      "repository": "Effect-TS/effect",
+      "branch": "main",
+    },
+    "internal-sdk": {
+      "repository": "git@gitlab.example.com:platform/sdk.git",
+      "branch": "release/v2",
+    },
+  },
+}
+```
+
+Understøttede former for remotes omfatter:
+
+- GitHub-kortformen `owner/repo`
+- Git-URL'er
+- Formen vært/sti
+- Remotes i SCP-stil
+
+Lokale `file:`-repositories understøttes ikke.
+
+Brug strengformen for at følge remotens standardbranch:
+
+```jsonc
+{
+  "references": {
+    "effect": "Effect-TS/effect",
+    "sdk": "gitlab.com/platform/sdk",
+  },
+}
+```
+
+Uden `branch` checker OpenCode remotens standardbranch ud og holder den opdateret.
+Branchnavne må indeholde bogstaver, tal, `/`, `_`, `.` og `-`, men må ikke starte
+med `-` eller indeholde `..`.
+
+```jsonc
+{
+  "references": {
+    "sdk": {
+      "repository": "example/sdk",
+      "branch": "release/v2.1",
+    },
+  },
+}
+```
+
+## Lagring
+
+OpenCode normaliserer hver remote og gemmer ét checkout pr. remote og branch i
+sin globale datamappe. Uden en eksplicit branch har stien denne form:
+
+```text
+opencode/repos/<host>/<repository-path>
+```
+
+På en typisk Linux-installation gemmes `Effect-TS/effect` her:
+
+```text
+~/.local/share/opencode/repos/github.com/Effect-TS/effect
+```
+
+En eksplicit branch tilføjer et kodet `@<branch>`-suffiks:
+
+```text
+~/.local/share/opencode/repos/github.com/Effect-TS/effect@main
+```
+
+## Opdatering
+
+Manglende repositories klones asynkront. Eksisterende checkouts tjekkes i
+baggrunden, når referencer indlæses eller genindlæses, og efter at en ny
+brugerprompt er modtaget i deres Location.
+
+```text
+Prompt admitted → refresh check starts in background → agent continues
+```
+
+Et checkout kan opdateres, når det seneste opdateringsforsøg ligger mindst 24
+timer tilbage, eller når der ikke er registreret noget forsøg. En opdatering
+henter og nulstiller til den konfigurerede branch eller remotens standardbranch.
+
+```text
+Last attempt: 25 hours ago → eligible
+Last attempt: 2 hours ago  → skipped
+```
+
+Opdateringer følger disse regler:
+
+- Tidsstempler bevares på tværs af genstarter af tjenesten.
+- Locations, der bruger samme checkout, deler dets tidsstempel.
+- Mislykkede forsøg logges og er stadig omfattet af grænsen på 24 timer.
+- Der polles ikke periodisk, mens en Location ikke er i brug.
+- Fejl ved kloning eller opdatering forhindrer ikke andre referencer i at blive
+  indlæst.
+
+Prompts venter ikke på kloning eller opdatering. En vedhæftning kan indeholde
+ældre indhold, selvom en senere læsning med et værktøj ser det opdaterede
+checkout, og en ny reference kan dukke op, før dens checkout er klar.
+
+```text
+Attachment created → cached content
+Background refresh completes → later tool read sees newer content
+```
+
+<Callout type="warning">
+  Cachede checkouts er delte og kan blive opdateret, mens en agent bruger dem. Undgå at redigere cachede checkouts, for
+  en opdatering nulstiller dem.
+</Callout>
+
+## Vejledning
+
+`description` fortæller agenter, hvornår en reference er relevant. Referencer med
+en beskrivelse vises i agentinstruktionerne med deres alias og den løste sti.
+
+```jsonc
+{
+  "references": {
+    "docs": {
+      "path": "../docs",
+      "description": "Use for product behavior and terminology",
+    },
+  },
+}
+```
+
+Referencer uden beskrivelse er stadig tilgængelige for klienter, men bliver ikke
+annonceret automatisk.
+
+```jsonc
+{
+  "references": {
+    "archive": {
+      "path": "../archive",
+    },
+  },
+}
+```
+
+## Synlighed
+
+Sæt `hidden` til `true` for at fjerne en reference fra interaktive vælgere i
+klienter:
+
+```jsonc
+{
+  "references": {
+    "internal": {
+      "path": "../internal",
+      "description": "Use for internal service behavior",
+      "hidden": true,
+    },
+  },
+}
+```
+
+`hidden` påvirker kun den interaktive synlighed. Referencen findes stadig i
+reference-API'et og, hvis den har en beskrivelse, i agentinstruktionerne.
+
+## Brug
+
+Klienter vedhæfter en reference via dens rodalias. Vedhæftningen indeholder en
+ikke-rekursiv liste over filerne og mapperne direkte under roden.
+
+```text
+Attached alias: docs
+Ask: Inspect docs/guides/deployment.md and explain the deployment steps.
+```
+
+Bed agenten om at undersøge en bestemt sti, når du har brug for indhold længere
+nede end roden.
+
+## Tilladelser
+
+Referencer giver ingen ekstra værktøjstilladelser. Adgang uden for den aktive
+Location følger stadig de normale værktøjsregler og tilladelsen
+`external_directory`; redigering kræver desuden den relevante
+redigeringstilladelse.
+
+```text
+Read ../product-docs/api.md
+```
+
+Anmodningen lykkes kun, når de aktive tilladelser tillader den eksterne læsning.
+
+## Felter
+
+| Felt          | Lokal    | Git      | Beskrivelse                                    |
+| ------------- | -------- | -------- | ---------------------------------------------- |
+| `path`        | Påkrævet | Nej      | Sti til lokal mappe                            |
+| `repository`  | Nej      | Påkrævet | Fjernt Git-repository                          |
+| `branch`      | Nej      | Valgfri  | Branch, der skal hentes og checkes ud          |
+| `description` | Valgfri  | Valgfri  | Vejledning om, hvornår agenter skal bruge den  |
+| `hidden`      | Valgfri  | Valgfri  | Skjul den i interaktive vælgere i klienter     |
+
+En komplet Git-post kan bruge alle Git-kompatible felter:
+
+```jsonc
+{
+  "references": {
+    "sdk": {
+      "repository": "example/sdk",
+      "branch": "main",
+      "description": "Use for SDK implementation details",
+      "hidden": false,
+    },
+  },
+}
+```
+
+## Aliasser
+
+Et alias må ikke være tomt eller indeholde `/`, `\`, mellemrum, backtick eller
+komma.
+
+```text
+Valid:   docs
+Invalid: product docs
+Invalid: docs/api
+```

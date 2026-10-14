@@ -1,0 +1,140 @@
+---
+title: "Eklentiler"
+---
+
+Yayımlanmış paketleri, sürümlü paketleri, kapsamlı (scoped) paketleri veya yerel eklenti dizinlerini `opencode.json(c)`
+dosyasına ekleyin.
+
+## Yapılandırma
+
+```jsonc title="opencode.jsonc"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "plugins": [
+    "opencode-acme-plugin",
+    "opencode-acme-plugin@1.2.0",
+    "@acme/opencode-plugin",
+    "./plugins/local",
+    "../shared/plugin.ts",
+    "/absolute/path/plugin.ts",
+    "file:///home/me/plugins/local",
+    {
+      "package": "@acme/opencode-plugin",
+      "options": {
+        "agent": "reviewer",
+        "strict": true,
+      },
+    },
+  ],
+}
+```
+
+Göreli yollar, girdiyi içeren yapılandırma dosyasına göre çözümlenir. Geçerli yapılandırma dosyalarındaki eklenti
+dizileri birbirinin yerini almaz; en düşük öncelikten en yükseğe doğru uygulanır.
+
+```text
+~/.config/opencode/opencode.jsonc
+./opencode.jsonc
+./.opencode/opencode.jsonc
+```
+
+## Bulma
+
+OpenCode ayrıca bulunan her `.opencode/plugins/` dizinindeki doğrudan `.ts` ve `.js` dosyalarını ve birinci düzeydeki
+eklenti paketi dizinlerini de yükler.
+
+```text
+.opencode/
+└── plugins/
+    ├── concise.ts
+    ├── reviewer.js
+    └── acme-package/
+```
+
+Global eklentiler, OpenCode yapılandırma dizini altında aynı bulma düzenini kullanır.
+
+```text
+~/.config/opencode/plugins/
+```
+
+Proje kökündeki `opencode.json(c)` dosyasının yanında bulunan bir `plugins/` dizini otomatik olarak taranmaz; içindeki
+dosyaları açıkça yapılandırın veya dizini `.opencode/` altına taşıyın.
+
+```jsonc title="opencode.jsonc"
+{
+  "plugins": ["./plugins/local"]
+}
+```
+
+## Denetim
+
+Eklenti girdileri sırayla işlenir. Bir ID'yi veya joker karakteri devre dışı bırakmak için başına `-` ekleyin; tüm
+eklentiler için `*`, bir ID önekiyle eşleştirmek için `.*` kullanın. Daha sonra gelen bir ID, eklentiyi yeniden
+etkinleştirir.
+
+```jsonc title="opencode.jsonc"
+{
+  "plugins": ["*", "-opencode.provider.*", "opencode.provider.openai", "-acme.reviewer"]
+}
+```
+
+Bir deponun [politika](/policies) uygulamasını kapatamaması için iki yerleşik eklenti kaldırma girdilerini yok sayar:
+`opencode.config.policy` ve kuruluş politikasını ileten Console bağlantısı olan `opencode.provider.opencode`.
+
+## Yönetim
+
+Global paket eklentilerini CLI ile yükleyin, listeleyin, denetleyin, güncelleyin veya kaldırın.
+
+```sh
+opencode plugin add opencode-acme-plugin@1.2.0
+opencode plugin list
+opencode plugin list --builtin
+opencode plugin check
+opencode plugin update
+opencode plugin update opencode-acme-plugin
+opencode plugin remove opencode-acme-plugin@1.2.0
+```
+
+`plugin check` komutu, sunucu ve yalnızca TUI'ye yönelik paket eklentilerinde güncelleme olup olmadığını denetler.
+`plugin update` komutu güncel olmayan tüm paketleri günceller; yalnızca belirli bir paketi denetlemek veya güncellemek için
+yapılandırılmış bir paket hedefi verin. Yerel eklentiler ve sabitlenmiş paket revizyonları atlanır.
+
+Paket kurulumu; sürüm, etiket veya aralık içeren npm adlarını ve npm uyumlu Git paket belirtimlerini kabul eder. Git
+depoları için barındırma hizmeti kısayolları, HTTPS veya SSH kullanılabilir; mevcut Git kimlik bilgilerinizle erişilebilen
+özel depolar da buna dahildir.
+
+```sh
+opencode plugin add @acme/opencode-plugin@latest
+opencode plugin add github:acme/opencode-plugin
+opencode plugin add git+ssh://git@github.com/acme/opencode-plugin.git#main
+opencode plugin add 'github:acme/plugins#main::path:packages/opencode-plugin'
+```
+
+Dallar, etiketler, tam commit hash'leri ve npm'in `::path:` depo alt dizini seçicileri desteklenir. Yerel yolları
+doğrudan yapılandırın; `plugin add` komutu tarball ve npm takma adı hedeflerini kabul etmez.
+
+## Yeniden yükleme
+
+İzlenen yapılandırma dizinlerindeki değişiklikler otomatik olarak yeniden yüklenir. Sunucu başlatılırken önbellekteki
+paket eklentileri hemen yüklenir, eksik paketler arka planda kurulur ve sürümü sabitlenmemiş npm ve Git eklentileri,
+kurulu paket değiştirilmeden güncellemeler için denetlenir. Tam npm sürümleri ve tam Git commit hash'leri sabit kalır.
+İzlenmeyen yerel bağımlılıklardaki değişiklikler yine de OpenCode'un yeniden başlatılmasını gerektirebilir.
+
+```sh
+touch .opencode/plugins/concise/index.ts
+opencode service restart
+```
+
+## Terminal
+
+Yalnızca CLI'a yönelik eklentiler ayrı olarak yapılandırılır ve uzak bir sunucuya bağlıyken de etkin kalır.
+
+```json title="cli.json"
+{
+  "plugins": ["opencode-acme-cli"]
+}
+```
+
+<Card title="Eklenti geliştirin" href="/build/plugins">
+  Araçlar, hook'lar, entegrasyonlar, komutlar, ajanlar ve diğer davranışları ekleyen eklentiler oluşturun.
+</Card>

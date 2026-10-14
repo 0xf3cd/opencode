@@ -1,0 +1,240 @@
+---
+title: "스킬"
+---
+
+특정 작업에 대해 재사용 가능한 지침을 에이전트에 제공하려면 스킬을 만드세요. `.opencode/skills/<skill-id>`에 `SKILL.md` 파일을 두고, 언제 사용할지를 `description`에 설명합니다.
+
+```markdown title=".opencode/skills/git-release/SKILL.md"
+---
+name: Git Release
+description: Prepare release notes, version bumps, and GitHub releases
+---
+
+## Workflow
+
+1. Read `references/release-policy.md`.
+2. Summarize merged changes since the previous tag.
+3. Propose the version bump before changing files.
+4. Run `scripts/changelog.ts` only after the user approves the version.
+```
+
+OpenCode는 관련이 있을 때 이 스킬을 모델에 알립니다. 그러면 에이전트는 모든 스킬을 모든 프롬프트에 넣는 대신 `skill` 도구로 필요한 스킬의 지침을 로드할 수 있습니다.
+
+## 만들기
+
+관련 스크립트, 참고 자료, 템플릿은 `SKILL.md` 옆에 두세요.
+
+```text
+.opencode/skills/
+└── git-release/
+    ├── SKILL.md
+    ├── scripts/
+    │   └── changelog.ts
+    └── references/
+        └── release-policy.md
+```
+
+스킬 안에 작성한 경로는 `SKILL.md`가 있는 디렉터리를 기준으로 합니다. 디렉터리 형식을 사용하면 보조 파일에 전용 기준 디렉터리가 생기므로 이 형식을 권장합니다.
+
+## 탐색
+
+OpenCode는 다음 위치를 자동으로 검색합니다.
+
+| 범위                  | 소스                                   |
+| --------------------- | -------------------------------------- |
+| 전역                  | `~/.config/opencode/skills`            |
+| 전역 호환             | `~/.claude/skills`, `~/.agents/skills` |
+| 프로젝트              | `.opencode/skills`                     |
+| 프로젝트 호환         | `.claude/skills`, `.agents/skills`     |
+
+프로젝트 소스의 경우 OpenCode는 현재 디렉터리부터 프로젝트 루트까지 검색하며, 모든 수준에서 일치하는 디렉터리를 포함합니다.
+
+각 소스에는 두 가지 형식 중 어느 것이든 사용할 수 있습니다.
+
+```text
+skills/
+├── review.md
+└── git-release/
+    └── SKILL.md
+```
+
+- Markdown 파일은 `skills/review.md`처럼 소스 루트에 있어야 합니다.
+- 이름이 정확히 `SKILL.md`인 파일은 `skills/git-release/SKILL.md`처럼 어떤 깊이에든 둘 수 있습니다.
+
+## 소스
+
+`opencode.json` 또는 `opencode.jsonc`의 `skills` 배열로 로컬 디렉터리나 HTTP 카탈로그를 더 추가할 수 있습니다.
+
+```jsonc title="opencode.jsonc"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "skills": [
+    "./team-skills",
+    "~/shared/opencode-skills",
+    "/opt/company-skills",
+    "https://example.com/opencode/skills/",
+  ],
+}
+```
+
+| 값 | 해석 방식 |
+| ----- | ---------- |
+| 상대 경로 | 구성 파일이 아니라 현재 OpenCode 작업 디렉터리를 기준으로 합니다 |
+| `~/` 경로 | 현재 사용자의 홈 디렉터리를 기준으로 합니다 |
+| 절대 경로 | 작성한 그대로 사용합니다 |
+| `http://` 또는 `https://` URL | HTTP 카탈로그로 로드합니다 |
+
+발견된 모든 구성 파일의 항목이 사용됩니다. `skills` 배열은 대체되지 않고 합쳐집니다.
+
+## 카탈로그
+
+HTTP 카탈로그는 `index.json` 파일이 있는 기본 URL입니다.
+
+```json title="index.json"
+{
+  "skills": [
+    {
+      "name": "git-release",
+      "version": "3",
+      "files": ["git-release.md", "references/release-policy.md"]
+    }
+  ]
+}
+```
+
+이 항목의 경우 OpenCode는 각 파일을 `<base-url>/git-release/<file>`에서 다운로드합니다.
+
+| 규칙 | 요구 사항 |
+| ---- | ----------- |
+| 경로 | 안전한 상대 경로여야 하며 출처가 같아야 합니다 |
+| 진입 파일 | `SKILL.md` 또는 `git-release.md` 같은 `<name>.md`를 포함해야 합니다 |
+| 업데이트 | 파일이 바뀌면 OpenCode가 캐시를 새로 고치도록 `version`을 올리세요 |
+
+HTTP 카탈로그에서는 이름이 있는 Markdown 형식을 사용하는 것이 좋습니다. 다운로드한 각 스킬 디렉터리는 소스 루트가 되므로 `git-release.md`의 ID는 `git-release`가 됩니다. 현재 V2에서 루트 수준의 `SKILL.md`는 ID가 글자 그대로 `SKILL`이 됩니다.
+
+## 프런트매터
+
+프런트매터로 스킬의 이름을 지정하고 표시 위치를 제어하세요.
+
+```markdown title="SKILL.md"
+---
+name: Git Release
+description: Prepare a repository release
+metadata:
+  opencode/autoinvoke: false
+---
+
+Prepare the changelog, version bump, tag, and release notes.
+```
+
+| 필드                           | 동작                                                              |
+| ------------------------------ | ----------------------------------------------------------------- |
+| `name`                         | 표시 이름입니다. 기본값은 경로에서 파생된 ID입니다                |
+| `description`                  | 모델에 스킬을 보여 줄 때 사용하는 요약입니다                      |
+| `metadata.opencode/autoinvoke` | `false`로 설정하면 모델이 볼 수 있는 목록에서 스킬을 제외합니다    |
+| `disable-model-invocation`     | `true`로 설정하면 `opencode/autoinvoke: false`와 같은 효과입니다  |
+
+런타임에서 모든 프런트매터는 선택 사항입니다. 모델이 스킬을 찾아야 한다면 명확한 `description`을 추가하세요. 설명이 없는 스킬은 모델에 알려지지 않습니다.
+
+`opencode/autoinvoke: false`는 모델이 볼 수 있는 목록에서 스킬을 숨길 뿐입니다. 스킬은 계속 등록되어 있으며 ID로 명시적으로 로드할 수 있습니다. `disable-model-invocation`과 `opencode/autoinvoke`를 모두 설정하면 `opencode/autoinvoke`가 우선합니다. V2는 `license`, `compatibility` 같은 이식성 필드를 허용하지만 해석하지는 않습니다.
+
+## ID
+
+파일 경로가 스킬 ID를 결정합니다. 프런트매터의 `name`은 표시용 레이블일 뿐입니다.
+
+| 파일                              | ID            |
+| --------------------------------- | ------------- |
+| `<source>/git-release.md`         | `git-release` |
+| `<source>/git-release/SKILL.md`   | `git-release` |
+| `<source>/teams/release/SKILL.md` | `release`     |
+
+ID는 정확히 일치해야 하며 대소문자를 구분합니다. 이식 가능한 스킬에는 1–64자의 고유한 소문자 kebab-case ID를 사용하고, 디렉터리 이름과 일치시키세요.
+
+```text
+^[a-z0-9]+(-[a-z0-9]+)*$
+```
+
+현재 V2는 이 패턴, 1–64자 권장 사항, `name`과 디렉터리 이름의 일치, 설명의 최대 길이를 강제하지 않습니다.
+
+## 우선순위
+
+스킬은 ID로 선택됩니다. 두 소스가 `git-release`를 정의하면, 나중에 등록된 소스의 스킬을 OpenCode가 로드합니다.
+
+```text
+~/.config/opencode/skills/git-release/SKILL.md  ← lower precedence
+.opencode/skills/git-release/SKILL.md           ← loaded
+```
+
+소스는 우선순위가 낮은 것부터 높은 순서로 등록됩니다.
+
+1. 기본 제공 스킬
+2. `.claude/skills`: 전역을 먼저, 이어서 가장 먼 상위 디렉터리부터 현재 디렉터리 방향으로
+3. `.agents/skills`: 전역을 먼저, 이어서 가장 먼 상위 디렉터리부터 현재 디렉터리 방향으로
+4. `~/.config/opencode/skills`
+5. 프로젝트 `.opencode/skills`: 프로젝트 루트부터 현재 디렉터리 방향으로
+6. 명시적인 `skills` 구성 항목: 구성 우선순위와 배열 순서대로
+
+이전 스킬을 재정의하려는 경우가 아니라면 ID가 중복되지 않게 하세요.
+
+## 로드
+
+OpenCode는 각 모델 단계마다, 설명이 있고 `opencode/autoinvoke`가 `false`로 설정되지 않은 허용된 스킬 목록을 제공합니다. 이 목록에는 Markdown 본문 전체가 아니라 ID, 이름, 설명만 포함됩니다.
+
+모델은 정확한 ID로 `skill` 도구를 호출해 스킬을 로드합니다.
+
+```json title="skill tool input"
+{
+  "id": "git-release"
+}
+```
+
+그러면 OpenCode는 다음을 수행합니다.
+
+1. 해당 ID의 현재 정의를 선택합니다.
+2. 선택된 에이전트의 `skill` 권한을 확인합니다.
+3. 프런트매터를 제외한 Markdown 본문을 대화에 추가합니다.
+4. 스킬의 기준 디렉터리와 최대 10개의 보조 파일 경로 샘플을 제공합니다.
+
+스킬을 직접 로드하려면 프롬프트에서 `@skill-id`로 언급하세요.
+
+보조 파일의 내용은 자동으로 로드되지 않습니다. 스킬이 지시할 때 에이전트가 해당 파일을 읽습니다. 파일 샘플은 디렉터리 기반 `SKILL.md` 스킬에서만 제공되며, 단일 Markdown 파일 스킬은 주변 파일 목록을 받지 않습니다.
+
+## 권한
+
+`skill` 작업을 사용하고 스킬 ID를 리소스로 지정하세요. 규칙은 순서대로 평가되며 마지막으로 일치한 규칙이 적용됩니다.
+
+```jsonc title="opencode.jsonc"
+{
+  "permissions": [
+    { "action": "skill", "resource": "*", "effect": "allow" },
+    { "action": "skill", "resource": "internal-*", "effect": "deny" },
+    { "action": "skill", "resource": "experimental-*", "effect": "ask" },
+  ],
+}
+```
+
+| 효과 | 동작 |
+| ------ | -------- |
+| `allow` | 일치하는 스킬을 모델에 알리고 승인 없이 로드합니다 |
+| `ask` | 일치하는 스킬을 모델에 알리고, 로드하기 전에 확인을 요청합니다 |
+| `deny` | 일치하는 스킬을 모델에서 숨기고 로드를 거부합니다 |
+
+특정 에이전트에만 적용하려면 같은 규칙을 `agents.<id>.permissions` 아래에 두세요.
+
+## 문제 해결
+
+예를 들어 다음 스킬의 ID는 프런트매터 이름인 `Git Release`가 아니라 `release`입니다.
+
+```text
+.opencode/skills/release/SKILL.md
+                      └─ ID: release
+```
+
+스킬이 보이지 않거나 잘못된 내용이 로드된다면 다음을 확인하세요.
+
+1. 파일이 루트 수준의 `*.md`이거나, 이름이 정확히 `SKILL.md`인 중첩 파일인지 확인합니다.
+2. 프런트매터의 `name`이 아니라 경로에서 파생된, 대소문자를 구분하는 ID를 확인합니다.
+3. 모델이 스킬을 찾아야 한다면 `description`을 추가합니다.
+4. `opencode/autoinvoke`와 선택된 에이전트의 `skill` 권한을 확인합니다.
+5. 같은 ID를 정의하는 나중 소스가 있는지 찾아봅니다.
+6. HTTP 카탈로그라면 `index.json`, 출처가 같은 파일 경로, 변경된 `version`을 확인합니다.

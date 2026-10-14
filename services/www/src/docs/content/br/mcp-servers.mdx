@@ -1,0 +1,418 @@
+---
+title: "Servidores MCP"
+---
+
+O OpenCode se conecta a servidores [Model Context Protocol](https://modelcontextprotocol.io/) e expõe funcionalidades como ferramentas, prompts, resources e instruções. As ferramentas MCP consomem contexto do modelo, então adicione apenas os servidores de que você precisa.
+
+## Primeiros passos
+
+Adicione um servidor remoto a partir do projeto que vai usá-lo e depois verifique a conexão:
+
+```sh
+opencode mcp add context7 --url https://mcp.context7.com/mcp
+opencode mcp list
+```
+
+O comando grava o servidor na [configuração](/config) do projeto. Adicione `--global` para disponibilizá-lo em todos os projetos:
+
+```sh
+opencode mcp add context7 --global --url https://mcp.context7.com/mcp
+```
+
+Servidores remotos usam OAuth por padrão. Se a lista mostrar `needs authentication`, abra o OpenCode, execute `/mcps`, selecione o servidor e faça login. Um servidor conectado já pode ser usado por um agente:
+
+```text
+✓ context7  connected
+```
+
+## Configuração
+
+Para configurar um servidor manualmente, dê a ele um nome único em `mcp.servers`. A V2 não coloca os nomes dos servidores diretamente em `mcp`.
+
+```jsonc title="opencode.jsonc"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "mcp": {
+    "servers": {
+      "my-server": {
+        "type": "local",
+        "command": ["npx", "-y", "example-mcp-server"],
+      },
+    },
+  },
+}
+```
+
+Os servidores se conectam automaticamente. Para manter um servidor configurado sem conectá-lo, use `disabled` (não existe um campo `enabled`):
+
+```jsonc
+{
+  "mcp": {
+    "servers": {
+      "my-server": {
+        "type": "local",
+        "command": ["npx", "-y", "example-mcp-server"],
+        "disabled": true,
+      },
+    },
+  },
+}
+```
+
+Uma configuração de projeto com precedência maior substitui o objeto inteiro do servidor com o mesmo nome. Use nomes diferentes para conexões ou contas separadas; caso contrário, repita todos os campos obrigatórios na sobrescrita:
+
+```jsonc title="opencode.jsonc"
+{
+  "mcp": {
+    "servers": {
+      "my-server": {
+        "type": "remote",
+        "url": "https://mcp.example.com/mcp",
+      },
+    },
+  },
+}
+```
+
+## Local
+
+Um servidor local é um comando que o OpenCode inicia usando o transporte stdio do MCP. Adicione um informando o comando depois de `--`:
+
+```sh
+opencode mcp add everything -- npx -y @modelcontextprotocol/server-everything
+```
+
+Use a configuração para opções do processo, como diretório de trabalho ou variáveis de ambiente:
+
+```jsonc title="opencode.jsonc"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "mcp": {
+    "servers": {
+      "everything": {
+        "type": "local",
+        "command": ["npx", "-y", "@modelcontextprotocol/server-everything"],
+        "cwd": ".",
+        "environment": {
+          "LOG_LEVEL": "info",
+          "MCP_API_KEY": "{env:MCP_API_KEY}",
+        },
+      },
+    },
+  },
+}
+```
+
+| Campo | Obrigatório | Descrição |
+| --- | --- | --- |
+| `type` | Sim | Precisa ser `"local"`. |
+| `command` | Sim | Executável seguido dos argumentos. |
+| `cwd` | Não | Diretório do processo. Caminhos relativos são resolvidos a partir do workspace, que também é o padrão. |
+| `environment` | Não | Variáveis de string adicionadas ao ambiente de processo herdado do OpenCode. |
+| `disabled` | Não | Impede a conexão quando `true`. O padrão é `false`. |
+| `codemode` | Não | Defina como `false` para expor as ferramentas diretamente, sem passar pelo Code Mode. O padrão é `true`. |
+| `timeout` | Não | Sobrescritas de tempo limite para este servidor. |
+| `protocol` | Não | `legacy` (padrão), `auto` ou `2026-07-28`. Consulte [Versão do protocolo](#protocol-version). |
+
+Use `{env:NAME}` para substituir variáveis de ambiente. Expressões de shell como `$NAME` não são expandidas em strings JSON:
+
+```jsonc
+{
+  "environment": {
+    "MCP_API_KEY": "{env:MCP_API_KEY}",
+  },
+}
+```
+
+## Remoto
+
+Um servidor remoto usa o transporte Streamable HTTP do MCP e exige uma URL absoluta:
+
+```sh
+opencode mcp add context7 --url https://mcp.context7.com/mcp
+```
+
+Use a configuração quando o servidor precisar de cabeçalhos ou outras opções. Guarde segredos em variáveis de ambiente, e não no arquivo:
+
+```jsonc title="opencode.jsonc"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "mcp": {
+    "servers": {
+      "context7": {
+        "type": "remote",
+        "url": "https://mcp.context7.com/mcp",
+        "oauth": false,
+        "headers": {
+          "CONTEXT7_API_KEY": "{env:CONTEXT7_API_KEY}",
+        },
+      },
+    },
+  },
+}
+```
+
+| Campo | Obrigatório | Descrição |
+| --- | --- | --- |
+| `type` | Sim | Precisa ser `"remote"`. |
+| `url` | Sim | Endpoint Streamable HTTP absoluto. |
+| `headers` | Não | Cabeçalhos HTTP (strings) enviados ao endpoint. |
+| `oauth` | Não | Configurações de OAuth, ou `false` para desativar o OAuth. |
+| `disabled` | Não | Impede a conexão quando `true`. O padrão é `false`. |
+| `codemode` | Não | Defina como `false` para expor as ferramentas diretamente, sem passar pelo Code Mode. O padrão é `true`. |
+| `timeout` | Não | Sobrescritas de tempo limite para este servidor. |
+| `protocol` | Não | `legacy` (padrão), `auto` ou `2026-07-28`. Consulte [Versão do protocolo](#protocol-version). |
+
+Use `oauth: false` somente quando o servidor usar exclusivamente uma chave de API ou outra credencial em cabeçalho:
+
+```jsonc
+{
+  "type": "remote",
+  "url": "https://mcp.example.com/mcp",
+  "oauth": false,
+  "headers": { "Authorization": "Bearer {env:MCP_API_KEY}" },
+}
+```
+
+## OAuth
+
+O OAuth fica ativado para servidores remotos, a menos que `oauth` seja `false`. O OpenCode descobre o servidor de autorização, usa PKCE, renova os tokens e tenta o registro dinâmico de cliente quando houver suporte; as credenciais ficam fora da configuração do projeto.
+
+Para o registro dinâmico, configure apenas a URL do servidor:
+
+```jsonc title="opencode.jsonc"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "mcp": {
+    "servers": {
+      "sentry": {
+        "type": "remote",
+        "url": "https://mcp.sentry.dev/mcp",
+      },
+    },
+  },
+}
+```
+
+Se o servidor exigir autenticação, execute `/mcps`, selecione-o e conclua a autorização no navegador. A CLI pode iniciar o mesmo fluxo:
+
+```sh
+opencode mcp auth sentry
+```
+
+Quando um provedor fornecer credenciais de cliente, use os campos de OAuth da V2 em snake_case:
+
+```jsonc title="opencode.jsonc"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "mcp": {
+    "servers": {
+      "company-tools": {
+        "type": "remote",
+        "url": "https://mcp.example.com/mcp",
+        "oauth": {
+          "client_id": "{env:MCP_CLIENT_ID}",
+          "client_secret": "{env:MCP_CLIENT_SECRET}",
+          "scope": "tools:read tools:execute",
+          "callback_port": 19876,
+          "redirect_uri": "http://127.0.0.1:19876/callback",
+        },
+      },
+    },
+  },
+}
+```
+
+| Campo | Descrição |
+| --- | --- |
+| `client_id` | ID de cliente pré-registrado. Omita-o para tentar o registro dinâmico. |
+| `client_secret` | Segredo de um cliente pré-registrado. |
+| `scope` | Escopos a solicitar, separados por espaço. |
+| `callback_port` | Porta local de callback, de `1` a `65535`. Por padrão, é usada uma porta efêmera disponível. |
+| `redirect_uri` | URI de loopback pré-registrada cujo caminho e porta chegam ao listener de callback local. |
+| `auth_server_metadata_url` | URL do documento de metadados OAuth ou OpenID Connect do servidor de autorização. Defina-a quando o servidor MCP não publicar metadados de recurso protegido que indiquem o servidor de autorização. |
+
+Remova as credenciais OAuth armazenadas quando precisar fazer login de novo ou trocar de conta:
+
+```sh
+opencode mcp logout sentry
+```
+
+## Tempos limite
+
+Os tempos limite são inteiros positivos em milissegundos. Defina os padrões em `mcp.timeout`; o objeto `timeout` de um servidor sobrescreve os padrões correspondentes.
+
+```jsonc title="opencode.jsonc"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "mcp": {
+    "timeout": {
+      "startup": 45000,
+      "catalog": 30000,
+      "execution": 600000,
+    },
+    "servers": {
+      "slow-tools": {
+        "type": "remote",
+        "url": "https://mcp.example.com/mcp",
+        "timeout": {
+          "catalog": 60000,
+        },
+      },
+    },
+  },
+}
+```
+
+| Tempo limite | Padrão | Aplica-se a |
+| --- | --- | --- |
+| `startup` | 30 segundos | Conexão do transporte e inicialização do servidor. |
+| `catalog` | 30 segundos | Listagem de ferramentas, prompts, resources e templates de resources. |
+| `execution` | 12 horas | Chamadas de ferramentas, obtenção de prompts e leitura de resources. |
+
+## Versão do protocolo
+
+Por padrão, o OpenCode abre todos os servidores com o handshake clássico `initialize` do MCP. Defina o `protocol` de um servidor para se comunicar com um servidor baseado na revisão 2026-07-28:
+
+```jsonc title="opencode.jsonc"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "mcp": {
+    "servers": {
+      "modern": {
+        "type": "remote",
+        "url": "https://mcp.example.com/mcp",
+        "protocol": "auto",
+      },
+    },
+  },
+}
+```
+
+| Valor | Comportamento |
+| --- | --- |
+| `legacy` | Padrão. Envia `initialize` e usa revisões do protocolo até a 2025-11-25. |
+| `auto` | Sonda com `server/discover` em busca da revisão 2026-07-28 e recorre a `legacy` quando o servidor não oferece suporte a ela. |
+| `2026-07-28` | Exige a revisão 2026-07-28. A conexão falha com servidores mais antigos. |
+
+Sondar um servidor local `legacy` cria um processo extra de curta duração e pode esperar até o tempo limite de inicialização quando o servidor ignora requisições desconhecidas, então use `auto` apenas nos servidores que precisam dele.
+
+## Nomes
+
+O OpenCode nomeia cada ferramenta como `<server>_<tool>`. Caracteres que não sejam letras, números, `_` e `-` são substituídos por `_`:
+
+```text
+server: context 7
+tool:   resolve.library/id
+name:   context_7_resolve_library_id
+```
+
+Os prompts MCP viram comandos chamados `<server>:<prompt>`, com a mesma normalização. Por exemplo:
+
+```text
+/context_7:find_docs
+```
+
+Escolha nomes de servidor curtos que continuem únicos depois da normalização. No Code Mode, que é o padrão, as ferramentas são agrupadas pelo nome normalizado do servidor:
+
+```text
+tools.context_7.resolve_library_id(...)
+```
+
+## Permissões
+
+O Code Mode é o padrão. Defina `codemode` como `false` quando as ferramentas de um servidor precisarem ficar na lista de ferramentas nativa do provedor:
+
+```jsonc
+{
+  "mcp": {
+    "servers": {
+      "context7": {
+        "type": "remote",
+        "url": "https://mcp.context7.com/mcp",
+        "codemode": false,
+      },
+    },
+  },
+}
+```
+
+Use ações de permissão para ocultar ou negar ferramentas sem desconectar o servidor delas. Use o nome normalizado `<server>_<tool>` na correspondência:
+
+```jsonc
+{
+  "permissions": [
+    {
+      "action": "context7_*",
+      "resource": "*",
+      "effect": "deny",
+    },
+  ],
+}
+```
+
+## Contexto
+
+Em chamadas feitas em nome de uma sessão, o OpenCode envia o ID da sessão em `CallToolRequest.params._meta["ai.opencode/sessionID"]`. Isso vale para ferramentas diretas e para o Code Mode, tanto via stdio quanto via Streamable HTTP:
+
+```json
+{
+  "method": "tools/call",
+  "params": {
+    "name": "lookup",
+    "arguments": { "query": "example" },
+    "_meta": { "ai.opencode/sessionID": "ses_..." }
+  }
+}
+```
+
+O ID é um metadado da requisição, não um argumento da ferramenta, então ele não aparece no schema visível para o modelo. Trate-o como um valor de correlação opaco:
+
+| Regra | Comportamento |
+| --- | --- |
+| Identidade | Identifica a sessão do OpenCode que fez a chamada, não a sessão de transporte do MCP. |
+| Presença | Pode estar ausente em chamadas sem contexto de sessão. |
+| Segurança | Não o use sozinho para autenticação ou autorização. |
+| Privacidade | Servidores remotos recebem o ID bruto e podem registrá-lo em log ou guardá-lo. |
+
+## Gerenciamento
+
+Liste os servidores e o estado atual da conexão de cada um a partir de qualquer projeto:
+
+```sh
+opencode mcp list
+```
+
+Use `/mcps` no OpenCode para ver, conectar, desconectar ou autenticar servidores. Use a CLI para adicionar servidores e gerenciar credenciais OAuth:
+
+```sh
+opencode mcp add sentry --url https://mcp.sentry.dev/mcp
+opencode mcp auth sentry
+opencode mcp logout sentry
+```
+
+Para remover um servidor, exclua a entrada dele da configuração do projeto ou da configuração global em que foi adicionado:
+
+```jsonc
+{
+  "mcp": {
+    "servers": {},
+  },
+}
+```
+
+Edite a configuração diretamente para ajustar as configurações de cliente OAuth, os tempos limite, os diretórios de trabalho ou a ativação persistente:
+
+```jsonc
+{
+  "mcp": {
+    "servers": {
+      "sentry": {
+        "type": "remote",
+        "url": "https://mcp.sentry.dev/mcp",
+        "disabled": true,
+      },
+    },
+  },
+}
+```

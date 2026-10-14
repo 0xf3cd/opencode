@@ -1,0 +1,496 @@
+---
+title: "Go"
+description: "Accesso affidabile ai modelli aperti per la programmazione, con due livelli di utilizzo."
+---
+
+OpenCode Go ti offre un accesso affidabile ai modelli aperti per la programmazione più diffusi, con due piani mensili:
+
+| Piano       | Prezzo        | Utilizzo incluso                                   |
+| ----------- | ------------- | -------------------------------------------------- |
+| **Go**      | **$10/mese**  | Accesso a costo ridotto ai modelli elencati sotto  |
+| **Go Plus** | **$40/mese**  | Limiti di utilizzo più alti sui modelli elencati sotto |
+
+In OpenCode Go funziona come qualsiasi altro provider: ti abboni a OpenCode Go e ottieni la tua chiave API. È **del tutto facoltativo** e non serve per usare OpenCode.
+
+Il servizio è pensato principalmente per gli utenti internazionali e offre un accesso stabile in tutto il mondo.
+
+## Come funziona
+
+1. Accedi a [OpenCode Console](https://opencode.ai/console), abbonati a Go o Go Plus, aggiungi i dati di fatturazione e copia la tua chiave API.
+2. Esegui `/connect` nella TUI, seleziona **OpenCode Go** e incolla la chiave API.
+
+   ```text
+   /connect
+   ```
+
+3. Esegui `/models` per selezionare un modello disponibile con Go.
+
+   ```text
+   /models
+   ```
+
+<Callout>
+  Go e Go Plus sono pensati per workspace con un solo membro, come il workspace **Personal** creato al momento della
+  registrazione. Un workspace con un abbonamento Go non può invitare membri.
+</Callout>
+
+L'elenco attuale dei modelli comprende:
+
+- **Grok 4.7**
+- **Grok 4.6**
+- **GLM-5.3-Flash**
+- **GLM-5.3**
+- **GLM-5.2**
+- **GPT 6 Luna**
+- **GPT 5.6 Luna**
+- **Claude Haiku 5.5**
+- **Gemini 4 Argon Contributor**
+- **Kimi K3**
+- **Kimi K2.7 Code**
+- **Kimi K2.6**
+- **LongCat-2.0**
+- **LongCat 2.5 Preview Free** (per un periodo limitato)
+- **Step 5 Preview Free** (per un periodo limitato)
+- **Cat Jam Free** (per un periodo limitato)
+- **MiMo-V2.6-Flash**
+- **MiMo-V2.6-Pro**
+- **MiMo-V2.5**
+- **MiMo-V2.5-Pro**
+- **MiniMax M3**
+- **MiniMax M2.7**
+- **Muse Spark 1.3 Contributor** ([solo in alcune regioni](https://ai.developer.meta.com/legal/geographic-use-policy))
+- **Muse Spark 1.2 Contributor** ([solo in alcune regioni](https://ai.developer.meta.com/legal/geographic-use-policy))
+- **Qwen3.8 Max**
+- **Qwen3.8 Flash**
+- **Qwen3.7 Plus**
+- **DeepSeek V4.1 Flash**
+- **DeepSeek V4 Pro**
+- **Hy4 preview**
+- **Hy3**
+- **Space Bunny**
+
+L'elenco può cambiare man mano che testiamo e aggiungiamo nuovi modelli.
+
+## Dove posso usarlo?
+
+OpenCode Go è pensato per [OpenCode](https://opencode.ai) e per altri agenti di programmazione che generano richieste
+simili. Il traffico viene monitorato per individuare abusi che peggiorano l'esperienza degli altri utenti.
+
+Il tuo client deve:
+
+1. Inviare il traffico tipico di un agente di programmazione
+2. Identificarsi con un proprio user agent, ad esempio `my-coding-agent/1.0`, anziché con il nome generico di un SDK o
+   di una libreria HTTP.
+3. Inviare in `x-opencode-session` un ID di sessione stabile per ogni conversazione, così possiamo ottimizzare
+   l'instradamento e la cache dei prompt.
+
+### Client verificati
+
+Oltre a OpenCode, è stato verificato che i client seguenti funzionano correttamente con OpenCode Go. Non garantiamo
+tuttavia che continueranno a funzionare in futuro.
+
+| Client            | Supporto delle sessioni                                                                                                                                                                                                                                      |
+| ----------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| **Hermes**        | Le build che includono la [PR #101864](https://github.com/NousResearch/hermes-agent/pull/101864) inviano l'intestazione nelle richieste OpenCode principali e ausiliarie. La correzione è stata integrata dopo la v0.21.0, che da sola non la include.       |
+| **Claude Code**   | Go riconosce la sua intestazione di sessione nativa. Non serve alcun wrapper per intestazioni personalizzate.                                                                                                                                                  |
+| **Codex**         | Go riconosce la sua intestazione di sessione nativa. Alcune versioni e configurazioni con proxy la omettono ancora: conserva l'intestazione di sessione quando inoltri le richieste.                                                                          |
+| **ZCode**         | Go riconosce la sua intestazione di sessione nativa. La nostra [richiesta per `x-opencode-session`](https://github.com/zai-org/feedback/issues/492) è ancora aperta, ma non è più necessario inviare quell'intestazione specifica.                            |
+| **Pi**            | Le build attuali inviano le informazioni di sessione per OpenCode. Aggiorna le installazioni meno recenti.                                                                                                                                                    |
+| **jcode**         | Aggiorna alla **v0.81.6 o successiva**, che include la [correzione dell'intestazione di sessione](https://github.com/1jehuang/jcode/issues/1167).                                                                                                            |
+| **Kilo Code CLI** | Le build che includono la [PR #13752](https://github.com/Kilo-Org/kilocode/pull/13752) ripristinano le intestazioni di sessione di OpenCode. La correzione riguarda la CLI, non l'estensione per VS Code. Consulta l'[issue #13723](https://github.com/Kilo-Org/kilocode/issues/13723). |
+
+### Client con problemi noti
+
+Nelle versioni che abbiamo esaminato, questi client hanno un supporto delle sessioni assente o incompleto. Le
+segnalazioni collegate tengono traccia di correzioni e soluzioni alternative.
+
+| Client                  | Stato e segnalazioni                                                                                                                                                                                                                                                       |
+| ----------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **DeepSeek Harness**    | Le informazioni di sessione arrivano su alcuni percorsi dei modelli, ma mancano su altri. Riconosciamo la sua intestazione nativa; resta da inviarla da tutti gli adapter. [Discussione #5495](https://github.com/deepseek-ai/deepseek-harness/discussions/5495).        |
+| **GitHub Copilot Chat** | Il supporto automatico dell'intestazione di sessione è stato richiesto nell'[issue #334186 di VS Code](https://github.com/microsoft/vscode/issues/334186).                                                                                                                |
+| **Kimi Code**           | Il supporto automatico dell'intestazione di sessione è stato richiesto nell'[issue #3506](https://github.com/MoonshotAI/kimi-code/issues/3506).                                                                                                                           |
+| **MiMo Code**           | Per l'[issue #2317](https://github.com/XiaomiMiMo/MiMo-Code/issues/2317) è stata proposta una correzione nella [PR #2327](https://github.com/XiaomiMiMo/MiMo-Code/pull/2327), non ancora integrata.                                                                       |
+
+## Limiti di utilizzo
+
+I limiti di utilizzo sono definiti come importi mensili in dollari. La tabella seguente mostra il limite mensile di
+ciascun piano e il costo dei token per ogni modello. I prezzi dei token sono gli stessi per Go e Go Plus.
+
+Ogni modello ha i seguenti limiti di utilizzo: 5 ore – 20% del limite mensile; settimanale – 50%; mensile – 100%.
+
+Il limite mensile di ciascun modello riportato sotto determina come il suo utilizzo viene conteggiato in queste quote.
+
+I prezzi dei token sono per 1M di token.
+
+<PlanTabs id="go-pricing" label="Piano Go" syncKey="go-plan">
+  <div slot="go">
+
+    | Modello | Input  | Output | Lettura in cache | Scrittura in cache | Limite mensile |
+    | --------------------------------------- | ------ | ------ | ----------- | ------------ | ----------------------------------------------------- |
+    | GLM-5.3-Flash                           | $0.15  | $0.50  | $0.03       | -            | **$60**                                               |
+    | GLM-5.3                                 | $1.40  | $4.40  | $0.26       | -            | **$15**                                               |
+    | GLM-5.2                                 | $1.40  | $4.40  | $0.26       | -            | **$60**                                               |
+    | Kimi K3                                 | $3.00  | $15.00 | $0.30       | -            | **$15**                                               |
+    | Kimi K2.7 Code                          | $0.95  | $4.00  | $0.19       | -            | **$60**                                               |
+    | Kimi K2.6                               | $0.95  | $4.00  | $0.16       | -            | **$60**                                               |
+    | LongCat-2.0                             | $0.30  | $1.20  | $0.006      | -            | **$60**                                               |
+    | LongCat 2.5 Preview Free                | Gratis | Gratis | Gratis | -            | **Illimitato**<br /><small>periodo limitato</small>        |
+    | Step 5 Preview Free                     | Gratis | Gratis | Gratis | -            | **Illimitato**<br /><small>periodo limitato</small>        |
+    | Cat Jam Free                            | Gratis | Gratis | Gratis | -            | **Illimitato**<br /><small>periodo limitato</small>        |
+    | MiMo-V2.6-Flash                         | $0.14  | $0.28  | $0.0028     | -            | **$60**                                               |
+    | MiMo-V2.6-Pro                           | $0.435 | $0.87  | $0.003625   | -            | **$15**                                               |
+    | MiMo-V2.5                               | $0.14  | $0.28  | $0.0028     | -            | **$60**                                               |
+    | MiMo-V2.5-Pro                           | $0.435 | $0.87  | $0.003625   | -            | **$15**                                               |
+    | MiniMax M3                              | $0.30  | $1.20  | $0.06       | -            | **$60**                                               |
+    | MiniMax M2.7                            | $0.30  | $1.20  | $0.06       | $0.375       | **$60**                                               |
+    | Muse Spark 1.3 Contributor              | $0.10  | $0.20  | $0.002      | -            | **$60**                                               |
+    | Muse Spark 1.2 Contributor              | $0.10  | $0.20  | $0.002      | -            | **$60**                                               |
+    | Qwen3.8 Max                             | $2.00  | $6.00  | $0.25       | $2.50        | **$15**                                               |
+    | Qwen3.8 Flash                           | $0.15  | $0.47  | $0.016      | $0.20        | **$30**                                               |
+    | Qwen3.7 Plus (≤ 256K token)            | $0.40  | $1.60  | $0.04       | $0.50        | **$60**                                               |
+    | Qwen3.7 Plus (> 256K token)            | $1.20  | $4.80  | $0.12       | $1.50        | **$60**                                               |
+    | DeepSeek V4.1 Flash (fuori picco)          | $0.15  | $0.60  | $0.003      | -            | **$80**                                               |
+    | DeepSeek V4.1 Flash (ore di picco)              | $0.30  | $1.20  | $0.006      | -            | **$80**                                               |
+    | DeepSeek V4 Pro (fuori picco)              | $0.66  | $1.98  | $0.022      | -            | **$15**                                               |
+    | DeepSeek V4 Pro (ore di picco)                  | $1.32  | $3.96  | $0.044      | -            | **$15**                                               |
+    | Hy4 preview                             | $0.834 | $2.501 | $0.042      | -            | **$30**                                               |
+    | Hy3                                     | $0.14  | $0.58  | $0.035      | -            | **$60**                                               |
+    | Space Bunny                             | $0.15  | $0.60  | $0.03       | -            | **$30**                                               |
+    | Grok 4.7 (≤ 200K token)                | $2.00  | $6.00  | $0.50       | -            | **$15**                                               |
+    | Grok 4.7 (> 200K token)                | $4.00  | $12.00 | $1.00       | -            | **$15**                                               |
+    | Grok 4.6 (≤ 200K token)                | $2.00  | $6.00  | $0.50       | -            | **$15**                                               |
+    | Grok 4.6 (> 200K token)                | $4.00  | $12.00 | $1.00       | -            | **$15**                                               |
+    | GPT 6 Luna (≤ 272K token)              | $0.10  | $0.50  | $0.01       | $0.125       | **$15**                                               |
+    | GPT 6 Luna (> 272K token)              | $0.20  | $0.75  | $0.02       | $0.25        | **$15**                                               |
+    | GPT 5.6 Luna (≤ 272K token)            | $0.20  | $1.20  | $0.02       | $0.25        | **$15**                                               |
+    | GPT 5.6 Luna (> 272K token)            | $0.40  | $1.80  | $0.04       | $0.50        | **$15**                                               |
+    | Claude Haiku 5.5 (≤ 100K token)        | $0.10  | $0.50  | $0.01       | $0.125       | **$15**                                               |
+    | Claude Haiku 5.5 (> 100K token)        | $0.50  | $2.50  | $0.05       | $0.625       | **$15**                                               |
+    | Gemini 4 Argon Contributor              | $4.00  | $20.00 | $0.20       | -            | ~~$30~~ **$60**<br /><small>2x · Periodo limitato</small> |
+
+  </div>
+  <div slot="go-plus">
+
+    | Modello | Input  | Output | Lettura in cache | Scrittura in cache | Limite mensile |
+    | --------------------------------------- | ------ | ------ | ----------- | ------------ | ------------------------------------------------------- |
+    | GLM-5.3-Flash                           | $0.15  | $0.50  | $0.03       | -            | **$180**                                                |
+    | GLM-5.3                                 | $1.40  | $4.40  | $0.26       | -            | **$120**                                                |
+    | GLM-5.2                                 | $1.40  | $4.40  | $0.26       | -            | **$180**                                                |
+    | Kimi K3                                 | $3.00  | $15.00 | $0.30       | -            | **$60**                                                 |
+    | Kimi K2.7 Code                          | $0.95  | $4.00  | $0.19       | -            | **$180**                                                |
+    | Kimi K2.6                               | $0.95  | $4.00  | $0.16       | -            | **$240**                                                |
+    | LongCat-2.0                             | $0.30  | $1.20  | $0.006      | -            | **$240**                                                |
+    | LongCat 2.5 Preview Free                | Gratis | Gratis | Gratis | -            | **Illimitato**<br /><small>periodo limitato</small>          |
+    | Step 5 Preview Free                     | Gratis | Gratis | Gratis | -            | **Illimitato**<br /><small>periodo limitato</small>          |
+    | Cat Jam Free                            | Gratis | Gratis | Gratis | -            | **Illimitato**<br /><small>periodo limitato</small>          |
+    | MiMo-V2.6-Flash                         | $0.14  | $0.28  | $0.0028     | -            | **$120**                                                |
+    | MiMo-V2.6-Pro                           | $0.435 | $0.87  | $0.003625   | -            | **$60**                                                 |
+    | MiMo-V2.5                               | $0.14  | $0.28  | $0.0028     | -            | **$120**                                                |
+    | MiMo-V2.5-Pro                           | $0.435 | $0.87  | $0.003625   | -            | **$60**                                                 |
+    | MiniMax M3                              | $0.30  | $1.20  | $0.06       | -            | **$180**                                                |
+    | MiniMax M2.7                            | $0.30  | $1.20  | $0.06       | $0.375       | **$240**                                                |
+    | Muse Spark 1.3 Contributor              | $0.10  | $0.20  | $0.002      | -            | **$120**                                                |
+    | Muse Spark 1.2 Contributor              | $0.10  | $0.20  | $0.002      | -            | **$120**                                                |
+    | Qwen3.8 Max                             | $2.00  | $6.00  | $0.25       | $2.50        | **$60**                                                 |
+    | Qwen3.8 Flash                           | $0.15  | $0.47  | $0.016      | $0.20        | **$90**                                                 |
+    | Qwen3.7 Plus (≤ 256K token)            | $0.40  | $1.60  | $0.04       | $0.50        | **$180**                                                |
+    | Qwen3.7 Plus (> 256K token)            | $1.20  | $4.80  | $0.12       | $1.50        | **$180**                                                |
+    | DeepSeek V4.1 Flash (fuori picco)          | $0.15  | $0.60  | $0.003      | -            | **$160**                                                |
+    | DeepSeek V4.1 Flash (ore di picco)              | $0.30  | $1.20  | $0.006      | -            | **$160**                                                |
+    | DeepSeek V4 Pro (fuori picco)              | $0.66  | $1.98  | $0.022      | -            | **$60**                                                 |
+    | DeepSeek V4 Pro (ore di picco)                  | $1.32  | $3.96  | $0.044      | -            | **$60**                                                 |
+    | Hy4 preview                             | $0.834 | $2.501 | $0.042      | -            | **$120**                                                |
+    | Hy3                                     | $0.14  | $0.58  | $0.035      | -            | **$240**                                                |
+    | Space Bunny                             | $0.15  | $0.60  | $0.03       | -            | **$120**                                                |
+    | Grok 4.7 (≤ 200K token)                | $2.00  | $6.00  | $0.50       | -            | **$60**                                                 |
+    | Grok 4.7 (> 200K token)                | $4.00  | $12.00 | $1.00       | -            | **$60**                                                 |
+    | Grok 4.6 (≤ 200K token)                | $2.00  | $6.00  | $0.50       | -            | **$60**                                                 |
+    | Grok 4.6 (> 200K token)                | $4.00  | $12.00 | $1.00       | -            | **$60**                                                 |
+    | GPT 6 Luna (≤ 272K token)              | $0.10  | $0.50  | $0.01       | $0.125       | **$60**                                                 |
+    | GPT 6 Luna (> 272K token)              | $0.20  | $0.75  | $0.02       | $0.25        | **$60**                                                 |
+    | GPT 5.6 Luna (≤ 272K token)            | $0.20  | $1.20  | $0.02       | $0.25        | **$60**                                                 |
+    | GPT 5.6 Luna (> 272K token)            | $0.40  | $1.80  | $0.04       | $0.50        | **$60**                                                 |
+    | Claude Haiku 5.5 (≤ 100K token)        | $0.10  | $0.50  | $0.01       | $0.125       | **$60**                                                 |
+    | Claude Haiku 5.5 (> 100K token)        | $0.50  | $2.50  | $0.05       | $0.625       | **$60**                                                 |
+    | Gemini 4 Argon Contributor              | $4.00  | $20.00 | $0.20       | -            | ~~$120~~ **$240**<br /><small>2x · Periodo limitato</small> |
+
+  </div>
+</PlanTabs>
+
+**LongCat 2.5 Preview Free:** gratuito per un periodo limitato.
+
+**Step 5 Preview Free:** gratuito per un periodo limitato.
+
+**Cat Jam Free:** gratuito per un periodo limitato.
+
+**DeepSeek V4.1 Flash / V4 Pro:** le ore di picco sono 01:00-04:00 e 06:00-10:00 UTC, dal lunedì al venerdì; tutte le altre ore, weekend compresi, sono fuori picco. [Scopri di più](https://api-docs.deepseek.com/quick_start/pricing/).
+
+### Richieste stimate
+
+Le tabelle seguenti stimano il numero di richieste in base ai modelli di utilizzo tipici di Go. Le stime per Go Plus
+crescono in proporzione al limite di utilizzo più alto di ciascun modello.
+
+<PlanTabs id="go-requests" label="Piano Go" syncKey="go-plan">
+  <div slot="go">
+
+    | Modello | Richieste ogni 5 ore | Richieste a settimana | Richieste al mese |
+    | ---------------------------------------------------------------- | -------------------- | ---------------------- | ------------------------ |
+    | GLM-5.3-Flash                                                    | 6,320                | 15,790                 | 31,580                   |
+    | GLM-5.3                                                          | 220                  | 540                    | 1,080                    |
+    | GLM-5.2                                                          | 880                  | 2,150                  | 4,300                    |
+    | Kimi K3                                                          | 110                  | 250                    | 490                      |
+    | Kimi K2.7 Code                                                   | 1,350                | 3,380                  | 6,750                    |
+    | Kimi K2.6                                                        | 1,150                | 2,880                  | 5,750                    |
+    | LongCat-2.0                                                      | 11,400               | 28,600                 | 57,200                   |
+    | LongCat 2.5 Preview Free                                         | Illimitato | Illimitato | Illimitato |
+    | Step 5 Preview Free                                              | Illimitato | Illimitato | Illimitato |
+    | Cat Jam Free                                                     | Illimitato | Illimitato | Illimitato |
+    | MiMo-V2.6-Flash                                                  | 30,100               | 75,200                 | 150,400                  |
+    | MiMo-V2.6-Pro                                                    | 3,250                | 8,150                  | 16,300                   |
+    | MiMo-V2.5                                                        | 30,100               | 75,200                 | 150,400                  |
+    | MiMo-V2.5-Pro                                                    | 3,250                | 8,150                  | 16,300                   |
+    | MiniMax M3                                                       | 3,200                | 8,000                  | 16,000                   |
+    | MiniMax M2.7                                                     | 3,400                | 8,500                  | 17,000                   |
+    | Muse Spark 1.3 Contributor                                       | 45,300               | 113,300                | 226,600                  |
+    | Muse Spark 1.2 Contributor                                       | 45,300               | 113,300                | 226,600                  |
+    | Qwen3.8 Max                                                      | 160                  | 400                    | 810                      |
+    | Qwen3.8 Flash                                                    | 5,400                | 13,500                 | 27,000                   |
+    | Qwen3.7 Plus                                                     | 4,300                | 10,800                 | 21,600                   |
+    | DeepSeek V4.1 Flash                                              | 34,670               | 86,670                 | 173,330                  |
+    | DeepSeek V4 Pro                                                  | 1,050                | 2,600                  | 5,200                    |
+    | Hy4 preview                                                      | 1,350                | 3,380                  | 6,770                    |
+    | Hy3                                                              | 4,300                | 10,750                 | 21,500                   |
+    | Space Bunny                                                      | 3,130                | 7,810                  | 15,630                   |
+    | Grok 4.7                                                         | 169                  | 423                    | 845                      |
+    | Grok 4.6                                                         | 169                  | 423                    | 845                      |
+    | GPT 6 Luna                                                       | 4,230                | 10,560                 | 21,130                   |
+    | GPT 5.6 Luna                                                     | 2,050                | 5,100                  | 10,250                   |
+    | Claude Haiku 5.5                                                 | 3,850                | 9,620                  | 19,230                   |
+    | Gemini 4 Argon Contributor<br /><small>2x · Periodo limitato</small> | ~~220~~<br />**440** | ~~540~~<br />**1,080** | ~~1,060~~<br />**2,120** |
+
+  </div>
+  <div slot="go-plus">
+
+    | Modello | Richieste ogni 5 ore | Richieste a settimana | Richieste al mese |
+    | ---------------------------------------------------------------- | ---------------------- | ------------------------ | ------------------------ |
+    | GLM-5.3-Flash                                                    | 18,960                 | 47,370                   | 94,740                   |
+    | GLM-5.3                                                          | 1,760                  | 4,320                    | 8,640                    |
+    | GLM-5.2                                                          | 2,640                  | 6,450                    | 12,900                   |
+    | Kimi K3                                                          | 440                    | 1,000                    | 1,960                    |
+    | Kimi K2.7 Code                                                   | 4,050                  | 10,140                   | 20,250                   |
+    | Kimi K2.6                                                        | 4,600                  | 11,520                   | 23,000                   |
+    | LongCat-2.0                                                      | 45,600                 | 114,400                  | 228,800                  |
+    | LongCat 2.5 Preview Free                                         | Illimitato | Illimitato | Illimitato |
+    | Step 5 Preview Free                                              | Illimitato | Illimitato | Illimitato |
+    | Cat Jam Free                                                     | Illimitato | Illimitato | Illimitato |
+    | MiMo-V2.6-Flash                                                  | 60,200                 | 150,400                  | 300,800                  |
+    | MiMo-V2.6-Pro                                                    | 13,000                 | 32,600                   | 65,200                   |
+    | MiMo-V2.5                                                        | 60,200                 | 150,400                  | 300,800                  |
+    | MiMo-V2.5-Pro                                                    | 13,000                 | 32,600                   | 65,200                   |
+    | MiniMax M3                                                       | 9,600                  | 24,000                   | 48,000                   |
+    | MiniMax M2.7                                                     | 13,600                 | 34,000                   | 68,000                   |
+    | Muse Spark 1.3 Contributor                                       | 90,600                 | 226,600                  | 453,200                  |
+    | Muse Spark 1.2 Contributor                                       | 90,600                 | 226,600                  | 453,200                  |
+    | Qwen3.8 Max                                                      | 640                    | 1,600                    | 3,240                    |
+    | Qwen3.8 Flash                                                    | 16,200                 | 40,500                   | 81,000                   |
+    | Qwen3.7 Plus                                                     | 12,900                 | 32,400                   | 64,800                   |
+    | DeepSeek V4.1 Flash                                              | 69,330                 | 173,330                  | 346,670                  |
+    | DeepSeek V4 Pro                                                  | 4,200                  | 10,400                   | 20,800                   |
+    | Hy4 preview                                                      | 5,400                  | 13,520                   | 27,080                   |
+    | Hy3                                                              | 17,200                 | 43,000                   | 86,000                   |
+    | Space Bunny                                                      | 12,500                 | 31,250                   | 62,500                   |
+    | Grok 4.7                                                         | 676                    | 1,692                    | 3,380                    |
+    | Grok 4.6                                                         | 676                    | 1,692                    | 3,380                    |
+    | GPT 6 Luna                                                       | 16,920                 | 42,240                   | 84,520                   |
+    | GPT 5.6 Luna                                                     | 8,200                  | 20,400                   | 41,000                   |
+    | Claude Haiku 5.5                                                 | 15,380                 | 38,460                   | 76,920                   |
+    | Gemini 4 Argon Contributor<br /><small>2x · Periodo limitato</small> | ~~880~~<br />**1,760** | ~~2,160~~<br />**4,320** | ~~4,240~~<br />**8,480** |
+
+  </div>
+</PlanTabs>
+
+Le stime usano i seguenti numeri di token per richiesta; l'utilizzo effettivo varia.
+
+- Grok 4.7/4.6 – 390 token di input, 32,500 in cache e 120 di output per richiesta
+- GLM-5.3-Flash – 1,000 token di input, 55,000 in cache e 200 di output per richiesta
+- GLM-5.3/5.2 – 700 token di input, 52,000 in cache e 150 di output per richiesta
+- GPT 6 Luna – 1,000 token di input, 50,000 in cache e 220 di output per richiesta
+- GPT 5.6 Luna – 1,000 token di input, 50,000 in cache e 220 di output per richiesta
+- Claude Haiku 5.5 – 1,100 token di input, 55,000 in cache e 240 di output per richiesta
+- Kimi K3 – 1,050 token di input, 76,500 in cache e 300 di output per richiesta
+- Kimi K2.7/K2.6 – 870 token di input, 55,000 in cache e 200 di output per richiesta
+- LongCat-2.0 – 920 token di input, 88,900 in cache e 200 di output per richiesta
+- DeepSeek V4.1 Flash – 410 token di input, 71,300 in cache e 310 di output per richiesta
+- DeepSeek V4 Pro – 750 token di input, 82,000 in cache e 290 di output per richiesta
+- MiniMax M3 – 510 token di input, 56,000 in cache e 190 di output per richiesta
+- MiniMax M2.7 – 300 token di input, 55,000 in cache e 125 di output per richiesta
+- Muse Spark 1.3 Contributor – 620 token di input, 71,400 in cache e 300 di output per richiesta
+- Muse Spark 1.2 Contributor – 620 token di input, 71,400 in cache e 300 di output per richiesta
+- MiMo-V2.6-Flash – 830 token di input, 71,500 in cache e 295 di output per richiesta
+- MiMo-V2.6-Pro – 790 token di input, 86,000 in cache e 305 di output per richiesta
+- MiMo-V2.5 – 830 token di input, 71,500 in cache e 295 di output per richiesta
+- MiMo-V2.5-Pro – 790 token di input, 86,000 in cache e 305 di output per richiesta
+- Qwen3.8 Max – 420 token di input, 66,000 in cache e 200 di output per richiesta
+- Qwen3.8 Flash – 600 token di input, 58,000 in cache e 200 di output per richiesta
+- Qwen3.7 Plus – 500 token di input, 57,000 in cache e 190 di output per richiesta
+- Hy4 preview – 830 token di input, 71,500 in cache e 295 di output per richiesta
+- Hy3 – 830 token di input, 71,500 in cache e 295 di output per richiesta
+- Space Bunny – 1,000 token di input, 55,000 in cache e 200 di output per richiesta
+
+Puoi monitorare l'utilizzo attuale nella [Console](https://opencode.ai/console).
+
+<Callout type="tip">Se raggiungi il limite di utilizzo, puoi continuare a usare i modelli gratuiti.</Callout>
+
+I limiti di utilizzo potrebbero cambiare man mano che raccogliamo dati dai primi utilizzi e dai feedback.
+
+---
+
+### Utilizzo oltre i limiti
+
+Se hai anche del credito nel saldo della Console, puoi abilitare l'opzione **Use balance** nella Console. Quando è
+attiva, dopo aver raggiunto i limiti di utilizzo Go passa al tuo [saldo a consumo](/console/models#pricing) invece di
+bloccare le richieste.
+
+### Perché alcuni modelli hanno un utilizzo inferiore
+
+Con Go, l'utilizzo mensile incluso varia da modello a modello.
+
+Per la maggior parte dei modelli riusciamo a offrirlo grazie a sconti sui volumi e a capacità GPU riservata, e ti
+trasferiamo questi risparmi sotto forma di un utilizzo mensile più alto.
+
+Per alcuni modelli non abbiamo ancora potuto negoziare uno sconto o ospitarli a costi inferiori, perché il modello è
+nuovo o perché il suo prezzo pubblico è già scontato.
+
+Anche con questi modelli ottieni comunque un po' di più rispetto a pagare direttamente i provider dei modelli; per questo
+il loro utilizzo mensile incluso è inferiore.
+
+## Endpoint
+
+Puoi anche accedere ai modelli Go tramite i seguenti endpoint API.
+
+<div class="docs-table-scroll" role="region" aria-label="Endpoint dei modelli Go" tabIndex={0}>
+
+| Modello | ID del modello | Endpoint                                                                | Pacchetto AI SDK |
+| ---------------------------- | ---------------------------- | ----------------------------------------------------------------------- | --------------------------- |
+| Grok 4.7                     | grok-4.7                     | `https://opencode.ai/inference/go/v1/responses`                         | `@ai-sdk/openai`            |
+| Grok 4.6                     | grok-4.6                     | `https://opencode.ai/inference/go/v1/responses`                         | `@ai-sdk/openai`            |
+| GPT 6 Luna                   | gpt-6-luna                   | `https://opencode.ai/inference/go/v1/responses`                         | `@ai-sdk/openai`            |
+| GPT 5.6 Luna                 | gpt-5.6-luna                 | `https://opencode.ai/inference/go/v1/responses`                         | `@ai-sdk/openai`            |
+| Claude Haiku 5.5             | claude-haiku-5-5             | `https://opencode.ai/inference/go/v1/messages`                          | `@ai-sdk/anthropic`         |
+| Gemini 4 Argon Contributor   | gemini-4-argon-contributor   | `https://opencode.ai/inference/go/v1/models/gemini-4-argon-contributor` | `@ai-sdk/google`            |
+| GLM-5.3-Flash                | glm-5.3-flash                | `https://opencode.ai/inference/go/v1/chat/completions`                  | `@ai-sdk/openai-compatible` |
+| GLM-5.3                      | glm-5.3                      | `https://opencode.ai/inference/go/v1/chat/completions`                  | `@ai-sdk/openai-compatible` |
+| GLM-5.2                      | glm-5.2                      | `https://opencode.ai/inference/go/v1/chat/completions`                  | `@ai-sdk/openai-compatible` |
+| Kimi K3                      | kimi-k3                      | `https://opencode.ai/inference/go/v1/chat/completions`                  | `@ai-sdk/openai-compatible` |
+| Kimi K2.7 Code               | kimi-k2.7-code               | `https://opencode.ai/inference/go/v1/chat/completions`                  | `@ai-sdk/openai-compatible` |
+| Kimi K2.6                    | kimi-k2.6                    | `https://opencode.ai/inference/go/v1/chat/completions`                  | `@ai-sdk/openai-compatible` |
+| LongCat-2.0                  | longcat-2.0                  | `https://opencode.ai/inference/go/v1/chat/completions`                  | `@ai-sdk/openai-compatible` |
+| DeepSeek V4.1 Flash          | deepseek-v4.1-flash          | `https://opencode.ai/inference/go/v1/chat/completions`                  | `@ai-sdk/openai-compatible` |
+| DeepSeek V4 Pro              | deepseek-v4-pro              | `https://opencode.ai/inference/go/v1/chat/completions`                  | `@ai-sdk/openai-compatible` |
+| MiMo-V2.6-Flash              | mimo-v2.6-flash              | `https://opencode.ai/inference/go/v1/chat/completions`                  | `@ai-sdk/openai-compatible` |
+| MiMo-V2.6-Pro                | mimo-v2.6-pro                | `https://opencode.ai/inference/go/v1/chat/completions`                  | `@ai-sdk/openai-compatible` |
+| MiMo-V2.5                    | mimo-v2.5                    | `https://opencode.ai/inference/go/v1/chat/completions`                  | `@ai-sdk/openai-compatible` |
+| MiMo-V2.5-Pro                | mimo-v2.5-pro                | `https://opencode.ai/inference/go/v1/chat/completions`                  | `@ai-sdk/openai-compatible` |
+| MiniMax M3                   | minimax-m3                   | `https://opencode.ai/inference/go/v1/messages`                          | `@ai-sdk/anthropic`         |
+| MiniMax M2.7                 | minimax-m2.7                 | `https://opencode.ai/inference/go/v1/messages`                          | `@ai-sdk/anthropic`         |
+| Muse Spark 1.3 Contributor   | muse-spark-1.3-contributor   | `https://opencode.ai/inference/go/v1/responses`                         | `@ai-sdk/openai`            |
+| Muse Spark 1.2 Contributor   | muse-spark-1.2-contributor   | `https://opencode.ai/inference/go/v1/responses`                         | `@ai-sdk/openai`            |
+| Qwen3.8 Max                  | qwen3.8-max                  | `https://opencode.ai/inference/go/v1/messages`                          | `@ai-sdk/anthropic`         |
+| Qwen3.8 Flash                | qwen3.8-flash                | `https://opencode.ai/inference/go/v1/messages`                          | `@ai-sdk/anthropic`         |
+| Qwen3.7 Plus                 | qwen3.7-plus                 | `https://opencode.ai/inference/go/v1/messages`                          | `@ai-sdk/anthropic`         |
+| Hy4 preview                  | hy4-preview                  | `https://opencode.ai/inference/go/v1/chat/completions`                  | `@ai-sdk/openai-compatible` |
+| Hy3                          | hy3                          | `https://opencode.ai/inference/go/v1/chat/completions`                  | `@ai-sdk/openai-compatible` |
+| Space Bunny                  | space-bunny                  | `https://opencode.ai/inference/go/v1/chat/completions`                  | `@ai-sdk/openai-compatible` |
+| LongCat 2.5 Preview Free     | longcat-2.5-preview-free     | `https://opencode.ai/inference/go/v1/chat/completions`                  | `@ai-sdk/openai-compatible` |
+| Step 5 Preview Free          | step-5-preview-free          | `https://opencode.ai/inference/go/v1/chat/completions`                  | `@ai-sdk/openai-compatible` |
+| Cat Jam Free                 | cat-jam-free                 | `https://opencode.ai/inference/go/v1/chat/completions`                  | `@ai-sdk/openai-compatible` |
+
+</div>
+
+Questi pacchetti AI SDK servono alle applicazioni che chiamano Go direttamente. Per usare Go in OpenCode, collegati con
+`/connect` e imposta il [modello](/models) nel formato `opencode-go/<model-id>`:
+
+```jsonc title="opencode.jsonc"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "model": "opencode-go/kimi-k3",
+}
+```
+
+### Modelli
+
+Recupera dall'endpoint dei modelli l'elenco completo dei modelli disponibili e i relativi metadati:
+
+```bash
+curl https://opencode.ai/inference/go/v1/models
+```
+
+## Privacy
+
+| Modello | Uso per l'addestramento | Conservazione dei dati |
+| ---------------------------- | -------------- | -------------- |
+| Grok 4.7                     | No | 30 giorni |
+| Grok 4.6                     | No | 30 giorni |
+| GPT 6 Luna                   | No | 30 giorni |
+| GPT 5.6 Luna                 | No | 30 giorni |
+| Claude Haiku 5.5             | No | 30 giorni |
+| Gemini 4 Argon Contributor   | Sì | Non ZDR |
+| GLM-5.3-Flash                | No | 0 giorni |
+| GLM-5.3                      | No | 0 giorni |
+| GLM-5.2                      | No | 0 giorni |
+| Kimi K3                      | No | 0 giorni |
+| Kimi K2.7 Code               | No | 0 giorni |
+| Kimi K2.6                    | No | 0 giorni |
+| LongCat-2.0                  | No | 0 giorni |
+| MiMo-V2.6-Pro                | No | 0 giorni |
+| MiMo-V2.6-Flash              | No | 0 giorni |
+| MiMo-V2.5-Pro                | No | 0 giorni |
+| MiMo-V2.5                    | No | 0 giorni |
+| Qwen3.8 Max                  | No | 0 giorni |
+| Qwen3.8 Flash                | No | 0 giorni |
+| Qwen3.7 Plus                 | No | 0 giorni |
+| MiniMax M3                   | No | 0 giorni |
+| MiniMax M2.7                 | No | 0 giorni |
+| Muse Spark 1.3 Contributor   | Sì | Non ZDR |
+| Muse Spark 1.2 Contributor   | Sì | Non ZDR |
+| DeepSeek V4.1 Flash          | No | 0 giorni\* |
+| DeepSeek V4 Pro              | No | 0 giorni\* |
+| Hy4 preview                  | No | 0 giorni |
+| Hy3                          | No | 0 giorni |
+| Space Bunny                  | No | 0 giorni |
+| LongCat 2.5 Preview Free     | No | 0 giorni |
+| Step 5 Preview Free          | No | 0 giorni |
+| Cat Jam Free                 | No | 30 giorni |
+
+- **Grok 4.7/4.6:** la ZDR (zero data retention) disattiva importanti funzionalità dell'API che dipendono da dati memorizzati, tra cui la Responses API con stato, Files and Collections e la Batch API. [Scopri di più](https://docs.x.ai/developers/faq/security#what-is-zero-data-retention-zdr).
+- **GPT 6 Luna / GPT 5.6 Luna:** per ogni utilizzo delle funzionalità dell'API vengono generati log di monitoraggio degli abusi, conservati per un massimo di 30 giorni. [Scopri di più](https://developers.openai.com/api/docs/guides/your-data#data-retention-controls-for-abuse-monitoring).
+- **Claude Haiku 5.5:** le richieste vengono conservate per 30 giorni in conformità con le [Data Policies di Anthropic](https://docs.anthropic.com/en/docs/claude-code/data-usage).
+- **Gemini 4 Argon Contributor:** i tuoi prompt e i completamenti possono essere usati per addestrare i futuri modelli Google.
+- **Muse Spark 1.3 Contributor:** prezzi dei token fortemente scontati in cambio dell'autorizzazione a usare i tuoi prompt e i completamenti per addestrare i futuri modelli Meta. La disponibilità è limitata alle regioni consentite dalla [Geographic Use Policy](https://ai.developer.meta.com/legal/geographic-use-policy) di Meta. [Scopri di più](https://dev.meta.ai/docs/pricing-rate-limits#contributor-tier).
+- **Muse Spark 1.2 Contributor:** prezzi dei token fortemente scontati in cambio dell'autorizzazione a usare i tuoi prompt e i completamenti per addestrare i futuri modelli Meta. La disponibilità è limitata alle regioni consentite dalla [Geographic Use Policy](https://ai.developer.meta.com/legal/geographic-use-policy) di Meta. [Scopri di più](https://dev.meta.ai/docs/pricing-rate-limits#contributor-tier).
+- **DeepSeek:** l'accordo ZDR viene rinnovato ogni mese. L'accordo attuale è valido fino al 31 ottobre 2026.
+
+## Contesto
+
+I modelli aperti sono diventati davvero validi: nelle attività di programmazione ormai raggiungono prestazioni vicine a quelle dei modelli proprietari. E poiché molti provider possono servirli a prezzi competitivi, di solito costano molto meno.
+
+Ottenere però un accesso affidabile e a bassa latenza può essere difficile, perché i provider variano per qualità e disponibilità.
+
+<Callout type="tip">Abbiamo testato un gruppo selezionato di modelli e provider che funzionano bene con OpenCode.</Callout>
+
+Per risolvere il problema abbiamo fatto alcune cose:
+
+1. Abbiamo testato un gruppo selezionato di modelli aperti e parlato con i rispettivi team del modo migliore per eseguirli.
+2. Abbiamo collaborato con alcuni provider per assicurarci che venissero serviti correttamente.
+3. Abbiamo eseguito benchmark sulle combinazioni modello/provider e stilato un elenco che ci sentiamo di consigliare.
+
+Go e Go Plus danno entrambi accesso a questi modelli: scegli il piano adatto a quanto li usi.
+
+## Obiettivi
+
+Abbiamo creato OpenCode Go per:
+
+1. Rendere la programmazione con l'AI **accessibile** a più persone, con un abbonamento a basso costo.
+2. Offrire un accesso **affidabile** ai migliori modelli aperti per la programmazione.
+3. Selezionare modelli **testati e sottoposti a benchmark** per l'uso con agenti di programmazione.
+4. Evitare qualsiasi **lock-in**, permettendoti di usare con OpenCode anche qualsiasi altro provider.

@@ -1,0 +1,246 @@
+---
+title: "Thème"
+---
+
+OpenCode inclut de nombreux thèmes intégrés pour les modes clair et sombre. Choisissez-en un dans les paramètres, ou composez vos propres couleurs.
+
+## Choisir un thème
+
+Appuyez sur `Ctrl+P`, sélectionnez **Open settings**, puis ouvrez **Theme**. Le thème par défaut est `opencode`.
+
+Vous pouvez aussi le définir dans vos [paramètres du CLI](/cli/config) globaux :
+
+```json title="~/.config/opencode/cli.json"
+{
+  "$schema": "https://opencode.ai/v2/cli.json",
+  "theme": {
+    "name": "tokyonight",
+    "mode": "dark"
+  }
+}
+```
+
+Exécutez `/themes` pour changer de thème sans ouvrir les paramètres.
+
+## Couleurs du système
+
+Lorsqu'OpenCode parvient à lire la palette de votre terminal, le sélecteur de thème propose le thème `system`. Celui-ci dérive ses couleurs du premier plan, de l'arrière-plan et de la palette ANSI de votre terminal.
+
+Le nom de thème `system` sélectionne les couleurs dérivées du terminal. Le mode `system`, lui, suit l'apparence claire ou sombre du terminal.
+
+## Mode
+
+Utilisez `system` pour suivre l'apparence de votre terminal, ou fixez le thème en mode clair ou sombre :
+
+| Mode | Comportement |
+| --- | --- |
+| `system` | Suit l'apparence claire ou sombre détectée du terminal. |
+| `dark` | Utilise toujours les couleurs sombres du thème. |
+| `light` | Utilise toujours les couleurs claires du thème. |
+
+Cela correspond au champ `mode` de `theme` dans votre configuration du CLI. Si un thème personnalisé ne fournit qu'un seul mode, OpenCode utilise ce mode lorsque l'autre est demandé.
+
+## Ajouter un thème
+
+Pour ajouter un thème que vous avez téléchargé ou reçu de quelqu'un, copiez son fichier JSON dans le répertoire global des thèmes :
+
+```bash
+cp theme.json ~/.config/opencode/themes/
+```
+
+Vous pouvez aussi placer le thème dans le répertoire `.opencode/themes` d'un projet pour le rendre disponible uniquement dans ce projet.
+
+Le nom du fichier devient le nom du thème. Par exemple, `my-theme.json` apparaît sous le nom `my-theme`. Redémarrez OpenCode après avoir ajouté le fichier, puis exécutez `/themes` pour le sélectionner.
+
+OpenCode lit uniquement les fichiers `.json`. Un thème plus proche du répertoire courant remplace un thème global ou d'un répertoire parent portant le même nom.
+
+## Utiliser les thèmes dans les plugins
+
+Les [plugins CLI](/build/plugins/cli) lisent les couleurs résolues via `context.theme` et le mode actif via `context.themeMode`. Utilisez des tokens sémantiques pour que votre plugin suive le thème sélectionné :
+
+```tsx title="Inside a CLI plugin component"
+import { usePlugin } from "@opencode/plugin/tui"
+
+function Status() {
+  const context = usePlugin()
+  return <text fg={context.theme.text.base}>Ready</text>
+}
+```
+
+L'API publique des plugins CLI ne permet pas d'enregistrer des thèmes. Ajoutez vos définitions de thèmes personnalisés sous forme de fichiers JSON dans les répertoires ci-dessus.
+
+## Créer un thème
+
+Utilisez notre [outil de thèmes](https://opencode.ai/theme/) pour créer ou modifier des thèmes. Il permet de comprendre facilement la structure, de la modifier et de définir des couleurs personnalisées. Les explications ci-dessous servent de référence.
+
+Un thème sépare les tokens sémantiques partagés des palettes propres à chaque mode :
+
+| Section | Rôle |
+| --- | --- |
+| `base` | L'arborescence complète des tokens, partagée par tous les modes. |
+| `light`, `dark` | Une palette de teintes complète et des remplacements de tokens facultatifs pour ce mode. |
+
+Chaque thème fournit une section `base` complète et définit au moins `light` ou `dark`. Les modes héritent de la section `base` du fichier ; ils n'héritent ni du thème OpenCode intégré ni l'un de l'autre.
+
+Les exemples ci-dessous ne montrent que les sections utiles à chaque notion. Utilisez l'éditeur de thèmes pour générer un fichier complet avant de le personnaliser.
+
+### Structure
+
+Placez les couleurs utilisées par les deux modes dans `base`, puis remplacez-les dans `light` ou `dark` si nécessaire :
+
+```json title="theme.json (excerpt)"
+{
+  "$schema": "https://opencode.ai/theme.json",
+  "base": {
+    "text": {
+      "base": "$hue.neutral.200",
+      "muted": "$hue.neutral.400"
+    }
+  },
+  "light": {
+    "hue": {}
+  },
+  "dark": {
+    "hue": {},
+    "text": {
+      "muted": "$hue.neutral.300"
+    }
+  }
+}
+```
+
+La section `base` complète fournit tous les tokens sémantiques. Chaque mode fournit toutes les teintes requises et peut remplacer n'importe quelle partie de l'arborescence de tokens de base.
+
+### Couleurs et références
+
+Une couleur peut être une valeur hexadécimale, `"transparent"` ou une référence à une autre couleur du thème :
+
+```json title="Inside base or a mode"
+{
+  "text": {
+    "base": "#eeeeee",
+    "muted": "$hue.neutral.400"
+  },
+  "border": {
+    "base": "$text.muted"
+  }
+}
+```
+
+### Teintes
+
+Les teintes sont des échelles de couleurs en neuf niveaux. Chaque mode définit les huit teintes de base et trois alias :
+
+| Type | Valeurs |
+| --- | --- |
+| Base | `gray`, `red`, `orange`, `yellow`, `green`, `cyan`, `blue`, `purple` |
+| Alias | `accent`, `interactive`, `neutral` |
+| Niveau | `100`, `200`, `300`, `400`, `500`, `600`, `700`, `800`, `900` |
+
+Définissez les neuf niveaux d'une teinte de base, ou faites d'une teinte l'alias d'une autre :
+
+```json title="Inside light or dark"
+{
+  "hue": {
+    "purple": {
+      "100": "#b38ff4",
+      "200": "#9d7cd8",
+      "300": "#8869bd",
+      "400": "#7357a2",
+      "500": "#5f4688",
+      "600": "#4b356f",
+      "700": "#392557",
+      "800": "#271640",
+      "900": "#17072b"
+    },
+    "accent": "$hue.purple"
+  }
+}
+```
+
+Les niveaux de teinte suivent le sens de contraste du mode. Dans les thèmes clairs, ils vont du foncé en `100` au clair en `900` ; dans les thèmes sombres, du clair en `100` au foncé en `900`.
+
+Le tableau `categorical` de `base` définit la liste ordonnée des teintes servant à distinguer les agents et les autres éléments répétés :
+
+```json title="Inside base"
+{
+  "categorical": ["accent", "purple", "green", "blue"]
+}
+```
+
+### Tokens sémantiques
+
+Les tokens sémantiques associent des couleurs aux rôles de l'interface. Les composants utilisent ces rôles au lieu de choisir directement des couleurs.
+
+| Groupe | Rôle |
+| --- | --- |
+| `text` | Texte de base, atténué, d'action, de champ de formulaire, d'état et de retour. |
+| `background` | Fond de base, surfaces surélevées, actions, champs de formulaire et remplissages de retour. |
+| `border`, `scrollbar` | Couleurs des bordures et de la barre de défilement. |
+| `diff` | Couleurs des ajouts, suppressions, lignes de contexte, surlignages et numéros de ligne. |
+| `syntax` | Coloration syntaxique du code source. |
+| `markdown` | Éléments Markdown. |
+
+Par exemple, `text.muted` contrôle le texte secondaire, tandis que `background.raised` définit des surfaces de plus en plus surélevées :
+
+```json title="Inside base"
+{
+  "text": {
+    "base": "$hue.neutral.200",
+    "muted": "$hue.neutral.400"
+  },
+  "background": {
+    "base": "$hue.neutral.800",
+    "raised": {
+      "base": "$hue.neutral.700",
+      "high": "$hue.neutral.600",
+      "max": "$hue.neutral.500"
+    }
+  }
+}
+```
+
+Les clés de syntaxe sont `comment`, `keyword`, `function`, `variable`, `string`, `number`, `type`, `operator` et `punctuation`.
+
+Les clés Markdown sont `text`, `heading`, `link`, `linkText`, `code`, `blockQuote`, `emphasis`, `strong`, `horizontalRule`, `listItem`, `listEnumeration`, `image`, `imageText` et `codeBlock`.
+
+### Actions et états
+
+Les actions ont les variantes `primary`, `secondary` et `destructive`. Les actions et les champs de formulaire utilisent `base` ainsi que des états d'interaction facultatifs :
+
+```json title="Inside base or a mode"
+{
+  "text": {
+    "action": {
+      "primary": {
+        "base": "$hue.interactive.400",
+        "$hovered": "$hue.interactive.300",
+        "$disabled": "$hue.neutral.600"
+      }
+    }
+  }
+}
+```
+
+Les clés d'état sont `$hovered`, `$focused`, `$pressed`, `$selected` et `$disabled`. Un état non spécifié utilise la couleur `base` de l'action ou du champ de formulaire concerné.
+
+### Surface des boîtes de dialogue
+
+Les panneaux, boîtes de dialogue, menus et notifications (toasts) choisissent leur niveau d'élévation dans `background.raised`. Les boîtes de dialogue peuvent en outre remplacer des tokens sémantiques avec `@dialog` :
+
+```json title="Inside base or a mode"
+{
+  "@dialog": {
+    "background": {
+      "base": "$background.raised.base",
+      "action": {
+        "primary": {
+          "$hovered": "$background.raised.high"
+        }
+      }
+    }
+  }
+}
+```
+
+Le TUI résout de nouveau les références après avoir appliqué `@dialog` : les tokens qui font référence à `$background.base` suivent donc le fond de la boîte de dialogue. Dans ce contexte, la valeur `base` d'une action sert de repli pour ses états non spécifiés ; les remplacements d'état explicites restent prioritaires.

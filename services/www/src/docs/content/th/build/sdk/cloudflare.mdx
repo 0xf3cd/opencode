@@ -1,0 +1,81 @@
+---
+title: "Cloudflare"
+---
+
+ใช้ `@opencode/sdk/workerd` ภายใน Cloudflare Durable Object โปรไฟล์นี้ใช้พื้นที่จัดเก็บ SQLite ของออบเจกต์ บันทึกอีเวนต์แบบถาวร (durable event) ไว้เพื่อกู้คืนหลังถูก evict และใช้บริการทดแทนสำหรับระบบไฟล์ภายในเครื่องและโปรเซสซึ่งใช้งานไม่ได้ในสภาพแวดล้อมนี้
+
+```sh
+bun add @opencode/sdk
+```
+
+ให้เก็บโฮสต์ไว้หนึ่งตัวตลอดอายุของอินสแตนซ์ Durable Object แทนการสร้างใหม่ทุกครั้งที่มีคำขอ
+
+```ts
+import { OpenCodeWorkerd } from "@opencode/sdk/workerd"
+import myPlugin from "./my-plugin"
+
+export class OpenCodeDO {
+  private readonly opencode: Promise<OpenCodeWorkerd.Interface>
+
+  constructor(state: DurableObjectState) {
+    this.opencode = state.blockConcurrencyWhile(() =>
+      OpenCodeWorkerd.create({
+        storage: state.storage,
+        config: { default_agent: "build" },
+        plugins: [myPlugin],
+      }),
+    )
+  }
+
+  async fetch() {
+    const opencode = await this.opencode
+    return Response.json(await opencode.server.info())
+  }
+}
+```
+
+`blockConcurrencyWhile` จะกันอีเวนต์ทั้งหมดของ Durable Object ไว้จนกว่าโฮสต์จะพร้อม และจะรีเซ็ตออบเจกต์หากการเริ่มต้นล้มเหลว Promise ที่เก็บไว้ช่วยให้ handler ของคำขอเข้าถึงโฮสต์ตัวเดียวกันได้โดยตรงหลังเริ่มทำงานแล้ว
+
+```ts
+constructor(state: DurableObjectState) {
+  this.opencode = state.blockConcurrencyWhile(() =>
+    OpenCodeWorkerd.create({ storage: state.storage }),
+  )
+}
+```
+
+Wrangler จะเลือกใช้ implementation ของ OpenCode ที่ปลอดภัยสำหรับ Workerd ผ่าน package condition `workerd` เนื่องจาก Cloudflare อาจ evict Durable Object โดยไม่รันขั้นตอน cleanup ความถูกต้องของการทำงานจึงไม่ขึ้นกับการเรียก `close()`
+
+```jsonc title="wrangler.jsonc"
+{
+  "compatibility_flags": ["nodejs_compat"]
+}
+```
+
+## ปรับแต่ง
+
+ปรับแต่งอินสแตนซ์ OpenCode ของคุณด้วยการลงทะเบียนปลั๊กอินที่ bundle มากับ Worker ส่งปลั๊กอินให้ `OpenCodeWorkerd.create()` เพื่อปรับแต่งเอเจนต์ โมเดล เครื่องมือ และพฤติกรรมอื่น ๆ:
+
+```ts
+import { Plugin } from "@opencode/plugin"
+import { OpenCodeWorkerd } from "@opencode/sdk/workerd"
+
+const plugin = Plugin.define({
+  id: "customize-agent",
+  async setup(ctx) {
+    await ctx.agent.transform((agents) => {
+      agents.update("build", (agent) => {
+        agent.description = "Builds features and fixes bugs for our team"
+      })
+    })
+  },
+})
+
+await OpenCodeWorkerd.create({
+  storage: state.storage,
+  config: { default_agent: "build" },
+  plugins: [plugin],
+})
+```
+
+ดู hook ของปลั๊กอิน transform เครื่องมือ และบริบทของปลั๊กอินทั้งหมดได้ที่[เอกสารปลั๊กอินฉบับเต็ม](/build/plugins)

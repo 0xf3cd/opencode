@@ -1,0 +1,90 @@
+---
+title: "TUI"
+description: "開始工作階段，並在終端機介面中完成日常工作流程。"
+---
+
+在專案中執行 OpenCode，輸入你的請求，然後按下 **Enter**。
+
+```bash
+cd ~/code/my-project
+opencode
+```
+
+```text
+Explain how authentication works in this project
+```
+
+按下 **Shift+Enter**、**Ctrl+Enter**、**Alt+Enter** 或 **Ctrl+J** 可以換行。OpenCode 工作期間，按下 **Enter** 會引導進行中的工作階段；先按 **Ctrl+X** 再按 **Enter**，則會將提示詞排入佇列，稍後再送出。
+
+## 上下文
+
+輸入 `@` 搜尋檔案，選取後即可將該檔案附加到提示詞。在 `@` 後面繼續輸入可以縮小搜尋結果。
+
+```text
+Review @src/auth.ts for error handling problems
+```
+
+你可以在路徑後面加上行號或行數範圍。
+
+```text
+Explain @src/auth.ts#20-45
+```
+
+## Shell
+
+在空白的提示詞開頭輸入 `!` 即可進入 shell 模式。輸入指令後按下 **Enter**；如果不想執行任何指令，按 **Esc** 即可離開 shell 模式。
+
+```text
+!git status
+```
+
+Shell 指令會在工作階段的工作目錄中執行，輸出也會保留在工作階段中。
+
+## 指令
+
+輸入 `/` 會列出斜線指令。繼續輸入可以篩選清單，再按 **Enter** 執行選取的指令。
+
+```text
+/models
+```
+
+常用的指令包括 `/new`、`/sessions`、`/models`、`/agents`、`/undo`、`/redo` 和 `/editor`。按下 **Ctrl+P** 可以開啟指令面板，查看目前畫面中所有可用的動作。
+
+更新後，OpenCode 會在主畫面顯示一次該版本的新功能。執行 `/highlights` 可以再次查看；若不希望它自動開啟，請在 [`cli.json`](/cli/config#alerts) 中設定 `"highlights": false`。
+
+## 旁支問題
+
+執行 `/btw <question>`，可以針對目前為止的對話快速提問。回答會使用工作階段的上下文和目前的模型，但不會加入對話中，因此不會影響之後的提示詞。執行期間，提示詞頁尾會顯示 `/btw` 指示標記，回答則會在對話方塊中開啟；按 **C** 即可複製。
+
+```text
+/btw why did the test in step 2 fail?
+```
+
+## 模型
+
+先按 **Ctrl+X** 再按 **M** 選擇模型，或執行 `/models`。按 **F2** 可以在最近使用的模型之間切換。
+
+先按 **Ctrl+X** 再按 **A** 選擇代理，或執行 `/agents`。按 **Shift+Tab** 可以切換代理。
+
+## 工作階段
+
+先按 **Ctrl+X** 再按 **N** 開始新的工作階段。先按 **Ctrl+X** 再按 **L**，或執行 `/sessions`，可以回到現有的工作階段；**Ctrl+O** 則會同時開啟最近的工作階段和專案。
+
+分頁功能預設為啟用。使用 **Ctrl+Tab** 和 **Ctrl+Shift+Tab** 在分頁之間切換，先按 **Ctrl+X** 再按 **W** 關閉分頁，按 **Ctrl+Shift+T** 可以重新開啟最後關閉的分頁。
+
+## 歷程記錄
+
+先按 **Ctrl+X** 再按 **U**，或執行 `/undo`，可以還原最近一則使用者訊息及其後續的所有工作。被還原的提示詞會回到輸入框，讓你重新編輯。
+
+先按 **Ctrl+X** 再按 **R**，或執行 `/redo`，可以恢復被還原的工作。如果改為送出新的提示詞，則會確定這次還原，並從該處繼續。
+
+## 編輯器
+
+設定 `VISUAL` 或 `EDITOR` 後，先按 **Ctrl+X** 再按 **E**，或執行 `/editor`，即可在該編輯器中編輯目前的提示詞。儲存並離開後，文字會回到輸入框，再按 **Enter** 送出。
+
+```bash
+export EDITOR="nvim"
+opencode
+```
+
+前導鍵預設為 **Ctrl+X**。若要變更這些快速鍵，請參閱[快速鍵](/cli/keybinds)。

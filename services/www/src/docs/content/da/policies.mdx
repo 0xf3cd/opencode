@@ -1,0 +1,243 @@
+---
+title: "Politikker"
+description: "Tillad eller afvis OpenCode-handlinger på navngivne ressourcer, hvor organisationens politik har det sidste ord."
+---
+
+Politikker afgør, om OpenCode må udføre en handling på en navngiven ressource. De
+skrives under `policies` og kan også leveres af et tilknyttet arbejdsområde i
+[OpenCode Console](/console).
+
+Politikker er adskilt fra [tilladelser](/permissions). Tilladelser er værktøjsregler
+pr. agent, der kan give `allow`, `deny` eller `ask`. Politikker er binære, spørger
+aldrig og kan kun stramme det, som tilladelser og udbydere ellers ville tillade.
+
+## Konfigurer
+
+Afvis en udbyder overalt ved at tilføje en erklæring i `opencode.jsonc`:
+
+```jsonc
+{
+  "$schema": "https://opencode.ai/config.json",
+  "policies": [{ "action": "provider.use", "resource": "openai", "effect": "deny" }],
+}
+```
+
+En afvist udbyder forsvinder fra kataloget og modelvalget, selv hvis den har gyldige
+legitimationsoplysninger.
+
+Tidligere versioner læste politikker fra `experimental.policies`. Den nøgle virker
+stadig og flettes ind i `policies`:
+
+```jsonc
+{
+  "experimental": {
+    "policies": [{ "action": "provider.use", "resource": "openai", "effect": "deny" }],
+  },
+}
+```
+
+## Erklæringer
+
+Hver erklæring har tre felter:
+
+| Felt       | Værdier                                       | Betydning                                                   |
+| ---------- | --------------------------------------------- | ----------------------------------------------------------- |
+| `action`   | `provider.use`, `tool.use`, `integration.use` | Den handling, der styres                                    |
+| `resource` | streng eller mønster med jokertegn            | Det, erklæringen gælder for; afhænger af handlingen         |
+| `effect`   | `allow`, `deny`                               | Beslutningen, når erklæringen matcher                       |
+
+Erklæringer, der ikke kan valideres, droppes med en advarsel i serverloggen, og
+resten af listen gælder stadig. Tjek loggen, når du har redigeret en `deny`.
+
+## Matchning
+
+Ressourcer bruger de samme jokertegn for hele værdien som tilladelser: `*` matcher nul
+eller flere tegn, og `?` matcher ét.
+
+```jsonc
+{
+  "policies": [{ "action": "provider.use", "resource": "company-*", "effect": "deny" }],
+}
+```
+
+Det afviser `company-us` og `company-eu`. Et mønster, der slutter med ` *`, matcher
+også værdien uden argumenter, så `shell:git push *` dækker også `git push` alene.
+
+## Rækkefølge
+
+Når flere erklæringer matcher, vinder den sidste. Der er ingen regel om specificitet,
+så placer brede erklæringer først og undtagelser efter dem. Hvis intet matcher, er
+handlingen tilladt.
+
+```jsonc
+{
+  "policies": [
+    { "action": "provider.use", "resource": "*", "effect": "deny" },
+    { "action": "provider.use", "resource": "anthropic", "effect": "allow" },
+  ],
+}
+```
+
+Kun Anthropic er tilgængelig.
+
+## Udbydere
+
+`provider.use` styrer, om en udbyder overhovedet kan bruges. Ressourcen er
+udbyder-ID'et: `anthropic`, `openai`, `opencode` eller et brugerdefineret ID fra
+[`providers`](/providers).
+
+```jsonc
+{
+  "providers": {
+    "company-ai": {
+      "package": "@opencode/ai/providers/openai-compatible",
+      "settings": { "baseURL": "https://ai.company.example/v1" },
+    },
+  },
+  "policies": [
+    { "action": "provider.use", "resource": "*", "effect": "deny" },
+    { "action": "provider.use", "resource": "company-ai", "effect": "allow" },
+  ],
+}
+```
+
+Posten i `providers` konfigurerer endpointet; erklæringerne gør den til den eneste
+udbyder, OpenCode bruger. Politikken gælder, uanset hvordan OpenCode kender
+udbyderen: katalogdata, miljøvariabler, gemte konti, indbyggede plugins eller
+konfiguration.
+
+Brug `provider.use` i stedet for V1-listerne `enabled_providers` og
+`disabled_providers`. V1-filer indlæses stadig; se
+[Migrer fra V1](/migrate-v1#supported-fields-without-direct-native-equivalents).
+
+## Værktøjer
+
+`tool.use`-erklæringer afviser et [tilladelsestjek](/permissions) ufravigeligt.
+Ressourcen er `<action>:<value>` og matches mod alle ressourcer, værktøjet
+kontrollerer.
+
+```jsonc
+{
+  "policies": [
+    { "action": "tool.use", "resource": "shell:git push *", "effect": "deny" },
+    { "action": "tool.use", "resource": "edit:*.env", "effect": "deny" },
+    { "action": "tool.use", "resource": "webfetch:*", "effect": "deny" },
+  ],
+}
+```
+
+Et afvist tjek fejler med `Blocked by configuration policy` i stedet for at spørge.
+Det gælder efter agentregler og gemte godkendelser, så det tilsidesætter både et
+`ask` og en »Allow always«-godkendelse.
+
+| Mønster                      | Blokerer                                          |
+| ---------------------------- | ------------------------------------------------- |
+| `shell:*`                    | Alle shell-kommandoer                             |
+| `read:*/.ssh/*`              | Læsning af SSH-materiale                          |
+| `external_directory:*`       | Al adgang uden for Location eller worktree        |
+| `subagent:general`           | Start af én bestemt subagent                      |
+| `github_delete_repository:*` | Ét MCP-værktøj                                    |
+| `*`                          | Alt, der ikke allerede er afvist                  |
+
+En `tool.use`-erklæring med `allow` giver aldrig adgang. Den ophæver kun en
+tidligere, bredere `deny`, hvorefter agentens egne regler bestemmer.
+
+```jsonc
+{
+  "policies": [
+    { "action": "tool.use", "resource": "shell:*", "effect": "deny" },
+    { "action": "tool.use", "resource": "shell:git status *", "effect": "allow" },
+  ],
+}
+```
+
+For `git status` gælder agentens `shell`-regel; alle andre kommandoer blokeres.
+
+## Integrationer
+
+`integration.use` styrer, om en MCP-server, skill eller et plugin indlæses.
+Ressourcen er integrationstypen og dens ID:
+
+| Ressource         | Gælder for                                                                  |
+| ----------------- | --------------------------------------------------------------------------- |
+| `mcp:<server>`    | En [MCP-server](/mcp-servers) ud fra dens konfigurerede navn                |
+| `skill:<id>`      | En [skill](/skills) ud fra dens ID                                          |
+| `plugin:<target>` | Et [plugin](/plugins) ud fra pakkenavn uden version eller absolut sti       |
+
+```jsonc
+{
+  "policies": [
+    { "action": "integration.use", "resource": "mcp:*", "effect": "deny" },
+    { "action": "integration.use", "resource": "mcp:github", "effect": "allow" },
+    { "action": "integration.use", "resource": "plugin:opencode-acme-cli", "effect": "deny" },
+  ],
+}
+```
+
+En afvist MCP-server eller skill fjernes, og et afvist plugin indlæses ikke, uanset
+hvordan det er konfigureret.
+
+## Prioritet
+
+For almindelige indstillinger vinder den nærmeste konfiguration. Politikker vender det
+om: erklæringer fra bredere konfiguration evalueres senere og tilsidesætter derfor
+snævrere. Administreret konfiguration og den tilknyttede Console har altid det
+sidste ord.
+
+| Autoritet    | Kilde                                                                                                          |
+| ------------ | -------------------------------------------------------------------------------------------------------------- |
+| 1 (højeste)  | Tilknyttet arbejdsområde i OpenCode Console                                                                    |
+| 2            | Administrerede indstillinger på macOS (`/Library/Managed Preferences/ai.opencode.managed.plist`)               |
+| 3            | Systemets `opencode.json(c)` (`/Library/Application Support/opencode`, `/etc/opencode`, `%ProgramData%\opencode`) |
+| 4            | Global `~/.config/opencode/opencode.json(c)`                                                                   |
+| 5            | `opencode.json(c)` direkte i mappen; ydre mapper vinder over indre                                             |
+| 6 (laveste)  | `.opencode/opencode.json(c)`; ydre mapper vinder over indre                                                    |
+
+Et repository kan ikke genaktivere en udbyder, du har afvist globalt:
+
+```jsonc title="~/.config/opencode/opencode.jsonc"
+{
+  "policies": [{ "action": "provider.use", "resource": "openai", "effect": "deny" }],
+}
+```
+
+```jsonc title="project/opencode.jsonc"
+{
+  "policies": [{ "action": "provider.use", "resource": "openai", "effect": "allow" }],
+}
+```
+
+`openai` forbliver afvist. Inden for én fil bevarer erklæringerne den rækkefølge,
+de er skrevet i.
+
+## Console
+
+Et arbejdsområde i [OpenCode Console](/console) kompilerer sine politikker for
+Providers og Tools til erklæringer og returnerer dem sammen med arbejdsområdets
+konfiguration. OpenCode tilføjer dem efter alle skrevne erklæringer, så de har det
+sidste ord: en `deny` fra organisationen kan ikke ophæves af et `allow` i et
+repository eller fra en bruger, og et `allow` fra organisationen ophæver en `deny`
+med lavere autoritet.
+
+Afvisninger fra disse erklæringer nævner arbejdsområdet:
+
+```text
+Blocked by Acme's policy
+```
+
+Erklæringerne følger den tilknyttede konto.
+
+| Hændelse                        | Resultat                                                     |
+| ------------------------------- | ------------------------------------------------------------ |
+| Console-politikken ændres       | Anvendes ved næste hentning, ca. én gang i minuttet          |
+| Skift til et andet arbejdsområde | Erklæringerne erstattes med det nye arbejdsområdes          |
+| Afbrydelse af forbindelsen      | Erklæringerne ryddes                                         |
+| Console kan ikke nås            | De seneste erklæringer for forbindelsen gælder fortsat       |
+
+Console-pluginnet og policy-pluginnet kan ikke slås fra i `plugins`; se
+[styring af plugins](/plugins#control).
+
+<Callout type="note">
+  Politikker konfigurerer hverken endpoints eller legitimationsoplysninger, og de kan ikke gøre en ubrugelig udbyder
+  brugbar. De sandboxer heller ikke plugin-kode: en afvist udbyder blokeres på den normale udbyder- og modelvej.
+</Callout>

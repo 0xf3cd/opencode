@@ -1,0 +1,141 @@
+---
+title: "Плагіни"
+---
+
+Додавайте до `opencode.json(c)` опубліковані пакети, пакети з версією, пакети з областю видимості (scope) або локальні
+каталоги плагінів.
+
+## Налаштування
+
+```jsonc title="opencode.jsonc"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "plugins": [
+    "opencode-acme-plugin",
+    "opencode-acme-plugin@1.2.0",
+    "@acme/opencode-plugin",
+    "./plugins/local",
+    "../shared/plugin.ts",
+    "/absolute/path/plugin.ts",
+    "file:///home/me/plugins/local",
+    {
+      "package": "@acme/opencode-plugin",
+      "options": {
+        "agent": "reviewer",
+        "strict": true,
+      },
+    },
+  ],
+}
+```
+
+Відносні шляхи розв'язуються відносно файлу конфігурації, що містить запис. Масиви плагінів з усіх відповідних файлів
+конфігурації застосовуються від найнижчого пріоритету до найвищого, а не замінюють один одного.
+
+```text
+~/.config/opencode/opencode.jsonc
+./opencode.jsonc
+./.opencode/opencode.jsonc
+```
+
+## Виявлення
+
+OpenCode також завантажує файли `.ts` і `.js`, що лежать безпосередньо в кожному знайденому каталозі
+`.opencode/plugins/`, і каталоги пакетів плагінів першого рівня в ньому.
+
+```text
+.opencode/
+└── plugins/
+    ├── concise.ts
+    ├── reviewer.js
+    └── acme-package/
+```
+
+Глобальні плагіни виявляються за тією самою структурою в каталозі конфігурації OpenCode.
+
+```text
+~/.config/opencode/plugins/
+```
+
+Каталог `plugins/` поруч з `opencode.json(c)` у корені проєкту автоматично не виявляється; укажіть його файли
+в конфігурації явно або перемістіть каталог у `.opencode/`.
+
+```jsonc title="opencode.jsonc"
+{
+  "plugins": ["./plugins/local"]
+}
+```
+
+## Керування
+
+Записи плагінів обробляються по черзі. Щоб вимкнути плагін, додайте перед ID або шаблоном префікс `-`; `*` означає всі
+плагіни, а `.*` відповідає префіксу ID. Пізніший запис з ID знову вмикає плагін.
+
+```jsonc title="opencode.jsonc"
+{
+  "plugins": ["*", "-opencode.provider.*", "opencode.provider.openai", "-acme.reviewer"]
+}
+```
+
+Два вбудовані плагіни ігнорують вимкнення, щоб репозиторій не міг відключити застосування [політик](/policies):
+`opencode.config.policy` і `opencode.provider.opencode` — з'єднання з OpenCode Console, яке доставляє політики
+організації.
+
+## Керування пакетами
+
+Установлюйте, переглядайте, перевіряйте, оновлюйте й видаляйте глобальні плагіни-пакети за допомогою CLI.
+
+```sh
+opencode plugin add opencode-acme-plugin@1.2.0
+opencode plugin list
+opencode plugin list --builtin
+opencode plugin check
+opencode plugin update
+opencode plugin update opencode-acme-plugin
+opencode plugin remove opencode-acme-plugin@1.2.0
+```
+
+`plugin check` перевіряє наявність оновлень для серверних плагінів-пакетів і пакетів лише для TUI. `plugin update`
+оновлює всі застарілі пакети; щоб перевірити або оновити лише один пакет, передайте налаштований пакет як ціль.
+Локальні плагіни та пакети з точно зафіксованою ревізією пропускаються.
+
+Установлення пакетів приймає назви npm з версіями, тегами або діапазонами, а також npm-сумісні специфікації пакетів
+Git. Репозиторії Git можна вказувати скороченнями хостингу, через HTTPS або SSH, зокрема приватні репозиторії,
+доступні з вашими наявними обліковими даними Git.
+
+```sh
+opencode plugin add @acme/opencode-plugin@latest
+opencode plugin add github:acme/opencode-plugin
+opencode plugin add git+ssh://git@github.com/acme/opencode-plugin.git#main
+opencode plugin add 'github:acme/plugins#main::path:packages/opencode-plugin'
+```
+
+Підтримуються гілки, теги, повні хеші комітів і селектори підкаталогу репозиторію `::path:` з npm. Локальні шляхи
+вказуйте в конфігурації безпосередньо; tarball-архіви та псевдоніми npm команда `plugin add` не приймає.
+
+## Перезавантаження
+
+Зміни в каталогах конфігурації, за якими ведеться спостереження, перезавантажуються автоматично. Під час запуску
+сервер одразу завантажує кешовані плагіни-пакети, установлює відсутні пакети у фоні й перевіряє наявність оновлень для
+незафіксованих плагінів з npm і Git, не змінюючи встановлений пакет. Точні версії npm і повні хеші комітів Git
+залишаються зафіксованими. Після змін у локальних залежностях, за якими не ведеться спостереження, може знадобитися
+перезапуск OpenCode.
+
+```sh
+touch .opencode/plugins/concise/index.ts
+opencode service restart
+```
+
+## Термінал
+
+Плагіни лише для CLI налаштовуються окремо й залишаються активними під час підключення до віддаленого сервера.
+
+```json title="cli.json"
+{
+  "plugins": ["opencode-acme-cli"]
+}
+```
+
+<Card title="Створення плагіна" href="/build/plugins">
+  Створюйте плагіни, що додають інструменти, хуки, інтеграції, команди, агентів та іншу поведінку.
+</Card>

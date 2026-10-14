@@ -1,0 +1,1678 @@
+---
+title: "ภาพรวม"
+---
+
+ปลั๊กอินใช้ปรับพฤติกรรมของ OpenCode และเพิ่มฟีเจอร์ใหม่ได้ หากต้องการเปลี่ยน UI บนเทอร์มินัล ให้สร้าง[ปลั๊กอิน CLI](/build/plugins/cli)
+
+หากต้องการย้ายปลั๊กอิน OpenCode 1 ที่มีอยู่ ให้ทำตาม[คู่มือการย้ายปลั๊กอินจาก V1](/build/plugins/migrate-v1)
+
+```ts title=".opencode/plugins/example/index.ts"
+import { Plugin } from "@opencode/plugin"
+
+export default Plugin.define({
+  id: "example",
+  async setup(ctx) {
+    await ctx.storage.set("loaded", true)
+  },
+})
+```
+
+ปลั๊กอินใน `.opencode/plugins/` จะโหลดโดยอัตโนมัติ เช่นเดียวกับตัวอย่างภายในเครื่องด้านบน หากต้องการโหลดแพ็กเกจที่เผยแพร่แล้วหรือไดเรกทอรีปลั๊กอินจากตำแหน่งอื่น ให้เพิ่มลงใน `plugins` ใน `opencode.json(c)`:
+
+```jsonc title="opencode.jsonc"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "plugins": [
+    "opencode-acme-plugin",
+    "opencode-acme-plugin@1.2.0",
+    "@acme/opencode-plugin",
+    "./plugins/local",
+    "../shared/plugin",
+    "/absolute/path/plugin",
+    "file:///home/me/plugins/local",
+    {
+      "package": "@acme/opencode-plugin",
+      "options": {
+        "agent": "reviewer",
+        "strict": true,
+      },
+    },
+  ],
+}
+```
+
+ดูตัวเลือกการโหลดและการกำหนดค่าเพิ่มเติมได้ที่[กำหนดค่าปลั๊กอิน](/plugins)
+
+## วงจรการทำงาน
+
+`setup` จะทำงานเมื่อโหลดปลั๊กอิน และอาจส่งกลับฟังก์ชัน cleanup ที่จะทำงานเมื่อยกเลิกการโหลดปลั๊กอิน
+
+```ts
+import { Plugin } from "@opencode/plugin"
+
+export default Plugin.define({
+  id: "example",
+  setup(ctx) {
+    console.log(`loaded in OpenCode ${ctx.app.version}`)
+    return () => console.log("unloaded")
+  },
+})
+```
+
+### Context
+
+โดยพื้นฐานแล้ว context ของปลั๊กอินก็คือ[ไคลเอนต์ของเซิร์ฟเวอร์ OpenCode](/build/client) เมธอดสำหรับอ่านข้อมูลและสั่งการใช้อินพุตและการตอบกลับเหมือนกับไคลเอนต์ และมีเมธอดเฉพาะปลั๊กอินเพิ่มเติมสำหรับ transform, hook ขณะรันไทม์ การโหลดใหม่ การลงทะเบียน และตัวเลือกของปลั๊กอิน
+
+```ts
+setup(ctx) {
+  console.log(ctx.app.version)
+}
+```
+
+`ctx.location` อธิบายตำแหน่ง (location) ที่อินสแตนซ์ปลั๊กอินนี้โหลดอยู่ ประกอบด้วย `directory`, `workspaceID` (ไม่บังคับ) และเมทาดาทา `project` (`id`, `directory` และ `canonical`) ใช้ได้ทั้งในปลั๊กอินแบบ Promise และแบบ Effect ค่านี้คือตำแหน่งของอินสแตนซ์ปลั๊กอิน ไม่ใช่ตำแหน่งของทุกเซสชันที่ปลั๊กอินเข้าถึงได้หรือทุกอีเวนต์ที่ได้รับ
+
+```ts
+setup(ctx) {
+  console.log(ctx.location.directory)
+  console.log(ctx.location.project.canonical)
+}
+```
+
+### ตัวเลือก
+
+ส่งตัวเลือกให้ปลั๊กอินด้วยรูปแบบอ็อบเจกต์ใน `opencode.json(c)`
+
+```jsonc title="opencode.jsonc"
+{
+  "plugins": [
+    {
+      "package": "./plugins/company",
+      "options": {
+        "strict": true,
+      },
+    },
+  ],
+}
+```
+
+อ่านค่าเหล่านั้นจาก `ctx.options` ระหว่าง `setup`
+
+```ts title="plugins/company/index.ts"
+import { Plugin } from "@opencode/plugin"
+
+export default Plugin.define({
+  id: "company",
+  setup(ctx) {
+    const strict = ctx.options.strict === true
+  },
+})
+```
+
+## Transform
+
+transform คือการแก้ไขสถานะของโดเมนใน OpenCode แบบ synchronous โดยแต่ละรายการจะต่อยอดจากการลงทะเบียนก่อนหน้าในโดเมนเดียวกัน การอ่าน registry เช่น `ctx.model.list()` จะสะท้อนการลงทะเบียนทั้งหมดจนถึงขณะนั้น รวมถึงระหว่าง setup ของปลั๊กอิน การรวมชุดตอนเริ่มต้นเพียงรวมการแจ้งเตือนการอัปเดตเข้าด้วยกัน และไม่ทำให้ค่าที่อ่านได้ล่าช้า ส่วน API สถานะของทรัพยากรยังคงรายงานสถานะของทรัพยากรที่กำลังทำงานอยู่ การที่คำจำกัดความลงทะเบียนแล้วไม่ได้หมายความว่าการเชื่อมต่อหรืองานอื่นของทรัพยากรนั้นเสร็จสิ้นแล้ว
+
+แหล่งที่มา (source) เพิ่มผู้ให้บริการและคำจำกัดความของโมเดลแบบแก้ไขไม่ได้ผ่าน `ctx.provider.transform`
+
+```ts title="plugins/models/index.ts"
+import { Model, Plugin, Provider } from "@opencode/plugin"
+
+export default Plugin.define({
+  id: "company.models",
+  async setup(ctx) {
+    const providerID = Provider.ID.make("acme")
+    const models = [{ ...Model.Info.default(providerID, Model.ID.make("reasoner")), name: "Acme Reasoner" }]
+    await ctx.provider.transform((editor) => {
+      editor.add({
+        info: {
+          ...Provider.Info.empty(providerID),
+          name: "Acme",
+          activation: "enabled",
+          package: "@opencode/ai/providers/openai-compatible",
+          settings: { baseURL: "http://127.0.0.1:8000/v1" },
+        },
+        models,
+      })
+    })
+
+    const available = await ctx.model.list()
+  },
+})
+```
+
+การลงทะเบียน การลบ หรือ `reload()` ใด ๆ จะทำเครื่องหมายว่า registry เปลี่ยนแปลงแล้ว การอ่านครั้งถัดไปจะสร้าง registry ใหม่โดยเล่นซ้ำ transform ที่ใช้งานอยู่ทั้งหมดตามลำดับการลงทะเบียนบนค่าใหม่ ให้ transform ทำงานเร็วและเล่นซ้ำได้ ค่าที่คุณอ่านไปแล้วจะไม่ถูกแก้ไขโดยการสร้างใหม่ในภายหลัง
+
+หลังจาก resolve transform ของผู้ให้บริการและความพร้อมใช้งานแล้ว OpenCode จะสร้างชุดโมเดลของผู้ให้บริการที่ใช้งานอยู่ และเล่นซ้ำ transform ของโมเดลทั้งหมดตามลำดับ นโยบายของโมเดลจึงตรวจสอบชุดโมเดลที่เป็นตัวเลือกทั้งหมดได้ รวมถึงแหล่งที่มาที่เพิ่งรีเฟรช
+
+```ts title="plugins/model-budget/index.ts"
+import { Plugin } from "@opencode/plugin"
+
+export default Plugin.define({
+  id: "company.model-budget",
+  async setup(ctx) {
+    await ctx.model.transform((editor) => {
+      editor
+        .list()
+        .filter((model) => model.cost.some((tier) => tier.output > 20))
+        .forEach((model) => {
+          editor.remove(model.providerID, model.id)
+        })
+    })
+  },
+})
+```
+
+อินพุตที่ callback เก็บไว้จะไม่ถูกเฝ้าดูการเปลี่ยนแปลงโดยอัตโนมัติ ให้โหลดข้อมูลภายนอกก่อน callback แบบ synchronous แล้วเรียก `reload()` หลังจากอินพุตเหล่านั้นเปลี่ยน ในตัวอย่างนี้ `loadFromSource()` ส่งกลับรายการแบบ `{ info: Provider.Info, models: readonly Model.Info[] }`
+
+```ts title="plugins/models/index.ts"
+import { Plugin } from "@opencode/plugin"
+
+export default Plugin.define({
+  id: "company.models",
+  async setup(ctx) {
+    const source = { providers: await loadFromSource() }
+
+    await ctx.provider.transform((editor) => {
+      source.providers.forEach((provider) => editor.add(provider))
+    })
+
+    const refresh = async () => {
+      source.providers = await loadFromSource()
+      await ctx.provider.reload()
+    }
+
+    const timer = setInterval(() => void refresh().catch(console.error), 60_000)
+    return () => clearInterval(timer)
+  },
+})
+```
+
+การเปลี่ยนแปลงของผู้ให้บริการจะทำให้ผลลัพธ์โมเดลที่ใช้งานอยู่ทั้งหมดเป็นโมฆะ นโยบายราคาเอาต์พุตจึงยังคงกรองโมเดลที่รีเฟรชแล้ว ใช้ `ctx.model.reload()` เมื่อมีเพียงอินพุตที่ transform ของโมเดลเก็บไว้เท่านั้นที่เปลี่ยน
+
+## API
+
+### เอเจนต์
+
+อ่านเอเจนต์ทั้งหมด หรือดึงเอเจนต์หนึ่งตัวตาม ID
+
+```ts
+const agents = await ctx.agent.list()
+const build = await ctx.agent.get({ agentID: "build" })
+```
+
+ลงทะเบียน transform เพื่อตรวจสอบ อัปเดต ลบ หรือเลือกเอเจนต์เริ่มต้น
+
+```ts
+await ctx.agent.transform((editor) => {
+  const agents = editor.list()
+  const build = editor.get("build")
+
+  editor.default("build")
+  editor.update("build", (agent) => {
+    agent.description = "Builds features and fixes bugs"
+  })
+  editor.remove("legacy")
+})
+```
+
+โหลดเอเจนต์ใหม่หลังจากสถานะภายนอกที่ transform ใช้มีการเปลี่ยนแปลง
+
+```ts
+await ctx.agent.reload()
+```
+
+#### ข้อมูลอ้างอิง
+
+Schema: [`Agent.Info`](/api#schema-Agent.Info)
+
+```ts
+interface AgentContext {
+  list(input?: AgentListInput, requestOptions?: RequestOptions): Promise<AgentListOutput>
+  get(input: AgentGetInput, requestOptions?: RequestOptions): Promise<AgentGetOutput>
+  transform(callback: (editor: AgentEditor) => void): Promise<Registration>
+  reload(): Promise<void>
+}
+
+interface AgentEditor {
+  list(): readonly AgentInfo[]
+  get(id: string): AgentInfo | undefined
+  default(id: string | undefined): void
+  update(id: string, update: (agent: AgentInfo) => void): void
+  remove(id: string): void
+}
+
+interface Registration {
+  dispose(): Promise<void>
+}
+```
+
+### ผู้ให้บริการ
+
+อ่านผู้ให้บริการที่ใช้ได้ หรือตรวจสอบเมทาดาทาของผู้ให้บริการหนึ่งรายตาม ID
+
+```ts
+const providers = await ctx.provider.list()
+const provider = await ctx.provider.get({ providerID: "anthropic" })
+```
+
+transform ของผู้ให้บริการใช้แก้ไขการตั้งค่าผู้ให้บริการและคำจำกัดความของแหล่งที่มา การอ่านผ่าน editor จะรวมผู้ให้บริการที่ไม่ได้ใช้งานด้วย และให้คำจำกัดความแบบแก้ไขไม่ได้ ส่วน `models.update` จะแก้ไขสำเนาของโมเดลต้นทางที่ editor เป็นเจ้าของ
+
+```ts
+await ctx.provider.transform((editor) => {
+  editor.update("anthropic", (provider) => {
+    provider.headers = { ...provider.headers, "x-company": "engineering" }
+  })
+  editor.models.update("anthropic", "claude-sonnet-4-5", (model) => {
+    model.name = "Team Sonnet"
+  })
+  editor.models.remove("anthropic", "legacy-model")
+  editor.remove("legacy-provider")
+})
+```
+
+แทนที่รายการโมเดลต้นทางของผู้ให้บริการด้วย `models.set` แล้วโหลดใหม่หลังจากคำจำกัดความที่เก็บไว้เปลี่ยน
+
+```ts
+const source = { models: await loadModels() }
+await ctx.provider.transform((editor) => {
+  editor.models.set("acme", source.models)
+})
+
+source.models = await loadModels()
+await ctx.provider.reload()
+```
+
+สำหรับการค้นหาโมเดลที่เจาะจงตามบัญชี ให้ส่งการเชื่อมต่อที่ใช้โหลดรายการโมเดลเป็น `sourceConnection` ขณะที่มีการเลือกการเชื่อมต่ออื่นอยู่ OpenCode จะไม่รวมผู้ให้บริการนั้น จนกว่าปลั๊กอินของคุณจะเผยแพร่รายการโมเดลที่รีเฟรชแล้ว
+
+```ts
+const connection = await ctx.integration.connection.active("acme")
+if (!connection) return
+const inventory = await loadInventory(connection)
+await ctx.provider.transform((editor) => {
+  editor.add({ info: inventory.provider, models: inventory.models, sourceConnection: connection })
+})
+```
+
+#### ข้อมูลอ้างอิง
+
+Schema: [`Provider.Info`](/api#schema-Provider.Info), [`Model.Info`](/api#schema-Model.Info)
+
+```ts
+interface ProviderDomain extends ProviderApi {
+  transform(callback: (editor: ProviderEditor) => void): Promise<Registration>
+  reload(): Promise<void>
+}
+
+interface ProviderRecord {
+  readonly provider: Provider.Info
+  readonly models: ReadonlyMap<string, Model.Info>
+  readonly sourceConnection?: ConnectionInfo
+}
+
+interface ProviderEditor {
+  list(): readonly ProviderRecord[]
+  get(providerID: string): ProviderRecord | undefined
+  add(input: { info: Provider.Info; models: readonly Model.Info[]; sourceConnection?: ConnectionInfo }): void
+  update(providerID: string, update: (provider: DeepMutable<Provider.Info>) => void): void
+  remove(providerID: string): void
+  readonly models: {
+    set(providerID: string, models: readonly Model.Info[]): void
+    update(providerID: string, modelID: string, update: (model: DeepMutable<Model.Info>) => void): void
+    remove(providerID: string, modelID: string): void
+  }
+}
+```
+
+### โมเดล
+
+อ่านโมเดลที่ใช้ได้และโมเดลที่เลือกเป็นค่าเริ่มต้น
+
+```ts
+const models = await ctx.model.list()
+const selected = await ctx.model.default()
+```
+
+transform ของโมเดลใช้แก้ไขชุดโมเดลที่เป็นตัวเลือกทั้งหมดของผู้ให้บริการที่ใช้งานอยู่ ตัวเลือกที่ปิดใช้งานยังแก้ไขได้จนกว่า transform ทั้งหมดจะทำงานเสร็จ และ `update` จะเพิ่มโมเดลได้เฉพาะภายใต้ผู้ให้บริการที่พร้อมใช้งานเท่านั้น
+
+```ts
+await ctx.model.transform((editor) => {
+  editor.list("anthropic").forEach((model) => {
+    editor.update(model.providerID, model.id, (draft) => {
+      draft.enabled = draft.capabilities.tools
+    })
+  })
+  editor.default.set("anthropic", "claude-sonnet-4-5")
+  editor.remove("anthropic", "legacy-model")
+})
+```
+
+callback จะแก้ไขค่าแทนที่ (override) ของโมเดลแบบดิบ ค่าเริ่มต้นของผู้ให้บริการจะถูกรวมเข้าเพียงครั้งเดียวเมื่อ OpenCode commit ผลลัพธ์ และการอ่านที่ไม่มีการเปลี่ยนแปลงจะใช้ผลลัพธ์นั้นซ้ำ `editor.provider` ให้คำจำกัดความต้นทางแบบแก้ไขไม่ได้ รวมถึงเทมเพลตที่ไม่ได้ใช้งาน ไม่ใช่เอาต์พุตของ transform ของโมเดล
+
+```ts
+await ctx.model.transform((editor) => {
+  const source = editor.provider.get("anthropic")?.models.get("claude-sonnet-4-5")
+  if (!source) return
+  editor.update("anthropic", source.id, (model) => {
+    model.limit.context = Math.min(model.limit.context, source.limit.context)
+  })
+})
+
+await ctx.model.reload()
+```
+
+#### ข้อมูลอ้างอิง
+
+Schema: [`Model.Info`](/api#schema-Model.Info)
+
+```ts
+interface ModelDomain extends ModelApi {
+  transform(callback: (editor: ModelEditor) => void): Promise<Registration>
+  reload(): Promise<void>
+}
+
+interface ModelEditor {
+  list(providerID?: string): readonly DeepMutable<Model.Info>[]
+  get(providerID: string, modelID: string): DeepMutable<Model.Info> | undefined
+  update(providerID: string, modelID: string, update: (model: DeepMutable<Model.Info>) => void): void
+  remove(providerID: string, modelID: string): void
+  readonly default: {
+    get(): { providerID: string; modelID: string } | undefined
+    set(providerID: string, modelID: string): void
+  }
+  readonly provider: {
+    list(): readonly ProviderRecord[]
+    get(providerID: string): ProviderRecord | undefined
+  }
+}
+```
+
+### คำสั่ง
+
+อ่านคำสั่งที่ใช้ได้ที่ตำแหน่งหนึ่ง ๆ
+
+```ts
+const commands = await ctx.command.list()
+```
+
+ลงทะเบียนคำสั่งด้วย transform ตัวดำเนินการ (executor) จะได้รับเซสชัน ไฟล์แนบของพรอมต์ และโหมดการส่งที่ร้องขอ
+
+```ts
+await ctx.command.transform((editor) => {
+  editor.add({
+    name: "security-review",
+    description: "Review changes for security issues",
+    execute: async ({ sessionID, prompt, delivery }) => {
+      await ctx.session.prompt({
+        ...prompt,
+        sessionID,
+        text: `Review these changes for security issues.\n\n${prompt.text}`,
+        delivery,
+      })
+    },
+  })
+})
+```
+
+โหลดคำสั่งใหม่หลังจากสถานะภายนอกที่ transform ใช้มีการเปลี่ยนแปลง
+
+```ts
+await ctx.command.reload()
+```
+
+#### ข้อมูลอ้างอิง
+
+Schema: [`Command.Info`](/api#schema-Command.Info), [`Session.Inbox.Delivery`](/api#schema-Session.Inbox.Delivery)
+
+```ts
+interface CommandContext {
+  list(input?: CommandListInput, requestOptions?: RequestOptions): Promise<CommandListOutput>
+  transform(callback: (editor: CommandEditor) => void): Promise<Registration>
+  reload(): Promise<void>
+}
+
+interface CommandEditor {
+  add(definition: CommandDefinition): void
+}
+
+interface CommandDefinition {
+  name: string
+  description?: string
+  execute(input: CommandInvocation): Promise<void>
+}
+
+interface CommandInvocation {
+  sessionID: string
+  prompt: PromptInput
+  delivery: "steer" | "queue"
+}
+```
+
+### การผสานรวม
+
+อ่านการผสานรวมและตรวจสอบข้อมูลรับรองที่ใช้งานอยู่
+
+```ts
+const integrations = await ctx.integration.list()
+const github = await ctx.integration.get({ integrationID: "github" })
+const connection = await ctx.integration.connection.active("github")
+const credential = connection ? await ctx.integration.connection.resolve(connection) : undefined
+```
+
+เชื่อมต่อการผสานรวมด้วยคีย์ API
+
+```ts
+await ctx.integration.connect.key({
+  integrationID: "github",
+  key: process.env.GITHUB_TOKEN!,
+})
+```
+
+เริ่ม ตรวจสอบ ทำให้เสร็จสิ้น หรือยกเลิกความพยายามเชื่อมต่อแบบ OAuth
+
+```ts
+const attempt = await ctx.integration.oauth.connect({ integrationID: "github", methodID: "oauth" })
+const status = await ctx.integration.oauth.status({ integrationID: "github", attemptID: attempt.data.attemptID })
+await ctx.integration.oauth.complete({ integrationID: "github", attemptID: attempt.data.attemptID, code })
+await ctx.integration.oauth.cancel({ integrationID: "github", attemptID: attempt.data.attemptID })
+```
+
+การเชื่อมต่อผ่านคำสั่งมีขั้นตอนเริ่ม ตรวจสอบสถานะ และยกเลิกแบบเดียวกัน
+
+```ts
+const attempt = await ctx.integration.command.connect({ integrationID: "acme", methodID: "cli" })
+const status = await ctx.integration.command.status({ integrationID: "acme", attemptID: attempt.data.attemptID })
+await ctx.integration.command.cancel({ integrationID: "acme", attemptID: attempt.data.attemptID })
+```
+
+ลงทะเบียน transform เพื่อตรวจสอบการผสานรวมและจัดการวิธีการยืนยันตัวตนของการผสานรวมเหล่านั้น
+
+```ts
+await ctx.integration.transform((editor) => {
+  const integrations = editor.list()
+  const acme = editor.get("acme")
+
+  editor.update("acme", (integration) => {
+    integration.name = "Acme"
+  })
+  editor.method.update({
+    integrationID: "acme",
+    method: { id: "cli", type: "command", label: "Sign in with Acme CLI", command: ["acme", "login"] },
+  })
+
+  const methods = editor.method.list("acme")
+  const legacy = methods.find((method) => method.type === "command" && method.id === "legacy")
+  if (legacy) editor.method.remove("acme", legacy)
+  editor.remove("legacy")
+})
+```
+
+โหลดการผสานรวมใหม่หลังจากสถานะภายนอกที่ transform ใช้มีการเปลี่ยนแปลง
+
+```ts
+await ctx.integration.reload()
+```
+
+#### ข้อมูลอ้างอิง
+
+Schema: [`Integration.Info`](/api#schema-Integration.Info), [`Integration.Method`](/api#schema-Integration.Method), [`Connection.Info`](/api#schema-Connection.Info), [`Form.Answer`](/api#schema-Form.Answer)
+
+```ts
+interface IntegrationContext {
+  list(input?: IntegrationListInput, requestOptions?: RequestOptions): Promise<IntegrationListOutput>
+  get(input: IntegrationGetInput, requestOptions?: RequestOptions): Promise<IntegrationGetOutput>
+  connect: {
+    key(input: IntegrationConnectKeyInput, requestOptions?: RequestOptions): Promise<void>
+  }
+  oauth: {
+    connect(
+      input: IntegrationOauthConnectInput,
+      requestOptions?: RequestOptions,
+    ): Promise<IntegrationOauthConnectOutput>
+    status(input: IntegrationOauthStatusInput, requestOptions?: RequestOptions): Promise<IntegrationOauthStatusOutput>
+    complete(input: IntegrationOauthCompleteInput, requestOptions?: RequestOptions): Promise<void>
+    cancel(input: IntegrationOauthCancelInput, requestOptions?: RequestOptions): Promise<void>
+  }
+  command: {
+    connect(
+      input: IntegrationCommandConnectInput,
+      requestOptions?: RequestOptions,
+    ): Promise<IntegrationCommandConnectOutput>
+    status(
+      input: IntegrationCommandStatusInput,
+      requestOptions?: RequestOptions,
+    ): Promise<IntegrationCommandStatusOutput>
+    cancel(input: IntegrationCommandCancelInput, requestOptions?: RequestOptions): Promise<void>
+  }
+  transform(callback: (editor: IntegrationEditor) => void): Promise<Registration>
+  reload(): Promise<void>
+  connection: {
+    active(integrationID: string): Promise<ConnectionInfo | undefined>
+    resolve(connection: ConnectionInfo): Promise<CredentialValue | undefined>
+  }
+}
+
+interface IntegrationEditor {
+  list(): readonly IntegrationRef[]
+  get(id: string): IntegrationRef | undefined
+  update(id: string, update: (integration: IntegrationRef) => void): void
+  remove(id: string): void
+  method: {
+    list(integrationID: string): readonly IntegrationMethod[]
+    update(input: IntegrationMethodRegistration): void
+    remove(integrationID: string, method: IntegrationMethod): void
+  }
+}
+```
+
+### ข้อมูลรับรอง
+
+ตั้งข้อมูลรับรองที่บันทึกไว้ให้เป็นข้อมูลรับรองที่ใช้งานอยู่ของการผสานรวมนั้น
+
+```ts
+await ctx.credential.activate({ credentialID })
+```
+
+#### ข้อมูลอ้างอิง
+
+```ts
+interface CredentialContext {
+  activate(input: CredentialActivateInput, requestOptions?: RequestOptions): Promise<void>
+}
+```
+
+### MCP
+
+แสดงรายการเซิร์ฟเวอร์ MCP และสถานะการเชื่อมต่อปัจจุบัน
+
+```ts
+const servers = await ctx.mcp.list()
+```
+
+ปลั๊กอินจัดการเซิร์ฟเวอร์ MCP ได้ผ่าน transform เท่านั้น ใช้ `editor.set` เพื่อเพิ่มหรือแทนที่เซิร์ฟเวอร์ `editor.update` เพื่อเปลี่ยนการกำหนดค่า และ `editor.remove` เพื่อลบเซิร์ฟเวอร์ ตรวจสอบการกำหนดค่าได้ด้วย `editor.list` และ `editor.get`
+
+```ts
+await ctx.mcp.transform((editor) => {
+  const servers = editor.list()
+  const docs = editor.get("docs")
+  editor.set("docs", { type: "remote", url: "https://mcp.example.com" })
+  editor.update("docs", (server) => {
+    server.disabled = false
+  })
+  editor.remove("legacy")
+})
+```
+
+ตั้งค่า `disabled: true` ใน transform เพื่อปิดใช้งานเซิร์ฟเวอร์และตัดการเชื่อมต่อ หรือ `disabled: false` เพื่อเปิดใช้งานและอนุญาตให้ OpenCode เชื่อมต่อ OpenCode จะปรับวงจรการทำงานของเซิร์ฟเวอร์ให้ตรงกับการกำหนดค่าที่ผ่าน transform แล้ว
+
+เรียก `reload()` หลังจากสถานะภายนอกที่ transform ใช้มีการเปลี่ยนแปลง เพื่อใช้ transform อีกครั้งและปรับสถานะเซิร์ฟเวอร์ให้ตรงกัน
+
+```ts
+await ctx.mcp.reload()
+```
+
+#### ข้อมูลอ้างอิง
+
+Schema: [`Mcp.Server`](/api#schema-Mcp.Server), [`Mcp.LocalConfigEncoded`](/api#schema-Mcp.LocalConfigEncoded), [`Mcp.RemoteConfigEncoded`](/api#schema-Mcp.RemoteConfigEncoded)
+
+```ts
+interface MCPContext {
+  list(input?: McpListInput, requestOptions?: RequestOptions): Promise<McpListOutput>
+  transform(callback: (editor: MCPEditor) => void): Promise<Registration>
+  reload(): Promise<void>
+}
+
+interface MCPEditor {
+  list(): readonly (readonly [string, McpServerConfig])[]
+  get(name: string): McpServerConfig | undefined
+  set(name: string, config: McpServerConfig): void
+  update(name: string, update: (config: McpServerConfig) => void): void
+  remove(name: string): void
+}
+```
+
+### ปลั๊กอิน
+
+แสดงรายการปลั๊กอินที่ใช้งานอยู่ในขณะนี้สำหรับตำแหน่งหนึ่ง ๆ
+
+```ts
+const plugins = await ctx.plugin.list()
+```
+
+#### ข้อมูลอ้างอิง
+
+Schema: [`Plugin.Info`](/api#schema-Plugin.Info), [`Plugin.Source`](/api#schema-Plugin.Source)
+
+```ts
+interface PluginContext {
+  list(input?: PluginListInput, requestOptions?: RequestOptions): Promise<PluginListOutput>
+}
+```
+
+### ไดเรกทอรีอ้างอิง
+
+อ่านไดเรกทอรีอ้างอิง (reference) ที่ใช้ได้ที่ตำแหน่งหนึ่ง ๆ
+
+```ts
+const references = await ctx.reference.list()
+```
+
+ลงทะเบียน transform เพื่อตรวจสอบ เพิ่ม หรือลบไดเรกทอรีอ้างอิงแบบภายในเครื่องและแบบ Git `get(name)` จะส่งกลับแหล่งที่มาที่กำหนดค่าไว้ในปัจจุบัน หรือ `undefined` หากไม่มีชื่อนั้น
+
+```ts
+await ctx.reference.transform((editor) => {
+  const references = editor.list()
+  editor.add("handbook", { type: "local", path: "/workspace/docs/handbook" })
+  editor.add("standards", { type: "git", repository: "https://github.com/acme/standards", branch: "main" })
+  const handbook = editor.get("handbook")
+  editor.remove("legacy")
+})
+```
+
+โหลดไดเรกทอรีอ้างอิงใหม่หลังจากสถานะภายนอกที่ transform ใช้มีการเปลี่ยนแปลง
+
+```ts
+await ctx.reference.reload()
+```
+
+#### ข้อมูลอ้างอิง
+
+Schema: [`Reference.Info`](/api#schema-Reference.Info), [`Reference.LocalSource`](/api#schema-Reference.LocalSource), [`Reference.GitSource`](/api#schema-Reference.GitSource)
+
+```ts
+interface ReferenceContext {
+  list(input?: ReferenceListInput, requestOptions?: RequestOptions): Promise<ReferenceListOutput>
+  transform(callback: (editor: ReferenceEditor) => void): Promise<Registration>
+  reload(): Promise<void>
+}
+
+interface ReferenceEditor {
+  list(): readonly (readonly [string, ReferenceLocalSource | ReferenceGitSource])[]
+  get(name: string): ReferenceLocalSource | ReferenceGitSource | undefined
+  add(name: string, source: ReferenceLocalSource | ReferenceGitSource): void
+  remove(name: string): void
+}
+```
+
+### การสร้างข้อความ
+
+สร้างข้อความด้วยโมเดลที่เลือก โดยไม่สร้างเซสชัน ไม่เรียกใช้เครื่องมือ และไม่เพิ่มลงในประวัติของเซสชัน
+
+```ts
+const review = await ctx.generate.text({
+  model: { providerID: "anthropic", id: "claude-sonnet-4-6" },
+  prompt: "Review this proposed action.",
+})
+```
+
+### สิทธิ์
+
+ตรวจสอบหรือตอบคำขอสิทธิ์ที่รอดำเนินการ
+
+```ts
+const pending = await ctx.permission.list({ sessionID })
+const request = await ctx.permission.get({ sessionID, requestID })
+await ctx.permission.reply({ sessionID, requestID, reply: "once" })
+```
+
+แทนที่กฎสิทธิ์ระดับเซสชัน กฎเหล่านี้จะได้รับการประเมินหลังกฎของเอเจนต์ และกฎสุดท้ายที่ตรงกันจะมีผล เซสชันลูกจะสืบทอดกฎที่มีผลอยู่ ณ เวลาที่สร้างเซสชันนั้น
+
+```ts
+await ctx.permission.rules({
+  sessionID,
+  permissions: [{ action: "edit", resource: "/path/to/original/checkout/**", effect: "deny" }],
+})
+```
+
+### เซสชัน
+
+สร้างหรืออ่านเซสชัน
+
+```ts
+const created = await ctx.session.create({ title: "Review" })
+const session = await ctx.session.get({ sessionID })
+const messages = await ctx.session.context({ sessionID })
+```
+
+เปลี่ยนเอเจนต์หรือโมเดลที่ใช้กับคำขอถัดไป
+
+```ts
+await ctx.session.switchAgent({ sessionID, agent: "build" })
+await ctx.session.switchModel({ sessionID, model: { providerID: "anthropic", id: "claude-sonnet-4-5" } })
+```
+
+ส่งพรอมต์ของผู้ใช้ คำขอสร้างข้อความแบบชั่วคราว คำสั่ง หรือข้อความสังเคราะห์ (synthetic)
+
+```ts
+const prompt = await ctx.session.prompt({ sessionID, text: "Review the current changes" })
+const generated = await ctx.session.generate({ sessionID, prompt: "Summarize this project" })
+const command = await ctx.session.command({ sessionID, command: "review", arguments: "--staged" })
+const synthetic = await ctx.session.synthetic({ sessionID, text: "Deployment completed" })
+```
+
+เปลี่ยนชื่อ ขัดจังหวะ หรือรอเซสชัน
+
+```ts
+await ctx.session.update({ sessionID, title: "Review" })
+await ctx.session.interrupt({ sessionID, continue: false })
+await ctx.session.wait({ sessionID })
+```
+
+ลบเซสชันชั่วคราวด้วย `remove` การลบจะหยุดการทำงานที่กำลังดำเนินอยู่ และลบเซสชันลูกทั้งหมดแบบเรียกซ้ำ
+
+```ts
+await ctx.session.remove({ sessionID })
+```
+
+ขอให้บีบอัดบริบทด้วย `compact` เมธอดนี้ส่งกลับรายการ inbox ที่รับเข้าระบบแล้ว ไม่ใช่สรุปที่เสร็จสมบูรณ์ โดยค่าเริ่มต้น การบีบอัดบริบทจะทำงานที่ขอบเขตของ step ถัดไป หากต้องการคงลำดับในคิวไว้ ให้ส่ง `delivery: "queue"` แทน
+
+```ts
+const compaction = await ctx.session.compact({ sessionID })
+```
+
+#### ข้อมูลอ้างอิง
+
+Schema: [`Session.Info`](/api#schema-Session.Info), [`Model.Ref`](/api#schema-Model.Ref), [`Session.Inbox.User`](/api#schema-Session.Inbox.User), [`Session.Inbox.Synthetic`](/api#schema-Session.Inbox.Synthetic)
+
+```ts
+interface SessionContext {
+  create(input?: SessionCreateInput, requestOptions?: RequestOptions): Promise<SessionInfo>
+  get(input: SessionGetInput, requestOptions?: RequestOptions): Promise<SessionInfo>
+  remove(input: SessionRemoveInput, requestOptions?: RequestOptions): Promise<void>
+  context(input: SessionContextInput, requestOptions?: RequestOptions): Promise<readonly SessionMessageInfo[]>
+  switchAgent(input: SessionSwitchAgentInput, requestOptions?: RequestOptions): Promise<void>
+  switchModel(input: SessionSwitchModelInput, requestOptions?: RequestOptions): Promise<void>
+  update(input: SessionUpdateInput, requestOptions?: RequestOptions): Promise<void>
+  move(input: SessionMoveInput, requestOptions?: RequestOptions): Promise<void>
+  prompt(input: SessionPromptInput, requestOptions?: RequestOptions): Promise<SessionInboxUser>
+  generate(input: SessionGenerateInput, requestOptions?: RequestOptions): Promise<{ text: string }>
+  command(input: SessionCommandInput, requestOptions?: RequestOptions): Promise<SessionInboxUser>
+  compact(input: SessionCompactInput, requestOptions?: RequestOptions): Promise<SessionInboxCompaction>
+  synthetic(input: SessionSyntheticInput, requestOptions?: RequestOptions): Promise<SessionInboxSynthetic>
+  interrupt(input: SessionInterruptInput, requestOptions?: RequestOptions): Promise<void>
+  wait(input: SessionWaitInput, requestOptions?: RequestOptions): Promise<void>
+}
+```
+
+### สกิล
+
+อ่านสกิลที่ใช้ได้ที่ตำแหน่งหนึ่ง ๆ
+
+```ts
+const skills = await ctx.skill.list()
+```
+
+ลงทะเบียน transform เพื่อตรวจสอบ เพิ่ม อัปเดต หรือลบสกิล `get(id)` จะส่งกลับรายการปัจจุบันใน editor หรือ `undefined` หากไม่มีสกิลนั้น
+
+```ts
+await ctx.skill.transform((editor) => {
+  const skills = editor.list()
+  editor.add({
+    id: "review",
+    name: "Review",
+    description: "Review the current changes",
+    path: "/workspace/.opencode/skills/review/SKILL.md",
+    content: "Review the current changes for correctness and missing tests.",
+  })
+  const review = editor.get("review")
+  editor.update("review", (skill) => {
+    skill.autoinvoke = true
+  })
+  editor.remove("legacy")
+})
+```
+
+โหลดสกิลใหม่หลังจากสถานะภายนอกที่ transform ใช้มีการเปลี่ยนแปลง
+
+```ts
+await ctx.skill.reload()
+```
+
+#### ข้อมูลอ้างอิง
+
+Schema: [`Skill.Info`](/api#schema-Skill.Info)
+
+```ts
+interface SkillContext {
+  list(input?: SkillListInput, requestOptions?: RequestOptions): Promise<SkillListOutput>
+  transform(callback: (editor: SkillEditor) => void): Promise<Registration>
+  reload(): Promise<void>
+}
+
+interface SkillEditor {
+  list(): readonly SkillInfo[]
+  get(id: string): SkillInfo | undefined
+  add(skill: SkillInfo): void
+  update(id: string, update: (skill: SkillInfo) => void): void
+  remove(id: string): void
+}
+```
+
+### พื้นที่จัดเก็บ
+
+จัดเก็บ อ่าน หรือลบค่า JSON แบบถาวรที่แยกตามปลั๊กอิน
+
+```ts
+await ctx.storage.set("settings", { strict: true })
+const settings = await ctx.storage.get("settings")
+await ctx.storage.remove("settings")
+```
+
+สแกนคีย์ตามคำนำหน้า โดยแบ่งหน้าด้วย cursor ได้ตามต้องการ
+
+```ts
+const page = await ctx.storage.scan({ prefix: "cache/", limit: 100 })
+const next = page.next
+```
+
+#### ข้อมูลอ้างอิง
+
+```ts
+interface StorageContext {
+  get(key: string): Promise<Json | undefined>
+  set(key: string, value: Json): Promise<void>
+  remove(key: string): Promise<void>
+  scan(options: StorageScanOptions): Promise<StorageScanResult>
+}
+
+interface StorageScanOptions {
+  prefix: string
+  after?: string
+  limit?: number
+}
+
+interface StorageScanResult {
+  entries: readonly { key: string; value: Json }[]
+  next?: string
+}
+```
+
+### เครื่องมือ
+
+อ่านเครื่องมือที่ลงทะเบียนอยู่ในขณะนี้ (หลังผ่าน transform ทั้งหมดแล้ว) จากภายนอก callback ของ transform เครื่องมือแต่ละตัวมี `id` ซึ่งเป็นชื่อที่มีผลจริง
+
+```ts
+const tools = await ctx.tool.list()
+const read = tools.find((tool) => tool.id === "read")
+```
+
+ลงทะเบียน อัปเดต และลบเครื่องมือด้วย transform แบบ synchronous ซึ่งใช้กับปลั๊กอินแบบ Promise ด้วย ให้โหลดข้อมูลภายนอกก่อนลงทะเบียนหรือโหลดใหม่ การลงทะเบียนที่ถูกต้องซึ่งมาทีหลังจะแทนที่เครื่องมือที่มีชื่อที่มีผลจริงเดียวกัน
+
+```ts
+const registration = await ctx.tool.transform((editor) => {
+  editor.namespace({
+    name: "acme",
+    description: "Customer account tools",
+  })
+  editor.add({
+    name: "greeting",
+    description: "Create a greeting",
+    input: {
+      type: "object",
+      properties: { name: { type: "string" } },
+      required: ["name"],
+      additionalProperties: false,
+    },
+    options: { namespace: "acme", codemode: true },
+    execute: async (input, context) => {
+      await context.progress({ status: "greeting" })
+      return { content: `Hello ${(input as { name: string }).name}!` }
+    },
+  })
+})
+```
+
+ตัวดำเนินการเครื่องมือแบบ Promise จะได้รับ `context.signal` ให้ส่งค่านี้ต่อให้งานที่ยกเลิกได้ เช่น `fetch` เพื่อให้การหยุดเซสชันหยุดการทำงานเบื้องหลังด้วย
+
+```ts
+execute: async ({ url }, context) => {
+  const response = await fetch(url, { signal: context.signal })
+  return { content: await response.text() }
+}
+```
+
+เรียก `reload()` หลังจากเปลี่ยนข้อมูลต้นทางที่ callback เก็บไว้ การโหลดใหม่จะเล่นซ้ำ transform ที่ใช้งานอยู่โดยไม่เปลี่ยนลำดับ และไม่รัน setup ของปลั๊กอินซ้ำ
+
+```ts
+await ctx.tool.reload()
+```
+
+ใช้ `list()` และ `get()` เพื่อตรวจสอบเครื่องมือที่อยู่ใน editor ในขณะนั้น เครื่องมือมี `id` ซึ่งเป็นชื่อที่มีผลจริง และ `get()` จะส่งกลับ `undefined` หากไม่มี ID นั้น ใช้ `update` และ `remove` กับชื่อเครื่องมือที่มีผลจริงซึ่งรวม namespace แล้ว (`acme_greeting` ในตัวอย่างด้านบน) จุดใน namespace และอักขระที่ไม่รองรับในชื่อเครื่องมือจะกลายเป็น `_` ชื่อที่ไม่มีอยู่จะถูกละเว้น การสร้างเครื่องมือต้องใช้ `add` พร้อมคำจำกัดความที่ครบถ้วน การอัปเดตจะคงชื่อและ namespace ไว้ หากต้องการแทนที่ schema หรือตัวเลือก ให้กำหนดค่าใหม่ทั้งก้อนแทนการแก้ไขค่าที่ซ้อนอยู่ข้างใน การอัปเดตที่ไม่ถูกต้องจะถูกบันทึกลง log และคำจำกัดความเดิมจะยังคงอยู่
+
+```ts
+await ctx.tool.transform((editor) => {
+  editor.update("acme_greeting", (tool) => {
+    tool.description = "Greet the user by name"
+  })
+  editor.remove("acme_obsolete")
+})
+```
+
+การอัปเดตและการลบจะเล่นซ้ำตามลำดับร่วมกับการเพิ่ม รวมถึงหลังจากรีเฟรชแคตตาล็อก MCP การ dispose การลงทะเบียนของรายการเหล่านั้นจะลบการเปลี่ยนแปลงออก และสร้างใหม่จาก transform ที่เหลืออยู่
+
+dispose การลงทะเบียนเพื่อลบ transform ของการลงทะเบียนนั้นและสร้างใหม่จาก transform ที่เหลืออยู่ ซึ่งจะทำให้คำจำกัดความก่อนหน้าที่เคยถูกแทนที่กลับมามีผล การ dispose เป็นแบบ idempotent และการยกเลิกการโหลดปลั๊กอินก็จะ dispose การลงทะเบียนของปลั๊กอินด้วย
+
+```ts
+await registration.dispose()
+```
+
+คำขอไปยังโมเดลแต่ละครั้งจะเก็บสแนปช็อตของเครื่องมือที่คงที่และเรียกใช้ได้ transform การโหลดใหม่ และการ dispose ที่เกิดขึ้นภายหลังจะมีผลกับสแนปช็อตในอนาคตเท่านั้น ไม่มีผลกับคำจำกัดความ คำอธิบาย namespace ของ Code Mode หรือตัวดำเนินการที่เก็บไว้แล้ว ตัวดำเนินการที่อ้างถึงข้อมูลของปลั๊กอินที่เปลี่ยนแปลงได้ (closure) จะยังเห็นข้อมูลนั้นอยู่ หากค่าต้องผูกกับคำจำกัดความนั้นตลอด ให้เก็บค่าไว้ภายใน transform
+
+#### ข้อมูลอ้างอิง
+
+Schema: [`Tool.Content`](/api#schema-Tool.Content), [`Tool.TextContent`](/api#schema-Tool.TextContent), [`Tool.FileContent`](/api#schema-Tool.FileContent)
+
+```ts
+interface ToolContext {
+  list(): Promise<readonly (ToolInfo & { readonly id: string })[]>
+  transform(callback: (editor: ToolEditor) => void): Promise<Registration>
+  reload(): Promise<void>
+}
+
+interface ToolEditor {
+  list(): readonly (ToolInfo & { readonly id: string })[]
+  get(id: string): (ToolInfo & { readonly id: string }) | undefined
+  namespace(namespace: { name: string; description: string }): void
+  add(tool: ToolInfo): void
+  update(id: string, update: (tool: Types.Mutable<ToolInfo>) => void): void
+  remove(id: string): void
+}
+```
+
+### VCS
+
+อ่านข้อมูล repository สถานะของ working copy หรือ diff ของไฟล์
+
+```ts
+const info = await ctx.vcs.get()
+const branches = await ctx.vcs.branches({ search: "feature", limit: 10 })
+const changes = await ctx.vcs.status()
+const diff = await ctx.vcs.diff({ mode: "working", context: 3 })
+```
+
+ลงทะเบียนผู้ให้บริการ VCS ระดับตำแหน่งด้วย transform ผู้ให้บริการที่ตรงกับชนิด repository ที่ตรวจพบจะถูกเลือกโดยอัตโนมัติ ใช้ `editor.default.set` เพื่อเลือกผู้ให้บริการอื่น
+
+```ts
+await ctx.vcs.transform((editor) => {
+  editor.add({
+    id: "custom",
+    name: "Custom VCS",
+    info: async () => ({ branch: { current: "feature", default: "main" } }),
+    branches: async (input, { signal }) => readBranches(input, signal),
+    status: async (scope, { signal }) => readStatus(scope.worktree, signal),
+    diff: async (input, { signal }) => readDiff(input, signal),
+  })
+  editor.default.set("custom")
+})
+```
+
+callback ของผู้ให้บริการจะได้รับตำแหน่งปัจจุบัน ไดเรกทอรี root ของ working copy ไดเรกทอรี root ของโปรเจกต์แบบ canonical และ store ของ repository (ถ้ามี) ส่วน callback ของ diff จะได้รับโหมดที่เลือก บริบทที่ร้องขอ และขีดจำกัดจำนวนไบต์ของเอาต์พุตด้วย การค้นหา repository ยังคงใช้ตัวตรวจจับ Git และ Mercurial ในตัวของ OpenCode
+
+ผู้ให้บริการสามารถ implement `init(scope, { signal })` เพิ่มเติมได้ เพื่อสร้าง repository ใน `scope.worktree` การ initialize จะเลือกผู้ให้บริการตาม ID (ค่าเริ่มต้นคือ Git) ไม่ใช่ตามชนิด repository ที่ตรวจพบ ให้ลงทะเบียนผู้ให้บริการที่มี `init` แม้ตำแหน่งนั้นจะยังไม่มี repository ก็ตาม OpenCode จะตรวจสอบว่าไดเรกทอรีมีอยู่และยังไม่มี repository ก่อนเรียก `init` จากนั้นจึงค้นหาโปรเจกต์ใหม่ รูปแบบ repository ใหม่ยังคงต้องมีการรองรับการค้นหานอกเหนือจาก callback นี้
+
+#### ข้อมูลอ้างอิง
+
+Schema: [`Vcs.Info`](/api#schema-Vcs.Info), [`Vcs.FileStatus`](/api#schema-Vcs.FileStatus), [`FileDiff.Info`](/api#schema-FileDiff.Info)
+
+```ts
+interface VcsContext {
+  get(input?: VcsGetInput, requestOptions?: RequestOptions): Promise<VcsGetOutput>
+  branches(input?: VcsBranchesInput, requestOptions?: RequestOptions): Promise<VcsBranchesOutput>
+  status(input?: VcsStatusInput, requestOptions?: RequestOptions): Promise<VcsStatusOutput>
+  diff(input: VcsDiffInput, requestOptions?: RequestOptions): Promise<VcsDiffOutput>
+  transform(callback: (editor: VcsEditor) => void): Promise<Registration>
+  reload(): Promise<void>
+}
+
+interface VcsEditor {
+  add(definition: VcsDefinition): void
+  default: {
+    get(): string | undefined
+    set(providerID: string): void
+  }
+}
+
+interface VcsDefinition {
+  init?(scope: VcsScope, context: { signal: AbortSignal }): Promise<void>
+  // Existing info, branches, status, and diff callbacks are required.
+}
+```
+
+### Worktree
+
+ลงทะเบียนกลยุทธ์ (strategy) ของ worktree ภายในเครื่องผ่านวงจรการทำงานปกติของปลั๊กอิน ในตัวอย่างนี้ โมดูล implementation เป็นผู้ดูแลการตรวจสอบตัวเลือก และการทำงาน `create`, `remove` และ `list` ของแบ็กเอนด์
+
+```ts title="plugins/worktrees/index.ts"
+import { Plugin } from "@opencode/plugin"
+import { makeStrategy } from "./strategy"
+
+export default Plugin.define({
+  id: "company.worktrees",
+  async setup(ctx) {
+    const strategy = makeStrategy(ctx.options)
+    await ctx.worktree.transform((editor) => {
+      editor.add(strategy)
+    })
+  },
+})
+```
+
+โหลดปลั๊กอินผ่าน `plugins` และกำหนดค่าปลายทางที่ใช้ร่วมกันแยกต่างหาก:
+
+```jsonc title="opencode.jsonc"
+{
+  "worktree": { "directory": "../worktrees" },
+  "plugins": [{ "package": "./plugins/worktrees", "options": {} }],
+}
+```
+
+- การเพิ่มกลยุทธ์จะเลือกกลยุทธ์นั้นโดยอัตโนมัติ การลงทะเบียนล่าสุดที่ใช้งานอยู่จะมีผล จึงไม่ต้องกำหนดค่าเพื่อเลือกกลยุทธ์
+- การ dispose การลงทะเบียนหรือการยกเลิกการโหลดปลั๊กอินจะคืนค่า implementation ก่อนหน้า ซึ่งท้ายที่สุดคือกลยุทธ์ Git ที่มาพร้อมกับ OpenCode
+- `reload()` จะเล่นซ้ำ transform หลังจากอินพุตที่เก็บไว้เปลี่ยน และไม่รัน setup ของปลั๊กอินซ้ำ
+- หากการสร้างล้มเหลว จะไม่ลองใหม่ผ่าน Git และ worktree ที่มีอยู่แล้วจะคงเจ้าของที่บันทึกไว้ แม้ค่าเริ่มต้นจะเปลี่ยนไป
+- กลยุทธ์ใช้จัดการไดเรกทอรีภายในเครื่อง การจัดเตรียม workspace ระยะไกลไม่ได้เป็นส่วนหนึ่งของอินเทอร์เฟซนี้
+
+#### การทำงาน
+
+context ของปลั๊กอินมีการทำงานกับ worktree ตามโปรเจกต์แบบเดียวกับไคลเอนต์ ทุกการทำงานต้องระบุ `projectID` ส่วน `list` จะอ่านเฉพาะรายการที่บันทึกไว้ รวมถึง checkout ที่รู้จักของโปรเจกต์เดียวกัน โดยไม่โหลดการกำหนดค่า ไม่เริ่มปลั๊กอิน และไม่ค้นหาการเปลี่ยนแปลงในระบบไฟล์
+
+```ts
+const projectID = ctx.location.project.id
+const created = await ctx.worktree.create({ projectID, name: "task" })
+const inventory = await ctx.worktree.list({ projectID })
+await ctx.worktree.refresh({ projectID })
+await ctx.worktree.remove({ projectID, directory: created.directory, force: false })
+```
+
+การสร้าง (create) จะโหลดการกำหนดค่าและปลั๊กอินจากไดเรกทอรี `canonical` ที่บันทึกไว้ของโปรเจกต์ และใช้กลยุทธ์ที่เลือกไว้ในนั้น โดยรับ `directory` ที่เป็นไดเรกทอรีแม่ แหล่งที่มา `from` สาขาเริ่มต้น `branch` และ `name` ซึ่งไม่บังคับทั้งหมด แหล่งที่มาเริ่มต้นคือ checkout แบบ canonical และค่า `from` ที่ระบุแทนต้องเป็นของโปรเจกต์นั้น การเลือกแหล่งที่มาไม่ได้เปลี่ยน root ของการกำหนดค่า ref เริ่มต้นที่ระบุต้องได้รับการรองรับจากกลยุทธ์ที่เลือก ตัวอย่างเช่น การทำสแนปช็อตแบบเนทีฟของ Rift ไม่มีตัวเลือกสำหรับเลือก ref
+
+การสร้างและการรีเฟรชจะรอให้ปลั๊กอินของ checkout แบบ canonical เปิดใช้งานก่อน การเรียกที่เกิดขึ้นระหว่าง setup ของปลั๊กอินใน checkout นั้นจะเห็นการลงทะเบียนที่เกิดขึ้นจนถึงขณะนั้น และไม่รอการเปิดใช้งานของตัวเอง
+
+การลบ (remove) จะโหลดการกำหนดค่าแบบ canonical และเปิดใช้งานปลั๊กอิน จากนั้นใช้กลยุทธ์ที่บันทึกไว้ของ worktree แทนค่าเริ่มต้นที่เลือกอยู่ในปัจจุบัน หากเจ้าของที่บันทึกไว้ใช้งานไม่ได้ จะเกิดข้อผิดพลาด ปลายทางของ worktree อาจอยู่ที่อื่นได้:
+
+```ts
+await ctx.worktree.remove({
+  directory: "/worktrees/task",
+  projectID,
+  force: false,
+})
+```
+
+หากไม่มีเจ้าของ การลบจะล้มเหลวแทนการใช้ Git เป็นทางสำรอง กลยุทธ์สามารถ throw `new Worktree.OperationError({ message: "Uncommitted changes", forceRequired: true })` (โดย import `Worktree` จาก `@opencode/plugin`) เพื่อขอให้ยืนยันการบังคับลบ โดยไม่ต้องขึ้นกับข้อผิดพลาดของ Core หรือ Git
+
+การรีเฟรช (refresh) จะโหลดการกำหนดค่าแบบ canonical และให้กลยุทธ์ทั้งหมดที่ใช้ได้ค้นหา worktree ใน root ของ checkout ที่รู้จัก จากนั้นรวมผลลัพธ์ คงความเป็นเจ้าของที่บันทึกไว้ และตัดไดเรกทอรีที่ไม่มีอยู่แล้วออก หากแหล่งค้นหาใดล้มเหลว จะบันทึกลง log และแหล่งอื่นยังทำงานต่อ ไดเรกทอรีที่มีอยู่จะยังบันทึกไว้แม้ไม่มีกลยุทธ์ใดรายงานไดเรกทอรีนั้น ให้ติดตามอีเวนต์ `worktree.updated` แล้วเรียก `list` อีกครั้งเพื่ออ่านรายการที่เปลี่ยนแปลง
+
+```ts
+await ctx.worktree.refresh({ projectID })
+```
+
+#### ข้อมูลอ้างอิง
+
+implementation จะได้รับปลายทางที่แนะนำหลังจากตั้งชื่อและจัดการชื่อชนกันแล้ว ให้ส่งกลับไดเรกทอรีจริงจาก `create` ซึ่งอาจแตกต่างออกไปหากแบ็กเอนด์ต้องใช้โครงสร้างของตัวเอง OpenCode จะ resolve พาธที่ส่งกลับและใช้พาธนั้นสำหรับรายการ worktree คำสั่งตอนเริ่มต้น และผลลัพธ์ของ API ไดเรกทอรีที่ส่งกลับต้องมีอยู่จริง
+
+กลยุทธ์ที่เลือกปลายทางอื่นต้องจัดการชื่อชนกันที่ปลายทางนั้นเอง ทั้งนี้ OpenCode ยังคงสร้างไดเรกทอรีแม่ที่แนะนำไว้ก่อนเรียกกลยุทธ์ `list` ต้องรายงานเฉพาะไดเรกทอรีที่กลยุทธ์เป็นเจ้าของ รวมถึง root ของ repository
+
+```ts
+interface WorktreeDefinition {
+  readonly id: string
+  create(
+    input: { sourceDirectory: string; directory: string; branch?: string },
+    context: { signal: AbortSignal },
+  ): Promise<{ directory: string }>
+  remove(input: { directory: string; force: boolean }, context: { signal: AbortSignal }): Promise<void>
+  list(
+    sourceDirectory: string,
+    context: { signal: AbortSignal },
+  ): Promise<readonly { directory: string; type: "root" | "worktree" }[]>
+}
+
+interface WorktreeEditor {
+  add(definition: WorktreeDefinition): void
+}
+
+interface WorktreeDomain extends WorktreeApi {
+  transform(callback: (editor: WorktreeEditor) => void): Promise<Registration>
+  reload(): Promise<void>
+}
+```
+
+callback แบบ Promise ต้องรองรับการยกเลิกผ่าน `signal` ส่วน callback แบบ Effect จะส่งกลับ Effect และใช้การ interrupt ของ Effect แทน การลงทะเบียนจะผูกกับขอบเขตของรันไทม์ปลั๊กอิน ส่วนการทำงานระดับโปรเจกต์จะใช้ registry ของ checkout แบบ canonical โดยตัวแปลงการกำหนดค่าของ Core จะส่งการตั้งค่าไดเรกทอรีเข้าไปใน registry นั้น
+
+### การค้นหาเว็บ
+
+แสดงรายการผู้ให้บริการค้นหาเว็บ หรือค้นหาผ่านผู้ให้บริการที่เลือก
+
+```ts
+const providers = await ctx.websearch.providers()
+const results = await ctx.websearch.query({ query: "OpenCode plugins", providerID: "internal" })
+```
+
+ลงทะเบียนผู้ให้บริการและเลือกผู้ให้บริการเริ่มต้นด้วย transform
+
+```ts
+await ctx.websearch.transform((editor) => {
+  editor.add({
+    id: "internal",
+    name: "Internal search",
+    execute: async ({ query }, { signal }) => {
+      const response = await fetch(`https://search.example.com?q=${encodeURIComponent(query)}`, { signal })
+      const result = await response.json()
+      return [{ url: result.url, title: result.title, content: result.content, time: {} }]
+    },
+  })
+  editor.default.set("internal")
+})
+```
+
+ปิดการค้นหาเว็บโดยเลือก `false` หรือโหลดผู้ให้บริการใหม่หลังจากสถานะภายนอกเปลี่ยน
+
+```ts
+await ctx.websearch.transform((editor) => editor.default.set(false))
+await ctx.websearch.reload()
+```
+
+#### ข้อมูลอ้างอิง
+
+Schema: [`WebSearch.Provider`](/api#schema-WebSearch.Provider), [`WebSearch.Result`](/api#schema-WebSearch.Result)
+
+```ts
+interface WebSearchContext {
+  providers(input?: WebsearchProvidersInput, requestOptions?: RequestOptions): Promise<WebsearchProvidersOutput>
+  query(input: WebsearchQueryInput, requestOptions?: RequestOptions): Promise<WebsearchQueryOutput>
+  transform(callback: (editor: WebSearchEditor) => void): Promise<Registration>
+  reload(): Promise<void>
+}
+
+interface WebSearchEditor {
+  add(provider: WebSearchDefinition): void
+  default: {
+    get(): string | false | undefined
+    set(providerID: string | false): void
+  }
+}
+```
+
+### อีเวนต์
+
+สมัครรับสตรีมอีเวนต์สาธารณะของเซิร์ฟเวอร์ที่เชื่อมต่ออยู่ และยกเลิกสตรีมระหว่างการ cleanup ของปลั๊กอิน
+
+```ts
+const controller = new AbortController()
+void (async () => {
+  for await (const event of ctx.event.subscribe({ signal: controller.signal })) {
+    console.log(event.type)
+  }
+})()
+return () => controller.abort()
+```
+
+#### ข้อมูลอ้างอิง
+
+Schema: [`V2EventEncoded`](/api#schema-V2EventEncoded)
+
+```ts
+interface EventContext {
+  subscribe(options?: { signal?: AbortSignal }): AsyncIterable<OpenCodeEvent>
+}
+```
+
+## Hook
+
+hook ใช้ดักการทำงานที่กำลังเกิดขึ้น ลงทะเบียน hook บนโดเมนของ hook นั้น และ dispose การลงทะเบียนที่ส่งกลับมาเมื่อไม่ต้องการแล้ว
+
+```ts
+const registration = await ctx.session.hook("context", () => {})
+await registration.dispose()
+```
+
+ปลั๊กอินหลายตัวลงทะเบียน hook เดียวกันได้ OpenCode จะรัน hook ตามลำดับของปลั๊กอิน hook ที่ทำงานทีหลังจึงเห็นการเปลี่ยนแปลงจาก hook ก่อนหน้า
+
+### เซสชัน
+
+hook ของเซสชันใช้ดักการรับพรอมต์เข้าระบบ การเรียกโมเดล HTTP แบบเนทีฟ และการลองใหม่
+
+#### การรับพรอมต์เข้าระบบ
+
+ดักพรอมต์ของผู้ใช้ที่เข้ามา ก่อนการ resolve ไฟล์แนบและสกิล และก่อนรับเข้า inbox อย่างถาวร:
+
+```ts
+await ctx.session.hook("prompt", (event) => {
+  event.prompt.text = event.prompt.text.replaceAll("company-secret", "[redacted]")
+  event.prompt.files ??= []
+  event.prompt.files.push({ uri: "file:///project/policy.md" })
+  event.metadata = { ...event.metadata, source: "company-policy" }
+  event.delivery = "queue"
+})
+```
+
+hook จะได้รับฉบับร่างที่เป็นของ hook เองและแก้ไขได้:
+
+- `prompt` มี `text`, `files`, การกล่าวถึงเอเจนต์ใน `agents` และ `skills` ที่เลือก
+- `metadata` มีเมทาดาทาของการรับเข้าระบบที่แอปพลิเคชันกำหนด
+- `delivery` มีค่าเริ่มต้นเป็น `"steer"` และเปลี่ยนเป็น `"queue"` ได้
+- ID ของเซสชันและข้อความเป็นแบบอ่านอย่างเดียว hook จึงเปลี่ยนเป้าหมายของการรับเข้าระบบไม่ได้
+
+ไฟล์และสกิลที่ hook เพิ่มเข้ามาจะผ่านขั้นตอน resolve และตรวจสอบความถูกต้องตามปกติ เมื่อเขียนข้อความใหม่ ให้อัปเดตหรือลบ offset ของ `mention` ในไฟล์แนบที่ไม่ตรงกันแล้ว การกล่าวถึงเอเจนต์ไม่ได้เปลี่ยนเอเจนต์ที่ใช้งานอยู่ของเซสชัน
+
+hook ของพรอมต์ทำงานภายใต้เงื่อนไขต่อไปนี้:
+
+- hook ทำงานตามลำดับการลงทะเบียน หลังจากปลั๊กอินของตำแหน่งของเซสชันพร้อมแล้ว
+- คำสั่งที่ส่งผ่าน `session.prompt` จะรัน hook นี้
+- ข้อความสังเคราะห์ ข้อความ shell ตัวควบคุมการบีบอัดบริบท และตัวควบคุมการย้ายจะไม่รัน hook นี้
+- hook ทำงานครั้งเดียวระหว่างการรับเข้าระบบ ไม่ใช่ก่อนการเรียกโมเดลทุกครั้ง
+- จำกัดขอบเขตตามผู้ให้บริการไม่ได้ เพราะการ resolve โมเดลเกิดขึ้นหลังการรับเข้าระบบ
+
+การแก้ไขจะกลายเป็นอินพุตของผู้ใช้ฉบับหลักที่บันทึกไว้อย่างถาวร หากการเตรียมล้มเหลวหรือถูกขัดจังหวะ OpenCode จะไม่รับพรอมต์นั้นเข้าระบบ
+
+ทำให้ hook ของพรอมต์ปลอดภัยต่อการลองใหม่ เพราะ hook ไม่ได้รับประกันว่าผลข้างเคียงจะเกิดขึ้นเพียงครั้งเดียว:
+
+- การลองใหม่ด้วย ID ที่รอดำเนินการหรือส่งไปแล้วจะส่งกลับการรับเข้าระบบเดิมโดยไม่รัน hook ซ้ำ
+- การส่งพร้อมกันหลายครั้งอาจทำให้ hook ทำงานมากกว่าหนึ่งครั้ง แต่เฉพาะการรับเข้าระบบที่สำเร็จครั้งแรกเท่านั้นที่มีผล
+- hook ของพรอมต์ใช้แปลงอินพุต และไม่มี API แบบมี type สำหรับปฏิเสธพรอมต์
+
+#### คำขอไปยังโมเดล
+
+แก้ไขคำสั่งระบบ (system instructions) ข้อความ เครื่องมือ หรือตัวเลือกของคำขอที่ประกอบแล้ว ทันทีก่อนส่งไปยังโมเดล คำขอแต่ละประเภทที่เซสชันส่งมี hook ของตัวเอง ปลั๊กอินจึงจัดการลูปของเอเจนต์และคำขอเสริมต่างกันได้:
+
+- `context` ทำงานกับลูปของเอเจนต์ รวมถึงการทำงานต่อที่เกิดจากเครื่องมือ
+- `compaction` ทำงานกับการสรุป checkpoint `messages` คือบทสนทนาที่กำลังสรุป และ OpenCode จะต่อท้ายพรอมต์สำหรับสรุปหลังจาก hook ทำงานเสร็จ ตั้งค่า `result` เพื่อบันทึกการบีบอัดบริบทเองและข้ามการเรียกโมเดล โดยใช้ฟิลด์เดียวกับข้อความการบีบอัดบริบทที่เสร็จสมบูรณ์
+- `generate` ทำงานกับการเรียก `ctx.session.generate` แบบชั่วคราว
+- `title` ทำงานกับการสร้างชื่อเซสชัน ไม่มี `agent` หรือ `tools` ตั้งค่า `result` เพื่อกำหนดชื่อเอง
+
+```ts
+await ctx.session.hook("context", (event) => {
+  event.system.push({ type: "text", text: "Keep the review focused on correctness." })
+  delete event.tools.write
+  event.options.temperature = 0.2
+  event.options.maxTokens = 8_000
+})
+
+await ctx.session.hook("compaction", async (event) => {
+  event.result = { summary: await summarize(event.messages) }
+})
+```
+
+การเปลี่ยนแปลงมีผลเฉพาะกับการเรียกโมเดลที่กำลังจะส่งออกไป ไม่มีผลกับประวัติที่บันทึกไว้หรือการกำหนดค่า hook ที่ต้องมีผลกับทุกคำขอต้องลงทะเบียนสำหรับคำขอทุกประเภท
+
+การแทนที่ค่าในคำขอเป็นไปตามกฎต่อไปนี้:
+
+- `options` เริ่มต้นเป็นค่าว่างในการเรียกโมเดลแต่ละครั้ง และไม่มีการตั้งค่าโมเดลที่ resolve แล้ว
+- คีย์ที่มี type คือการตั้งค่าการสร้างข้อความ คีย์อื่นจะส่งต่อไปยังโปรโตคอลที่เลือกเป็นตัวเลือกของผู้ให้บริการ
+- hook ทำงานตามลำดับการลงทะเบียน และเห็นค่าแทนที่จาก hook ก่อนหน้า
+- ค่าแทนที่ในคำขอมีลำดับความสำคัญสูงกว่าค่าเริ่มต้นของโมเดล ซึ่งมีลำดับความสำคัญสูงกว่าค่าเริ่มต้นของ route
+- อ็อบเจกต์ตัวเลือกของผู้ให้บริการจะรวมกันแบบเรียกซ้ำ ส่วนอาร์เรย์และค่าสเกลาร์จะแทนที่ค่าก่อนหน้า
+- การลบค่าแทนที่หรือตั้งเป็น `undefined` จะกลับไปใช้ค่าเริ่มต้นที่กำหนดค่าไว้ ไม่ได้ลบค่าเริ่มต้นเหล่านั้นออก
+- body ของ HTTP แบบดิบที่ซ้อนทับจะมีผลหลังการแปลงเป็นรูปแบบของโปรโตคอล และแทนที่ฟิลด์ที่ได้ได้
+
+#### ตัวเลือกของผู้ให้บริการ
+
+ตัวเลือกของผู้ให้บริการใช้ชื่อตัวเลือกเชิงความหมายของโปรโตคอลที่เลือก ไม่ใช่ฟิลด์ใน body ของ HTTP แบบดิบ ให้จำกัดขอบเขตการตั้งค่าที่เจาะจงผู้ให้บริการไว้กับผู้ให้บริการที่ตรงกัน ตัวอย่างเช่น OpenAI Responses ใช้ `reasoningEffort`:
+
+```ts
+await ctx.session.hook(
+  "context",
+  (event) => {
+    event.options.reasoningEffort = "high"
+  },
+  { providerID: "openai" },
+)
+```
+
+ตัวเลือกการสร้างข้อความขึ้นอยู่กับโปรโตคอลและโมเดลที่เลือก:
+
+- `maxTokens` คือขีดจำกัดโทเค็นเอาต์พุตเชิงความหมาย
+- Gemini รองรับ `topK` แต่ OpenAI Responses ไม่มีตัวเลือกนี้
+
+#### การตั้งค่าคำขอไปยังโมเดล
+
+แก้ไขการตั้งค่าคำขอไปยังโมเดล และจำกัดขอบเขต hook ไว้กับผู้ให้บริการรายเดียวได้ตามต้องการ อีเวนต์มี `kind` เหมือนกับ hook ของ HTTP ด้านล่าง
+
+```ts
+await ctx.session.hook(
+  "model.request",
+  (event) => {
+    event.headers["x-plugin"] = "review"
+  },
+  { providerID: "anthropic" },
+)
+```
+
+#### HTTP แบบเนทีฟ
+
+แก้ไขคำขอหรือการตอบกลับแบบเนทีฟของผู้ให้บริการ body ของคำขอและการตอบกลับเป็นสตรีมที่อ่านได้ครั้งเดียว ให้ clone หรือแทนที่ body ก่อนอ่าน
+
+hook ทั้งสองทำงานกับทุกคำขอที่เซสชันส่ง `event.kind` ระบุว่าคำขอมาจากขั้นตอนใด ได้แก่ `"primary"` สำหรับลูปของเอเจนต์ `"compaction"` สำหรับการสรุป checkpoint `"title"` สำหรับการสร้างชื่อเซสชัน และ `"generate"` สำหรับการเรียก `ctx.session.generate` แบบชั่วคราว ให้ใช้ค่านี้แทน ID ของเอเจนต์เพื่อแยกคำขอเสริม
+
+```ts
+await ctx.session.hook("http.request", (event) => {
+  event.request.headers.set("x-session-id", event.sessionID)
+  if (event.kind === "title") event.request.headers.set("x-priority", "background")
+})
+
+await ctx.session.hook("http.response", (event) => {
+  event.response = new Response(event.response.body, {
+    status: event.response.status,
+    headers: { ...Object.fromEntries(event.response.headers), "x-plugin": "review" },
+  })
+})
+```
+
+#### WebSocket แบบเนทีฟ (ทดลอง)
+
+ผู้ให้บริการที่สตรีมผ่าน WebSocket จะเปิดการเชื่อมต่อหนึ่งรายการต่อเซสชันและใช้ซ้ำในหลายคำขอ `http.request` และ `http.response` จึงไม่เห็นทราฟฟิกนั้น hook `experimental.ws.handshake` จะทำงานหนึ่งครั้งต่อการเรียกโมเดลก่อนเลือกการเชื่อมต่อ โดยมี `sessionID`, `agent`, `model` และ `kind` เหมือนกับ hook ของ HTTP พร้อมด้วย `url` และ `headers` ของการเชื่อมต่อ การเปลี่ยน `url` หรือ `headers` จะเปลี่ยน socket ที่คำขอใช้ การหมุนเวียน bearer token จึงทำให้เปิดการเชื่อมต่อใหม่
+
+hook ของ HTTP ยังคงทำงานกับทุกคำขอ HTTP รวมถึงคำขอที่ route แบบ WebSocket ใช้เป็นทางสำรอง
+
+```ts
+await ctx.session.hook(
+  "experimental.ws.handshake",
+  async (event) => {
+    event.headers.authorization = `Bearer ${await mintToken(event.url)}`
+    delete event.headers["api-key"]
+  },
+  { providerID: "azure" },
+)
+```
+
+`experimental.ws.send` และ `experimental.ws.receive` ให้เข้าถึงตัวเฟรมโดยตรง ซึ่งเทียบเท่ากับการแก้ไข body ของคำขอหรือการตอบกลับ HTTP ในฝั่ง WebSocket `send` ทำงานหลังจากไดรเวอร์ของผู้ให้บริการสร้างเฟรมขาออกและก่อนเขียนเฟรมนั้น ส่วน `receive` ทำงานกับเฟรมขาเข้าแต่ละเฟรมก่อนที่ไดรเวอร์จะเห็น ทั้งสองส่งเฟรมมาเป็นสตริง และจะส่งค่าที่อยู่ใน `frame` ณ ตอนที่ hook ทำงานเสร็จ
+
+OpenCode ไม่ตรวจสอบความถูกต้องของเฟรมที่เขียนใหม่ ไดรเวอร์ติดตามสถานะจากการตอบกลับของผู้ให้บริการ การเขียนใหม่ที่เปลี่ยนความหมายของโปรโตคอลจึงเป็นความรับผิดชอบของปลั๊กอิน เช่นเดียวกับการเขียน body ของ HTTP ใหม่
+
+```ts
+await ctx.session.hook(
+  "experimental.ws.send",
+  (event) => {
+    const body = JSON.parse(event.frame)
+    if (body.type === "response.create") body.metadata = { ...body.metadata, session: event.sessionID }
+    event.frame = JSON.stringify(body)
+  },
+  { providerID: "openai" },
+)
+
+await ctx.session.hook("experimental.ws.receive", (event) => {
+  if (event.frame.includes('"type":"error"')) console.error(event.frame)
+})
+```
+
+hook เหล่านี้อยู่ในขั้นทดลอง ชื่อหรือรูปแบบอาจเปลี่ยนแปลงได้
+
+#### นโยบายการลองใหม่
+
+แทนที่การตัดสินใจลองใหม่เมื่อผู้ให้บริการล้มเหลว หรือแทนที่ระยะหน่วงเป็นมิลลิวินาที hook จะทำงานหลังจาก OpenCode จัดประเภทความล้มเหลวและเสนอนโยบายแล้ว แต่ก่อนกำหนดเวลาการลองใหม่ใด ๆ hook นี้ไม่เปิดเผยว่า OpenCode ดำเนินการครั้งถัดไปภายในอย่างไร
+
+```ts
+await ctx.session.hook("retry", (event) => {
+  if (event.error.status === 429) {
+    event.decision = { retry: true, delay: 10_000 }
+    return
+  }
+  if (event.error.type === "provider.invalid-request" && event.attempt === 2) {
+    event.decision = { retry: true, delay: 0 }
+    return
+  }
+  if (event.attempt >= 3) event.decision = { retry: false }
+})
+```
+
+hook การลองใหม่สามารถเปลี่ยน `decision` เริ่มต้นของ OpenCode ได้ โดยทำให้ความล้มเหลวที่เป็นจุดสิ้นสุดลองใหม่ได้ หรือยับยั้งการลองใหม่ที่เสนอไว้
+
+การตัดสินใจลองใหม่เป็นไปตามกฎต่อไปนี้:
+
+- hook หลายตัวทำงานตามลำดับการลงทะเบียน และ hook ที่ทำงานทีหลังจะเห็นการตัดสินใจปัจจุบัน
+- จำนวนครั้งสูงสุดในตัวยังคงเป็นขีดจำกัดที่เกินไม่ได้
+- `attempt` คือครั้งที่พยายามจริงที่กำลังพิจารณา คำขอแรกคือ `1` การลองใหม่ครั้งแรกจึงเป็น `2`
+- ระยะหน่วงที่ไม่ถูกต้อง เช่น `NaN` ค่าอนันต์ หรือค่าติดลบ จะกลับไปใช้ระยะหน่วงที่คำนวณไว้
+- การกู้คืนเมื่อบริบทล้นเป็นกลไกแยกต่างหาก เพราะจะบีบอัดบทสนทนาแทนการลองส่งคำขอเดิมซ้ำ
+
+#### ข้อมูลอ้างอิง hook ของเซสชัน
+
+```ts
+import type { SessionPrompt } from "@opencode/plugin/promise/session"
+
+interface SessionHooks {
+  prompt: SessionPrompt
+  context: SessionContextHook
+  compaction: SessionContextHook & { result?: SessionCompactionResult }
+  generate: SessionContextHook
+  title: SessionRequestHook & { result?: string }
+  "model.request": SessionModelRequestHook
+  "http.request": SessionHttpRequestHook
+  "http.response": SessionHttpResponseHook
+  "experimental.ws.handshake": SessionWebSocketHandshakeHook
+  "experimental.ws.send": SessionWebSocketSendHook
+  "experimental.ws.receive": SessionWebSocketReceiveHook
+  retry: SessionRetryHook
+}
+
+interface SessionWebSocketHandshakeHook {
+  readonly sessionID: string
+  readonly agent: string
+  readonly model: { providerID: string; id: string; variant?: string }
+  readonly kind: "primary" | "compaction" | "title" | "generate"
+  url: string
+  headers: Record<string, string>
+}
+
+interface SessionWebSocketSendHook {
+  readonly sessionID: string
+  readonly agent: string
+  readonly model: { providerID: string; id: string; variant?: string }
+  readonly kind: "primary" | "compaction" | "title" | "generate"
+  frame: string
+}
+
+interface SessionWebSocketReceiveHook {
+  readonly sessionID: string
+  readonly agent: string
+  readonly model: { providerID: string; id: string; variant?: string }
+  readonly kind: "primary" | "compaction" | "title" | "generate"
+  frame: string
+}
+
+type RetryDecision = { retry: false } | { retry: true; delay: number }
+
+interface SessionRetryHook {
+  readonly sessionID: string
+  readonly agent: string
+  readonly model: { providerID: string; id: string; variant?: string }
+  readonly error: { type: string; message: string; status?: number }
+  readonly attempt: number
+  decision: RetryDecision
+}
+
+interface SessionRequestHook {
+  readonly sessionID: string
+  readonly model: { providerID: string; id: string; variant?: string }
+  system: SystemPart[]
+  messages: Message[]
+  options: {
+    maxTokens?: number
+    temperature?: number
+    topP?: number
+    topK?: number
+    frequencyPenalty?: number
+    presencePenalty?: number
+    seed?: number
+    stop?: string[]
+  } & Record<string, unknown>
+}
+
+interface SessionContextHook extends SessionRequestHook {
+  readonly agent: string
+  tools: Record<string, { description: string; input: JsonSchema }>
+}
+
+interface SessionCompactionResult {
+  summary: string
+  providerState?: Record<string, unknown>
+  metadata?: Record<string, unknown>
+  tokens?: TokenUsage
+}
+
+interface SessionHookContext {
+  hook<Name extends keyof SessionHooks>(
+    name: Name,
+    callback: (event: SessionHooks[Name]) => Promise<void> | void,
+    options?: Name extends "prompt" ? never : { providerID?: string },
+  ): Promise<Registration>
+}
+```
+
+### สิทธิ์
+
+ตรวจสอบการตัดสินใจด้านสิทธิ์หลังจากประเมินกฎที่กำหนดค่าไว้แล้ว และก่อนที่การกระทำจะทำงานหรือก่อนแสดงคำขอสิทธิ์
+
+```ts
+await ctx.permission.hook("evaluate", async (event) => {
+  if (event.action === "read") return
+
+  const messages = await ctx.session.context({ sessionID: event.sessionID })
+  const review = await ctx.generate.text({
+    model: { providerID: "anthropic", id: "claude-sonnet-4-6" },
+    prompt: buildSafetyPrompt({ messages, action: event.action, resources: event.resources }),
+  })
+  const decision = parseDecision(review.text)
+
+  event.effect = decision.effect
+  event.message = decision.reason
+})
+```
+
+hook ของสิทธิ์เป็นไปตามกฎต่อไปนี้:
+
+- hook ทำงานกับการตัดสินใจแบบ `allow` และ `ask`
+- `deny` ที่กำหนดค่าไว้อย่างชัดเจนถือเป็นที่สิ้นสุดและไม่เรียก hook
+- hook สามารถเปลี่ยน `effect` เป็น `allow`, `ask` หรือ `deny`
+- `message` จะแสดงในคำขอสิทธิ์ที่ยกระดับขึ้นไปถามผู้ใช้ หรือใช้เป็นเหตุผลของการปฏิเสธ
+
+#### ข้อมูลอ้างอิง
+
+```ts
+interface PermissionEvaluation {
+  readonly sessionID: string
+  readonly agent?: string
+  readonly action: string
+  readonly resources: readonly string[]
+  readonly metadata?: Record<string, unknown>
+  readonly source?: { type: "tool"; messageID: string; id: string }
+  effect: "allow" | "ask" | "deny"
+  message?: string
+}
+```
+
+### Shell
+
+แก้ไขคำสั่ง shell ไดเรกทอรีทำงาน ระยะหมดเวลา ไฟล์ที่เรียกใช้งาน หรือตัวแปรสภาพแวดล้อมก่อนรัน
+
+```ts
+await ctx.shell.hook("create.before", (event) => {
+  event.timeout = Math.min(event.timeout, 60_000)
+  event.env.COMPANY_ENV = "development"
+})
+```
+
+#### ข้อมูลอ้างอิง
+
+```ts
+interface ShellHookContext {
+  hook(name: "create.before", callback: (event: ShellCreateBefore) => Promise<void> | void): Promise<Registration>
+}
+
+interface ShellCreateBefore {
+  command: string
+  cwd: string
+  timeout: number
+  shell: string
+  env: Record<string, string | undefined>
+}
+```
+
+### เครื่องมือ
+
+ตรวจสอบหรือแทนที่อินพุตของเครื่องมือก่อนทำงาน
+
+```ts
+await ctx.tool.hook("execute.before", (event) => {
+  if (event.tool === "read") console.log(event.input)
+})
+```
+
+ตรวจสอบผลลัพธ์ที่สำเร็จหรือความล้มเหลวหลังทำงาน
+
+```ts
+await ctx.tool.hook("execute.after", (event) => {
+  if (event.status === "completed") event.result = { ...event.result, metadata: { observed: true } }
+  if (event.status === "error") console.error(event.error.message)
+})
+```
+
+#### ข้อมูลอ้างอิง
+
+```ts
+interface ToolHooks {
+  "execute.before": ToolExecuteBefore
+  "execute.after": ToolExecuteCompleted | ToolExecuteFailed
+}
+
+interface ToolHookContext {
+  hook<Name extends keyof ToolHooks>(
+    name: Name,
+    callback: (event: ToolHooks[Name]) => Promise<void> | void,
+  ): Promise<Registration>
+}
+```
+
+## การเผยแพร่
+
+ปลั๊กอินแบบแพ็กเกจใช้ default export แบบเดียวกับปลั๊กอินภายในเครื่อง manifest ขั้นต่ำมีดังนี้:
+
+```json title="package.json"
+{
+  "name": "opencode-acme-plugin",
+  "version": "1.0.0",
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts",
+    "./rpc": "./src/rpc.ts"
+  },
+  "dependencies": {
+    "@opencode/plugin": "latest"
+  }
+}
+```
+
+การ export `./rpc` ไม่บังคับ ให้ใส่ไว้เมื่อเผยแพร่[สัญญา RPC](/build/plugins/rpc)ที่ใช้ร่วมกัน เพื่อให้ปลั๊กอินและไคลเอนต์อื่น import ได้โดยไม่ต้องโหลด implementation ของคุณ
+
+ใช้เวอร์ชันที่เข้ากันได้กับ OpenCode รุ่นที่คุณรองรับ และทดสอบแพ็กเกจที่ติดตั้งจริง ไม่ใช่เพียงสำเนาที่ลิงก์ผ่าน workspace เมื่อเปลี่ยนไปใช้สัญญา API ที่ใหม่กว่า ให้เผยแพร่อัปเดตปลั๊กอินที่เข้ากันได้
+
+## รองรับ V1
+
+ปลั๊กอินรองรับทั้ง V1 และ V2 จาก entrypoint ของแพ็กเกจเดียวกันได้ ให้ default export อ็อบเจกต์เดียวที่มีฟังก์ชัน `server()` สำหรับ V1 และฟังก์ชัน `setup()` สำหรับ V2:
+
+```ts title="src/index.ts"
+import { Plugin } from "@opencode/plugin"
+
+export default {
+  ...Plugin.define({
+    id: "example",
+    async setup(ctx) {
+      await ctx.tool.hook("execute.before", () => {
+        console.log("A tool is about to run")
+      })
+    },
+  }),
+  async server() {
+    return {
+      "tool.execute.before": async () => {
+        console.log("A tool is about to run")
+      },
+    }
+  },
+}
+```
+
+- V1 เรียก `server()` และใช้ hook ที่ส่งกลับมา
+- V2 อ่าน `id` และ `setup()` (หรือ `effect()` สำหรับปลั๊กอินแบบ Effect) จาก default export และละเว้น `server()`
+- ให้แต่ละ implementation ใช้ API ของตัวเอง การใช้ export ร่วมกันไม่ได้แปลง hook ของ V1 เป็น hook ของ V2
+- spread `Plugin.define(...)` ลงในอ็อบเจกต์ที่ export เพื่อให้ตรวจสอบ type ของคำจำกัดความ V2 แยกจาก `server()`
+
+รูปแบบอ็อบเจกต์ของ V1 รองรับใน OpenCode `1.18.29` ส่วน V1 รุ่นที่เก่ากว่าอาจคาดหวังให้ export เป็นฟังก์ชันแทน ให้ทดสอบแพ็กเกจที่ติดตั้งแล้วกับ V1 รุ่นที่เก่าที่สุดที่คุณตั้งใจจะรองรับ และกับ V2

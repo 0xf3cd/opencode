@@ -1,0 +1,93 @@
+---
+title: "SSO"
+description: "Accedi a un workspace di OpenCode Console tramite il tuo identity provider con OIDC o SAML."
+---
+
+Il single sign-on (SSO) fa passare i membri del workspace dall'identity provider della tua azienda al momento
+dell'accesso. Proprietari e amministratori lo configurano in **Settings › Security** ed è incluso in ogni workspace.
+
+| Protocollo     | Provider                                                                                    |
+| -------------- | ------------------------------------------------------------------------------------------- |
+| OpenID Connect | Google Workspace, Microsoft Entra ID, Okta, Auth0, Ping Identity o qualsiasi provider OIDC |
+| SAML 2.0       | Google Workspace, Microsoft Entra ID, Okta o qualsiasi provider SAML                        |
+
+Ogni workspace ha una sola connessione SSO.
+
+## Configurazione di OIDC
+
+1. Apri **Settings › Security**, fai clic su **Configure SSO** e scegli **OpenID Connect** e il tuo provider.
+2. Crea un'app nel tuo provider seguendo i passaggi indicati, con gli scope `openid`, `email` e `profile`.
+3. Inserisci l'**Issuer URL** (oppure il tuo tenant o dominio), il **Client ID**, il **Client Secret** e un
+   **Display Name**, quindi fai clic su **Save**.
+4. Copia il **Callback URL** della connessione tra gli URI di reindirizzamento consentiti del tuo provider.
+
+```text
+https://opencode.ai/console/auth/sso/ssoconn_.../callback
+```
+
+Al salvataggio la Console verifica che l'issuer sia raggiungibile. L'SSO è attivo non appena la connessione viene
+salvata.
+
+## Configurazione di SAML
+
+1. Apri **Settings › Security**, fai clic su **Configure SSO** e scegli **SAML 2.0** e il tuo provider.
+2. Copia l'**ACS URL** e l'**SP Entity ID** nel tuo provider. Con i provider personalizzati puoi usare in alternativa
+   l'**SP Metadata URL** o scaricare l'XML.
+3. Aggiungi i metadati del tuo provider tramite URL, caricamento dell'XML o incollandoli. Puoi anche inserire a mano
+   **IdP Entity ID**, **IdP SSO URL** e **IdP Certificate**.
+4. Controlla i dati e fai clic su **Activate SSO**.
+
+```text
+ACS URL:       https://opencode.ai/console/auth/sso/ssoconn_.../callback
+SP Entity ID:  https://opencode.ai/console/auth/sso/ssoconn_.../metadata
+```
+
+Il provider deve firmare la risposta o l'asserzione e inviare l'email dell'utente come attributo `email` o come NameID.
+
+## Verifica dei domini email
+
+Chi accede alla [Console](https://opencode.ai/console) con un'email di un dominio verificato viene indirizzato al tuo
+identity provider. Una volta attivato l'SSO, fai clic su **Add domain** in **Email domains**, inserisci il dominio e
+pubblica il record TXT indicato.
+
+```text
+Name:   _opencode-console-challenge.example.com
+Type:   TXT
+Value:  oc-verify=...
+```
+
+Dopo aver pubblicato il record, fai clic su **Verify Domain**. La propagazione delle modifiche DNS può richiedere del
+tempo. Ogni dominio può appartenere a un solo workspace.
+
+## Obbligo di SSO
+
+Quando un workspace ha l'SSO, amministratori e membri devono accedere tramite SSO per aprire il workspace e la Console li
+reindirizza automaticamente. La stessa regola vale quando si collega OpenCode con `/connect`.
+
+I proprietari possono accedere anche senza SSO, così un provider configurato male non può bloccare l'accesso alle
+impostazioni del workspace.
+
+## Iscrizione automatica
+
+Le persone di un dominio verificato entrano nel workspace come **Member** al primo accesso tramite SSO. Non vengono
+aggiunte automaticamente quando:
+
+- Hanno un invito in sospeso. In questo caso viene usato l'invito.
+- Il workspace usa la [sincronizzazione della directory](/console/scim), che decide chi è membro.
+- Il workspace ha un abbonamento [Go](/console/go).
+
+Gli inviti a un workspace con SSO indirizzano la persona invitata al tuo identity provider quando apre il link.
+
+## Account esistenti
+
+Se qualcuno ha già un account della Console con la stessa email, la Console gli chiede di accedervi una volta per
+collegare l'SSO. Le persone invitate e quelle aggiunte dalla sincronizzazione della directory vengono collegate
+automaticamente.
+
+## Modifica o eliminazione
+
+Fai clic su **Edit** sulla connessione per modificarne i dati. Lascia vuoto il secret o il certificato per mantenere
+quello attuale. Per passare da OIDC a SAML o viceversa, elimina la connessione e creane una nuova.
+
+Elimina la connessione da **⋯ › Delete...**. I membri tornano ai loro altri metodi di accesso e la sincronizzazione
+della directory si interrompe, con la revoca dei relativi token. I domini email vengono mantenuti.

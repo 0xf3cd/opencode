@@ -1,0 +1,94 @@
+---
+title: "簡介"
+---
+
+在專案中執行 CLI，即可開啟全螢幕終端機介面：
+
+```bash
+opencode
+```
+
+傳入目錄路徑，即可在其他專案中工作：
+
+```bash
+opencode ~/code/my-project
+```
+
+建議使用的終端機：
+
+- [Ghostty](https://ghostty.org)
+- [WezTerm](https://wezterm.org)
+- [Alacritty](https://alacritty.org)
+- [Kitty](https://sw.kovidgoyal.net/kitty/)
+
+支援全彩（truecolor）的終端機能最準確地呈現主題色彩；不支援的終端機則會以可用的調色盤近似呈現。
+
+## 自動化
+
+使用 `opencode run` 可以直接送出提示詞，不必開啟互動式介面。這個指令專為指令碼、CI 工作，以及其他需要直接在終端機中取得模型輸出的工作流程而設計。
+
+```bash
+opencode run "Explain this repository"
+```
+
+## Mini
+
+使用 `opencode mini` 可以啟動 OpenCode 的精簡互動式介面，取代全螢幕 TUI。
+
+```bash
+opencode mini
+```
+
+執行 `opencode mini --help`，查看工作階段、模型、代理、提示詞和重播等選項。
+
+## 背景服務
+
+根據預設，OpenCode 會為你的使用者帳戶尋找或啟動一個共用的背景伺服器。每個本機 OpenCode 用戶端都會連線到這個伺服器，由它負責管理工作階段、設定、整合、權限和工具執行。
+
+使用 `--standalone` 以私有伺服器執行，或使用 `--server` 連線到指定的伺服器 URL：
+
+```bash
+opencode --standalone
+opencode --server http://localhost:4096
+```
+
+如果希望 CLI 指令預設使用私有伺服器，而不啟動共用服務，請停用共用服務：
+
+```bash
+opencode service set disabled true
+opencode
+```
+
+這會停止正在執行的背景服務。`--server` 仍然會連線到明確指定的伺服器，`opencode service start` 也仍然可以明確啟動共用服務。若要恢復自動使用服務，請執行 `opencode service unset disabled`。配對功能需要共用服務，停用期間無法使用。
+
+共用服務的診斷方式請參閱[疑難排解](/troubleshooting)，伺服器端點請參閱 [API 參考](/api)。
+
+## 路徑
+
+印出特定的本機路徑，以便搭配其他工具使用：
+
+```bash
+opencode debug paths db
+sqlite3 "$(opencode debug paths db)"
+```
+
+選用的選擇器接受 `db`、`home`、`data`、`config`、`cache`、`state`、`tmp`、`bin`、`log` 或 `repos`，且只會印出路徑和一個換行字元。資料庫路徑會依循發行通道和 `OPENCODE_DB`；以相對路徑覆寫的資料庫會解析到資料目錄底下，`:memory:` 則會原樣印出。這個指令不會啟動伺服器，也不會開啟資料庫。
+
+省略選擇器即可顯示所有路徑及其標籤：
+
+```bash
+opencode debug paths
+```
+
+## 解除安裝
+
+預覽將被移除的檔案和安裝項目：
+
+```bash
+opencode uninstall --dry-run
+```
+
+執行 `opencode uninstall` 以確認移除。OpenCode 會先停止已註冊的背景服務和常駐終端機，再移除全域快取目錄；這個目錄由各個 OpenCode 版本和通道共用。工作階段資料、設定和狀態一律不會被移除。
+
+- `--force`（`-f`）會略過確認步驟，適合用於非互動式移除。
+- 透過套件管理員安裝的版本，會使用偵測到的套件管理員移除。透過 curl 安裝的版本，則會印出最後一道指令，讓你手動移除執行檔。

@@ -1,0 +1,393 @@
+---
+title: "ปุ่มลัด"
+---
+
+ปรับแต่งการผูกปุ่มได้ใน `cli.json`:
+
+```json title="cli.json"
+{
+  "keybinds": {
+    "leader": "ctrl+space",
+    "command.palette.show": "ctrl+k",
+    "app.exit": ["ctrl+c", "ctrl+d"],
+    "app.debug": false
+  },
+  "leader": {
+    "timeout": 1500
+  }
+}
+```
+
+ใช้สตริงสำหรับปุ่มเดียว:
+
+```json
+{
+  "keybinds": {
+    "command.palette.show": "ctrl+k"
+  }
+}
+```
+
+คั่นปุ่มทางเลือกด้วยเครื่องหมายจุลภาค:
+
+```json
+{
+  "keybinds": {
+    "app.exit": "ctrl+c,ctrl+d"
+  }
+}
+```
+
+ปิดการผูกปุ่มด้วย `"none"` หรือ `false`:
+
+```json
+{
+  "keybinds": {
+    "app.debug": "none",
+    "help.show": false
+  }
+}
+```
+
+ใช้อ็อบเจกต์เพื่อกำหนดการทำงานของอีเวนต์:
+
+```json
+{
+  "keybinds": {
+    "prompt.paste": {
+      "key": "ctrl+v",
+      "preventDefault": false
+    }
+  }
+}
+```
+
+ค่าเริ่มต้นของ `leader` คือ `ctrl+x` และ `<leader>` ในการผูกปุ่มอื่นจะหมายถึงปุ่มนั้น
+
+```json
+{
+  "keybinds": {
+    "leader": "ctrl+space",
+    "model.list": "<leader>m"
+  },
+  "leader": {
+    "timeout": 2000
+  }
+}
+```
+
+ID คำสั่งที่ไม่รู้จักจะถูกปฏิเสธ
+
+## แอปพลิเคชัน
+
+| ID | ค่าเริ่มต้น | คำอธิบาย |
+| --- | --- | --- |
+| `leader` | `ctrl+x` | ปุ่ม leader สำหรับการกดปุ่มลัดแบบผสม |
+| `app.exit` | `ctrl+c,ctrl+d,<leader>q` | ออกจากแอปพลิเคชัน |
+| `app.debug` | `none` | เปิด/ปิดแผงดีบัก |
+| `app.console` | `none` | เปิด/ปิดคอนโซล |
+| `app.scrap` | `none` | เปิดหน้าจอ scrap |
+| `app.toggle.animations` | `none` | เปิด/ปิดแอนิเมชัน |
+| `app.toggle.file_context` | `none` | เปิด/ปิดบริบทไฟล์ |
+| `app.toggle.diffwrap` | `none` | เปิด/ปิดการตัดบรรทัดใน diff |
+| `app.toggle.paste_summary` | `none` | เปิด/ปิดสรุปข้อความที่วาง |
+| `command.palette.show` | `ctrl+p` | แสดงรายการคำสั่งที่ใช้ได้ |
+| `help.show` | `none` | เปิดกล่องโต้ตอบวิธีใช้ |
+| `docs.open` | `none` | เปิดเอกสาร |
+| `opencode.settings` | `none` | เปิดการตั้งค่า |
+| `server.pair` | `none` | จับคู่อุปกรณ์ |
+| `service.restart` | `none` | รีสตาร์ตบริการ |
+
+## Mini
+
+คำสั่ง `app.clear` ใช้ได้เฉพาะใน [`opencode mini`](/cli) กด `ctrl+l` เพื่อล้างหน้าจอที่มองเห็นและวาดพรอมต์ใหม่ เทอร์มินัลจะยังเก็บ scrollback ไว้
+
+```json title="cli.json"
+{
+  "keybinds": {
+    "app.clear": "ctrl+l"
+  }
+}
+```
+
+| ID | ค่าเริ่มต้น | คำอธิบาย |
+| --- | --- | --- |
+| `app.clear` | `ctrl+l` | ล้างหน้าจอ |
+
+## ตัวแสดง Diff
+
+กด `d` (`diff.switch_source`) เพื่อเลือก **All**, **Committed**, **Uncommitted** หรือ **Last turn** (ภายในเซสชัน) หรือเลือก **Base** เพื่อเปลี่ยนบรานช์ที่ใช้เปรียบเทียบ ตัวเลือกจะถูกจดจำไว้จนกว่าจะออกจาก TUI กำหนดขอบเขตเริ่มต้นได้ด้วย [`diffs.source` ใน `cli.json`](/cli/config#diffs)
+
+ปุ่มลัดสำหรับการเลื่อน การเลื่อนทีละหน้า และการไปยังจุดเริ่มต้น/จุดสิ้นสุดจะควบคุม diff เสมอ ไม่มีการสลับโฟกัสด้วยแป้นพิมพ์ ให้คลิกไฟล์เพื่อเปิด คลิกโฟลเดอร์เพื่อขยายหรือยุบ และใช้ล้อเมาส์เพื่อเลื่อนแผนผังไฟล์
+
+ใช้ `n` / `p` หรือ `alt+down` / `alt+up` (ปุ่ม Option บน macOS) เพื่อย้ายไปมาระหว่างไฟล์ ภายในตัวแสดง diff ปุ่มลัด Alt จะใช้นำทางระหว่างไฟล์แทนแท็บเซสชัน
+
+กด `m` เพื่อทำเครื่องหมายว่ารีวิวไฟล์แล้วและยุบเนื้อหา patch ในมุมมองทุกไฟล์ กด `m` อีกครั้งเพื่อยกเลิกเครื่องหมายและเปิด patch อีกครั้ง มุมมองไฟล์เดียวจะเลื่อนไปยังไฟล์ถัดไปโดยอัตโนมัติเมื่อทำเครื่องหมายว่ารีวิวแล้ว แต่จะหยุดอยู่ที่ไฟล์สุดท้ายโดยไม่วนกลับไปไฟล์แรก การยกเลิกเครื่องหมายจะไม่เลื่อนไปไฟล์ถัดไป
+
+คลิกขวาที่ไฟล์ในแถบด้านข้างหรือที่หัวข้อ diff ของไฟล์เพื่อเลือก **Mark complete** (หรือ **Mark incomplete**) ซึ่งเปลี่ยนสถานะการรีวิวเดียวกับ `m` การทำเครื่องหมายว่าเสร็จให้ไฟล์อื่นจากเมนูจะไม่เลือกไฟล์นั้นและไม่เลื่อนไฟล์ที่กำลังอ่านอยู่
+
+ปุ่มทางเลือกแบบมี Shift ของ `diff.help` มีไว้รองรับเทอร์มินัลที่รายงานปุ่ม Shift เมื่อกด `?`
+
+| ID | ค่าเริ่มต้น | คำอธิบาย |
+| --- | --- | --- |
+| `diff.open` | `none` | เปิดตัวแสดง diff |
+| `diff.close` | `escape,q` | ปิดตัวแสดง diff |
+| `diff.down` | `j,down` | เลื่อนตัวแสดง diff ลง |
+| `diff.up` | `k,up` | เลื่อนตัวแสดง diff ขึ้น |
+| `diff.page.down` | `pagedown,ctrl+f` | เลื่อนตัวแสดง diff ลงหนึ่งหน้า |
+| `diff.page.up` | `pageup,ctrl+b` | เลื่อนตัวแสดง diff ขึ้นหนึ่งหน้า |
+| `diff.half_page.down` | `ctrl+d` | เลื่อนตัวแสดง diff ลงครึ่งหน้า |
+| `diff.half_page.up` | `ctrl+u` | เลื่อนตัวแสดง diff ขึ้นครึ่งหน้า |
+| `diff.first` | `gg,home` | ไปยังจุดเริ่มต้นของ diff |
+| `diff.last` | `shift+g,end` | ไปยังจุดสิ้นสุดของ diff |
+| `diff.next_hunk` | `]` | ข้ามไปยัง hunk ถัดไปของ diff |
+| `diff.previous_hunk` | `[` | ข้ามไปยัง hunk ก่อนหน้าของ diff |
+| `diff.next_file` | `n,alt+down` | ข้ามไปยังไฟล์ถัดไปใน diff |
+| `diff.previous_file` | `p,alt+up` | ข้ามไปยังไฟล์ก่อนหน้าใน diff |
+| `diff.toggle_file_tree` | `b` | เปิด/ปิดแผนผังไฟล์ของตัวแสดง diff |
+| `diff.single_patch` | `s` | เปิด/ปิดมุมมอง patch เดียว |
+| `diff.switch_source` | `d` | เลือกขอบเขตการรีวิว diff |
+| `diff.toggle_view` | `v` | สลับมุมมองแบบ split หรือ unified ของตัวแสดง diff |
+| `diff.mark_reviewed` | `m` | สลับสถานะรีวิวแล้วของไฟล์ diff ที่เลือก |
+| `diff.help` | `?,shift+?,shift+/` | แสดงปุ่มลัดเพิ่มเติมของตัวแสดง diff |
+
+รายการกำหนดค่า `diff.toggle`, `diff.expand`, `diff.expand_all`, `diff.collapse` และ `diff.switch_focus` ที่เลิกใช้แล้วยังคงยอมรับได้ แต่จะไม่ลงทะเบียนปุ่มลัดอีกต่อไป
+
+## รูปลักษณ์และการนำทาง
+
+| ID | ค่าเริ่มต้น | คำอธิบาย |
+| --- | --- | --- |
+| `prompt.editor` | `<leader>e` | เปิดตัวแก้ไขภายนอก |
+| `theme.switch` | `none` | แสดงรายการธีมที่ใช้ได้ |
+| `theme.switch_mode` | `none` | สลับระหว่างโหมดธีมสว่างและมืด |
+| `theme.mode.lock` | `none` | ล็อกหรือปลดล็อกโหมดธีม |
+| `session.sidebar.toggle` | `<leader>b` | เปิด/ปิดแถบด้านข้าง |
+| `terminal.toggle` | `<leader>t` | เปิด/ปิดแผงเทอร์มินัล |
+| `session.toggle.scrollbar` | `none` | เปิด/ปิดแถบเลื่อนของเซสชัน |
+| `opencode.status` | `<leader>s` | ดูสถานะ |
+| `opencode.debug` | `none` | ดูข้อมูลดีบัก |
+
+## เซสชัน
+
+| ID | ค่าเริ่มต้น | คำอธิบาย |
+| --- | --- | --- |
+| `session.export` | `<leader>x` | ส่งออกเซสชันไปยังตัวแก้ไข |
+| `session.copy` | `none` | คัดลอกบทสนทนาของเซสชัน |
+| `session.move` | `none` | ย้ายเซสชัน |
+| `session.new` | `<leader>n` | สร้างเซสชันใหม่ |
+| `session.list` | `<leader>l` | แสดงรายการเซสชันทั้งหมด |
+| `open.menu` | `ctrl+o` | เปิดเซสชันและโปรเจกต์ล่าสุด |
+| `session.tab.next` | `ctrl+tab,alt+down` | สลับไปยังแท็บเซสชันที่เปิดอยู่ถัดไป |
+| `session.tab.previous` | `ctrl+shift+tab,alt+up` | สลับไปยังแท็บเซสชันที่เปิดอยู่ก่อนหน้า |
+| `session.tab.history.back` | `none` | ย้อนกลับในประวัติแท็บเซสชัน |
+| `session.tab.history.forward` | `ctrl+i` | ไปข้างหน้าในประวัติแท็บเซสชัน |
+| `session.tab.next_unread` | `alt+shift+down` | สลับไปยังแท็บเซสชันที่ยังไม่ได้อ่านถัดไป |
+| `session.tab.previous_unread` | `alt+shift+up` | สลับไปยังแท็บเซสชันที่ยังไม่ได้อ่านก่อนหน้า |
+| `session.tab.close` | `<leader>w` | ปิดแท็บเซสชันปัจจุบัน |
+| `session.tab.reopen` | `ctrl+shift+t` | เปิดแท็บเซสชันที่ปิดล่าสุดอีกครั้ง |
+| `session.timeline` | `<leader>g` | แสดงไทม์ไลน์ของเซสชัน |
+| `session.fork` | `none` | fork เซสชันจากข้อความ |
+| `session.rename` | `ctrl+r` | เปลี่ยนชื่อเซสชัน |
+| `session.delete` | `ctrl+d` | ลบเซสชัน |
+| `session.share` | `none` | แชร์เซสชันปัจจุบัน |
+| `session.unshare` | `none` | ยกเลิกการแชร์เซสชันปัจจุบัน |
+| `session.interrupt` | `escape` | ขัดจังหวะเซสชันปัจจุบัน |
+| `session.background` | `ctrl+b` | ย้ายเครื่องมือที่บล็อกเซสชันไปทำงานเบื้องหลัง |
+| `session.compact` | `<leader>c` | บีบอัดบริบทของเซสชัน |
+| `session.aside` | `none` | ถามคำถามแทรก |
+| `session.cd` | `none` | เปลี่ยนไดเรกทอรีทำงาน |
+| `session.queued_prompts` | `<leader>q` | จัดการพรอมต์ที่อยู่ในคิว |
+| `queued_prompt.undo` | `ctrl+u` | เลิกทำพรอมต์ที่อยู่ในคิว |
+| `queued_prompt.delete` | `ctrl+d` | ลบพรอมต์ที่อยู่ในคิว |
+| `session.toggle.exploration_grouping` | `none` | เปิด/ปิดการจัดกลุ่มการเรียกใช้เครื่องมือที่เกี่ยวข้อง |
+| `session.child.first` | `down` | เปิด/ปิดตัวเลือกเอเจนต์ย่อย |
+| `session.child.next` | `right` | ไปยังเซสชันลูกถัดไป |
+| `session.child.previous` | `left` | ไปยังเซสชันลูกก่อนหน้า |
+| `session.parent` | `up` | ไปยังเซสชันแม่ |
+| `session.pin.toggle` | `ctrl+f` | ปักหมุดหรือเลิกปักหมุดเซสชันในรายการเซสชัน |
+| `session.quick_switch.1` | `<leader>1` | สลับไปยังเซสชันในช่องด่วน 1 |
+| `session.quick_switch.2` | `<leader>2` | สลับไปยังเซสชันในช่องด่วน 2 |
+| `session.quick_switch.3` | `<leader>3` | สลับไปยังเซสชันในช่องด่วน 3 |
+| `session.quick_switch.4` | `<leader>4` | สลับไปยังเซสชันในช่องด่วน 4 |
+| `session.quick_switch.5` | `<leader>5` | สลับไปยังเซสชันในช่องด่วน 5 |
+| `session.quick_switch.6` | `<leader>6` | สลับไปยังเซสชันในช่องด่วน 6 |
+| `session.quick_switch.7` | `<leader>7` | สลับไปยังเซสชันในช่องด่วน 7 |
+| `session.quick_switch.8` | `<leader>8` | สลับไปยังเซสชันในช่องด่วน 8 |
+| `session.quick_switch.9` | `<leader>9` | สลับไปยังเซสชันในช่องด่วน 9 |
+| `session.tab.select.1` | `<leader>1,ctrl+1` | สลับไปยังแท็บเซสชัน 1 |
+| `session.tab.select.2` | `<leader>2,ctrl+2` | สลับไปยังแท็บเซสชัน 2 |
+| `session.tab.select.3` | `<leader>3,ctrl+3` | สลับไปยังแท็บเซสชัน 3 |
+| `session.tab.select.4` | `<leader>4,ctrl+4` | สลับไปยังแท็บเซสชัน 4 |
+| `session.tab.select.5` | `<leader>5,ctrl+5` | สลับไปยังแท็บเซสชัน 5 |
+| `session.tab.select.6` | `<leader>6,ctrl+6` | สลับไปยังแท็บเซสชัน 6 |
+| `session.tab.select.7` | `<leader>7,ctrl+7` | สลับไปยังแท็บเซสชัน 7 |
+| `session.tab.select.8` | `<leader>8,ctrl+8` | สลับไปยังแท็บเซสชัน 8 |
+| `session.tab.select.9` | `<leader>9,ctrl+9` | สลับไปยังแท็บเซสชัน 9 |
+| `session.tab.select.10` | `<leader>0,ctrl+0` | สลับไปยังแท็บเซสชัน 10 |
+
+## โมเดลและเอเจนต์
+
+| ID | ค่าเริ่มต้น | คำอธิบาย |
+| --- | --- | --- |
+| `stash.delete` | `ctrl+d` | ลบรายการที่ stash ไว้ |
+| `model.dialog.provider` | `ctrl+a` | เปิดรายการผู้ให้บริการจากกล่องโต้ตอบโมเดล |
+| `model.dialog.favorite` | `ctrl+f` | สลับสถานะโมเดลโปรด |
+| `model.list` | `<leader>m` | แสดงรายการโมเดลที่ใช้ได้ |
+| `model.cycle_recent` | `f2` | โมเดลที่ใช้ล่าสุดถัดไป |
+| `model.cycle_recent_reverse` | `shift+f2` | โมเดลที่ใช้ล่าสุดก่อนหน้า |
+| `model.cycle_favorite` | `none` | โมเดลโปรดถัดไป |
+| `model.cycle_favorite_reverse` | `none` | โมเดลโปรดก่อนหน้า |
+| `mcp.list` | `none` | แสดงรายการเซิร์ฟเวอร์ MCP |
+| `provider.connect` | `none` | เชื่อมต่อการผสานรวม |
+| `agent.list` | `<leader>a` | แสดงรายการเอเจนต์ |
+| `agent.cycle` | `shift+tab` | เอเจนต์ถัดไป |
+| `agent.cycle.reverse` | `none` | เอเจนต์ก่อนหน้า |
+| `variant.cycle` | `ctrl+t` | สลับ variant ของโมเดลทีละตัว |
+| `variant.list` | `none` | แสดงรายการ variant ของโมเดล |
+
+## การนำทางในเซสชัน
+
+| ID | ค่าเริ่มต้น | คำอธิบาย |
+| --- | --- | --- |
+| `session.page.up` | `pageup,ctrl+alt+b` | เลื่อนข้อความขึ้นหนึ่งหน้า |
+| `session.page.down` | `pagedown,ctrl+alt+f` | เลื่อนข้อความลงหนึ่งหน้า |
+| `session.line.up` | `ctrl+alt+y` | เลื่อนข้อความขึ้นหนึ่งบรรทัด |
+| `session.line.down` | `ctrl+alt+e` | เลื่อนข้อความลงหนึ่งบรรทัด |
+| `session.half.page.up` | `ctrl+alt+u` | เลื่อนข้อความขึ้นครึ่งหน้า |
+| `session.half.page.down` | `ctrl+alt+d` | เลื่อนข้อความลงครึ่งหน้า |
+| `session.first` | `ctrl+g,home,alt+home` | ไปยังข้อความแรก |
+| `session.last` | `ctrl+alt+g,end` | ไปยังข้อความสุดท้าย |
+| `session.message.next` | `none` | ไปยังข้อความถัดไป |
+| `session.message.previous` | `none` | ไปยังข้อความก่อนหน้า |
+| `session.message.user.next` | `none` | ไปยังข้อความถัดไปของผู้ใช้ |
+| `session.message.user.previous` | `none` | ไปยังข้อความก่อนหน้าของผู้ใช้ |
+| `session.messages_last_user` | `alt+end` | ไปยังข้อความล่าสุดของผู้ใช้ |
+| `messages.copy` | `<leader>y` | คัดลอกข้อความ |
+| `session.undo` | `<leader>u` | ย้อนข้อความ |
+| `session.redo` | `<leader>r` | กู้คืนข้อความที่ย้อนไว้ |
+| `session.toggle.thinking` | `none` | เปิด/ปิดการแสดงบล็อกการคิด |
+
+## คำสั่งของพรอมต์
+
+| ID | ค่าเริ่มต้น | คำอธิบาย |
+| --- | --- | --- |
+| `prompt.submit` | `none` | ส่งพรอมต์ |
+| `prompt.queue` | `<leader>return` | เข้าคิวพรอมต์ |
+| `prompt.editor_context.clear` | `none` | ล้างบริบทจากตัวแก้ไข |
+| `prompt.images.view` | `<leader>i` | ดูรูปภาพที่แนบไว้ |
+| `prompt.skills` | `none` | เปิดตัวเลือกสกิล |
+| `prompt.stash` | `none` | stash พรอมต์ |
+| `prompt.stash.pop` | `none` | นำพรอมต์ที่ stash ไว้กลับมา |
+| `prompt.stash.list` | `none` | แสดงรายการพรอมต์ที่ stash ไว้ |
+
+## การแก้ไขข้อความที่ป้อน
+
+| ID | ค่าเริ่มต้น | คำอธิบาย |
+| --- | --- | --- |
+| `prompt.clear` | `ctrl+c` | ล้างช่องป้อนข้อมูล |
+| `prompt.paste` | `{"key":"ctrl+v","preventDefault":false}` (`ctrl+v`; `preventDefault: false`) | วางจากคลิปบอร์ด |
+| `input.submit` | `return` | ส่งข้อความที่ป้อน |
+| `input.newline` | `shift+return,ctrl+return,alt+return,ctrl+j` | แทรกบรรทัดใหม่ในช่องป้อนข้อมูล |
+| `input.move.left` | `left,ctrl+b` | เลื่อนเคอร์เซอร์ไปทางซ้าย |
+| `input.move.right` | `right,ctrl+f` | เลื่อนเคอร์เซอร์ไปทางขวา |
+| `input.move.up` | `up` | เลื่อนเคอร์เซอร์ขึ้น |
+| `input.move.down` | `down` | เลื่อนเคอร์เซอร์ลง |
+| `input.select.left` | `shift+left` | เลือกไปทางซ้าย |
+| `input.select.right` | `shift+right` | เลือกไปทางขวา |
+| `input.select.up` | `shift+up` | เลือกขึ้นด้านบน |
+| `input.select.down` | `shift+down` | เลือกลงด้านล่าง |
+| `input.line.home` | `ctrl+a` | ไปยังต้นบรรทัด |
+| `input.line.end` | `ctrl+e` | ไปยังท้ายบรรทัด |
+| `input.select.line.home` | `ctrl+shift+a` | เลือกจนถึงต้นบรรทัด |
+| `input.select.line.end` | `ctrl+shift+e` | เลือกจนถึงท้ายบรรทัด |
+| `input.visual.line.home` | `alt+a` | ไปยังต้นบรรทัดที่แสดงผล |
+| `input.visual.line.end` | `alt+e` | ไปยังท้ายบรรทัดที่แสดงผล |
+| `input.select.visual.line.home` | `alt+shift+a` | เลือกจนถึงต้นบรรทัดที่แสดงผล |
+| `input.select.visual.line.end` | `alt+shift+e` | เลือกจนถึงท้ายบรรทัดที่แสดงผล |
+| `input.buffer.home` | `none` | ไปยังต้นบัฟเฟอร์ |
+| `input.buffer.end` | `none` | ไปยังท้ายบัฟเฟอร์ |
+| `input.select.buffer.home` | `shift+home` | เลือกจนถึงต้นบัฟเฟอร์ |
+| `input.select.buffer.end` | `shift+end` | เลือกจนถึงท้ายบัฟเฟอร์ |
+| `input.delete.line` | `ctrl+shift+d` | ลบบรรทัด |
+| `input.delete.to.line.end` | `ctrl+k` | ลบจนถึงท้ายบรรทัด |
+| `input.delete.to.line.start` | `ctrl+u` | ลบจนถึงต้นบรรทัด |
+| `input.backspace` | `backspace,shift+backspace` | ลบอักขระก่อนเคอร์เซอร์ (backspace) |
+| `input.delete` | `ctrl+d,delete,shift+delete` | ลบอักขระ |
+| `input.undo` | `ctrl+-,super+z` | เลิกทำ |
+| `input.redo` | `ctrl+.,super+shift+z` | ทำซ้ำ |
+| `input.word.forward` | `alt+f,alt+right,ctrl+right` | เลื่อนไปข้างหน้าหนึ่งคำ |
+| `input.word.backward` | `alt+b,alt+left,ctrl+left` | เลื่อนย้อนกลับหนึ่งคำ |
+| `input.select.word.forward` | `alt+shift+f,alt+shift+right` | เลือกคำถัดไป |
+| `input.select.word.backward` | `alt+shift+b,alt+shift+left` | เลือกคำก่อนหน้า |
+| `input.delete.word.forward` | `alt+d,alt+delete,ctrl+delete` | ลบคำถัดไป |
+| `input.delete.word.backward` | `ctrl+w,ctrl+backspace,alt+backspace` | ลบคำก่อนหน้า |
+| `input.select.all` | `super+a` | เลือกทั้งหมด |
+| `prompt.history.previous` | `up` | รายการก่อนหน้าในประวัติ |
+| `prompt.history.next` | `down` | รายการถัดไปในประวัติ |
+
+## ช่องเขียนพรอมต์
+
+| ID | ค่าเริ่มต้น | คำอธิบาย |
+| --- | --- | --- |
+| `composer.subagent.up` | `up` | เอเจนต์ย่อยก่อนหน้า |
+| `composer.subagent.down` | `down` | เอเจนต์ย่อยถัดไป |
+| `composer.subagent.select` | `return` | ไปยังเอเจนต์ย่อย |
+| `composer.subagent.interrupt` | `ctrl+d` | ขัดจังหวะเอเจนต์ย่อย |
+| `composer.shell.up` | `up` | shell ก่อนหน้า |
+| `composer.shell.down` | `down` | shell ถัดไป |
+| `composer.shell.select` | `return` | ดูเอาต์พุตของ shell |
+| `composer.shell.kill` | `ctrl+d` | หยุดคำสั่ง shell |
+
+เลือกคำสั่งที่กำลังทำงานในแท็บ **Shell** แล้วกด **Enter** หรือคลิกที่คำสั่ง เพื่อดู stdout และ stderr ที่บันทึกไว้ ใช้ **↑/↓**, **Page Up/Down** หรือ **Home** เพื่อเลื่อน **End** เพื่อติดตามเอาต์พุตใหม่ และ **Esc** เพื่อกลับโดยไม่หยุดคำสั่ง ตัวแสดงผลจะแสดงเอาต์พุตล่าสุดและยังเปิดอยู่หลังคำสั่งจบ เอาต์พุตที่เปลี่ยนทิศทางไปยังไฟล์จะไม่แสดงในนี้
+
+## กล่องโต้ตอบและการเติมอัตโนมัติ
+
+| ID | ค่าเริ่มต้น | คำอธิบาย |
+| --- | --- | --- |
+| `dialog.select.prev` | `up,ctrl+p` | ไปยังรายการก่อนหน้าในกล่องโต้ตอบ |
+| `dialog.select.next` | `down,ctrl+n` | ไปยังรายการถัดไปในกล่องโต้ตอบ |
+| `dialog.select.page_up` | `pageup` | เลื่อนขึ้นหนึ่งหน้าในกล่องโต้ตอบ |
+| `dialog.select.page_down` | `pagedown` | เลื่อนลงหนึ่งหน้าในกล่องโต้ตอบ |
+| `dialog.select.home` | `home` | ไปยังรายการแรกในกล่องโต้ตอบ |
+| `dialog.select.end` | `end` | ไปยังรายการสุดท้ายในกล่องโต้ตอบ |
+| `dialog.select.submit` | `return` | ยืนยันรายการที่เลือกในกล่องโต้ตอบ |
+| `dialog.prompt.submit` | `return` | ส่งพรอมต์ในกล่องโต้ตอบ |
+| `dialog.worktree.generate` | `tab` | สร้างชื่อ worktree |
+| `dialog.move_session.new` | `ctrl+a` | worktree ใหม่ |
+| `dialog.move_session.move` | `ctrl+m` | ย้ายเซสชันไปยัง worktree |
+| `dialog.move_session.delete` | `ctrl+d` | ลบ worktree |
+| `dialog.move_session.refresh` | `ctrl+r` | รีเฟรชรายการ worktree |
+| `prompt.autocomplete.prev` | `up,ctrl+p` | ไปยังรายการเติมอัตโนมัติก่อนหน้า |
+| `prompt.autocomplete.next` | `down,ctrl+n` | ไปยังรายการเติมอัตโนมัติถัดไป |
+| `prompt.autocomplete.hide` | `escape` | ซ่อนการเติมอัตโนมัติ |
+| `prompt.autocomplete.select` | `return` | เลือกรายการเติมอัตโนมัติ |
+| `prompt.autocomplete.complete` | `tab` | เติมรายการเติมอัตโนมัติให้สมบูรณ์ |
+| `permission.prompt.fullscreen` | `ctrl+f` | เปิด/ปิดโหมดเต็มหน้าจอของพรอมต์ขอสิทธิ์ |
+| `plugins.toggle` | `return` | เปิด/ปิดปลั๊กอิน |
+| `dialog.mcp.toggle` | `space` | เปิด/ปิดเซิร์ฟเวอร์ MCP |
+| `dialog.plugins.update` | `ctrl+u` | อัปเดตปลั๊กอินจากกล่องโต้ตอบปลั๊กอิน |
+| `dialog.plugins.check` | `ctrl+r` | ตรวจสอบอัปเดตของปลั๊กอิน |
+
+## เทอร์มินัลและปลั๊กอิน
+
+| ID | ค่าเริ่มต้น | คำอธิบาย |
+| --- | --- | --- |
+| `terminal.suspend` | `ctrl+z` | พักเทอร์มินัล (suspend) |
+| `terminal.title.toggle` | `none` | เปิด/ปิดชื่อหน้าต่างเทอร์มินัล |
+| `plugins.list` | `none` | เปิดกล่องโต้ตอบจัดการปลั๊กอิน |
+
+## Which-Key
+
+| ID | ค่าเริ่มต้น | คำอธิบาย |
+| --- | --- | --- |
+| `which-key.toggle` | `ctrl+alt+k` | เปิด/ปิดแผง which-key |
+| `which-key.layout.toggle` | `ctrl+alt+shift+k` | สลับเลย์เอาต์ของ which-key |
+| `which-key.pending.toggle` | `ctrl+alt+shift+p` | เปิด/ปิดตัวอย่างปุ่มที่รอกดต่อของ which-key |
+| `which-key.group.previous` | `ctrl+alt+left,ctrl+alt+[` | กลุ่ม which-key ก่อนหน้า |
+| `which-key.group.next` | `ctrl+alt+right,ctrl+alt+]` | กลุ่ม which-key ถัดไป |
+| `which-key.scroll.up` | `ctrl+alt+up,ctrl+alt+p` | เลื่อน which-key ขึ้น |
+| `which-key.scroll.down` | `ctrl+alt+down,ctrl+alt+n` | เลื่อน which-key ลง |
+| `which-key.page.up` | `ctrl+alt+pageup` | เลื่อน which-key ขึ้นหนึ่งหน้า |
+| `which-key.page.down` | `ctrl+alt+pagedown` | เลื่อน which-key ลงหนึ่งหน้า |
+| `which-key.home` | `ctrl+alt+home` | ข้ามไปยังการผูกปุ่มแรกของ which-key |
+| `which-key.end` | `ctrl+alt+end` | ข้ามไปยังการผูกปุ่มสุดท้ายของ which-key |

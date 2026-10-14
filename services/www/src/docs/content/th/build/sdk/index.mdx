@@ -1,0 +1,84 @@
+---
+title: "ภาพรวม"
+---
+
+`@opencode/sdk` โฮสต์ OpenCode ไว้ภายในแอปพลิเคชันของคุณโดยตรง ต่างจาก[ไคลเอนต์ผ่านเครือข่าย](/build/client) ตรงที่ SDK จะประกอบเซิร์ฟเวอร์ OpenCode ขึ้นมาและส่งการเรียก API ผ่าน HTTP router ของเซิร์ฟเวอร์ภายในหน่วยความจำ โดยไม่เปิด HTTP listener และไม่มีการส่งผ่านเครือข่ายเพิ่มเติมระหว่างไคลเอนต์กับเซิร์ฟเวอร์
+
+สำหรับ Cloudflare Durable Objects ดู[คู่มือ Cloudflare](/build/sdk/cloudflare)
+
+ติดตั้ง SDK:
+
+```sh
+bun add @opencode/sdk
+```
+
+## สร้างโฮสต์
+
+`OpenCode.create()` คืนค่าโฮสต์ที่ผู้เรียกต้องจัดการความเป็นเจ้าของเองอย่างชัดเจน ใช้ `await using` เพื่อปล่อย router บริการ Location ไฟเบอร์ และการลงทะเบียนปลั๊กอินที่ผูกกับ scope:
+
+```ts
+import { OpenCode } from "@opencode/sdk"
+
+await using opencode = await OpenCode.create()
+const session = await opencode.sessions.create({
+  location: { directory: "/workspace" },
+})
+
+await opencode.sessions.prompt({
+  sessionID: session.id,
+  text: "Review the current changes",
+})
+```
+
+หากใช้การจัดการทรัพยากรแบบชัดเจน (explicit resource management) ไม่ได้ ให้เรียก `await opencode.close()` เอง
+
+โฮสต์แบบฝังใช้ค่า Promise ข้อผิดพลาดที่ประกาศไว้ ตัวเลือกคำขอ และสตรีม `AsyncIterable` ชุดเดียวกับ `@opencode/client` โดยเปิดให้ใช้ไคลเอนต์ที่สร้างขึ้นอัตโนมัติแบบเต็ม และเพิ่มชื่อย่อ `sessions` และ `events` สำหรับกลุ่มเซสชันและกลุ่มอีเวนต์เพื่อความสะดวก
+
+## Worktree
+
+การดำเนินการกับ worktree ต้องระบุ `projectID` การสร้าง (create) และการรีเฟรช (refresh) จะโหลดการกำหนดค่าและปลั๊กอินจาก checkout หลัก (canonical checkout) ที่บันทึกไว้ของโปรเจกต์ การแสดงรายการ (list) อ่านเฉพาะรายการที่บันทึกไว้เท่านั้น ส่วนการลบ (remove) จะเปิดใช้งานปลั๊กอินของ checkout หลักและใช้กลยุทธ์ที่บันทึกไว้ หากกลยุทธ์นั้นใช้ไม่ได้ การลบจะล้มเหลว
+
+```ts
+const projectID = session.projectID
+const worktree = await opencode.worktree.create({ projectID, name: "task" })
+await opencode.worktree.refresh({ projectID })
+await opencode.worktree.remove({ projectID, directory: worktree.directory, force: false })
+```
+
+การรีเฟรชจะค้นหา worktree ในทุก checkout root ที่รู้จักโดยใช้กลยุทธ์ทั้งหมดที่มี ลงทะเบียนกลยุทธ์แบบกำหนดเองได้ผ่าน[worktree transform ของปลั๊กอิน](/build/plugins#worktrees)
+
+## สตรีมอีเวนต์
+
+```ts
+for await (const event of opencode.events.subscribe()) {
+  console.log(event.type)
+}
+```
+
+ส่ง `AbortSignal` ผ่านตัวเลือกคำขอที่สร้างขึ้นอัตโนมัติ หรือออกจากลูปการวนเพื่อยกเลิก body ของการตอบกลับ
+
+## ปรับแต่ง
+
+ปรับแต่งอินสแตนซ์ OpenCode ของคุณด้วยการลงทะเบียนปลั๊กอิน ส่งปลั๊กอินให้ `OpenCode.create()` เพื่อปรับแต่งเอเจนต์ โมเดล เครื่องมือ และพฤติกรรมอื่น ๆ เมื่อโฮสต์แบบฝังเริ่มทำงาน:
+
+```ts
+import { Plugin } from "@opencode/plugin"
+import { OpenCode } from "@opencode/sdk"
+
+const plugin = Plugin.define({
+  id: "customize-agent",
+  async setup(ctx) {
+    await ctx.agent.transform((agents) => {
+      agents.update("build", (agent) => {
+        agent.description = "Builds features and fixes bugs for our team"
+      })
+    })
+  },
+})
+
+await using opencode = await OpenCode.create({ plugins: [plugin] })
+```
+
+เรียก `await opencode.plugin(plugin)` เพื่อลงทะเบียนปลั๊กอินเพิ่มหลังจากเริ่มทำงานแล้ว
+
+ดู hook ของปลั๊กอิน transform เครื่องมือ และบริบทของปลั๊กอินทั้งหมดได้ที่[เอกสารปลั๊กอินฉบับเต็ม](/build/plugins)

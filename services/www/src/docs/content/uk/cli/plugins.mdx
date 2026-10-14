@@ -1,0 +1,61 @@
+---
+title: "Плагіни"
+---
+
+Плагіни, налаштовані в `opencode.json(c)`, які надають компонент TUI, CLI завантажує автоматично. Як створювати плагіни,
+див. у розділі [Створення плагінів](/build/plugins). Додавати той самий пакет у `cli.json` не потрібно. CLI отримує
+список активних плагінів від під'єднаного сервера OpenCode, тому це працює й тоді, коли сервер віддалений.
+
+Для плагінів лише для CLI використовуйте `cli.json`. Такі плагіни працюють локально в терміналі й залишаються активними,
+коли CLI під'єднується до віддаленого сервера:
+
+```json title="cli.json"
+{
+  "plugins": [
+    "opencode.example",
+    "opencode.example@1.0.0",
+    "@example/opencode-tui",
+    "@example/opencode-tui@1.0.0",
+    "./plugins/status",
+    "../plugins/status",
+    "/home/user/plugins/status",
+    "file:///home/user/plugins/status"
+  ]
+}
+```
+
+Записи обробляються по черзі. Щоб вимкнути відповідні плагіни, додайте перед ID або шаблоном із підстановкою префікс `-`:
+
+```json title="cli.json"
+{
+  "plugins": ["*", "-opencode.notifications", "-team.*"]
+}
+```
+
+Щоб передати параметри плагіна, використайте форму об'єкта:
+
+```json title="cli.json"
+{
+  "plugins": [
+    {
+      "package": "@example/opencode-tui",
+      "options": {
+        "compact": true
+      }
+    }
+  ]
+}
+```
+
+OpenCode також виявляє плагіни в глобальному каталозі конфігурації та в каталогах `.opencode` проєктів. Кожен плагін має
+ту саму структуру, що й опублікований пакет: точки входу для сервера і TUI розміщуються разом.
+
+```text title="Plugin discovery paths"
+<global-config>/plugins/status/index.ts
+<global-config>/plugins/status/tui.ts
+<project>/.opencode/plugins/status/index.ts
+<project>/.opencode/plugins/status/tui.ts
+```
+
+Виявлені плагіни можуть імпортувати `@opencode/plugin/tui` напряму; OpenCode знаходить цей пакет під час виконання.
+Приклади див. у розділі [Створення плагінів CLI](/build/plugins/cli).

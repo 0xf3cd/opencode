@@ -1,0 +1,135 @@
+---
+title: "Precalentamiento"
+---
+
+El precalentamiento de sesiones envía solicitudes periódicas al modelo para conservar las cachés de prompts del
+proveedor u otro estado de corta duración mientras haces una pausa entre prompts. Está desactivado de forma
+predeterminada.
+
+Activa el precalentamiento en cualquier [archivo de configuración de OpenCode](/config):
+
+```jsonc title="opencode.jsonc"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "warming": true,
+}
+```
+
+Con esta configuración, OpenCode precalienta una sesión activa recientemente tras cuatro minutos sin solicitudes al
+modelo. Lo repite cada cuatro minutos hasta que pasan 30 minutos desde la última solicitud que no sea de
+precalentamiento.
+
+## Opciones
+
+Usa la forma de objeto para cambiar el prompt de precalentamiento, el intervalo de inactividad o la ventana activa:
+
+```jsonc title="opencode.jsonc"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "warming": {
+    "prompt": "Do not perform any work. Reply with exactly: OK",
+    "interval": "5 minutes",
+    "duration": "1 hour",
+  },
+}
+```
+
+| Campo | Valor predeterminado | Función |
+| --- | --- | --- |
+| `prompt` | Instrucción para mantener activa la sesión | Se añade como mensaje de usuario transitorio en cada solicitud de precalentamiento. El valor predeterminado pide al modelo que no haga ningún trabajo, que no use herramientas y que responda con `OK`. |
+| `interval` | `"4 minutes"` | Tiempo de inactividad antes de la siguiente solicitud de precalentamiento. |
+| `duration` | `"30 minutes"` | Ventana de precalentamiento, contada desde la última solicitud al modelo que no sea de precalentamiento. |
+
+Los campos que omitas en el objeto conservan su valor predeterminado. Por ejemplo, esto solo cambia el intervalo:
+
+```jsonc title="opencode.jsonc"
+{
+  "warming": {
+    "interval": "2 minutes",
+  },
+}
+```
+
+## Duraciones
+
+`interval` y `duration` aceptan cadenas de duración. Ambas deben resolverse en valores finitos mayores que cero; de lo
+contrario, OpenCode omite el precalentamiento y registra una advertencia.
+
+```jsonc title="opencode.jsonc"
+{
+  "warming": {
+    "interval": "30 seconds",
+    "duration": "1 hour",
+  },
+}
+```
+
+## Temporización
+
+El precalentamiento empieza tras una solicitud al modelo que no sea de precalentamiento. Cuando termina una solicitud de
+precalentamiento, empieza el siguiente intervalo de inactividad, pero la ventana activa no se amplía.
+
+```text
+00:00  normal model request
+00:04  warming request
+00:08  warming request
+00:30  warming stops
+```
+
+Cualquier nueva actividad del modelo que no sea de precalentamiento reinicia ambos temporizadores. Si el intervalo es
+igual o más largo que la duración, la ventana activa vence antes de que se envíe ninguna solicitud de precalentamiento.
+
+```text
+00:00  normal model request
+00:20  normal model request; window restarts
+00:24  warming request
+00:50  warming stops
+```
+
+## Solicitudes
+
+Una solicitud de precalentamiento usa el modelo, el agente, las instrucciones y el contexto de conversación actuales de
+la sesión. OpenCode añade el prompt configurado de forma transitoria, hace una llamada al modelo y descarta la respuesta.
+
+```text
+[current session context]
+[transient user message: keep-alive prompt]
+→ one model response, discarded
+```
+
+La solicitud no incorpora entradas pendientes, no añade mensajes al historial ni modifica el estado persistente de la sesión. OpenCode
+no ejecuta llamadas a herramientas locales ni continúa un bucle de herramientas; además, el prompt predeterminado indica
+al modelo que no use herramientas.
+
+## Fallos
+
+Los fallos de precalentamiento se registran sin que la sesión falle ni cambie. OpenCode espera al siguiente intervalo
+para volver a intentarlo, mientras la ventana activa original sigue su cuenta atrás.
+
+```text
+00:04  warming request fails; session is unchanged
+00:08  next warming attempt
+```
+
+## Costes
+
+Las solicitudes de precalentamiento son solicitudes reales al proveedor. Pueden consumir tokens, generar costes,
+contar para los límites de solicitudes y fallar como cualquier otra solicitud al modelo.
+
+- Los intervalos más cortos aumentan el volumen de solicitudes.
+- Las duraciones más largas permiten más solicitudes de precalentamiento.
+- Activa el precalentamiento solo cuando su beneficio en el proveedor compense el uso adicional.
+
+Por ejemplo, los valores predeterminados permiten hasta siete intentos de precalentamiento durante una ventana
+ininterrumpida de 30 minutos: en los minutos 4, 8, 12, 16, 20, 24 y 28.
+
+## Desactivación
+
+Asigna `false` a `warming` para desactivarlo explícitamente. Si omites el campo, el precalentamiento también queda
+desactivado.
+
+```jsonc title="opencode.jsonc"
+{
+  "warming": false,
+}
+```

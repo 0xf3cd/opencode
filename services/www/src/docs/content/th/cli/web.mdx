@@ -1,0 +1,101 @@
+---
+title: "Web"
+description: "รัน OpenCode ในเบราว์เซอร์"
+---
+
+OpenCode มาพร้อมเว็บ UI ที่ให้บริการจากเซิร์ฟเวอร์เดียวกับที่ขับเคลื่อน TUI เว็บ UI เปิดใช้งานอยู่โดยค่าเริ่มต้นและป้องกันด้วยรหัสผ่าน
+
+## การเข้าถึง
+
+```bash
+$ opencode pair
+
+  Open a link to connect. Links work once and expire in 5 minutes.
+
+  http://127.0.0.1:49374/auth/connect/...
+
+  █▀▀▀▀▀█ ...
+```
+
+เมื่อเปิดลิงก์ในเบราว์เซอร์ เบราว์เซอร์จะลงชื่อเข้าใช้ด้วยคุกกี้เซสชันและโหลดเว็บ UI การสแกน QR code จากแอป OpenCode หรือการวางลิงก์ลงในช่องที่อยู่เซิร์ฟเวอร์ของแอป จะเชื่อมต่อแอปด้วยวิธีเดียวกัน เซสชันมีอายุ 30 วัน และการเปลี่ยนรหัสผ่านเซิร์ฟเวอร์จะทำให้ทุกเซสชันออกจากระบบ
+
+### ผ่าน SSH
+
+เมื่อเซิร์ฟเวอร์รับการเชื่อมต่อเฉพาะบน localhost ให้ส่งต่อพอร์ตของเซิร์ฟเวอร์จากเครื่องของคุณ แล้วเปิดลิงก์ที่พิมพ์ออกมาในเครื่อง:
+
+```bash
+$ ssh -L 49374:127.0.0.1:49374 my-server
+```
+
+โดยค่าเริ่มต้น เซิร์ฟเวอร์จะรันบนพอร์ต 49374 และรับการเชื่อมต่อเฉพาะบน localhost เปลี่ยนการกำหนดค่านี้ได้ด้วยคำสั่ง `opencode service`
+
+### การเข้าถึงระยะไกล
+
+หากต้องการเชื่อมต่อจากที่ใดก็ได้ ให้จับคู่ผ่านที่อยู่ระยะไกลของ [OpenTunnel](https://github.com/anomalyco/opentunnel):
+
+```bash
+$ opencode pair --remote
+```
+
+ครั้งแรกที่เปิดการเข้าถึงระยะไกล คำสั่งจะถามยืนยันก่อนดำเนินการต่อ:
+
+```text
+▲  This will expose your OpenCode server to the internet.
+│  Traffic is end-to-end encrypted, and access requires your server password.
+│  To pair locally instead, run `opencode pair` without the --remote flag.
+│
+◆  Expose your server to the internet?
+│  ● Yes / ○ No
+```
+
+หากไม่มีเทอร์มินัลแบบโต้ตอบ คำสั่งจะล้มเหลว เว้นแต่จะส่ง `--yes` เพื่อยอมรับ เมื่อยอมรับแล้ว การรันครั้งต่อ ๆ ไปจะข้ามการถามนี้ แม้ว่าจะปิดการเข้าถึงระยะไกลไปแล้วด้วย `opencode service set remote false` ก็ตาม
+
+## การกำหนดค่า
+
+ตั้งค่าตัวเลือกใดก็ได้ด้วย `opencode service set`:
+
+```bash
+# Listen on every network interface
+$ opencode service set hostname 0.0.0.0
+
+# Use a fixed port instead of the channel default
+$ opencode service set port 49374
+
+# Replace the generated password
+$ opencode service set password "a-long-secret"
+
+# Allow a web client served from another origin
+$ opencode service set cors https://app.example.com,https://other.example.com
+
+# Pass an environment variable to the server process
+$ opencode service set env OPENCODE_LOG_LEVEL DEBUG
+```
+
+การเปลี่ยนการตั้งค่าจะหยุดเซิร์ฟเวอร์เบื้องหลัง หากต้องการใช้การกำหนดค่าใหม่ ให้รัน:
+
+```bash
+$ opencode service start
+```
+
+## สแตนด์อโลน
+
+`opencode serve` รันเซิร์ฟเวอร์ตัวเดียวกันแบบเบื้องหน้า แทนการรันผ่านบริการเบื้องหลังที่ใช้ร่วมกัน
+
+```bash
+$ opencode serve --hostname 0.0.0.0 --port 4096
+server listening on http://0.0.0.0:4096
+server password <password>
+```
+
+ใช้คำสั่งนี้เมื่อต้องการ:
+
+- รัน OpenCode บนโฮสต์ที่ใช้ร่วมกัน เปิดตลอดเวลา หรืออยู่ระยะไกล แล้วเชื่อมต่อไคลเอนต์ด้วย `opencode --server <url>`
+- ควบคุม hostname พอร์ต และ origin ของ CORS สำหรับโปรเซสเดียว
+- รันภายใต้ตัวควบคุมโปรเซส (supervisor) อย่าง systemd, Docker หรือสภาพแวดล้อมอื่นที่ต้องการโปรเซสเบื้องหน้า
+- ใช้เซิร์ฟเวอร์เฉพาะแทนบริการเบื้องหลังที่ใช้ร่วมกัน
+
+เชื่อมต่อไคลเอนต์กับเซิร์ฟเวอร์นี้ด้วย `--server`:
+
+```bash
+$ opencode --server http://127.0.0.1:4096
+```

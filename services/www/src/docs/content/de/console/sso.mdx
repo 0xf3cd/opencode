@@ -1,0 +1,93 @@
+---
+title: "SSO"
+description: "Über deinen Identitätsanbieter per OIDC oder SAML bei einem Workspace der OpenCode Console anmelden."
+---
+
+Mit Single Sign-on (SSO) melden sich Mitglieder des Workspace über den Identitätsanbieter deines Unternehmens an. Owner
+und Admins richten es unter **Settings › Security** ein; SSO ist in jedem Workspace enthalten.
+
+| Protokoll      | Anbieter                                                                                   |
+| -------------- | ------------------------------------------------------------------------------------------ |
+| OpenID Connect | Google Workspace, Microsoft Entra ID, Okta, Auth0, Ping Identity oder jeder OIDC-Anbieter |
+| SAML 2.0       | Google Workspace, Microsoft Entra ID, Okta oder jeder SAML-Anbieter                        |
+
+Jeder Workspace hat eine SSO-Verbindung.
+
+## OIDC einrichten
+
+1. Öffne **Settings › Security**, klicke auf **Configure SSO** und wähle **OpenID Connect** sowie deinen Anbieter.
+2. Erstelle anhand der angezeigten Schritte eine App bei deinem Anbieter, mit den Scopes `openid`, `email` und `profile`.
+3. Gib die **Issuer URL** oder deinen Tenant bzw. deine Domain ein, dazu **Client ID**, **Client Secret** und einen
+   **Display Name**, und klicke dann auf **Save**.
+4. Kopiere die **Callback URL** der Verbindung in die zulässigen Redirect-URIs deines Anbieters.
+
+```text
+https://opencode.ai/console/auth/sso/ssoconn_.../callback
+```
+
+Beim Speichern prüft die Console, ob der Issuer erreichbar ist. SSO ist aktiv, sobald die Verbindung gespeichert ist.
+
+## SAML einrichten
+
+1. Öffne **Settings › Security**, klicke auf **Configure SSO** und wähle **SAML 2.0** sowie deinen Anbieter.
+2. Kopiere die **ACS URL** und die **SP Entity ID** zu deinem Anbieter. Bei eigenen Anbietern kannst du stattdessen die
+   **SP Metadata URL** verwenden oder das XML herunterladen.
+3. Füge die Metadaten deines Anbieters per URL, XML-Upload oder durch Einfügen hinzu. Alternativ kannst du **IdP Entity
+   ID**, **IdP SSO URL** und **IdP Certificate** von Hand eingeben.
+4. Prüfe die Angaben und klicke auf **Activate SSO**.
+
+```text
+ACS URL:       https://opencode.ai/console/auth/sso/ssoconn_.../callback
+SP Entity ID:  https://opencode.ai/console/auth/sso/ssoconn_.../metadata
+```
+
+Dein Anbieter muss die Antwort oder die Assertion signieren und die E-Mail-Adresse des Nutzers als Attribut `email`
+oder als NameID senden.
+
+## E-Mail-Domains verifizieren
+
+Wer sich mit einer E-Mail-Adresse einer verifizierten Domain bei der [Console](https://opencode.ai/console) anmeldet,
+wird an deinen Identitätsanbieter weitergeleitet. Sobald SSO aktiv ist, klicke unter **Email domains** auf **Add
+domain**, gib deine Domain ein und veröffentliche den angezeigten TXT-Eintrag.
+
+```text
+Name:   _opencode-console-challenge.example.com
+Type:   TXT
+Value:  oc-verify=...
+```
+
+Klicke auf **Verify Domain**, sobald der Eintrag veröffentlicht ist. Bis DNS-Änderungen überall angekommen sind, kann
+es eine Weile dauern. Jede Domain kann nur zu einem Workspace gehören.
+
+## SSO erzwingen
+
+Hat ein Workspace SSO, müssen sich Admins und Members darüber anmelden, um den Workspace zu öffnen; die Console leitet
+sie automatisch weiter. Für das Verbinden von OpenCode mit `/connect` gilt dieselbe Regel.
+
+Owner können sich auch ohne SSO anmelden. So kann ein falsch konfigurierter Anbieter den Workspace nicht von seinen
+Einstellungen aussperren.
+
+## Automatische Mitgliedschaft
+
+Personen mit einer verifizierten Domain treten dem Workspace als **Member** bei, wenn sie sich zum ersten Mal per SSO
+anmelden. Nicht automatisch hinzugefügt werden sie, wenn:
+
+- eine ausstehende Einladung für sie existiert. Dann wird stattdessen die Einladung verwendet.
+- der Workspace die [Verzeichnissynchronisierung](/console/scim) nutzt, die über die Mitgliedschaft entscheidet.
+- der Workspace ein [Go](/console/go)-Abonnement hat.
+
+Einladungen in einen SSO-Workspace leiten die eingeladene Person beim Öffnen des Links zu deinem Identitätsanbieter.
+
+## Bestehende Konten
+
+Hat jemand bereits ein Console-Konto mit derselben E-Mail-Adresse, fordert die Console die Person auf, sich einmalig
+damit anzumelden, um SSO zu verknüpfen. Eingeladene und über die Verzeichnissynchronisierung hinzugefügte Personen
+werden automatisch verknüpft.
+
+## Bearbeiten oder löschen
+
+Klicke bei der Verbindung auf **Edit**, um ihre Angaben zu ändern. Lass das Secret oder Zertifikat leer, um das
+aktuelle beizubehalten. Um zwischen OIDC und SAML zu wechseln, lösche die Verbindung und lege eine neue an.
+
+Lösche die Verbindung über **⋯ › Delete...**. Mitglieder melden sich dann wieder mit ihren anderen Anmeldemethoden an,
+und die Verzeichnissynchronisierung wird beendet; ihre Tokens werden widerrufen. E-Mail-Domains bleiben erhalten.

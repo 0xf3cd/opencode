@@ -1,0 +1,78 @@
+---
+title: "SSO"
+description: "透過 OIDC 或 SAML，經由你的身分識別提供者登入 OpenCode Console 工作區。"
+---
+
+單一登入（SSO）會在工作區成員登入時，將他們導向公司的身分識別提供者。擁有者和管理員可以在 **Settings › Security** 中設定，每個工作區都內含這項功能。
+
+| 通訊協定 | 提供者 |
+| -------------- | -------------------------------------------------------------------------------------- |
+| OpenID Connect | Google Workspace、Microsoft Entra ID、Okta、Auth0、Ping Identity，或任何 OIDC 提供者 |
+| SAML 2.0 | Google Workspace、Microsoft Entra ID、Okta，或任何 SAML 提供者 |
+
+每個工作區只有一個 SSO 連線。
+
+## 設定 OIDC
+
+1. 開啟 **Settings › Security**，按一下 **Configure SSO**，然後選擇 **OpenID Connect** 和你的提供者。
+2. 依照畫面上的步驟，在提供者中建立一個應用程式，並加入 `openid`、`email` 和 `profile` 範圍。
+3. 輸入 **Issuer URL**（或你的租用戶或網域），以及 **Client ID**、**Client Secret** 和 **Display Name**，然後按一下 **Save**。
+4. 從連線中複製 **Callback URL**，加入提供者允許的重新導向 URI。
+
+```text
+https://opencode.ai/console/auth/sso/ssoconn_.../callback
+```
+
+儲存時，Console 會檢查是否能連線到簽發者。連線一儲存，SSO 就會生效。
+
+## 設定 SAML
+
+1. 開啟 **Settings › Security**，按一下 **Configure SSO**，然後選擇 **SAML 2.0** 和你的提供者。
+2. 將 **ACS URL** 和 **SP Entity ID** 複製到提供者中。自訂提供者也可以改用 **SP Metadata URL**，或下載 XML。
+3. 透過 URL、上傳 XML 或貼上內容，加入提供者的中繼資料。你也可以手動輸入 **IdP Entity ID**、**IdP SSO URL** 和 **IdP Certificate**。
+4. 檢查詳細資料，然後按一下 **Activate SSO**。
+
+```text
+ACS URL:       https://opencode.ai/console/auth/sso/ssoconn_.../callback
+SP Entity ID:  https://opencode.ai/console/auth/sso/ssoconn_.../metadata
+```
+
+提供者必須簽署回應或判斷提示（assertion），並以 `email` 屬性或 NameID 傳送使用者的電子郵件。
+
+## 驗證電子郵件網域
+
+使用已驗證網域的電子郵件登入 [Console](https://opencode.ai/console) 的人，會被導向你的身分識別提供者。SSO 生效後，請在 **Email domains** 底下按一下 **Add domain**，輸入你的網域，然後發布畫面上顯示的 TXT 記錄。
+
+```text
+Name:   _opencode-console-challenge.example.com
+Type:   TXT
+Value:  oc-verify=...
+```
+
+記錄發布後，按一下 **Verify Domain**。DNS 變更可能需要一段時間才會生效。每個網域只能屬於一個工作區。
+
+## 強制使用 SSO
+
+工作區設定 SSO 後，管理員和成員都必須透過 SSO 登入才能開啟工作區，Console 會自動將他們重新導向。使用 `/connect` 連接 OpenCode 時也適用相同規則。
+
+擁有者也可以不透過 SSO 登入，因此即使提供者設定錯誤，也不會讓工作區無法進入自己的設定。
+
+## 自動加入成員
+
+使用已驗證網域的人第一次透過 SSO 登入時，會以 **Member** 身分加入工作區。下列情況不會自動加入：
+
+- 他們有待處理的邀請。此時會改用該邀請。
+- 工作區使用[目錄同步](/console/scim)，由目錄同步決定成員資格。
+- 工作區已訂閱 [Go](/console/go)。
+
+受邀者開啟 SSO 工作區的邀請連結時，會被導向你的身分識別提供者。
+
+## 現有帳號
+
+如果某人已經有使用相同電子郵件的 Console 帳號，Console 會要求他們登入該帳號一次，以連結 SSO。受邀者和由目錄同步加入的人會自動連結。
+
+## 編輯或刪除
+
+按一下連線上的 **Edit** 即可變更詳細資料。將密碼或憑證欄位留空，即可保留目前的值。若要在 OIDC 和 SAML 之間切換，請刪除連線後再建立新的連線。
+
+從 **⋯ › Delete...** 刪除連線。成員會改回使用其他登入方式，目錄同步也會停止，其 token 會被撤銷。電子郵件網域會保留下來。

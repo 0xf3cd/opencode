@@ -1,0 +1,179 @@
+---
+title: "Komprimering"
+---
+
+Komprimering skaber plads i en lang session ved at erstatte ældre dele af samtalen
+med et resumé, så sessionen kan fortsætte ud over modellens kontekstgrænse.
+
+## Sådan virker det
+
+Når en session nærmer sig modellens kontekstgrænse, opsummerer OpenCode alt
+undtagen den seneste del af samtalen, som standard ca. 15.000 tokens. Når
+resuméet er klar, placeres det foran den seneste del af samtalen, og sessionen
+fortsætter derfra.
+
+```text
+before   [ system prompt ][ older conversation ............ ][ recent 15k ][ pending work ]
+after    [ system prompt ][ summary ][ recent 15k ][ pending work ]
+```
+
+Modellen ser resuméet som tidligere samtale. Senere komprimeringer opdaterer det
+samme resumé i stedet for at starte forfra.
+
+## Start
+
+Automatisk komprimering er slået til som standard:
+
+```jsonc title="opencode.jsonc"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "compaction": {
+    "auto": true,
+    "keep": { "tokens": 15000 },
+  },
+}
+```
+
+Komprimering medfører tab af information. Øg `keep.tokens`, når præcise nylige
+detaljer er vigtige, eller anmod selv om komprimering før den automatiske.
+
+## Manuel
+
+Du kan anmode om komprimering når som helst, også ved en kort historik:
+
+```sh
+opencode api post /api/session/ses_example/compact --data '{}'
+```
+
+Kommandoen `api` finder baggrundstjenesten og godkender sig over for den. Svaret
+bekræfter, at anmodningen er modtaget; det venter ikke på resuméet. Følg
+`session.compaction.*`-hændelserne for at se, hvornår den er færdig. Se
+[API-referencen](/api) for den fulde operation.
+
+| Regel | Adfærd |
+| --- | --- |
+| Tidspunkt | Kører ved næste sikre punkt, før prompts, der stadig venter. |
+| Gentagelser | Anmodninger, der kommer, mens en anden venter, slås sammen med den. |
+| Automatik | Virker, også når `compaction.auto` er `false`. |
+
+Angiv et `id` for at gøre et præcist genforsøg idempotent. Hvis du genbruger
+ID'et til en anden anmodning, returneres en konflikt.
+
+```sh
+opencode api post /api/session/ses_example/compact --data '{"id":"msg_compact_once"}'
+```
+
+## Indstillinger
+
+Tilføj `compaction` til en vilkårlig [OpenCode-konfigurationsfil](/config):
+
+```jsonc title="opencode.jsonc"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "compaction": {
+    "auto": false,
+    "keep": { "tokens": 24000 },
+    "buffer": 16000,
+  },
+}
+```
+
+| Felt | Standard | Adfærd |
+| --- | ---: | --- |
+| `auto` | `true` | Komprimer automatisk nær kontekstgrænsen, og gendan én gang, når en udbyder afviser en anmodning som for lang. Manuel komprimering virker altid. |
+| `keep.tokens` | `15000` | Omtrentlig mængde nylig samtale, der bevares ved siden af resuméet. Større værdier bevarer flere detaljer, men giver mindre plads til nyt arbejde. |
+| `buffer` | 10 % af grænsen | Antal tokens, der holdes fri under modellens grænse. Større værdier starter automatisk komprimering tidligere. |
+
+`keep.tokens` og `buffer` accepterer ikke-negative heltal.
+
+## Udbydere
+
+Som standard skriver OpenCode selv resuméet med sessionens model. Nogle udbydere
+kan i stedet komprimere samtalen på deres side. Slå det til pr. udbyder eller
+model med `settings.compaction`:
+
+```jsonc title="opencode.jsonc"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "providers": {
+    "openai": {
+      "settings": { "compaction": { "type": "native" } },
+      "models": {
+        "gpt-4.1": { "settings": { "compaction": { "type": "summary" } } },
+      },
+    },
+  },
+}
+```
+
+En modelindstilling tilsidesætter udbyderindstillingen. `native` bruger
+udbyderens komprimering; `summary` bruger OpenCodes egen.
+
+Ved native komprimering sender OpenCode samtalen til udbyderens
+komprimerings-endpoint. Udbyderen returnerer et uigennemsigtigt, krypteret
+element, der træder i stedet for den ældre samtale. Dine seneste beskeder og
+vedhæftninger, op til `keep.tokens`, bevares ved siden af det:
+
+```text
+before   [ older conversation ........................ ][ recent user messages ]
+after    [ encrypted checkpoint + recent user messages ]
+```
+
+| Emne | Adfærd |
+| --- | --- |
+| Understøttelse | OpenAI Responses-modeller. Understøttelsen varierer efter deployment og model. |
+| Tærskel | Samme `auto`- og `buffer`-indstillinger som ved komprimering med resumé. Manuelle anmodninger virker også. |
+| Portabilitet | Et krypteret checkpoint virker kun med samme udbyder, model og endpoint. Hvis du skifter model, fortsætter sessionen i stedet fra den oprindelige samtale. |
+| For lang | Hvis udbyderen afviser en komprimering som for lang, prøver OpenCode igen med en mindre anmodning. Der skiftes ikke til et resumé. |
+
+## Resuméer
+
+Resuméet er struktureret, så en anden agent kan overtage arbejdet ud fra det:
+
+```md
+## Objective
+Finish the authentication migration.
+
+## Next Move
+- Update the callback handler.
+- Verify the login flow.
+```
+
+Det dækker mål og krav, beslutninger, færdigt og igangværende arbejde,
+blokeringer og næste skridt samt relevante filer. I den nylige samtale, der
+bevares ved siden af, forkortes langt værktøjsoutput, og data fra vedhæftninger
+erstattes af en kort beskrivelse.
+
+Efter komprimering bliver de aktuelle versioner af dine instruktionsfiler
+sessionens udgangspunkt; se [Instruktioner](/instructions).
+
+## Grænser
+
+| Grænse | Resultat |
+| --- | --- |
+| Model | Komprimering bruger sessionens model. Der findes ingen separat komprimeringsmodel. |
+| Historik | Komprimering kræver ældre samtale, der kan erstattes. Den kan ikke skabe plads, når en anmodning hovedsageligt består af faste instruktioner og værktøjsskemaer. |
+| Størrelse | Hvis den samtale, der skal komprimeres, selv er for lang, sender OpenCode en forkortet tekstversion og udelader muligvis de ældste udvekslinger. |
+| Gendannelse | En anmodning, der afvises som for lang, komprimeres og prøves igen én gang. Afvises den igen, returneres en fejl. |
+| Lagring | Tidligere beskeder forbliver gemt, selv når de ikke længere sendes til modellen. |
+
+Her kan komprimering f.eks. ikke hjælpe:
+
+```text
+128k context = 120k fixed instructions and tools + 8k conversation
+```
+
+## Migration
+
+V1 brugte tail-turn og pruning. V2 bruger resuméer og
+`compaction.keep.tokens`:
+
+```jsonc
+{
+  "compaction": {
+    "keep": { "tokens": 15000 }
+  }
+}
+```
+
+Indstillingerne og adfærden på denne side gælder for V2.

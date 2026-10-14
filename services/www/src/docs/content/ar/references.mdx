@@ -1,0 +1,277 @@
+---
+title: "المراجع"
+---
+
+تمنح المراجع OpenCode وصولًا مسمّى إلى أدلة خارج المشروع الحالي. أضف مرجعًا في `opencode.json` أو `opencode.jsonc`، ثم أرفق
+اسمه المستعار (alias) في العميل عندما تحتاج إليه.
+
+```jsonc title="opencode.jsonc"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "references": {
+    "docs": {
+      "path": "../product-docs",
+      "description": "Use for product behavior and terminology",
+    },
+  },
+}
+```
+
+بعد إرفاق `docs`، اطلب من الوكيل فحص المسار المطلوب:
+
+```text
+Read the attached docs reference and summarize api/authentication.md.
+```
+
+استخدم المراجع للتوثيق، أو المكتبات المشتركة، أو الأمثلة، أو الشيفرة المصدرية من مستودع آخر.
+
+## المراجع المحلية
+
+استخدم `path` لدليل محلي:
+
+```jsonc
+{
+  "references": {
+    "design-system": {
+      "path": "../design-system",
+      "description": "Use when working with components or design tokens",
+    },
+  },
+}
+```
+
+تُعامَل المسارات على النحو التالي:
+
+- تُحَل المسارات النسبية انطلاقًا من الدليل الذي يحتوي ملف التهيئة.
+- المسارات المطلقة مدعومة.
+- المسارات النسبية إلى الدليل المنزلي مثل `~/docs` مدعومة.
+
+استخدم الصيغة المختصرة النصية عندما لا تحتاج إلى حقول أخرى:
+
+```jsonc
+{
+  "references": {
+    "docs": "../docs",
+    "shared": "~/work/shared",
+  },
+}
+```
+
+<Callout type="note">
+  لا تُعد السلسلة المختصرة مسارًا محليًا إلا إذا بدأت بـ `.` أو `/` أو `~`. استخدم `./docs` لا `docs`؛ فالقيمة المجردة
+  `docs` تُفسَّر على أنها مستودع Git.
+</Callout>
+
+## Git
+
+استخدم `repository` لمستودع Git بعيد:
+
+```jsonc
+{
+  "references": {
+    "effect": {
+      "repository": "Effect-TS/effect",
+      "branch": "main",
+    },
+    "internal-sdk": {
+      "repository": "git@gitlab.example.com:platform/sdk.git",
+      "branch": "release/v2",
+    },
+  },
+}
+```
+
+تشمل صيغ المستودعات البعيدة المدعومة:
+
+- الصيغة المختصرة `owner/repo` في GitHub
+- عناوين URL الخاصة بـ Git
+- صيغ المضيف/المسار
+- المستودعات البعيدة بأسلوب SCP
+
+مستودعات `file:` المحلية غير مدعومة.
+
+استخدم الصيغة المختصرة النصية لتتبّع الفرع الافتراضي للمستودع البعيد:
+
+```jsonc
+{
+  "references": {
+    "effect": "Effect-TS/effect",
+    "sdk": "gitlab.com/platform/sdk",
+  },
+}
+```
+
+بدون `branch`، يجلب OpenCode الفرع الافتراضي للمستودع البعيد (checkout) ويحدّثه. ويمكن أن تحتوي أسماء الفروع على الأحرف
+والأرقام و`/` و`_` و`.` و`-`، لكن لا يجوز أن تبدأ بـ `-` أو أن تحتوي على `..`.
+
+```jsonc
+{
+  "references": {
+    "sdk": {
+      "repository": "example/sdk",
+      "branch": "release/v2.1",
+    },
+  },
+}
+```
+
+## التخزين
+
+يوحّد OpenCode صيغة كل مستودع بعيد، ويخزّن نسخة واحدة (checkout) لكل مستودع بعيد وفرع ضمن دليل بياناته العام. وبدون فرع
+صريح، يتخذ المسار الشكل التالي:
+
+```text
+opencode/repos/<host>/<repository-path>
+```
+
+في تثبيت نموذجي على Linux، يُخزَّن `Effect-TS/effect` في:
+
+```text
+~/.local/share/opencode/repos/github.com/Effect-TS/effect
+```
+
+ويضيف الفرع الصريح لاحقة مرمّزة بالشكل `@<branch>`:
+
+```text
+~/.local/share/opencode/repos/github.com/Effect-TS/effect@main
+```
+
+## التحديث
+
+تُنسخ المستودعات غير الموجودة (clone) بشكل غير متزامن. وتُفحص النسخ الموجودة في الخلفية عند تحميل المراجع أو إعادة
+تحميلها، وبعد قبول موجّه جديد من المستخدم في الموقع (Location) الخاص بها.
+
+```text
+Prompt admitted → refresh check starts in background → agent continues
+```
+
+تكون النسخة مؤهلة للتحديث إذا مضت 24 ساعة على الأقل على آخر محاولة تحديث لها، أو إذا لم تُسجَّل أي محاولة. ويجلب التحديث
+التغييرات (fetch) ثم يعيد الضبط (reset) إلى الفرع المهيّأ أو الفرع الافتراضي للمستودع البعيد.
+
+```text
+Last attempt: 25 hours ago → eligible
+Last attempt: 2 hours ago  → skipped
+```
+
+يخضع التحديث للقواعد التالية:
+
+- تبقى الطوابع الزمنية محفوظة عبر عمليات إعادة تشغيل الخدمة.
+- تتشارك المواقع التي تستخدم النسخة نفسها طابعها الزمني.
+- تُسجَّل المحاولات الفاشلة وتظل خاضعة لحد 24 ساعة.
+- لا يوجد استطلاع دوري (polling) أثناء عدم استخدام الموقع.
+- لا يمنع فشل النسخ أو التحديث تحميلَ المراجع الأخرى.
+
+لا تنتظر الموجّهات اكتمال النسخ أو التحديث. لذا قد يحتوي المرفق على محتوى أقدم حتى لو رأت قراءة لاحقة بالأداة النسخة
+المحدّثة، وقد يظهر مرجع جديد قبل أن تصبح نسخته جاهزة.
+
+```text
+Attachment created → cached content
+Background refresh completes → later tool read sees newer content
+```
+
+<Callout type="warning">
+  النسخ المخزّنة مؤقتًا مشتركة وقد تتحدّث أثناء استخدام الوكيل لها. تجنّب تعديلها لأن التحديث يعيد ضبطها.
+</Callout>
+
+## الإرشاد
+
+يخبر الحقل `description` الوكلاء متى يكون المرجع ذا صلة. وتظهر المراجع التي لها وصف في تعليمات الوكيل مع اسمها المستعار
+ومسارها المحلول.
+
+```jsonc
+{
+  "references": {
+    "docs": {
+      "path": "../docs",
+      "description": "Use for product behavior and terminology",
+    },
+  },
+}
+```
+
+تبقى المراجع التي لا وصف لها متاحة للعملاء، لكنها لا تُعرض على الوكلاء تلقائيًا.
+
+```jsonc
+{
+  "references": {
+    "archive": {
+      "path": "../archive",
+    },
+  },
+}
+```
+
+## الظهور
+
+اضبط `hidden` على `true` لإزالة المرجع من قوائم الاختيار التفاعلية في العميل:
+
+```jsonc
+{
+  "references": {
+    "internal": {
+      "path": "../internal",
+      "description": "Use for internal service behavior",
+      "hidden": true,
+    },
+  },
+}
+```
+
+لا يؤثر `hidden` إلا في الظهور التفاعلي. فيبقى المرجع في API المراجع، وفي تعليمات الوكيل إذا كان له وصف.
+
+## الاستخدام
+
+يُرفق العملاء المرجع باسمه المستعار الجذري. ويحتوي المرفق على قائمة غير تعاودية بالملفات والأدلة المباشرة في الجذر.
+
+```text
+Attached alias: docs
+Ask: Inspect docs/guides/deployment.md and explain the deployment steps.
+```
+
+اطلب من الوكيل فحص مسار محدد عندما تحتاج إلى محتوى أعمق من الجذر.
+
+## الأذونات
+
+لا تمنح المراجع أي أذونات إضافية للأدوات. فالوصول خارج الموقع النشط يظل خاضعًا لقواعد الأدوات المعتادة وللإذن
+`external_directory`، كما يتطلب التعديل إذن التعديل المعمول به.
+
+```text
+Read ../product-docs/api.md
+```
+
+لا ينجح الطلب إلا إذا سمحت الأذونات النشطة بتلك القراءة الخارجية.
+
+## الحقول
+
+| الحقل         | محلي     | Git      | الوصف                                         |
+| ------------- | -------- | -------- | --------------------------------------------- |
+| `path`        | مطلوب    | لا       | مسار الدليل المحلي                            |
+| `repository`  | لا       | مطلوب    | مستودع Git البعيد                             |
+| `branch`      | لا       | اختياري  | الفرع المراد جلبه والتبديل إليه               |
+| `description` | اختياري  | اختياري  | إرشاد يوضح متى ينبغي للوكلاء استخدامه         |
+| `hidden`      | اختياري  | اختياري  | إخفاؤه من قوائم الاختيار التفاعلية في العميل  |
+
+يمكن لإدخال Git كامل استخدام جميع الحقول المتوافقة مع Git:
+
+```jsonc
+{
+  "references": {
+    "sdk": {
+      "repository": "example/sdk",
+      "branch": "main",
+      "description": "Use for SDK implementation details",
+      "hidden": false,
+    },
+  },
+}
+```
+
+## الأسماء المستعارة
+
+لا يجوز أن يكون الاسم المستعار فارغًا أو أن يحتوي على `/` أو `\` أو مسافة بيضاء أو علامة backtick أو فاصلة.
+
+```text
+Valid:   docs
+Invalid: product docs
+Invalid: docs/api
+```

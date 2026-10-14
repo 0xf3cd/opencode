@@ -1,0 +1,132 @@
+---
+title: "Ön ısıtma"
+---
+
+Oturum ön ısıtma, istemler arasında ara verdiğinizde sağlayıcı tarafındaki istem önbelleklerini veya kısa ömürlü diğer
+durumları korumak için düzenli aralıklarla model istekleri gönderir. Varsayılan olarak devre dışıdır.
+
+Ön ısıtmayı herhangi bir [OpenCode yapılandırma dosyasında](/config) etkinleştirin:
+
+```jsonc title="opencode.jsonc"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "warming": true,
+}
+```
+
+Bu yapılandırmayla OpenCode, yakın zamanda etkin olan bir oturumu dört dakika boyunca model isteği gelmezse ısıtır. Ön
+ısıtmayı, ön ısıtma dışındaki son istekten itibaren 30 dakika geçene kadar her dört dakikada bir sürdürür.
+
+## Seçenekler
+
+Ön ısıtma istemini, boşta bekleme aralığını veya etkin pencereyi değiştirmek için nesne biçimini kullanın:
+
+```jsonc title="opencode.jsonc"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "warming": {
+    "prompt": "Do not perform any work. Reply with exactly: OK",
+    "interval": "5 minutes",
+    "duration": "1 hour",
+  },
+}
+```
+
+| Alan | Varsayılan | Amaç |
+| --- | --- | --- |
+| `prompt` | Canlı tutma talimatı | Her ön ısıtma isteğine geçici bir kullanıcı mesajı olarak eklenir. Varsayılan istem, modelden hiçbir iş yapmamasını, araç kullanmamasını ve `OK` yanıtını vermesini ister. |
+| `interval` | `"4 minutes"` | Bir sonraki ön ısıtma isteğinden önceki boşta bekleme süresi. |
+| `duration` | `"30 minutes"` | Ön ısıtma dışındaki son model isteğinden itibaren ölçülen ön ısıtma penceresi. |
+
+Nesnede belirtilmeyen alanlar varsayılan değerlerini korur. Örneğin bu yapılandırma yalnızca aralığı değiştirir:
+
+```jsonc title="opencode.jsonc"
+{
+  "warming": {
+    "interval": "2 minutes",
+  },
+}
+```
+
+## Süreler
+
+`interval` ve `duration` süre dizeleri kabul eder. İkisi de sıfırdan büyük, sonlu değerlere çözümlenmelidir; aksi
+takdirde OpenCode ön ısıtmayı atlar ve bir uyarı kaydeder.
+
+```jsonc title="opencode.jsonc"
+{
+  "warming": {
+    "interval": "30 seconds",
+    "duration": "1 hour",
+  },
+}
+```
+
+## Zamanlama
+
+Ön ısıtma, ön ısıtma dışındaki bir model isteğinden sonra başlar. Bir ön ısıtma isteği bittiğinde bir sonraki boşta
+bekleme aralığı başlar, ancak etkin pencere uzatılmaz.
+
+```text
+00:00  normal model request
+00:04  warming request
+00:08  warming request
+00:30  warming stops
+```
+
+Ön ısıtma dışındaki her yeni model etkinliği iki zamanlayıcıyı da sıfırlar. Aralık süreye eşit veya ondan uzunsa etkin
+pencere, herhangi bir ön ısıtma isteği gönderilmeden sona erer.
+
+```text
+00:00  normal model request
+00:20  normal model request; window restarts
+00:24  warming request
+00:50  warming stops
+```
+
+## İstekler
+
+Bir ön ısıtma isteği, oturumun güncel modelini, ajanını, talimatlarını ve konuşma bağlamını kullanır. OpenCode
+yapılandırılmış istemi geçici olarak ekler, tek bir model çağrısı yapar ve yanıtı atar.
+
+```text
+[current session context]
+[transient user message: keep-alive prompt]
+→ one model response, discarded
+```
+
+İstek girdi kabul etmez, geçmişe mesaj eklemez ve kalıcı oturum durumunu değiştirmez. OpenCode yerel araç çağrılarını
+çalıştırmaz veya bir araç döngüsünü sürdürmez; varsayılan istem de modele araç kullanmamasını söyler.
+
+## Hatalar
+
+Ön ısıtma hataları, oturumu başarısız kılmadan veya değiştirmeden kaydedilir. OpenCode yeniden denemek için bir sonraki
+aralığı bekler; bu sırada asıl etkin pencerenin geri sayımı devam eder.
+
+```text
+00:04  warming request fails; session is unchanged
+00:08  next warming attempt
+```
+
+## Maliyetler
+
+Ön ısıtma istekleri gerçek sağlayıcı istekleridir. Diğer model istekleri gibi token tüketebilir, maliyet oluşturabilir,
+hız sınırlarından düşebilir ve başarısız olabilir.
+
+- Daha kısa aralıklar istek hacmini artırır.
+- Daha uzun süreler daha fazla ön ısıtma isteğine olanak tanır.
+- Ön ısıtmayı yalnızca sağlayıcı tarafındaki faydası ek kullanıma değdiğinde etkinleştirin.
+
+Örneğin varsayılan ayarlar, kesintisiz 30 dakikalık bir pencerede 4., 8., 12., 16., 20., 24. ve 28. dakikalarda olmak
+üzere en fazla yedi ön ısıtma denemesine izin verir.
+
+## Devre dışı bırakma
+
+Ön ısıtmayı açıkça devre dışı bırakmak için `warming` değerini `false` olarak ayarlayın. Alanı hiç belirtmemek de ön
+ısıtmayı devre dışı bırakır.
+
+```jsonc title="opencode.jsonc"
+{
+  "warming": false,
+}
+```

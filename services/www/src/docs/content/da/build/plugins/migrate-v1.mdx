@@ -1,0 +1,372 @@
+---
+title: "Migrer plugins fra V1"
+---
+
+Plugin-konfigurationen kan normaliseres automatisk, men koden i selve pluginnet skal porteres. V1-pluginfunktioner
+returnerer ét objekt med værktøjer og hooks. Et V2-plugin har en default-eksport af en definition med et `id` og
+`setup(ctx)`; `setup` registrerer hooks, transformationer, værktøjer og abonnementer via konteksten.
+
+<Callout type="warning">
+  V1-pluginimplementeringer kører ikke i V2. Det er ikke nok at flytte en fil eller omdøbe dens konfigurationspost.
+</Callout>
+
+## Migrer plugin-konfigurationen
+
+Omdøb `plugin` til `plugins`. Erstat en tuple med pakke og indstillinger med et objekt:
+
+```jsonc
+// V1
+{
+  "plugin": [
+    "opencode-example-plugin",
+    ["./plugin/local.ts", { "enabled": true }]
+  ]
+}
+
+// V2
+{
+  "plugins": [
+    "opencode-example-plugin",
+    {
+      "package": "./plugin/local.ts",
+      "options": { "enabled": true }
+    }
+  ]
+}
+```
+
+V2 finder lokale plugins i både `.opencode/plugin/` og `.opencode/plugins/`; brug `.opencode/plugins/` til V2-filer.
+Behold hjælpemoduler ved siden af pluginnet, når du flytter det. Lokale plugins og pakkeplugins bruger samme
+implementerings-API.
+
+## Erstat indgangspunktet
+
+Skift pakkeimporten, erstat den eksporterede pluginfunktion med `Plugin.define`, og flyt initialiseringen ind i
+`setup`.
+
+```ts title="V1"
+import type { Plugin } from "@opencode-ai/plugin"
+
+export const ExamplePlugin: Plugin = async ({ directory, project, client }) => {
+  await client.app.log({
+    body: { service: "example", level: "info", message: `Loaded for ${project.id}` },
+  })
+
+  return {
+    // V1 tools and hooks
+  }
+}
+```
+
+```ts title="V2"
+import { Plugin } from "@opencode/plugin"
+
+export default Plugin.define({
+  id: "example",
+  async setup(ctx) {
+    await ctx.storage.set("last-project", ctx.location.project.id)
+    console.log(`Loaded for ${ctx.location.directory}`)
+  },
+})
+```
+
+Alle V2-plugins skal have et stabilt `id`. Pluginlageret er afgrænset af dette ID, og ID'et identificerer også pluginnet
+i status og diagnostik. Publicerede plugins bør afhænge af en version af `@opencode/plugin`, der er kompatibel med den
+OpenCode-udgivelse, de er rettet mod.
+
+## Migrer konteksten
+
+V2-konteksten er både en OpenCode-klient og pluginnets udvidelses-API. De fleste operationer er grupperet efter domæne i
+stedet for at ligge på en separat `client`-egenskab.
+
+| V1                                              | V2                                                                   |
+| ----------------------------------------------- | -------------------------------------------------------------------- |
+| `directory`                                     | `ctx.location.directory`                                             |
+| `project`                                       | `ctx.location.project`                                               |
+| `client`                                        | Domænemetoder som `ctx.session`, `ctx.permission`, `ctx.agent`       |
+| argument med plugin-indstillinger               | `ctx.options`                                                        |
+| returneret `dispose()`-hook                     | oprydningsfunktion, som `setup` returnerer                           |
+| returneret `event`-hook                         | `ctx.event.subscribe()`                                              |
+| returnerede ændringer af config, model eller værktøj | en `transform(...)` på domænet                                  |
+| `$` Bun-shellhjælper                            | importer og håndter den proces-API, dit plugin bruger                |
+
+`ctx.location` beskriver den placering, hvor denne plugininstans blev indlæst. Det er ikke placeringen for alle sessioner
+eller hændelser, som pluginnet kan observere. Læs sessions- eller hændelsesdataene, når den forskel betyder noget.
+
+Konteksten udstiller mange flere domæner end dem i tabellen, blandt andet kataloger, kommandoer, integrationer,
+MCP-servere, referencer, skills, lager, VCS, worktrees og websøgning. Se den [komplette plugin-kontekst](/build/plugins#api).
+
+## Registrer hooks i `setup`
+
+V1 returnerer hooks med en strengnøgle. V2 registrerer hver hook på det domæne, der ejer operationen. Callbacket
+modtager én muterbar hændelse i stedet for separate `input`- og `output`-objekter.
+
+```ts title="V1"
+import type { Plugin } from "@opencode-ai/plugin"
+
+export const GuardPlugin: Plugin = async () => ({
+  "tool.execute.before": async (input, output) => {
+    if (input.tool === "read" && output.args.filePath.includes(".env")) {
+      throw new Error("Do not read .env files")
+    }
+  },
+  "shell.env": async (_input, output) => {
+    output.env.COMPANY_ENV = "development"
+  },
+})
+```
+
+```ts title="V2"
+import { Plugin } from "@opencode/plugin"
+
+export default Plugin.define({
+  id: "company.guard",
+  async setup(ctx) {
+    await ctx.tool.hook("execute.before", (event) => {
+      const input = event.input as { filePath?: string }
+      if (event.tool === "read" && input.filePath?.includes(".env")) {
+        throw new Error("Do not read .env files")
+      }
+    })
+
+    await ctx.shell.hook("create.before", (event) => {
+      event.env.COMPANY_ENV = "development"
+    })
+  },
+})
+```
+
+Registreringer forbliver aktive i hele pluginnets levetid og frigives, når det lukkes ned. Gem kun den returnerede
+registrering, hvis pluginnet skal fjerne netop den hook eller transformation tidligere med `registration.dispose()`.
+
+Brug denne tabel til at finde den nærmeste V2-API for hver V1-hook:
+
+| V1-udvidelsespunkt                     | V2-API                                                          |
+| -------------------------------------- | --------------------------------------------------------------- |
+| `event`                                | `ctx.event.subscribe()`                                         |
+| `dispose`                              | oprydningsfunktion, som `setup` returnerer                      |
+| `config`                               | transformationer på de berørte domæner                          |
+| `tool`-map                             | `ctx.tool.transform(...)`                                       |
+| `auth`                                 | `ctx.integration.transform(...)` og integrations-API'er         |
+| `provider`                             | `ctx.provider.transform(...)` og `ctx.model.transform(...)`     |
+| `chat.message`                         | `ctx.session.hook("prompt", ...)`                               |
+| `chat.params`                          | `ctx.session.hook("context", ...)`                              |
+| `chat.headers`                         | `ctx.session.hook("model.request", ...)` eller `"http.request"` |
+| `permission.ask`                       | `ctx.permission.hook("evaluate", ...)`                          |
+| `command.execute.before`               | kommandotransformationer eller prompt-hooken, afhængigt af formålet |
+| `tool.execute.before`                  | `ctx.tool.hook("execute.before", ...)`                          |
+| `tool.execute.after`                   | `ctx.tool.hook("execute.after", ...)`                           |
+| `shell.env`                            | `ctx.shell.hook("create.before", ...)`                          |
+| `tool.definition`                      | `ctx.tool.transform(...)`                                       |
+| `experimental.chat.system.transform`   | `ctx.session.hook("context", ...)` og rediger `event.system`    |
+| `experimental.chat.messages.transform` | `ctx.session.hook("context", ...)` og rediger `event.messages`  |
+| `experimental.session.compacting`      | `ctx.session.hook("compaction", ...)`                           |
+
+Det er migrationsmål, ikke altid direkte omdøbninger. Især kører V2's `prompt`-hook før den varige modtagelse af
+prompten, mens `context` kører umiddelbart før en agents modelanmodning. Registrer `context`, `compaction`, `generate` og
+`title` hver for sig, hvis en transformation skal gælde for alle typer modelanmodninger.
+
+Der findes ikke en direkte V2-hook for hver eksperimentel V1-hook. Vurder plugins, der bruger
+`experimental.compaction.autocontinue`, `experimental.provider.small_model` eller `experimental.text.complete`, på ny ud
+fra V2's API'er for sessioner, udbydere, modeller og hændelser i stedet for at bevare en antagelse om en intern livscyklus.
+
+`command.execute.before` har heller ingen global hook, der svarer én til én. Registrer en kommando med
+`ctx.command.transform`, når pluginnet ejer kommandoen. Brug prompt-hooken, når det egentlige formål er at ændre prompts,
+der sendes af kommandoer og andre promptkilder.
+
+## Migrer anmodningshooks
+
+V2 adskiller modtagelse af prompts, den kontekst modellen ser, semantiske modelindstillinger og native HTTP. Vælg det
+smalleste lag, dit plugin har brug for.
+
+```ts title="V1"
+export const RequestPlugin = async () => ({
+  "chat.params": async (_input, output) => {
+    output.temperature = 0.2
+    output.maxOutputTokens = 8_000
+  },
+  "chat.headers": async (_input, output) => {
+    output.headers["x-plugin"] = "review"
+  },
+  "experimental.chat.system.transform": async (_input, output) => {
+    output.system.push("Focus on correctness.")
+  },
+})
+```
+
+```ts title="V2"
+import { Plugin } from "@opencode/plugin"
+
+export default Plugin.define({
+  id: "review-request",
+  async setup(ctx) {
+    await ctx.session.hook("context", (event) => {
+      event.system.push({ type: "text", text: "Focus on correctness." })
+      event.options.temperature = 0.2
+      event.options.maxTokens = 8_000
+    })
+
+    await ctx.session.hook("model.request", (event) => {
+      event.headers["x-plugin"] = "review"
+    })
+  },
+})
+```
+
+Brug semantiske udbyderindstillinger i `event.options`. Brug `model.request` til headers og rå indstillinger for
+modelanmodninger, og brug kun `http.request` eller `http.response`, når pluginnet har brug for udbyderens native
+HTTP-udveksling. Udbyderspecifikke hooks kan sende `{ providerID: "..." }` som tredje argument til `ctx.session.hook`.
+
+## Migrer brugerdefinerede værktøjer
+
+V1 returnerer et `tool`-map, der er bygget med den gamle `tool()`-hjælper. V2 registrerer værktøjsdefinitioner via en
+synkron `ctx.tool.transform`-editor. Værktøjsskemaer bruger JSON Schema, og udførelsen returnerer struktureret indhold.
+
+```ts title="V1"
+import { tool } from "@opencode-ai/plugin"
+
+export const ToolsPlugin = async () => ({
+  tool: {
+    greeting: tool({
+      description: "Create a greeting",
+      args: { name: tool.schema.string() },
+      async execute(args) {
+        return `Hello ${args.name}!`
+      },
+    }),
+  },
+})
+```
+
+```ts title="V2"
+import { Plugin } from "@opencode/plugin"
+
+export default Plugin.define({
+  id: "greeting",
+  async setup(ctx) {
+    await ctx.tool.transform((editor) => {
+      editor.add({
+        name: "greeting",
+        description: "Create a greeting",
+        input: {
+          type: "object",
+          properties: { name: { type: "string" } },
+          required: ["name"],
+          additionalProperties: false,
+        },
+        async execute(input) {
+          return { content: `Hello ${(input as { name: string }).name}!` }
+        },
+      })
+    })
+  },
+})
+```
+
+Transformationer er tilstandsændringer, der kan afspilles igen. Hold deres callback synkront, billigt og fri for
+engangsbivirkninger. Indlæs eksterne data før registreringen, fang dem i callbacket, og kald domænets `reload()`-metode,
+når dataene ændres. En senere plugintransformation ser tidligere ændringer og kan opdatere, erstatte eller fjerne dem.
+
+Samme transformationsmønster erstatter V1's `config`- og `provider`-hooks, men V2 udstiller ikke ét muterbart globalt
+konfigurationsobjekt. Registrer ændringen hos det domæne, der ejer den: `ctx.agent`, `ctx.provider`, `ctx.model`,
+`ctx.command`, `ctx.integration`, `ctx.mcp`, `ctx.reference`, `ctx.skill`, `ctx.tool`, `ctx.vcs`, `ctx.websearch` eller
+`ctx.worktree`. Godkendelsesmetoder hører til integrationer; udbydertransformationer bidrager med kildedefinitioner og
+udbyderindstillinger, mens modeltransformationer anvender begrænsninger og tilsidesættelser på hele modelsamlingen for de
+aktive udbydere.
+
+```ts
+await ctx.provider.transform((editor) => {
+  editor.update("anthropic", (provider) => {
+    provider.headers = { ...provider.headers, "x-company": "engineering" }
+  })
+})
+
+await ctx.model.transform((editor) => {
+  editor.list("anthropic").forEach((model) => {
+    if (!model.capabilities.tools) editor.remove(model.providerID, model.id)
+  })
+})
+```
+
+## Migrer hændelser og oprydning
+
+V1's `event`-callback bliver til et asynkront abonnement på serverens offentlige hændelsesstream. Afbryd det fra den
+oprydningsfunktion, som `setup` returnerer.
+
+```ts title="V2"
+import { Plugin } from "@opencode/plugin"
+
+export default Plugin.define({
+  id: "notifications",
+  setup(ctx) {
+    const controller = new AbortController()
+
+    void (async () => {
+      for await (const event of ctx.event.subscribe({ signal: controller.signal })) {
+        if (event.type === "session.idle") console.log("Session completed")
+      }
+    })()
+
+    return () => controller.abort()
+  },
+})
+```
+
+Brug oprydningsfunktionen til timere, underprocesser, sockets og andre ressourcer, som pluginnet ejer. Registreringer af
+hooks og transformationer er afgrænset til pluginnet og ryddes op automatisk.
+
+## Migrer indstillinger og vedvarende tilstand
+
+Læs indstillinger fra `ctx.options`. Brug `ctx.storage` i stedet for at opfinde en global fil, når tilstanden hører til et
+plugin; dets JSON-værdier er varige og afgrænset til pluginnet.
+
+```ts
+const strict = ctx.options.strict === true
+await ctx.storage.set("settings", { strict })
+const settings = await ctx.storage.get("settings")
+```
+
+## Understøt V1 og V2 fra én pakke
+
+En pakke kan midlertidigt udstille begge implementeringer fra én default-eksport. V1 kalder `server()`, og V2 kalder
+`setup()`. API'erne forbliver adskilte; denne form oversætter ikke hooks automatisk.
+
+```ts title="src/index.ts"
+import { Plugin } from "@opencode/plugin"
+
+export default {
+  ...Plugin.define({
+    id: "example",
+    async setup(ctx) {
+      await ctx.tool.hook("execute.before", () => {
+        console.log("A tool is about to run")
+      })
+    },
+  }),
+  async server() {
+    return {
+      "tool.execute.before": async () => {
+        console.log("A tool is about to run")
+      },
+    }
+  },
+}
+```
+
+V1-indgangspunkter i objektform understøttes i OpenCode `1.18.29` og nyere. Hvis du understøtter ældre V1-udgivelser,
+skal du bruge separate pakkeversioner eller indgangspunkter og teste den ældste udgivelse, du hævder at understøtte. Fjern
+V1-implementeringen, når din supportperiode slutter.
+
+## Verificer et porteret plugin
+
+For hvert plugin:
+
+1. Bekræft at dets ID og kilde står på listen over aktive plugins.
+2. Afprøv alle registrerede hooks, transformationer, værktøjer, kommandoer og hændelsesabonnementer.
+3. Verificer oprydningen ved at genindlæse eller fjerne pluginnet.
+4. Test plugin-indstillinger og gemt tilstand med et rent projekt.
+5. For en publiceret pakke skal du teste den installerede pakke og ikke kun en kopi, der er linket i arbejdsområdet.
+
+Se [Plugins-guiden](/build/plugins) for hele Promise-API'et, [Effect-plugins](/build/plugins/effect) for
+Effect-indgangspunktet, [plugin-RPC](/build/plugins/rpc) for brugerdefinerede metoder og hændelser og
+[CLI-plugins](/build/plugins/cli) for TUI-udvidelser.

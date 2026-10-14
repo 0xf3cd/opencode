@@ -1,0 +1,101 @@
+---
+title: "Web araması"
+---
+
+OpenCode'dan güncel bilgi istediğinizde web'de arama yapabilir, sonuçları okuyabilir ve yanıtına kaynak bağlantılarını
+ekleyebilir.
+
+```text
+Find the latest Bun release and summarize the changes.
+```
+
+İlk aramada sizden web aramasına izin vermeniz ve bir sağlayıcı seçmeniz istenir. OpenCode seçiminizi sonraki oturumlar
+için hatırlar.
+
+## Sağlayıcılar
+
+OpenCode beş arama sağlayıcısı içerir:
+
+| Sağlayıcı | ID | Ortam değişkeni |
+| --- | --- | --- |
+| Exa | `exa` | `EXA_API_KEY` |
+| Firecrawl | `firecrawl` | `FIRECRAWL_API_KEY` |
+| Parallel | `parallel` | `PARALLEL_API_KEY` |
+| Tavily | `tavily` | `TAVILY_API_KEY` |
+| TinyFish | `tinyfish` | `TINYFISH_API_KEY` (isteğe bağlı) |
+
+TUI'den `/connect` komutuyla bir hesap bağlayın veya OpenCode'u başlatmadan önce sağlayıcının ortam değişkenini ayarlayın.
+
+```bash
+$ TAVILY_API_KEY=your-key opencode
+```
+
+## Seçim
+
+Seçim istemini atlamak için `opencode.jsonc` dosyasında bir sağlayıcı belirleyin.
+
+```jsonc title="opencode.jsonc"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "websearch": {
+    "provider": "tavily",
+  },
+}
+```
+
+Kullanılabilir bir sağlayıcının otomatik olarak seçilmesi için `"random"` değerini kullanın. Her oturum, seçtiği sağlayıcı
+hız sınırına takılana kadar o sağlayıcıyı kullanmaya devam eder.
+
+```jsonc title="opencode.jsonc"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "websearch": {
+    "provider": "random",
+  },
+}
+```
+
+## Sınırlar
+
+Bir sağlayıcı HTTP 429 döndürdüğünde rastgele seçim, aramayı kullanılabilir başka bir sağlayıcıyla yeniden dener. Hız
+sınırına takılan sağlayıcı `Retry-After` süresi boyunca, yanıtta geçerli bir süre yoksa 60 saniye bekletilir.
+
+```text
+Exa returns HTTP 429
+→ Exa enters cooldown
+→ OpenCode retries with another provider
+```
+
+Tüm sağlayıcılar bekleme süresindeyse arama hemen başarısız olur. Bir oturumu taşımak veya sunucusunu yeniden başlatmak,
+oturumun hatırladığı sağlayıcıyı temizler; bekleme süreleri aynı çalışma alanındaki oturumlar arasında paylaşılır.
+
+## İzinler
+
+Web aramaları, `websearch` izin eylemini ve kaynak olarak arama sorgusunu kullanır. Açıkça izin verilmemiş aramalardan önce
+onay isteyin.
+
+```jsonc title="opencode.jsonc"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "permissions": [
+    {
+      "action": "websearch",
+      "resource": "*",
+      "effect": "ask",
+    },
+  ],
+}
+```
+
+Kural sırası ve eşleştirme için [İzinler](/permissions) sayfasına bakın.
+
+## Devre dışı bırakma
+
+Web arama aracını model isteklerinden kaldırmak için `websearch` değerini `false` olarak ayarlayın.
+
+```jsonc title="opencode.jsonc"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "websearch": false,
+}
+```

@@ -1,0 +1,198 @@
+---
+title: "Biçimlendiriciler"
+---
+
+OpenCode, `write`, `edit` veya `patch` araçları dosyaları değiştirdikten sonra bu dosyaları biçimlendirebilir.
+Biçimlendiriciler varsayılan olarak devre dışıdır; bu yüzden yapılandırmanızda etkinleştirin:
+
+```jsonc title="opencode.jsonc"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "formatter": true,
+}
+```
+
+## Etkinleştirme
+
+Tüm yerleşik biçimlendiricileri etkinleştirmek için `formatter` değerini `true` olarak ayarlayın. OpenCode yerleşik bir
+biçimlendiriciyi yalnızca çalıştırılabilir dosyası ve projeye özgü gereksinimleri mevcutsa çalıştırır.
+
+```jsonc title="opencode.jsonc"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "formatter": true,
+}
+```
+
+Bir nesne de yerleşik biçimlendiricileri etkinleştirir ve bunları geçersiz kılmanıza veya özel biçimlendiriciler
+eklemenize olanak tanır. Boş bir nesne devralınan biçimlendirici ayarlarını korurken `true` bunları yerleşik ayarlara
+sıfırlar.
+
+```jsonc title="opencode.jsonc"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "formatter": {},
+}
+```
+
+## Yerleşikler
+
+OpenCode aşağıdaki biçimlendirici tanımlarını içerir. Çoğu, adı geçen komutun kullanılabilir olmasını gerektirir; ek
+algılama kuralları olan tanımlar bu kuralları aşağıda listeler.
+
+| Biçimlendirici | Uzantılar | Gereksinim |
+| --- | --- | --- |
+| `gofmt` | `.go` | `gofmt` komutu |
+| `mix` | `.ex`, `.exs`, `.eex`, `.heex`, `.leex`, `.neex`, `.sface` | `mix` komutu |
+| `oxfmt` | `.js`, `.jsx`, `.mjs`, `.cjs`, `.ts`, `.tsx`, `.mts`, `.cts` | `package.json` içinde `oxfmt` bağımlılığı |
+| `prettier` | `.js`, `.jsx`, `.mjs`, `.cjs`, `.ts`, `.tsx`, `.mts`, `.cts`, `.html`, `.htm`, `.css`, `.scss`, `.sass`, `.less`, `.vue`, `.svelte`, `.json`, `.jsonc`, `.yaml`, `.yml`, `.toml`, `.xml`, `.md`, `.mdx`, `.graphql`, `.gql` | `package.json` içinde `prettier` bağımlılığı |
+| `biome` | Yukarıdaki `prettier` ile aynı uzantılar | `biome.json` veya `biome.jsonc` ve kurulu bir `@biomejs/biome` ikili dosyası |
+| `zig` | `.zig`, `.zon` | `zig` komutu |
+| `clang-format` | `.c`, `.cc`, `.cpp`, `.cxx`, `.c++`, `.h`, `.hh`, `.hpp`, `.hxx`, `.h++`, `.ino`, `.C`, `.H` | `clang-format` komutu ve `.clang-format` |
+| `ktlint` | `.kt`, `.kts` | `ktlint` komutu |
+| `ruff` | `.py`, `.pyi` | `ruff` komutu ve bir Ruff yapılandırması veya bağımlılık bildirimi |
+| `air` | `.R` | Kendini R biçimlendiricisi olarak tanıtan `air` komutu |
+| `uv` | `.py`, `.pyi` | `uv format` desteğine sahip `uv` komutu |
+| `rubocop` | `.rb`, `.rake`, `.gemspec`, `.ru` | `rubocop` komutu |
+| `standardrb` | `.rb`, `.rake`, `.gemspec`, `.ru` | `standardrb` komutu |
+| `htmlbeautifier` | `.erb` | `htmlbeautifier` komutu |
+| `dart` | `.dart` | `dart` komutu |
+| `ocamlformat` | `.ml`, `.mli` | `ocamlformat` komutu ve `.ocamlformat` |
+| `terraform` | `.tf`, `.tfvars` | `terraform` komutu |
+| `latexindent` | `.tex` | `latexindent` komutu |
+| `gleam` | `.gleam` | `gleam` komutu |
+| `shfmt` | `.sh`, `.bash` | `shfmt` komutu |
+| `nixfmt` | `.nix` | `nixfmt` komutu |
+| `rustfmt` | `.rs` | `rustfmt` komutu |
+| `pint` | `.php` | `composer.json` içinde `laravel/pint` |
+| `ormolu` | `.hs` | `ormolu` komutu |
+| `cljfmt` | `.clj`, `.cljs`, `.cljc`, `.edn` | `cljfmt` komutu |
+| `dfmt` | `.d` | `dfmt` komutu |
+
+Örneğin yerleşik biçimlendiricileri etkinleştirdiğinizde OpenCode, eşleşen dosyalar için projedeki yerel Prettier
+bağımlılığını bulup çalıştırabilir:
+
+```jsonc title="opencode.jsonc"
+{
+  "formatter": true,
+}
+```
+
+## Özelleştirme
+
+Yerleşik bir biçimlendiriciyi değiştirmek veya özel bir biçimlendirici tanımlamak için adlandırılmış bir girdi ekleyin.
+Özel bir biçimlendiricinin çalışması için hem `command` hem de `extensions` gerekir.
+
+```jsonc title="opencode.jsonc"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "formatter": {
+    "prettier": {
+      "environment": {
+        "NODE_ENV": "development",
+      },
+      "extensions": [".js", ".ts"],
+    },
+    "deno-markdown": {
+      "command": ["deno", "fmt", "$FILE"],
+      "extensions": [".md"],
+    },
+  },
+}
+```
+
+| Alan | Tür | Davranış |
+| --- | --- | --- |
+| `disabled` | `boolean` | `true` olduğunda adlandırılmış biçimlendiriciyi kaldırır. |
+| `command` | `string[]` | Yerleşik komutu değiştirir veya özel bir komut tanımlar. |
+| `environment` | `Record<string, string>` | Üst ortamı koruyarak ortam değişkenleri ekler. |
+| `extensions` | `string[]` | Yerleşik uzantı listesini değiştirir veya özel listeyi tanımlar. Baştaki noktayı dahil edin. |
+
+Tüm alanlar isteğe bağlıdır. Yerleşik bir girdi, belirtilmeyen değerleri devralır; komutu veya uzantıları olmayan yeni
+bir girdi ise çalışamaz.
+
+```jsonc title="opencode.jsonc"
+{
+  "formatter": {
+    "prettier": {
+      "extensions": [".md", ".mdx"],
+    },
+  },
+}
+```
+
+## Komutlar
+
+`command` bir shell komut dizesi değil, bir argüman dizisidir. OpenCode `$FILE` ifadesini dosyanın mutlak yoluyla
+değiştirir ve komutu etkin proje dizininden çalıştırır.
+
+```jsonc title="opencode.jsonc"
+{
+  "formatter": {
+    "custom": {
+      "command": ["custom-fmt", "--write", "$FILE"],
+      "extensions": [".custom"],
+    },
+  },
+}
+```
+
+## Eşleştirme
+
+OpenCode, dosyanın son uzantısını `extensions` ile karşılaştırır. Eşleştirme büyük/küçük harfe duyarlıdır. `.part.md`
+gibi birleşik girdiler `notes.part.md` dosyasıyla eşleşmez, çünkü bu dosyanın son uzantısı `.md` olur.
+
+```jsonc title="opencode.jsonc"
+{
+  "formatter": {
+    "markdown": {
+      "command": ["deno", "fmt", "$FILE"],
+      "extensions": [".md"],
+    },
+  },
+}
+```
+
+Birden fazla biçimlendirici eşleştiğinde OpenCode bunları kayıt sırasına göre dener ve ilk başarılı komuttan sonra durur.
+Yerleşikler kendi yerleşik sıralarını korur; özel girdiler nesnedeki sıralarıyla onları izler. Biri başarısız bir çıkış
+koduyla sonlanırsa OpenCode hatayı kaydeder ve sonraki eşleşmeyi dener.
+
+```jsonc title="opencode.jsonc"
+{
+  "formatter": {
+    "preferred": {
+      "command": ["preferred-fmt", "$FILE"],
+      "extensions": [".foo"],
+    },
+    "fallback": {
+      "command": ["fallback-fmt", "$FILE"],
+      "extensions": [".foo"],
+    },
+  },
+}
+```
+
+## Devre dışı bırakma
+
+Hiçbir yapılandırma dosyası `formatter` ayarlamadığında biçimlendirme devre dışıdır. Daha düşük öncelikli bir dosyanın
+etkinleştirdiği biçimlendirmeyi devre dışı bırakmak için değeri `false` olarak ayarlayın.
+
+```jsonc title="opencode.jsonc"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "formatter": false,
+}
+```
+
+Diğerlerini etkin bırakırken tek bir yerleşik biçimlendiriciyi devre dışı bırakmak için onun adlandırılmış girdisini
+devre dışı olarak işaretleyin.
+
+```jsonc title="opencode.jsonc"
+{
+  "formatter": {
+    "prettier": {
+      "disabled": true,
+    },
+  },
+}
+```

@@ -1,0 +1,378 @@
+---
+title: "Eklentileri V1'den geçirme"
+---
+
+Eklenti yapılandırması otomatik olarak normalleştirilebilir, ancak eklenti kodunun elle taşınması gerekir. V1 eklenti
+fonksiyonları, araçları ve hook'ları içeren tek bir nesne döndürür. V2 eklentisi ise varsayılan dışa aktarım olarak
+`id` ve `setup(ctx)` içeren bir tanım sunar. `setup`; hook'ları, dönüşümleri, araçları ve abonelikleri bağlam üzerinden
+kaydeder.
+
+<Callout type="warning">
+  V1 eklenti uygulamaları V2'de çalışmaz. Dosyayı taşımak veya yapılandırma girdisini yeniden adlandırmak yeterli değildir.
+</Callout>
+
+## Eklenti yapılandırmasını geçirme
+
+`plugin` anahtarını `plugins` olarak yeniden adlandırın. Paket ve seçeneklerden oluşan demetleri (tuple) bir nesneyle
+değiştirin:
+
+```jsonc
+// V1
+{
+  "plugin": [
+    "opencode-example-plugin",
+    ["./plugin/local.ts", { "enabled": true }]
+  ]
+}
+
+// V2
+{
+  "plugins": [
+    "opencode-example-plugin",
+    {
+      "package": "./plugin/local.ts",
+      "options": { "enabled": true }
+    }
+  ]
+}
+```
+
+V2, yerel eklentileri hem `.opencode/plugin/` hem de `.opencode/plugins/` dizininden bulur; V2 dosyaları için
+`.opencode/plugins/` dizinini kullanın. Eklentiyi taşırken yardımcı modülleri de yanında tutun. Yerel eklentiler ve paket
+eklentileri aynı uygulama API'sini kullanır.
+
+## Giriş noktasını değiştirme
+
+Paket içe aktarımını değiştirin, dışa aktarılan eklenti fonksiyonunu `Plugin.define` ile değiştirin ve başlatma kodunu
+`setup` içine taşıyın.
+
+```ts title="V1"
+import type { Plugin } from "@opencode-ai/plugin"
+
+export const ExamplePlugin: Plugin = async ({ directory, project, client }) => {
+  await client.app.log({
+    body: { service: "example", level: "info", message: `Loaded for ${project.id}` },
+  })
+
+  return {
+    // V1 tools and hooks
+  }
+}
+```
+
+```ts title="V2"
+import { Plugin } from "@opencode/plugin"
+
+export default Plugin.define({
+  id: "example",
+  async setup(ctx) {
+    await ctx.storage.set("last-project", ctx.location.project.id)
+    console.log(`Loaded for ${ctx.location.directory}`)
+  },
+})
+```
+
+Her V2 eklentisinin sabit bir `id` değeri olmalıdır. Eklenti depolaması bu ID'ye göre kapsamlanır; ID ayrıca eklentiyi
+durum bilgilerinde ve tanılamada tanımlar. Yayımlanan eklentiler, hedefledikleri OpenCode sürümüyle uyumlu bir
+`@opencode/plugin` sürümüne bağımlı olmalıdır.
+
+## Bağlamı geçirme
+
+V2 bağlamı hem bir OpenCode istemcisi hem de eklenti genişletme API'sidir. İşlemlerin çoğu ayrı bir `client` özelliğinde
+değil, alanlarına (domain) göre gruplanmıştır.
+
+| V1                                      | V2                                                                  |
+| --------------------------------------- | ------------------------------------------------------------------- |
+| `directory`                             | `ctx.location.directory`                                            |
+| `project`                               | `ctx.location.project`                                              |
+| `client`                                | `ctx.session`, `ctx.permission`, `ctx.agent` gibi alan metotları    |
+| eklenti seçenekleri argümanı            | `ctx.options`                                                       |
+| döndürülen `dispose()` hook'u           | `setup` tarafından döndürülen temizleme fonksiyonu                  |
+| döndürülen `event` hook'u               | `ctx.event.subscribe()`                                             |
+| döndürülen yapılandırma, model veya araç değişiklikleri | bir alanın `transform(...)` metodu                  |
+| `$` Bun shell yardımcısı                | eklentinizin kullandığı süreç API'sini içe aktarıp kendiniz yönetin |
+
+`ctx.location`, bu eklenti örneğinin yüklendiği konumu tanımlar. Eklentinin gözlemleyebileceği her oturumun veya olayın
+konumu değildir. Bu ayrım önemli olduğunda oturum veya olay verisini okuyun.
+
+Bağlam, tablodakilerden çok daha fazla alan sunar; bunlar arasında kataloglar, komutlar, entegrasyonlar, MCP sunucuları,
+referanslar, beceriler, depolama, VCS, worktree'ler ve web araması vardır. [Eklenti bağlamının tamamı](/build/plugins#api)
+için ilgili bölüme bakın.
+
+## Hook'ları `setup` içinde kaydetme
+
+V1, hook'ları dize anahtarlarıyla döndürür. V2 ise her hook'u, ilgili işlemin sahibi olan alana kaydeder. Geri çağırma
+fonksiyonu ayrı `input` ve `output` nesneleri yerine değiştirilebilir tek bir olay alır.
+
+```ts title="V1"
+import type { Plugin } from "@opencode-ai/plugin"
+
+export const GuardPlugin: Plugin = async () => ({
+  "tool.execute.before": async (input, output) => {
+    if (input.tool === "read" && output.args.filePath.includes(".env")) {
+      throw new Error("Do not read .env files")
+    }
+  },
+  "shell.env": async (_input, output) => {
+    output.env.COMPANY_ENV = "development"
+  },
+})
+```
+
+```ts title="V2"
+import { Plugin } from "@opencode/plugin"
+
+export default Plugin.define({
+  id: "company.guard",
+  async setup(ctx) {
+    await ctx.tool.hook("execute.before", (event) => {
+      const input = event.input as { filePath?: string }
+      if (event.tool === "read" && input.filePath?.includes(".env")) {
+        throw new Error("Do not read .env files")
+      }
+    })
+
+    await ctx.shell.hook("create.before", (event) => {
+      event.env.COMPANY_ENV = "development"
+    })
+  },
+})
+```
+
+Kayıtlar eklentinin ömrü boyunca etkin kalır ve eklenti kaldırıldığında serbest bırakılır. Döndürülen kaydı yalnızca
+eklentinin belirli bir hook'u veya dönüşümü `registration.dispose()` ile daha erken kaldırması gerekiyorsa saklayın.
+
+Her V1 hook'una en yakın V2 API'sini bulmak için bu tabloyu kullanın:
+
+| V1 genişletme noktası                  | V2 API'si                                                    |
+| -------------------------------------- | ------------------------------------------------------------ |
+| `event`                                | `ctx.event.subscribe()`                                      |
+| `dispose`                              | `setup` tarafından döndürülen temizleme fonksiyonu           |
+| `config`                               | etkilenen alanlardaki dönüşümler                             |
+| `tool` haritası                        | `ctx.tool.transform(...)`                                    |
+| `auth`                                 | `ctx.integration.transform(...)` ve entegrasyon API'leri     |
+| `provider`                             | `ctx.provider.transform(...)` ve `ctx.model.transform(...)`  |
+| `chat.message`                         | `ctx.session.hook("prompt", ...)`                            |
+| `chat.params`                          | `ctx.session.hook("context", ...)`                           |
+| `chat.headers`                         | `ctx.session.hook("model.request", ...)` veya `"http.request"` |
+| `permission.ask`                       | `ctx.permission.hook("evaluate", ...)`                       |
+| `command.execute.before`               | amaca göre komut dönüşümleri veya istem hook'u               |
+| `tool.execute.before`                  | `ctx.tool.hook("execute.before", ...)`                       |
+| `tool.execute.after`                   | `ctx.tool.hook("execute.after", ...)`                        |
+| `shell.env`                            | `ctx.shell.hook("create.before", ...)`                       |
+| `tool.definition`                      | `ctx.tool.transform(...)`                                    |
+| `experimental.chat.system.transform`   | `ctx.session.hook("context", ...)` ile `event.system` düzenlemesi   |
+| `experimental.chat.messages.transform` | `ctx.session.hook("context", ...)` ile `event.messages` düzenlemesi |
+| `experimental.session.compacting`      | `ctx.session.hook("compaction", ...)`                        |
+
+Bunlar geçiş hedefleridir; her zaman birebir yeniden adlandırma değildir. Özellikle V2 `prompt` hook'u, istemin kalıcı
+olarak kabulünden (admission) önce çalışır; `context` ise bir ajan model isteğinden hemen önce çalışır. Bir dönüşümün her
+model isteği türüne uygulanması gerekiyorsa `context`, `compaction`, `generate` ve `title` hook'larını ayrı ayrı kaydedin.
+
+Her deneysel V1 hook'unun doğrudan bir V2 karşılığı yoktur. `experimental.compaction.autocontinue`,
+`experimental.provider.small_model` veya `experimental.text.complete` kullanan eklentileri, dahili bir yaşam döngüsü
+varsayımını korumaya çalışmak yerine V2 oturum, sağlayıcı, model ve olay API'lerine göre yeniden değerlendirin.
+
+`command.execute.before` hook'unun da birebir genel bir karşılığı yoktur. Komutun sahibi eklentiyse komutu
+`ctx.command.transform` ile kaydedin. Asıl amaç, komutlar ve diğer istem kaynakları tarafından gönderilen istemleri
+değiştirmekse istem hook'unu kullanın.
+
+## İstek hook'larını geçirme
+
+V2; istem kabulünü, modelin gördüğü bağlamı, anlamsal model seçeneklerini ve yerel HTTP'yi birbirinden ayırır.
+Eklentinizin ihtiyaç duyduğu en dar katmanı seçin.
+
+```ts title="V1"
+export const RequestPlugin = async () => ({
+  "chat.params": async (_input, output) => {
+    output.temperature = 0.2
+    output.maxOutputTokens = 8_000
+  },
+  "chat.headers": async (_input, output) => {
+    output.headers["x-plugin"] = "review"
+  },
+  "experimental.chat.system.transform": async (_input, output) => {
+    output.system.push("Focus on correctness.")
+  },
+})
+```
+
+```ts title="V2"
+import { Plugin } from "@opencode/plugin"
+
+export default Plugin.define({
+  id: "review-request",
+  async setup(ctx) {
+    await ctx.session.hook("context", (event) => {
+      event.system.push({ type: "text", text: "Focus on correctness." })
+      event.options.temperature = 0.2
+      event.options.maxTokens = 8_000
+    })
+
+    await ctx.session.hook("model.request", (event) => {
+      event.headers["x-plugin"] = "review"
+    })
+  },
+})
+```
+
+`event.options` içinde anlamsal sağlayıcı seçeneklerini kullanın. Model isteği başlıkları ve ham istek ayarları için
+`model.request` kullanın; `http.request` veya `http.response` hook'larını yalnızca eklentinin sağlayıcıyla yapılan yerel
+HTTP alışverişine ihtiyacı olduğunda kullanın. Sağlayıcıya özgü hook'lar, `ctx.session.hook` çağrısına üçüncü argüman
+olarak `{ providerID: "..." }` geçirebilir.
+
+## Özel araçları geçirme
+
+V1, eski `tool()` yardımcısıyla oluşturulan bir `tool` haritası döndürür. V2 ise araç tanımlarını senkron bir
+`ctx.tool.transform` düzenleyicisiyle kaydeder. Araç şemaları JSON Schema kullanır ve çalıştırma sonucunda yapılandırılmış
+içerik döner.
+
+```ts title="V1"
+import { tool } from "@opencode-ai/plugin"
+
+export const ToolsPlugin = async () => ({
+  tool: {
+    greeting: tool({
+      description: "Create a greeting",
+      args: { name: tool.schema.string() },
+      async execute(args) {
+        return `Hello ${args.name}!`
+      },
+    }),
+  },
+})
+```
+
+```ts title="V2"
+import { Plugin } from "@opencode/plugin"
+
+export default Plugin.define({
+  id: "greeting",
+  async setup(ctx) {
+    await ctx.tool.transform((editor) => {
+      editor.add({
+        name: "greeting",
+        description: "Create a greeting",
+        input: {
+          type: "object",
+          properties: { name: { type: "string" } },
+          required: ["name"],
+          additionalProperties: false,
+        },
+        async execute(input) {
+          return { content: `Hello ${(input as { name: string }).name}!` }
+        },
+      })
+    })
+  },
+})
+```
+
+Dönüşümler, yeniden oynatılabilen durum düzenlemeleridir. Geri çağırma fonksiyonlarını senkron, hafif ve tek seferlik
+yan etkilerden arınmış tutun. Harici verileri kayıttan önce yükleyin, geri çağırma içinde yakalayın ve bu veriler
+değiştiğinde ilgili alanın `reload()` metodunu çağırın. Sonraki bir eklenti dönüşümü önceki değişiklikleri görür ve
+bunları güncelleyebilir, değiştirebilir veya kaldırabilir.
+
+Aynı dönüşüm deseni V1'deki `config` ve `provider` hook'larının yerini alır; ancak V2, değiştirilebilir tek bir genel
+yapılandırma nesnesi sunmaz. Değişikliği, sahibi olan alana kaydedin: `ctx.agent`, `ctx.provider`, `ctx.model`,
+`ctx.command`, `ctx.integration`, `ctx.mcp`, `ctx.reference`, `ctx.skill`, `ctx.tool`, `ctx.vcs`, `ctx.websearch` veya
+`ctx.worktree`. Kimlik doğrulama yöntemleri entegrasyonlara aittir. Sağlayıcı dönüşümleri kaynak tanımlarını ve sağlayıcı
+ayarlarını sağlarken model dönüşümleri, etkin sağlayıcıların tüm model koleksiyonuna kısıtlamalar ve geçersiz kılmalar
+uygular.
+
+```ts
+await ctx.provider.transform((editor) => {
+  editor.update("anthropic", (provider) => {
+    provider.headers = { ...provider.headers, "x-company": "engineering" }
+  })
+})
+
+await ctx.model.transform((editor) => {
+  editor.list("anthropic").forEach((model) => {
+    if (!model.capabilities.tools) editor.remove(model.providerID, model.id)
+  })
+})
+```
+
+## Olayları ve temizliği geçirme
+
+V1'deki `event` geri çağırması, herkese açık sunucu olay akışına yapılan asenkron bir aboneliğe dönüşür. Aboneliği
+`setup` tarafından döndürülen temizleme fonksiyonunda iptal edin.
+
+```ts title="V2"
+import { Plugin } from "@opencode/plugin"
+
+export default Plugin.define({
+  id: "notifications",
+  setup(ctx) {
+    const controller = new AbortController()
+
+    void (async () => {
+      for await (const event of ctx.event.subscribe({ signal: controller.signal })) {
+        if (event.type === "session.idle") console.log("Session completed")
+      }
+    })()
+
+    return () => controller.abort()
+  },
+})
+```
+
+Temizleme fonksiyonunu zamanlayıcılar, alt süreçler, soketler ve eklentinin sahip olduğu diğer kaynaklar için kullanın.
+Hook ve dönüşüm kayıtları eklentiye göre kapsamlanır ve otomatik olarak temizlenir.
+
+## Seçenekleri ve kalıcı durumu geçirme
+
+Seçenekleri `ctx.options` üzerinden okuyun. Durum bir eklentiye aitse genel bir dosya icat etmek yerine `ctx.storage`
+kullanın; buradaki JSON değerleri kalıcıdır ve eklentiye göre kapsamlanır.
+
+```ts
+const strict = ctx.options.strict === true
+await ctx.storage.set("settings", { strict })
+const settings = await ctx.storage.get("settings")
+```
+
+## Tek paketten V1 ve V2 desteği
+
+Bir paket, geçici olarak her iki uygulamayı da tek bir varsayılan dışa aktarımdan sunabilir. V1 `server()`, V2 ise
+`setup()` fonksiyonunu çağırır. API'ler ayrı kalır; bu yapı hook'ları otomatik olarak dönüştürmez.
+
+```ts title="src/index.ts"
+import { Plugin } from "@opencode/plugin"
+
+export default {
+  ...Plugin.define({
+    id: "example",
+    async setup(ctx) {
+      await ctx.tool.hook("execute.before", () => {
+        console.log("A tool is about to run")
+      })
+    },
+  }),
+  async server() {
+    return {
+      "tool.execute.before": async () => {
+        console.log("A tool is about to run")
+      },
+    }
+  },
+}
+```
+
+V1 nesne giriş noktaları OpenCode `1.18.29` ve sonraki sürümlerde desteklenir. Daha eski V1 sürümlerini destekliyorsanız
+ayrı paket sürümleri veya giriş noktaları kullanın ve desteklediğinizi belirttiğiniz en eski sürümü test edin. Destek
+süreniz sona erdiğinde V1 uygulamasını kaldırın.
+
+## Taşınan eklentiyi doğrulama
+
+Her eklenti için:
+
+1. ID'sinin ve kaynağının etkin eklenti listesinde göründüğünü doğrulayın.
+2. Kaydedilen her hook'u, dönüşümü, aracı, komutu ve olay aboneliğini çalıştırıp deneyin.
+3. Eklentiyi yeniden yükleyerek veya kaldırarak temizliğin çalıştığını doğrulayın.
+4. Eklenti seçeneklerini ve kalıcı durumu temiz bir projeyle test edin.
+5. Yayımlanan bir paket için yalnızca çalışma alanına bağlı bir kopyayı değil, kurulu paketi test edin.
+
+Promise API'sinin tamamı için [Eklentiler kılavuzuna](/build/plugins), Effect giriş noktası için [Effect
+eklentilerine](/build/plugins/effect), özel metotlar ve olaylar için [eklenti RPC'sine](/build/plugins/rpc), TUI
+uzantıları için de [CLI eklentilerine](/build/plugins/cli) bakın.

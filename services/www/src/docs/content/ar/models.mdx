@@ -1,0 +1,457 @@
+---
+title: "النماذج"
+---
+
+اختر نموذجًا للجلسة الحالية باستخدام `/models`:
+
+```text
+/models
+```
+
+يعرض OpenCode النماذج من [models.dev](https://models.dev) ومن عمليات التكامل مع المزوّدين ومن تهيئتك. ولا يعرض المحدِّد
+إلا النماذج المفعّلة التي يتوفر مزوّدها في المشروع الحالي. اتصل بالمزوّدين من صفحة [المزوّدون](/providers).
+
+## الاختيار
+
+اختر عنصرًا من `/models` بدلًا من تخمين معرّف المزوّد أو النموذج. ينطبق الاختيار على الجلسة الحالية، ولا يغيّر تهيئتك.
+
+```text
+anthropic/claude-sonnet-4-5
+```
+
+يختلف توفر النماذج من مشروع إلى آخر:
+
+- يجب أن يكون النموذج مفعّلًا.
+- يجب أن يكون مزوّده متاحًا في المشروع الحالي.
+- لا تنتقل بيانات الاعتماد والتهيئة من مشروع آخر تلقائيًا.
+
+## مرات التشغيل
+
+استخدم `--model` لاختيار نموذج لمرة تشغيل واحدة من سطر الأوامر دون تغيير النموذج الافتراضي المهيّأ:
+
+```bash
+opencode run --model anthropic/claude-sonnet-4-5 "Refactor parseToken"
+```
+
+يمكن للوكلاء والأوامر أيضًا اختيار نماذجها الخاصة. راجع [الوكلاء](/agents) و[الأوامر](/commands).
+
+## القيم الافتراضية
+
+اضبط `model` في `opencode.json` أو `opencode.jsonc` لاختيار النموذج الافتراضي للأعمال الجديدة:
+
+```jsonc title="opencode.jsonc"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "model": "anthropic/claude-sonnet-4-5",
+}
+```
+
+يصبح النموذج المهيّأ هو الافتراضي في الكتالوج متى كان مفعّلًا وكان مزوّده متاحًا. وإلا يلجأ OpenCode إلى أحدث نموذج
+مدعوم متاح بديلًا احتياطيًا.
+
+- يتقدم النموذج المحدد مسبقًا لجلسة ما على النموذج الافتراضي المهيّأ.
+- لا يؤدي تبديل نموذج الجلسة إلى إعادة كتابة ملف التهيئة.
+- لا يحتفظ الحقل `model` في المستوى الجذري حاليًا إلا بالمزوّد والنموذج الافتراضيين، دون المتغير.
+
+راجع [التهيئة](/config) للتعرّف على مواقع التهيئة وترتيب أولويتها.
+
+## المتغيرات
+
+المتغيرات خيارات مسمّاة لنموذج واحد، وتُستخدم غالبًا لتحديد مستوى جهد التفكير (reasoning effort) أو ميزانيات tokens. أضف `#variant`
+عند اختيار متغير لمرة تشغيل أو جلسة أو وكيل أو أمر:
+
+```bash
+opencode run --model openai/gpt-5.2#high "Review this migration plan"
+```
+
+تأتي أسماء المتغيرات من بيانات الكتالوج الحالية للنموذج المحدد. لا تتوفر أسماء مثل `low` و`high` و`max` لكل نموذج،
+ويؤدي المتغير غير المعروف إلى خطأ في تحليل النموذج.
+
+عرّف متغيرات جديدة، أو استبدل متغيرات الكتالوج ذات المعرّف نفسه، في المصفوفة `variants` الخاصة بالنموذج:
+
+```jsonc title="opencode.jsonc"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "providers": {
+    "openai": {
+      "models": {
+        "gpt-5.2": {
+          "settings": {
+            "reasoningEffort": "medium",
+          },
+          "variants": [
+            {
+              "id": "fast",
+              "settings": {
+                "reasoningEffort": "low",
+              },
+            },
+            {
+              "id": "deep",
+              "settings": {
+                "reasoningEffort": "high",
+                "reasoningSummary": "auto",
+              },
+            },
+          ],
+        },
+      },
+    },
+  },
+}
+```
+
+يمكن أن يحتوي كل متغير على `settings` و`headers` و`body`. وتُطبَّق قيمه بعد قيم المزوّد والنموذج.
+
+## الخيارات
+
+يمكن لعناصر المزوّدين والنماذج تخصيص الطلبات باستخدام `settings` و`headers` و`body`:
+
+```jsonc title="opencode.jsonc"
+{
+  "providers": {
+    "openai": {
+      "settings": {
+        "baseURL": "https://api.example.com/v1",
+      },
+      "headers": {
+        "X-Team": "platform",
+      },
+      "models": {
+        "gpt-5.2": {
+          "settings": {
+            "reasoningEffort": "high",
+          },
+          "body": {
+            "store": false,
+          },
+        },
+      },
+    },
+  },
+}
+```
+
+| الحقل      | الغرض                                                            |
+| ---------- | ------------------------------------------------------------------ |
+| `settings` | خيارات حزمة المزوّد، مثل `baseURL` أو `reasoningEffort`.  |
+| `headers`  | ترويسات إضافية لطلبات HTTP.                                 |
+| `body`     | حقول متن الطلب الخاصة بالمزوّد.                            |
+
+يطبّق OpenCode قيم المزوّد أولًا، ثم قيم النموذج، ثم المتغير المحدد أخيرًا.
+
+- تُدمج الكائنات المتداخلة `settings` و`body`.
+- تحل المصفوفات والقيم المفردة اللاحقة محل القيم السابقة.
+- تُطابَق أسماء الترويسات دون تمييز بين الأحرف الكبيرة والصغيرة.
+- الخيارات خاصة بكل مزوّد، وقد تتجاهلها حزمة مزوّد أخرى أو ترفضها.
+
+## الأسماء البديلة
+
+استخدم `modelID` لمنح نموذج API معرّفًا أسهل في الكتالوج:
+
+```jsonc title="opencode.jsonc"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "model": "openai/coding-default",
+  "providers": {
+    "openai": {
+      "models": {
+        "coding-default": {
+          "modelID": "gpt-5.2",
+          "name": "Coding default",
+          "capabilities": {
+            "tools": true,
+            "input": ["text", "image"],
+            "output": ["text"],
+          },
+          "limit": {
+            "context": 200000,
+            "output": 32000,
+          },
+        },
+      },
+    },
+  },
+}
+```
+
+هنا يكون `openai/coding-default` هو المرجع القابل للاختيار، بينما يُرسَل `gpt-5.2` إلى المزوّد. وبالنسبة إلى نموذج غير
+موجود في الكتالوج أصلًا، يفترض OpenCode ما يلي:
+
+- دعم الأدوات، وإدخالًا نصيًا ومرئيًا (صور)، وإخراجًا نصيًا.
+- حدًا للسياق قدره 200,000 token وحدًا للإخراج قدره 32,000 token.
+- حدًا غير محدد للإدخال.
+
+هذه افتراضات احتياطية، لا إمكانات مكتشفة. اضبط قيم `capabilities` و`limit` الدقيقة متى عرفتها؛ إذ تحل القيم الصريحة محل
+القيم الاحتياطية. وأضف `disabled: true` لإخفاء نموذج من الكتالوج المتاح:
+
+```jsonc title="opencode.jsonc"
+{
+  "providers": {
+    "openai": {
+      "models": {
+        "legacy-model": {
+          "disabled": true,
+        },
+      },
+    },
+  },
+}
+```
+
+## التفكير
+
+إذا كان نموذج متوافق مع OpenAI يبث محتوى التفكير (reasoning) في حقل مخصص من رسالة المساعد، فاضبط
+`compatibility.reasoningField`:
+
+```jsonc title="opencode.jsonc"
+{
+  "providers": {
+    "local": {
+      "models": {
+        "reasoner": {
+          "compatibility": {
+            "reasoningField": "reasoning_content",
+          },
+        },
+      },
+    },
+  },
+}
+```
+
+يتعرّف OpenCode على `reasoning` و`reasoning_content` و`reasoning_text`، ويقبل أيضًا أي سلسلة نصية أخرى خاصة بالمزوّد.
+ويقرأ محتوى التفكير المتدفق من ذلك الحقل، ثم يعيد الحقل نفسه عند إرسال رسائل المساعد السابقة إلى النموذج.
+
+## التخزين المؤقت للموجّهات
+
+يضع OpenCode نقاط فصل التخزين المؤقت للموجّهات (prompt-cache breakpoints) تلقائيًا في المسارات المعروف أنها تحتاج إليها،
+مثل Anthropic. لكن عندما تُقدَّم نماذج Claude عبر خادم وسيط (proxy) متوافق مع OpenAI مثل LiteLLM، لا يستطيع OpenCode
+معرفة أنها تحتاج إلى نقاط فصل `cache_control` بأسلوب Anthropic. لذا اضبط `compatibility.cacheFormat` على نماذج Claude
+تلك:
+
+```jsonc title="opencode.jsonc"
+{
+  "providers": {
+    "litellm": {
+      "package": "@opencode/ai/providers/openai-compatible",
+      "settings": { "baseURL": "https://litellm.example.com/v1" },
+      "models": {
+        "claude-sonnet-5": {
+          "compatibility": { "cacheFormat": "anthropic" },
+        },
+        "claude-opus-5-5": {
+          "compatibility": { "cacheFormat": "anthropic" },
+        },
+        // Other models on the same proxy cache automatically and need no setting.
+        "gpt-6.1": {},
+      },
+    },
+  },
+}
+```
+
+بعد ذلك يضع OpenCode العلامة `cache_control: { "type": "ephemeral" }` على آخر تعريف أداة وعلى موجّه النظام وعلى أحدث
+رسالة، ما يعني استخدام مدة التخزين المؤقت الافتراضية لنقطة النهاية وهي خمس دقائق. استخدم `"alibaba"` لنماذج Alibaba
+Model Studio، التي تقبل العلامات نفسها لكنها تتجاهلها في تعريفات الأدوات. واضبط `compatibility.cacheFormat` على مستوى
+المزوّد بدلًا من ذلك إذا كانت كل النماذج التي يقدّمها تقبل الصيغة نفسها.
+
+## النماذج المحلية
+
+يكتشف OpenCode تلقائيًا النماذج من Ollama وLM Studio وvLLM على عناوينها المحلية الافتراضية. ويمكنك أيضًا تهيئة أي خادم
+متوافق مع OpenAI يدويًا.
+
+```text
+ollama/gemma3:4b
+lmstudio/google/gemma-4-26b-a4b
+vllm/Qwen/Qwen3-Coder-30B-A3B-Instruct
+```
+
+### Ollama
+
+عندما يستمع Ollama على `http://127.0.0.1:11434`، اختر نموذجًا مكتشفًا باستخدام معرّف المزوّد `ollama`:
+
+```jsonc title="opencode.jsonc"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "model": "ollama/gemma3:4b",
+}
+```
+
+يحدّث OpenCode قائمة النماذج في الخلفية، ويقرأ من Ollama إمكانات السياق والرؤية واستخدام الأدوات. وتُستبعد النماذج
+المخصصة للتضمين (embedding) فقط.
+
+لاستخدام مضيف أو منفذ آخر، اضبط عنوان URL المتوافق مع OpenAI الخاص بـ Ollama. ويظل الاكتشاف يستخدم واجهة Ollama API
+الأصلية على بادئة المسار نفسها:
+
+```jsonc title="opencode.jsonc"
+{
+  "providers": {
+    "ollama": {
+      "settings": {
+        "baseURL": "http://127.0.0.1:5678/v1",
+        "apiKey": "{env:OLLAMA_API_KEY}",
+      },
+    },
+  },
+}
+```
+
+- احذف `apiKey` إذا كانت نقطة النهاية لا تتطلب مصادقة bearer.
+- عطّل الاكتشاف باستخدام `"plugins": ["-opencode.provider.ollama"]`.
+
+### LMStudio
+
+عندما يعمل خادم LM Studio بلا مصادقة على `http://127.0.0.1:1234`، اختر نموذجًا مكتشفًا باستخدام معرّف المزوّد
+`lmstudio`:
+
+```jsonc title="opencode.jsonc"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "model": "lmstudio/google/gemma-4-26b-a4b",
+}
+```
+
+يحدّث OpenCode قائمة النماذج في الخلفية، ويقرأ من LM Studio إمكانات السياق والرؤية واستخدام الأدوات. وتُستبعد نماذج
+التضمين.
+
+لاستخدام مضيف أو منفذ آخر، اضبط عنوان URL المتوافق مع OpenAI. وتظل النماذج تُكتشف تلقائيًا:
+
+```jsonc title="opencode.jsonc"
+{
+  "providers": {
+    "lmstudio": {
+      "settings": {
+        "baseURL": "http://127.0.0.1:5678/v1",
+        "apiKey": "{env:LMSTUDIO_API_KEY}",
+      },
+    },
+  },
+}
+```
+
+- احذف `apiKey` إذا كانت مصادقة LM Studio معطّلة.
+- عطّل الاكتشاف باستخدام `"plugins": ["-opencode.provider.lmstudio"]`.
+
+### vLLM
+
+عندما يستمع vLLM على `http://127.0.0.1:8000`، اختر نموذجًا مكتشفًا باستخدام معرّف المزوّد `vllm`:
+
+```jsonc title="opencode.jsonc"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "model": "vllm/Qwen/Qwen3-Coder-30B-A3B-Instruct",
+}
+```
+
+يتحقق OpenCode من `/health`، ويحدّث `/v1/models` في الخلفية، ويستخدم قيمة `max_model_len` المُبلَّغ عنها حدًا للسياق،
+ولا يضمّن إلا بطاقات النماذج التي يملكها `vllm`.
+
+تعلن النماذج المكتشفة دعم الإدخال والإخراج النصيين، لا الرؤية ولا الأدوات. إذ يفعّل vLLM استدعاء الأدوات عبر خيارات
+الخادم مثل `--enable-auto-tool-choice` و`--tool-call-parser`، وهي خيارات لا يكشف عنها الاكتشاف.
+
+لاستخدام نقطة نهاية أخرى أو خادم يتطلب مصادقة، اضبط عنوان URL المتوافق مع OpenAI الخاص به:
+
+```jsonc title="opencode.jsonc"
+{
+  "providers": {
+    "vllm": {
+      "settings": {
+        "baseURL": "http://127.0.0.1:9000/v1",
+        "apiKey": "{env:VLLM_API_KEY}",
+      },
+    },
+  },
+}
+```
+
+- احذف `apiKey` إذا كانت المصادقة معطّلة.
+- عطّل الاكتشاف باستخدام `"plugins": ["-opencode.provider.vllm"]`.
+- الخوادم الوسيطة ذات بادئة المسار مدعومة. مثلًا، مع `https://example.com/vllm/v1` يتحقق OpenCode من `/vllm/health`
+  ويكتشف `/vllm/v1/models`.
+
+### الخوادم المتوافقة
+
+لأي خادم آخر متوافق مع OpenAI، عرّف حزمة المزوّد ونقطة النهاية ونموذجًا واحدًا على الأقل:
+
+```jsonc title="opencode.jsonc"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "model": "local/coder",
+  "providers": {
+    "local": {
+      "name": "Local server",
+      "package": "@opencode/ai/providers/openai-compatible",
+      "settings": {
+        "baseURL": "http://127.0.0.1:1234/v1",
+      },
+      "models": {
+        "coder": {
+          "modelID": "model-name-on-server",
+          "capabilities": {
+            "tools": true,
+            "input": ["text"],
+            "output": ["text"],
+          },
+          "limit": {
+            "context": 32768,
+            "output": 8192,
+          },
+        },
+      },
+    },
+  },
+}
+```
+
+استخدم اسم النموذج الحقيقي على الخادم وحدوده وأنواع الإدخال والإخراج ودعم الأدوات. لا يستطيع OpenCode التحقق من دقة القيم
+الاحتياطية للنماذج المخصصة. وإذا كانت نقطة النهاية تتطلب مفتاحًا، فأضف `apiKey` إلى `settings` مع استبدال بمتغير بيئة
+مثل `"apiKey": "{env:LOCAL_API_KEY}"`؛ ولا تُودِع الأسرار في المستودع.
+
+## مراجع النماذج
+
+تستخدم محددات النماذج الصيغة `provider/model` مع `#variant` اختياري:
+
+```text
+openai/gpt-5.2
+openai/gpt-5.2#high
+openrouter/anthropic/claude-sonnet-4.5#high
+```
+
+| الجزء       | القاعدة                                                       |
+| ---------- | ---------------------------------------------------------- |
+| المزوّد   | ينتهي عند أول `/`؛ ولا يمكن أن يحتوي على `/` أو `#`.          |
+| النموذج      | قد يحتوي على محارف `/` إضافية؛ ولا يمكن أن يحتوي على `#`. |
+| المتغير    | يلي `#` عند وجوده.                                  |
+| حالة الأحرف     | معرّفات المزوّدين والنماذج حساسة لحالة الأحرف.                 |
+
+استخدم معرّفات الكتالوج لا أسماء العرض الخاصة بالمزوّدين. تقبل حقول `model` في المستوى الجذري وفي الوكلاء والأوامر الصيغة
+النصية أعلاه أو كائنًا موسّعًا:
+
+```jsonc
+{
+  "model": {
+    "providerID": "openrouter",
+    "model": "anthropic/claude-sonnet-4.5",
+  },
+}
+```
+
+تفيد الصيغة الموسّعة في التهيئة المولَّدة أو البرمجية.
+
+## تنبيهات
+
+ضع هذه القواعد في حسبانك عند تهيئة النماذج:
+
+```jsonc
+{
+  "model": "openai/gpt-5.2"
+}
+```
+
+- يستخدم كائن المحدِّد الحقل `model`؛ أما عنصر كتالوج المزوّد فيستخدم `modelID` للمعرّف المُرسَل إلى المزوّد.
+- مع أن بنية الاختيار في المستوى الجذري تقبل متغيرًا، فإن النموذج الافتراضي في كتالوج V2 لا يحتفظ به. لذا اختر المتغيرات
+  للجلسة أو مرة التشغيل أو الوكيل أو الأمر بدلًا من ذلك.
+- خيارات النماذج خاصة بكل مزوّد، وقد تتجاهلها حزمة مزوّد أخرى أو ترفضها.
+- بيانات الكتالوج وبيانات الاعتماد والتهيئة مقيّدة بالموقع. فالنموذج المتاح في مشروع ما قد لا يكون متاحًا في مشروع آخر.
+- تُعاد عادةً قراءة ملفات التهيئة تلقائيًا. أما طلب النموذج الجاري بالفعل فيحتفظ بالإعدادات التي بدأ بها.

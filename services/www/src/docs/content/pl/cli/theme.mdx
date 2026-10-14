@@ -1,0 +1,246 @@
+---
+title: "Motyw"
+---
+
+OpenCode zawiera wiele wbudowanych motywów dla trybu jasnego i ciemnego. Wybierz jeden w ustawieniach lub skomponuj własne kolory.
+
+## Wybór motywu
+
+Naciśnij `Ctrl+P`, wybierz **Open settings**, a następnie otwórz **Theme**. Domyślny motyw to `opencode`.
+
+Motyw możesz też ustawić w globalnych [ustawieniach CLI](/cli/config):
+
+```json title="~/.config/opencode/cli.json"
+{
+  "$schema": "https://opencode.ai/v2/cli.json",
+  "theme": {
+    "name": "tokyonight",
+    "mode": "dark"
+  }
+}
+```
+
+Uruchom `/themes`, aby zmienić motyw bez otwierania ustawień.
+
+## Kolory systemowe
+
+Gdy OpenCode może odczytać paletę terminala, lista motywów zawiera motyw `system`. Wyprowadza on kolory z koloru pierwszego planu, tła i palety ANSI terminala.
+
+Nazwa motywu `system` wybiera kolory pochodzące z terminala. Tryb `system` podąża za jasnym lub ciemnym wyglądem terminala.
+
+## Tryb
+
+Użyj `system`, aby podążać za wyglądem terminala, lub zablokuj motyw w trybie jasnym albo ciemnym:
+
+| Tryb | Działanie |
+| --- | --- |
+| `system` | Podąża za wykrytym jasnym lub ciemnym wyglądem terminala. |
+| `dark` | Zawsze używa ciemnych kolorów motywu. |
+| `light` | Zawsze używa jasnych kolorów motywu. |
+
+Odpowiada to polu `mode` w obiekcie `theme` w konfiguracji CLI. Jeśli własny motyw udostępnia tylko jeden tryb, OpenCode używa go także wtedy, gdy żądany jest drugi.
+
+## Dodawanie motywu
+
+Aby dodać motyw pobrany z sieci lub otrzymany od kogoś innego, skopiuj jego plik JSON do globalnego katalogu motywów:
+
+```bash
+cp theme.json ~/.config/opencode/themes/
+```
+
+Motyw możesz też umieścić w katalogu `.opencode/themes` projektu, aby był dostępny tylko w tym projekcie.
+
+Nazwa pliku staje się nazwą motywu. Na przykład `my-theme.json` pojawia się jako `my-theme`. Po dodaniu pliku uruchom OpenCode ponownie, a następnie uruchom `/themes`, aby wybrać motyw.
+
+OpenCode odczytuje wyłącznie pliki `.json`. Motyw położony bliżej bieżącego katalogu zastępuje motyw globalny lub z katalogu nadrzędnego o tej samej nazwie.
+
+## Motywy we wtyczkach
+
+[Wtyczki CLI](/build/plugins/cli) odczytują rozwiązane kolory przez `context.theme`, a aktywny tryb przez `context.themeMode`. Używaj tokenów semantycznych, aby wtyczka podążała za wybranym motywem:
+
+```tsx title="Inside a CLI plugin component"
+import { usePlugin } from "@opencode/plugin/tui"
+
+function Status() {
+  const context = usePlugin()
+  return <text fg={context.theme.text.base}>Ready</text>
+}
+```
+
+Publiczne API wtyczek CLI nie rejestruje motywów. Własne definicje motywów dodawaj jako pliki JSON w opisanych wyżej katalogach.
+
+## Tworzenie motywu
+
+Do tworzenia i edytowania motywów użyj naszego [narzędzia do motywów](https://opencode.ai/theme/). Ułatwia ono zrozumienie struktury, wprowadzanie zmian i definiowanie własnych kolorów. Poniższy opis służy jako dokumentacja referencyjna.
+
+Motyw oddziela wspólne tokeny semantyczne od palet właściwych dla poszczególnych trybów:
+
+| Sekcja | Przeznaczenie |
+| --- | --- |
+| `base` | Kompletne drzewo tokenów wspólne dla wszystkich trybów. |
+| `light`, `dark` | Kompletna paleta odcieni i opcjonalne nadpisania tokenów dla danego trybu. |
+
+Każdy motyw zawiera kompletną sekcję `base` i definiuje co najmniej jedną z sekcji `light` lub `dark`. Tryby dziedziczą z `base` w tym samym pliku; nie dziedziczą z wbudowanego motywu OpenCode ani po sobie nawzajem.
+
+Poniższe przykłady pokazują tylko sekcje istotne dla danego zagadnienia. Przed dostosowywaniem wygeneruj kompletny plik w edytorze motywów.
+
+### Struktura
+
+Kolory używane przez oba tryby umieść w `base`, a w razie potrzeby nadpisz je w `light` lub `dark`:
+
+```json title="theme.json (excerpt)"
+{
+  "$schema": "https://opencode.ai/theme.json",
+  "base": {
+    "text": {
+      "base": "$hue.neutral.200",
+      "muted": "$hue.neutral.400"
+    }
+  },
+  "light": {
+    "hue": {}
+  },
+  "dark": {
+    "hue": {},
+    "text": {
+      "muted": "$hue.neutral.300"
+    }
+  }
+}
+```
+
+Kompletna sekcja `base` dostarcza wszystkie tokeny semantyczne. Każdy tryb dostarcza wszystkie wymagane odcienie i może nadpisać dowolną część drzewa tokenów z `base`.
+
+### Kolory i odwołania
+
+Kolor może być wartością szesnastkową, `"transparent"` lub odwołaniem do innego koloru motywu:
+
+```json title="Inside base or a mode"
+{
+  "text": {
+    "base": "#eeeeee",
+    "muted": "$hue.neutral.400"
+  },
+  "border": {
+    "base": "$text.muted"
+  }
+}
+```
+
+### Odcienie
+
+Odcienie to dziewięciostopniowe skale kolorów. Każdy tryb definiuje osiem odcieni bazowych i trzy aliasy:
+
+| Rodzaj | Wartości |
+| --- | --- |
+| Bazowy | `gray`, `red`, `orange`, `yellow`, `green`, `cyan`, `blue`, `purple` |
+| Alias | `accent`, `interactive`, `neutral` |
+| Stopień | `100`, `200`, `300`, `400`, `500`, `600`, `700`, `800`, `900` |
+
+Zdefiniuj wszystkie dziewięć stopni odcienia bazowego lub ustaw jeden odcień jako alias innego:
+
+```json title="Inside light or dark"
+{
+  "hue": {
+    "purple": {
+      "100": "#b38ff4",
+      "200": "#9d7cd8",
+      "300": "#8869bd",
+      "400": "#7357a2",
+      "500": "#5f4688",
+      "600": "#4b356f",
+      "700": "#392557",
+      "800": "#271640",
+      "900": "#17072b"
+    },
+    "accent": "$hue.purple"
+  }
+}
+```
+
+Stopnie odcieni podążają za kierunkiem kontrastu trybu. W motywach jasnych biegną od ciemnego na `100` do jasnego na `900`; w motywach ciemnych – od jasnego na `100` do ciemnego na `900`.
+
+Tablica `categorical` w `base` określa uporządkowane odcienie używane do rozróżniania agentów i innych powtarzających się elementów:
+
+```json title="Inside base"
+{
+  "categorical": ["accent", "purple", "green", "blue"]
+}
+```
+
+### Tokeny semantyczne
+
+Tokeny semantyczne przypisują kolory do ról w interfejsie. Komponenty korzystają z tych ról zamiast wybierać kolory bezpośrednio.
+
+| Grupa | Przeznaczenie |
+| --- | --- |
+| `text` | Tekst podstawowy, wyciszony, akcji, pól formularzy, stanu i komunikatów zwrotnych. |
+| `background` | Tło podstawowe, powierzchnie uniesione, akcje, pola formularzy i wypełnienia komunikatów zwrotnych. |
+| `border`, `scrollbar` | Kolory obramowań i pasków przewijania. |
+| `diff` | Kolory dodanych i usuniętych linii, kontekstu, wyróżnień i numerów linii. |
+| `syntax` | Podświetlanie kodu źródłowego. |
+| `markdown` | Elementy Markdown. |
+
+Na przykład `text.muted` steruje tekstem drugorzędnym, a `background.raised` definiuje kolejne poziomy uniesionych powierzchni:
+
+```json title="Inside base"
+{
+  "text": {
+    "base": "$hue.neutral.200",
+    "muted": "$hue.neutral.400"
+  },
+  "background": {
+    "base": "$hue.neutral.800",
+    "raised": {
+      "base": "$hue.neutral.700",
+      "high": "$hue.neutral.600",
+      "max": "$hue.neutral.500"
+    }
+  }
+}
+```
+
+Klucze składni to `comment`, `keyword`, `function`, `variable`, `string`, `number`, `type`, `operator` i `punctuation`.
+
+Klucze Markdown to `text`, `heading`, `link`, `linkText`, `code`, `blockQuote`, `emphasis`, `strong`, `horizontalRule`, `listItem`, `listEnumeration`, `image`, `imageText` i `codeBlock`.
+
+### Akcje i stany
+
+Akcje mają warianty `primary`, `secondary` i `destructive`. Akcje i pola formularzy używają `base` oraz opcjonalnych stanów interakcji:
+
+```json title="Inside base or a mode"
+{
+  "text": {
+    "action": {
+      "primary": {
+        "base": "$hue.interactive.400",
+        "$hovered": "$hue.interactive.300",
+        "$disabled": "$hue.neutral.600"
+      }
+    }
+  }
+}
+```
+
+Klucze stanów to `$hovered`, `$focused`, `$pressed`, `$selected` i `$disabled`. Nieokreślony stan używa koloru `base` danej akcji lub pola formularza.
+
+### Powierzchnia okien dialogowych
+
+Panele, okna dialogowe, menu i powiadomienia (toasty) wybierają swój poziom z `background.raised`. Okna dialogowe mogą dodatkowo nadpisywać tokeny semantyczne za pomocą `@dialog`:
+
+```json title="Inside base or a mode"
+{
+  "@dialog": {
+    "background": {
+      "base": "$background.raised.base",
+      "action": {
+        "primary": {
+          "$hovered": "$background.raised.high"
+        }
+      }
+    }
+  }
+}
+```
+
+Po zastosowaniu `@dialog` TUI ponownie rozwiązuje odwołania, więc tokeny odwołujące się do `$background.base` podążają za tłem okna dialogowego. Kontekstowe `base` akcji staje się wartością zapasową dla jej nieokreślonych stanów; jawnie nadpisane stany nadal mają pierwszeństwo.

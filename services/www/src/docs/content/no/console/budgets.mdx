@@ -1,0 +1,88 @@
+---
+title: "Budsjetter"
+description: "Begrens det månedlige forbruket til et arbeidsområde, medlemmene og tjenestekontoene."
+---
+
+Budsjetter begrenser hvor mye et arbeidsområde bruker hver måned. Eiere og administratorer setter dem i
+**Budget limits**-panelet på sidene **Members** og **Keys**.
+
+## Budsjettnivåer
+
+| Budsjett                     | Gjelder for                                    | Hvor du setter det                                 |
+| ---------------------------- | ---------------------------------------------- | -------------------------------------------------- |
+| Arbeidsområde                | Samlet forbruk for alle i arbeidsområdet       | **Members** eller **Keys › Monthly workspace budget** |
+| Standard for brukere         | Hvert medlem uten egendefinert grense          | **Members › Monthly default user budget**          |
+| Egendefinert for bruker      | Ett medlem                                     | **Members**-tabellen eller medlemssiden            |
+| Standard for tjenestekontoer | Hver tjenestekonto uten egendefinert grense    | **Keys › Monthly default service account budget**  |
+| Egendefinert for tjenestekonto | Én tjenestekonto                             | Siden for tjenestekontoen                          |
+
+En forespørsel må holde seg innenfor både budsjettet til arbeidsområdet og personens eget budsjett. Uten budsjetter er
+forbruket ubegrenset.
+
+## Budsjett for arbeidsområdet
+
+Budsjettet for arbeidsområdet blokkerer forespørsler for alle når arbeidsområdet når grensen.
+
+1. Åpne **Members** eller **Keys**.
+2. Klikk på **Monthly workspace budget** i **Budget limits**.
+3. Skriv inn en **Workspace limit** i USD og klikk på **Save**.
+
+## Medlemsbudsjetter
+
+Standardbudsjettet for brukere gjelder for alle medlemmer som ikke har en egendefinert grense. Sett det under
+**Monthly default user budget**.
+
+Du kan gi ett medlem en egendefinert grense fra to steder:
+
+- Klikk på **Limit**-cellen i medlemmets rad under **Members**, og skriv inn et beløp.
+- Åpne medlemmet og klikk på **Set User Budget** under **Monthly Budget**.
+
+Egendefinerte grenser er uthevet i medlemstabellen. Fjern en egendefinert grense for å sette medlemmet tilbake til
+standarden; medlemssiden viser da **Using Default**.
+
+## Budsjetter for tjenestekontoer
+
+Tjenestekontoer fungerer på samme måte. Sett **Monthly default service account budget** på **Keys**-siden, eller åpne en
+tjenestekonto og klikk på **Set Service Account Budget**.
+
+## Beløp og tilbakestilling
+
+- Beløpene er i amerikanske dollar med opptil to desimaler.
+- Budsjettene tilbakestilles den 1. hver måned kl. 00:00 UTC.
+- Et budsjett på `$0` blokkerer alt forbruk som teller mot budsjetter.
+
+## Hva som teller
+
+| Forbruk                                                                    | Teller mot budsjetter          |
+| -------------------------------------------------------------------------- | ------------------------------ |
+| Betalte Console-modeller                                                   | Ja                             |
+| Modeller hos [dine egne leverandører](/console/providers) med angitt pris  | Ja, til den konfigurerte prisen |
+| [Nettsøk](/console/websearch)                                              | Ja                             |
+| Gratis modeller                                                            | Nei                            |
+| [Go](/console/go)-bruk innenfor planen                                     | Nei                            |
+| Ekstra Go-bruk som betales med kreditt                                     | Ja                             |
+
+## Når et budsjett er nådd
+
+Nye forespørsler mislykkes med HTTP `429` til budsjettet tilbakestilles eller en administrator øker det. Svaret oppgir
+ikke hvilket budsjett som er nådd.
+
+```text
+Upstream request failed: Account budget exceeded
+```
+
+Budsjettene sjekkes når en forespørsel starter. Forespørsler som allerede pågår, fullføres, så forbruket kan ende litt
+over grensen.
+
+## Følg med på forbruket
+
+Hvert medlem ser sitt eget budsjett på **Overview**: hvor mye som er igjen, hvor mye som er brukt, og datoen for
+tilbakestilling.
+
+Eiere og administratorer av arbeidsområder med mer enn ett medlem ser også **Usage**. Der fordeles kostnadene per dag,
+modell og person, og **Export usage**-knappen laster ned daglige totaler for de siste 7, 30 eller 90 dagene som CSV.
+
+## Automatiser budsjetter
+
+Bruk [budsjett-API-et](/console/api/budgets) til å lese budsjettet til alle medlemmer og sette egendefinerte grenser fra
+dine egne verktøy.

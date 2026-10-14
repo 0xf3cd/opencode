@@ -1,0 +1,342 @@
+---
+title: "الوكلاء"
+---
+
+لإضافة وكيل قابل لإعادة الاستخدام، أنشئ ملف Markdown. يضيف هذا المثال مراجعًا للقراءة فقط يستطيع الوكيل الرئيسي تشغيله لمراجعة الشيفرة:
+
+```md title=".opencode/agents/reviewer.md"
+---
+description: Reviews changes for correctness and regressions
+mode: subagent
+model: anthropic/claude-sonnet-4-5#high
+permissions:
+  - action: edit
+    resource: "*"
+    effect: deny
+  - action: shell
+    resource: "*"
+    effect: deny
+---
+
+Review the current changes. List findings in severity order with file and line references.
+```
+
+اطلب من وكيلك الأساسي استخدامه:
+
+```text
+Use the reviewer subagent to review my current changes.
+```
+
+يجمع الوكيل موجّه النظام وتفضيل النموذج والأذونات وتفاصيل العرض في ملف تعريف مسمّى لمساعد.
+
+## المواقع
+
+احفظ الوكلاء المكتوبين بـ Markdown على المستوى العام لكل المشاريع، أو داخل مشروع بعينه:
+
+```text
+~/.config/opencode/agents/<name>.md
+.opencode/agents/<name>.md
+```
+
+يكتشف OpenCode دلائل `.opencode` الخاصة بالمشروع بدءًا من الدليل الحالي صعودًا حتى جذر المشروع. ويصبح المسار المتداخل جزءًا من معرّف الوكيل:
+
+```text
+.opencode/agents/team/reviewer.md  →  team/reviewer
+```
+
+## الصيغ
+
+### Markdown
+
+تقبل ترويسة frontmatter الحقول نفسها التي يقبلها عنصر في تهيئة `agents`. ويصبح متن Markdown موجّه `system` الخاص بالوكيل:
+
+```md title=".opencode/agents/explainer.md"
+---
+description: Explains code without changing it
+mode: subagent
+---
+
+Explain the relevant code with short examples. Do not edit files.
+```
+
+### JSONC
+
+عرّف الوكلاء ضمن `agents` في أي [ملف تهيئة لـ OpenCode](/config):
+
+```jsonc title="opencode.jsonc"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "agents": {
+    "reviewer": {
+      "description": "Reviews current changes",
+      "mode": "subagent",
+      "system": "Report findings in severity order.",
+      "permissions": [
+        { "action": "edit", "resource": "*", "effect": "deny" },
+      ],
+    },
+  },
+}
+```
+
+## الاختيار
+
+اضبط الوكيل الأساسي الذي يُستخدم عندما لا تكون الجلسة قد اختارت وكيلًا:
+
+```jsonc title="opencode.jsonc"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "default_agent": "writer",
+  "agents": {
+    "writer": { "mode": "primary" },
+  },
+}
+```
+
+يجب أن يكون الوكيل الافتراضي المحدد موجودًا ومرئيًا وقابلًا للاستخدام وكيلًا أساسيًا. وإلا يستخدم OpenCode الوكيل `build`، ثم أول وكيل مرئي يصلح وكيلًا أساسيًا. ولا يؤدي تغيير هذا الإعداد إلى استبدال الوكيل المخزّن في جلسة موجودة.
+
+## الأوضاع
+
+اضبط `mode` حسب المكان الذي ينبغي أن يعمل فيه الوكيل:
+
+```jsonc
+{
+  "agents": {
+    "reviewer": { "mode": "subagent" },
+  },
+}
+```
+
+| الوضع | السلوك |
+| --- | --- |
+| `primary` | يعمل وكيلًا رئيسيًا للجلسة. هذه هي القيمة الافتراضية للوكيل المخصص الجديد. |
+| `subagent` | يعمل فقط في جلسة فرعية عبر الأداة `subagent`. |
+| `all` | يعمل وكيلًا أساسيًا أو وكيلًا فرعيًا. |
+
+يعمل الوكلاء الفرعيون بسياق جديد في جلسات فرعية في الواجهة الأمامية أو في الخلفية. تتحكم أذونات `subagent` الخاصة بالوكيل الأب في الوكلاء الذين يُسمح له بتشغيلهم، بينما يستخدم الوكيل الفرعي الأذونات المهيّأة له.
+
+```jsonc
+{
+  "agents": {
+    "orchestrator": {
+      "permissions": [
+        { "action": "subagent", "resource": "*", "effect": "deny" },
+        { "action": "subagent", "resource": "reviewer", "effect": "allow" },
+      ],
+    },
+  },
+}
+```
+
+## الوكلاء المدمجون
+
+يتضمن OpenCode هؤلاء الوكلاء المرئيين:
+
+| الوكيل | الوضع | الغرض |
+| --- | --- | --- |
+| **Build** (`build`) | `primary` | وكيل البرمجة الافتراضي. الأدوات مسموح بها افتراضيًا؛ أما قراءة ملفات البيئة الحساسة والوصول إلى ما هو خارج مساحة العمل فيتطلبان موافقتك. |
+| **Plan** (`plan`) | `primary` | يستكشف ويخطط دون تعديل ملفات المشروع العادية. قد يكتب ملفات خطط OpenCode عند الطلب، وتبقى أوامر shell خاضعة للأذونات. |
+| **General** (`general`) | `subagent` | يتولى البحث والأعمال متعددة الخطوات مع وصول واسع إلى الأدوات، لكنه لا يستطيع تشغيل وكلاء فرعيين آخرين. |
+| **Explore** (`explore`) | `subagent` | يبحث في الشيفرة أو مصادر الويب ويقرأها دون تعديل الملفات. |
+
+لتجاوز وكيل مدمج، استخدم المعرّف نفسه:
+
+```jsonc
+{
+  "agents": {
+    "build": {
+      "permissions": [
+        { "action": "shell", "resource": "git push *", "effect": "ask" },
+      ],
+    },
+  },
+}
+```
+
+يتولى الوكلاء المخفيون `compaction` و`title` و`summary` مهام الصيانة، ولا يمكن اختيارهم مباشرةً. ولا يتضمن V2 وكيلًا مدمجًا باسم `scout`.
+
+## الدمج
+
+تُدمج تعريفات الوكلاء حسب ترتيب التهيئة. تحل القيم المفردة اللاحقة محل القيم السابقة، وتُدمج خرائط الطلب حسب المفتاح، وتُلحق قواعد الأذونات بعضها ببعض:
+
+```jsonc
+{
+  "permissions": [
+    { "action": "shell", "resource": "*", "effect": "ask" },
+  ],
+  "agents": {
+    "build": {
+      "permissions": [
+        { "action": "shell", "resource": "git status", "effect": "allow" },
+      ],
+    },
+  },
+}
+```
+
+تُطبَّق `permissions` العامة قبل القواعد الخاصة بالوكيل، فتستطيع قواعد الوكيل اللاحقة تدقيقها.
+
+## الخيارات
+
+### الوصف
+
+يشرح `description` الغرض من الوكيل. أضفه إلى الوكلاء الفرعيين، لأن OpenCode يعرضه على النموذج الذي يختار الوكيل المراد تشغيله:
+
+```yaml
+description: Reviews database migrations for safety
+```
+
+### الوضع
+
+يقبل `mode` القيم `primary` أو `subagent` أو `all`. وإذا لم يُحدَّد في وكيل مخصص جديد، فقيمته الافتراضية `primary`:
+
+```yaml
+mode: all
+```
+
+### النموذج
+
+يستخدم `model` الصيغة `provider/model` مع `#variant` اختياري:
+
+```yaml
+model: anthropic/claude-sonnet-4-5#high
+```
+
+وتقبل تهيئة JSON أيضًا الصيغة الموسّعة:
+
+```jsonc
+{
+  "agents": {
+    "reviewer": {
+      "model": {
+        "providerID": "anthropic",
+        "model": "claude-sonnet-4-5",
+        "variant": "high",
+      },
+    },
+  },
+}
+```
+
+- يستخدم الوكيل الفرعي النموذج المهيّأ له، أو يرث نموذج الجلسة الأم إذا لم يُهيّأ له نموذج.
+- تخزّن الجلسة النموذج المحدد لها بشكل منفصل. ولا يغيّر اختيار وكيل أساسي بمعرّفه ذلك النموذج.
+
+### النظام
+
+يضبط `system` موجّه النظام الخاص بالوكيل. وتحل القيمة غير الفارغة محل الموجّه الأساسي للمزوّد في هذا الوكيل:
+
+```jsonc
+{
+  "agents": {
+    "reviewer": { "system": "Review only. Do not modify files." },
+  },
+}
+```
+
+مع ذلك تظل تعليمات المشروع والمهارات والمراجع وسائر مصادر التعليمات تُضاف. وفي الوكيل المكتوب بـ Markdown، ضع هذا النص في متن المستند بدلًا من حقل `system` في ترويسة frontmatter.
+
+### الأذونات
+
+الحقل `permissions` قائمة مرتبة من قواعد المطابقة:
+
+```jsonc
+{
+  "agents": {
+    "reviewer": {
+      "permissions": [
+        { "action": "*", "resource": "*", "effect": "deny" },
+        { "action": "read", "resource": "src/**", "effect": "allow" },
+      ],
+    },
+  },
+}
+```
+
+| الحقل | المعنى |
+| --- | --- |
+| `action` | الأداة أو إجراء الإذن. أحرف البدل مدعومة. |
+| `resource` | المسار أو الأمر أو معرّف الوكيل أو أي قيمة أخرى يطابقها الإجراء. أحرف البدل مدعومة. |
+| `effect` | `allow` أو `ask` أو `deny`. |
+
+تفوز آخر قاعدة مطابقة، لذا ضع القواعد العامة قبل الاستثناءات. من الإجراءات الشائعة:
+
+| الإجراء | يشمل |
+| --- | --- |
+| `shell` | أوامر shell |
+| `edit` | أدوات التعديل والكتابة والترقيع (patch) |
+| `subagent` | الوكلاء الفرعيين |
+| `read`, `glob`, `grep` | أدوات الاستكشاف المحلية |
+| `webfetch`, `websearch` | أدوات الويب |
+| `skill` | تحميل المهارات |
+
+في موارد `read` و`edit` و`external_directory`، يوسّع OpenCode كلًّا من `~` و`$HOME`:
+
+```jsonc
+{ "action": "read", "resource": "~/notes/**", "effect": "allow" }
+```
+
+أما موارد shell فتبقى نص أمر خامًا، ولا تُوسَّع فيها هذه القيم.
+
+### الخطوات
+
+يضبط `steps` حدًا أقصى موجبًا لعدد خطوات النموذج:
+
+```yaml
+steps: 8
+```
+
+في الخطوة الأخيرة، يزيل OpenCode الأدوات ويطلب من النموذج تلخيص العمل نصيًا. وتعيد مدخلات المستخدم الجديدة ضبط العدد المسموح به.
+
+### الإخفاء
+
+يزيل `hidden` الوكيل من القوائم العادية والاكتشاف التفاعلي وكتالوج الوكلاء الفرعيين:
+
+```yaml
+hidden: true
+```
+
+يتحكم هذا الخيار في الظهور لا في الأمان. استخدم الأذونات لتقييد السلوك.
+
+### اللون
+
+يضبط `color` لون الوكيل في الواجهة بقيمة سداسية عشرية من ستة أرقام:
+
+```yaml
+color: "#ff6b6b"
+```
+
+### التعطيل
+
+يزيل `disabled` وكيلًا مدمجًا أو مخصصًا عند تلك النقطة من تحميل التهيئة:
+
+```jsonc
+{
+  "agents": {
+    "plan": { "disabled": true },
+  },
+}
+```
+
+### الطلب
+
+يقبل `request` طبقات إضافية للترويسات ولمتن JSON خاصة بكل وكيل:
+
+```jsonc
+{
+  "agents": {
+    "reviewer": {
+      "request": {
+        "headers": { "x-agent": "reviewer" },
+        "body": { "temperature": 0.1 },
+      },
+    },
+  },
+}
+```
+
+<Callout type="warning">
+  يحتفظ مشغّل الجلسات في V2 بهذه القيم، لكنه لا يرسلها بعد مع طلبات النموذج. لذا هيّئ إعدادات الطلب الفعّالة على مستوى
+  المزوّد أو النموذج أو متغير النموذج بدلًا من ذلك.
+</Callout>
+
+لا تستخدم الحقول القديمة في المستوى الأعلى، مثل `temperature` و`top_p` و`prompt` و`permission` و`tools` و`disable` و`maxSteps`، في تهيئة وكلاء V2 الجديدة.

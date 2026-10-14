@@ -1,0 +1,105 @@
+---
+title: "الويب"
+description: "شغّل OpenCode في المتصفح."
+---
+
+يأتي OpenCode بواجهة ويب يقدّمها الخادم نفسه الذي يشغّل واجهة TUI. تتوفر هذه الواجهة افتراضيًا، وهي محمية بكلمة مرور.
+
+## الوصول
+
+```bash
+$ opencode pair
+
+  Open a link to connect. Links work once and expire in 5 minutes.
+
+  http://127.0.0.1:49374/auth/connect/...
+
+  █▀▀▀▀▀█ ...
+```
+
+يؤدي فتح الرابط في المتصفح إلى تسجيل دخوله بملف تعريف ارتباط (cookie) للجلسة وتحميل واجهة الويب. ويتصل تطبيق OpenCode
+بالطريقة نفسها عند مسح رمز QR منه، أو لصق الرابط في حقل عنوان الخادم فيه. تدوم الجلسات 30 يومًا، ويؤدي تغيير كلمة مرور
+الخادم إلى تسجيل خروج جميع الجلسات.
+
+### عبر SSH
+
+إذا كان الخادم يستمع على localhost فقط، فأعد توجيه منفذه من جهازك وافتح الرابط المطبوع محليًا:
+
+```bash
+$ ssh -L 49374:127.0.0.1:49374 my-server
+```
+
+يعمل الخادم افتراضيًا على المنفذ 49374 ويستمع على localhost فقط. يمكنك تغيير هذه التهيئة باستخدام الأمر
+`opencode service`.
+
+### الوصول عن بُعد
+
+للاتصال من أي مكان، أجرِ الاقتران عبر عنوان بعيد من [OpenTunnel](https://github.com/anomalyco/opentunnel):
+
+```bash
+$ opencode pair --remote
+```
+
+في المرة الأولى التي يفعّل فيها الأمر الوصول عن بُعد، يطلب تأكيدك قبل المتابعة:
+
+```text
+▲  This will expose your OpenCode server to the internet.
+│  Traffic is end-to-end encrypted, and access requires your server password.
+│  To pair locally instead, run `opencode pair` without the --remote flag.
+│
+◆  Expose your server to the internet?
+│  ● Yes / ○ No
+```
+
+في غياب طرفية تفاعلية، يفشل الأمر ما لم تمرّر `--yes` للموافقة. وبعد الموافقة، تتخطى مرات التشغيل اللاحقة هذا السؤال،
+حتى بعد إيقاف الوصول عن بُعد باستخدام `opencode service set remote false`.
+
+## الإعداد
+
+اضبط أي خيار باستخدام `opencode service set`:
+
+```bash
+# Listen on every network interface
+$ opencode service set hostname 0.0.0.0
+
+# Use a fixed port instead of the channel default
+$ opencode service set port 49374
+
+# Replace the generated password
+$ opencode service set password "a-long-secret"
+
+# Allow a web client served from another origin
+$ opencode service set cors https://app.example.com,https://other.example.com
+
+# Pass an environment variable to the server process
+$ opencode service set env OPENCODE_LOG_LEVEL DEBUG
+```
+
+يؤدي تغيير أي إعداد إلى إيقاف الخادم الخلفي. لتطبيق التهيئة الجديدة، شغّل:
+
+```bash
+$ opencode service start
+```
+
+## التشغيل المستقل
+
+يشغّل الأمر `opencode serve` الخادم نفسه في الواجهة الأمامية بدلًا من تشغيله عبر الخدمة الخلفية المشتركة.
+
+```bash
+$ opencode serve --hostname 0.0.0.0 --port 4096
+server listening on http://0.0.0.0:4096
+server password <password>
+```
+
+استخدمه عندما تريد:
+
+- تشغيل OpenCode على مضيف مشترك أو دائم التشغيل أو بعيد، ثم توصيل العملاء به باستخدام `opencode --server <url>`.
+- التحكم في اسم المضيف والمنفذ ومصادر CORS المسموح بها لعملية واحدة.
+- التشغيل تحت مدير عمليات مثل systemd أو Docker أو أي بيئة أخرى تتوقع عملية في الواجهة الأمامية.
+- الاحتفاظ بخادم مخصص بدلًا من الخدمة الخلفية المشتركة.
+
+وصّل عميلًا به باستخدام `--server`:
+
+```bash
+$ opencode --server http://127.0.0.1:4096
+```

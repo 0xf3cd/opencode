@@ -1,0 +1,64 @@
+---
+title: "Plugins"
+---
+
+Plugins, die in `opencode.json(c)` konfiguriert sind und eine TUI-Komponente bereitstellen, lädt die CLI automatisch. Wie
+du Plugins entwickelst, erfährst du unter [Plugins entwickeln](/build/plugins). Du musst dasselbe Paket nicht zusätzlich
+in die `cli.json` eintragen. Die CLI bezieht die Liste der aktiven Plugins vom verbundenen OpenCode-Server, daher
+funktioniert das auch mit einem entfernten Server.
+
+Verwende die `cli.json` für reine CLI-Plugins. Diese Plugins laufen lokal im Terminal und bleiben aktiv, wenn sich die
+CLI mit einem entfernten Server verbindet:
+
+```json title="cli.json"
+{
+  "plugins": [
+    "opencode.example",
+    "opencode.example@1.0.0",
+    "@example/opencode-tui",
+    "@example/opencode-tui@1.0.0",
+    "./plugins/status",
+    "../plugins/status",
+    "/home/user/plugins/status",
+    "file:///home/user/plugins/status"
+  ]
+}
+```
+
+Die Einträge werden der Reihe nach verarbeitet. Stelle einer ID oder einer Wildcard ein `-` voran, um passende Plugins
+zu deaktivieren:
+
+```json title="cli.json"
+{
+  "plugins": ["*", "-opencode.notifications", "-team.*"]
+}
+```
+
+Optionen übergibst du mit der Objektform:
+
+```json title="cli.json"
+{
+  "plugins": [
+    {
+      "package": "@example/opencode-tui",
+      "options": {
+        "compact": true
+      }
+    }
+  ]
+}
+```
+
+OpenCode erkennt außerdem Plugins im globalen Konfigurationsverzeichnis und in den `.opencode`-Verzeichnissen von
+Projekten. Jedes Plugin hat denselben Aufbau wie ein veröffentlichtes Paket, wobei die Einstiegspunkte für Server und
+TUI zusammen liegen.
+
+```text title="Plugin discovery paths"
+<global-config>/plugins/status/index.ts
+<global-config>/plugins/status/tui.ts
+<project>/.opencode/plugins/status/index.ts
+<project>/.opencode/plugins/status/tui.ts
+```
+
+Erkannte Plugins können `@opencode/plugin/tui` direkt importieren; OpenCode löst das Paket zur Laufzeit auf. Beispiele
+findest du unter [CLI-Plugins entwickeln](/build/plugins/cli).

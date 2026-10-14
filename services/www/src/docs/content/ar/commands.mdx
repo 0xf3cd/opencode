@@ -1,0 +1,259 @@
+---
+title: "الأوامر"
+---
+
+أنشئ الملف `.opencode/commands/review.md` لتحويل موجّه إلى الأمر `/review`:
+
+```md title=".opencode/commands/review.md"
+Review $ARGUMENTS for bugs and missing tests.
+```
+
+شغّله من واجهة TUI مع تحديد الهدف:
+
+```text
+/review src/auth.ts
+```
+
+يرسل OpenCode النص `Review src/auth.ts for bugs and missing tests.` بوصفه موجّهًا من المستخدم.
+
+## Markdown
+
+ضع الأوامر العامة في `~/.config/opencode/commands/`، وأوامر المشروع في `.opencode/commands/`.
+
+```text
+~/.config/opencode/commands/review.md
+.opencode/commands/review.md
+```
+
+لا تُكتشف إلا ملفات `.md`. وتصبح المسارات المتداخلة أسماء أوامر تفصل بين أجزائها `/`:
+
+```md title=".opencode/commands/team/review.md"
+Review $ARGUMENTS using the team's checklist.
+```
+
+شغّل الأمر المتداخل بالصيغة `/team/review src/auth.ts`. يُكتشف أيضًا الدليل القديم ذو الاسم المفرد `command/`، لكن استخدم
+`commands/` للملفات الجديدة.
+
+أضف ترويسة frontmatter بصيغة YAML إذا احتاج الأمر إلى بيانات وصفية. أما متن Markdown، بعد إزالة المسافات من طرفيه، فهو
+دائمًا قالب الموجّه.
+
+```md title=".opencode/commands/review.md"
+---
+description: Review code for correctness
+agent: plan
+model: anthropic/claude-sonnet-4-5#high
+---
+
+Review $ARGUMENTS. Report bugs first.
+```
+
+## JSON
+
+عرّف الأوامر ضمن `commands` في أي [ملف تهيئة](/config) لـ OpenCode بصيغة JSON أو JSONC. ويتطلب كل أمر الحقل
+`template`.
+
+```jsonc title="opencode.jsonc"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "commands": {
+    "review": {
+      "description": "Review code for correctness",
+      "template": "Review $ARGUMENTS. Report bugs first.",
+    },
+  },
+}
+```
+
+## الحقول
+
+تقبل ترويسة frontmatter في Markdown وعناصر JSON الحقول نفسها، باستثناء أن Markdown يأخذ `template` من متن الملف.
+
+| الحقل | مطلوب | السلوك |
+| --- | --- | --- |
+| `template` | في JSON فقط | قالب الموجّه. |
+| `description` | لا | النص المعروض في قوائم الأوامر وعند اكتشافها. |
+| `agent` | لا | الوكيل المحدد عند تشغيل الأمر. |
+| `model` | لا | نموذج يتجاوز النموذج الحالي، بالصيغة `provider/model` أو `provider/model#variant`. |
+| `subagent` | لا | القيمة `true` تشغّله في جلسة فرعية في الخلفية؛ والقيمة `false` تفرض الجلسة الحالية. |
+| `subtask` | لا | اسم بديل مُهمَل لـ `subagent`. |
+
+مثلًا، يضبط أمر JSON هذا كل الحقول الاختيارية الحالية:
+
+```jsonc title="opencode.jsonc"
+{
+  "commands": {
+    "audit": {
+      "template": "Audit $ARGUMENTS.",
+      "description": "Audit a package",
+      "agent": "general",
+      "model": "anthropic/claude-sonnet-4-5#high",
+      "subagent": true,
+    },
+  },
+}
+```
+
+لا تضع `template` في ترويسة frontmatter في Markdown؛ فالمتن هو الذي يوفّره.
+
+## الوسائط
+
+استخدم `$ARGUMENTS` للحصول على سلسلة الوسائط كاملة كما أُدخلت تمامًا.
+
+```md title=".opencode/commands/component.md"
+Create a typed React component named $ARGUMENTS.
+```
+
+مع `/component Account Settings`، يصبح العنصر النائب `Account Settings`.
+
+## المواضع
+
+استخدم `$1` و`$2` والأرقام الأعلى للوسائط الموضعية المحلَّلة. تجمع علامات الاقتباس المفردة أو المزدوجة الكلمات معًا ثم
+تُزال.
+
+```md title=".opencode/commands/check.md"
+Check $1. Focus on $2.
+```
+
+مع `/check src/auth.ts "error handling"`، يصبح `$1` هو `src/auth.ts` ويصبح `$2` هو `error handling`.
+
+يستهلك العنصر النائب ذو الرقم الأعلى وسيطه وكل ما يليه. وتصبح المواضع المفقودة سلاسل نصية فارغة.
+
+```md title=".opencode/commands/compare.md"
+Compare $1 with $2.
+```
+
+مع `/compare api stable branch`، يرسل OpenCode النص `Compare api with stable branch.`
+
+## السلوك الاحتياطي
+
+إذا لم يحتوِ القالب على `$ARGUMENTS` ولا على عنصر نائب موضعي، يُلحق OpenCode الوسائط غير الفارغة بعد سطر فارغ.
+
+```md title=".opencode/commands/explain.md"
+Explain this code clearly.
+```
+
+مع `/explain src/cache.ts`، يصبح الموجّه:
+
+```text
+Explain this code clearly.
+
+src/cache.ts
+```
+
+## Shell
+
+ضع أمر shell بين علامتي backtick مسبوقتين بـ `!` لإدراج مخرجاته قبل إرسال الموجّه.
+
+```md title=".opencode/commands/review-diff.md"
+Review this diff:
+
+!`git diff --stat && git diff`
+```
+
+يشغّل OpenCode كل كتلة باستخدام shell المهيّأ في موقع المشروع النشط، ويُدرج مخرجاتها المجمّعة. وتُوسَّع العناصر النائبة
+للوسائط أولًا:
+
+```md title=".opencode/commands/history.md"
+Summarize these commits:
+
+!`git log --oneline -$1`
+```
+
+مع `/history 5`، يتلقى shell الأمر `git log --oneline -5`. لا تضع وسائط غير موثوقة داخل كتل shell.
+
+<Callout type="warning">
+  تُنفَّذ كتل shell عندما يقيّم OpenCode الأمر، خارج مسار أذونات الأدوات الخاص بالوكيل. لا تستخدم إلا أوامر من مصادر
+  تثق بها.
+</Callout>
+
+## المرفقات
+
+لا توسّع القوالب المخزّنة `@path`، بل يبقى نصًا عاديًا في الموجّه.
+
+```md title=".opencode/commands/readme.md"
+Review @README.md.
+```
+
+لإرفاق ملف، أضفه عبر محرر الرسائل عند استدعاء الأمر. ويحتفظ OpenCode بمرفقات محرر الرسائل هذه عند إرسال الموجّه الموسَّع.
+
+## التنفيذ
+
+توسّع الأوامر الوسائط وكتل shell قبل إرسال موجّه مستخدم يُحفظ بشكل دائم. وتعمل افتراضيًا في الجلسة الحالية.
+
+```md title=".opencode/commands/plan.md"
+---
+agent: plan
+---
+
+Plan $ARGUMENTS.
+```
+
+يؤدي تشغيل `/plan migration` إلى تبديل الجلسة الحالية إلى الوكيل `plan` قبل إرسال الموجّه.
+
+يتبع اختيار النموذج هذه القواعد:
+
+1. يتجاوز `model` المحدد في الأمر أي نموذج آخر.
+2. وإلا فإن النموذج المهيّأ لوكيل الأمر المحدد يتجاوز النموذج النشط لحظة الاستدعاء.
+3. وإلا يظل نموذج الجلسة الحالية نشطًا.
+
+مثلًا، يحدد هذا الأمر وكيله ونموذجًا صريحًا معًا:
+
+```md title=".opencode/commands/design.md"
+---
+agent: plan
+model: openai/gpt-5#high
+---
+
+Design $ARGUMENTS.
+```
+
+## التشغيل في الخلفية
+
+اضبط `subagent: true` لتشغيل الأمر في جلسة فرعية في الخلفية.
+
+```md title=".opencode/commands/audit.md"
+---
+description: Audit changes
+agent: general
+subagent: true
+---
+
+Audit $ARGUMENTS for bugs and missing tests.
+```
+
+تبقى الجلسة الأم متاحة وتحتفظ بوكيلها ونموذجها. وعندما تنتهي الجلسة الفرعية، يرسل OpenCode نتيجتها أو فشلها إلى الجلسة
+الأم.
+
+| القيمة | السلوك |
+| --- | --- |
+| `true` | يستخدم جلسة فرعية دائمًا، حتى إذا كان للوكيل المحدد `mode: primary`. |
+| `false` | يستخدم الجلسة الحالية دائمًا، حتى إذا كان للوكيل المحدد `mode: subagent`. |
+| غير محدد | يستخدم جلسة فرعية فقط إذا كان للوكيل المحدد `mode: subagent`. |
+
+تستخدم الجلسة الفرعية نموذج الأمر، ثم نموذج الوكيل المحدد، ثم نموذج الجلسة الأم. ولا يزال الحقل القديم `subtask` مقبولًا؛
+وإذا وُجد الحقلان معًا، يفوز `subagent`.
+
+```yaml
+subagent: false
+subtask: true
+```
+
+يعمل هذا المثال في الجلسة الحالية لأن الأولوية لـ `subagent`.
+
+## التحميل
+
+تشترك أوامر Markdown وJSON في سجل واحد. وتحل المصادر اللاحقة محل الأوامر السابقة التي تحمل الاسم نفسه.
+
+```text
+~/.config/opencode/commands/review.md   # Lower priority
+.opencode/commands/review.md           # Replaces the global command
+```
+
+تتقدم مصادر المشروع على المصادر العامة، وتتقدم مصادر المشروع الأقرب على مصادر الدلائل الأسلاف. ويمكن لتعريف مخصص أيضًا أن
+يحل محل أمر مدمج سابق. ويعيد OpenCode تحميل ملفات الأوامر وتغييرات التهيئة تلقائيًا.
+
+```md title=".opencode/commands/review.md"
+Review only the staged changes: !`git diff --cached`
+```
+
+يؤدي حفظ هذا الملف إلى تحديث `/review` دون إعادة تشغيل OpenCode.

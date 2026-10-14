@@ -1,0 +1,101 @@
+---
+title: "Effect"
+---
+
+الحزمة `@opencode/sdk/effect` هي SDK المضمَّن المبني أصلًا على Effect. تُعيد العمليات قيم Effect وStream ذات أنواع محددة،
+ويؤدي إغلاق Scope المالك إلى تحرير مكوّن التوجيه (router) وخدمات Location وكائنات Fiber وتسجيلات الإضافات.
+
+```sh
+bun add @opencode/sdk effect
+```
+
+## إنشاء مضيف
+
+أنشئ المضيف داخل `Effect.scoped`، ثم استخدم مجموعات API المُولَّدة أو الاسم المختصر `sessions`.
+
+```ts
+import { AbsolutePath, Location, OpenCode } from "@opencode/sdk/effect"
+import { Effect } from "effect"
+
+const program = Effect.scoped(
+  Effect.gen(function* () {
+    const opencode = yield* OpenCode.create()
+    const session = yield* opencode.sessions.create({
+      location: Location.Ref.make({ directory: AbsolutePath.make("/workspace") }),
+    })
+    yield* opencode.sessions.prompt({
+      sessionID: session.id,
+      text: "Review the current changes",
+    })
+    return session
+  }),
+)
+
+const session = await Effect.runPromise(program)
+```
+
+يستخدم المضيف المضمَّن قيم Schema والأخطاء المُعلنة وخيارات الطلب وقيم Stream نفسها التي تستخدمها
+`@opencode/client/effect`.
+
+```ts
+const info = yield* opencode.server.info()
+const sessions = yield* opencode.sessions.list()
+```
+
+## بث الأحداث
+
+تُعيد نقاط النهاية المتدفقة قيمًا من نوع `Stream` في Effect. وإذا أردت أن يعمل المستهلكون في الخلفية، فشغّلهم في fiber
+منفصل (fork) ضمن Scope المضيف.
+
+```ts
+import { Effect, Stream } from "effect"
+
+yield* opencode.events.subscribe().pipe(
+  Stream.runForEach((event) => Effect.logInfo("OpenCode event", { type: event.type })),
+  Effect.forkScoped,
+)
+```
+
+## التخصيص
+
+خصّص نسخة OpenCode الخاصة بك بتسجيل إضافات Effect. استخدم المضيف المضمَّن لتخصيص الوكلاء والنماذج والأدوات وغيرها من
+السلوكيات:
+
+```ts
+import { Plugin } from "@opencode/plugin/effect"
+import { Effect } from "effect"
+
+const plugin = Plugin.define({
+  id: "customize-agent",
+  effect: (ctx) =>
+    Effect.gen(function* () {
+      const agent = ctx.agent
+      yield* agent.transform((agents) => {
+        agents.update("build", (agent) => {
+          agent.description = "Builds features and fixes bugs for our team"
+        })
+      })
+    }),
+})
+
+yield* opencode.plugin(plugin)
+```
+
+راجع [التوثيق الكامل لإضافات Effect](/build/plugins/effect) للتعرّف على خطّافات (hooks) الإضافات والتحويلات والأدوات
+وسياق الإضافة الكامل.
+
+## استخدام Layer
+
+استخدم `OpenCode.layer()` عندما تريد أن يكون المضيف المضمَّن خدمةً من خدمات التطبيق.
+
+```ts
+import { OpenCode } from "@opencode/sdk/effect"
+import { Effect } from "effect"
+
+const program = Effect.gen(function* () {
+  const opencode = yield* OpenCode.Service
+  return yield* opencode.server.info()
+})
+
+const health = await Effect.runPromise(program.pipe(Effect.provide(OpenCode.layer())))
+```

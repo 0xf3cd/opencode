@@ -1,0 +1,103 @@
+---
+title: "API de presupuestos"
+description: "Consulta los presupuestos mensuales efectivos de todos los miembros del espacio de trabajo y gestiona el presupuesto personalizado de cada uno."
+---
+
+Consulta los presupuestos mensuales efectivos de todos los miembros del espacio de trabajo y gestiona el presupuesto
+personalizado de cada miembro desde una integración.
+
+## Inicio rápido
+
+Crea una clave de API de [cuenta de servicio](/console/api#service-accounts) con permisos **All** en
+[Console](https://opencode.ai/console). Las claves de solo inferencia no pueden acceder a los datos de presupuesto ni
+cambiar los límites.
+
+```bash
+export CONSOLE_URL="https://opencode.ai/console"
+export SERVICE_API_KEY="oc_sk_..."
+```
+
+Lista los presupuestos de los miembros:
+
+```bash
+curl --fail-with-body \
+  "${CONSOLE_URL}/api/v1/budgets/members" \
+  --header "Authorization: Bearer ${SERVICE_API_KEY}" \
+  --header "Accept: application/json"
+```
+
+## Listar los presupuestos de los miembros
+
+```text
+GET /api/v1/budgets/members
+```
+
+La respuesta incluye a todos los miembros actuales, ordenados por correo electrónico. Un límite con origen `custom` es
+una sobrescritura del miembro; con origen `default`, se hereda del valor predeterminado del espacio de trabajo. Si el
+límite y el origen son null, el miembro no tiene límite.
+
+```json
+[
+  {
+    "user_id": "user_...",
+    "email": "alice@example.com",
+    "limit_micro_cents": "7525000000",
+    "spent_micro_cents": "1250000000",
+    "exceeded": false,
+    "resets_at": "2026-10-01T00:00:00.000Z",
+    "source": "custom",
+    "updated_at": "2026-09-03T12:00:00.000Z"
+  }
+]
+```
+
+Los campos monetarios de la respuesta son cadenas decimales en microcentavos para que las integraciones no pierdan
+precisión. Un dólar estadounidense equivale a 100,000,000 microcentavos. El gasto y las marcas de tiempo de reinicio
+corresponden al mes natural actual en UTC. `updated_at` es null cuando el miembro no tiene una sobrescritura
+personalizada.
+
+## Definir un presupuesto personalizado
+
+```text
+PUT /api/v1/budgets/members/:user_id
+```
+
+Define un presupuesto mensual de $75.25 para un miembro:
+
+```bash
+curl --fail-with-body --request PUT \
+  "${CONSOLE_URL}/api/v1/budgets/members/user_..." \
+  --header "Authorization: Bearer ${SERVICE_API_KEY}" \
+  --header "Content-Type: application/json" \
+  --data '{"budget_dollars":75.25}'
+```
+
+`budget_dollars` acepta un importe no negativo en dólares estadounidenses con dos decimales como máximo. El PUT es
+idempotente y devuelve HTTP 204. Usa el ID de miembro que devuelve la operación de listado.
+
+## Volver al valor predeterminado del espacio de trabajo
+
+```text
+DELETE /api/v1/budgets/members/:user_id
+```
+
+Elimina la sobrescritura personalizada:
+
+```bash
+curl --fail-with-body --request DELETE \
+  "${CONSOLE_URL}/api/v1/budgets/members/user_..." \
+  --header "Authorization: Bearer ${SERVICE_API_KEY}"
+```
+
+Eliminar una sobrescritura no elimina al miembro. A partir de ese momento, el miembro hereda el presupuesto
+predeterminado del espacio de trabajo, o se queda sin límite si el espacio de trabajo no tiene uno. Repetir la
+solicitud es seguro y devuelve HTTP 204.
+
+## Errores
+
+| Estado | Significado                                                             |
+| ------ | ----------------------------------------------------------------------- |
+| `400`  | ID de miembro o importe de presupuesto no válido.                       |
+| `401`  | Clave de API de servicio ausente, no válida, caducada o revocada.       |
+| `403`  | La clave de API no tiene permiso para gestionar presupuestos.           |
+| `404`  | El miembro no pertenece al espacio de trabajo vinculado a la clave de API. |

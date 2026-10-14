@@ -1,0 +1,247 @@
+---
+title: "主題"
+---
+
+在終端機介面中按下 `Ctrl+P`，選擇 **Open settings**，再開啟 **Theme**，即可選擇主題。你也可以直接在全域 CLI 設定中設定：
+
+```json title="~/.config/opencode/cli.json"
+{
+  "theme": {
+    "name": "tokyonight",
+    "mode": "system"
+  }
+}
+```
+
+主題屬於終端機用戶端。請將主題選擇寫在 `cli.json`，而不是 `opencode.json`。設定檔位置和其他終端機設定，請參閱 [CLI 偏好設定](/cli/config)。
+
+## 模式
+
+使用 `system` 跟隨終端機的外觀，或將主題固定為其中一種模式：
+
+```json title="~/.config/opencode/cli.json"
+{
+  "theme": {
+    "name": "opencode",
+    "mode": "dark"
+  }
+}
+```
+
+| 值    | 行為                                      |
+| -------- | --------------------------------------------- |
+| `system` | 跟隨終端機的淺色或深色模式。 |
+| `dark`   | 一律使用深色主題。                   |
+| `light`  | 一律使用淺色主題。                  |
+
+如果自訂主題只提供一種模式，當要求使用另一種模式時，OpenCode 會改用主題提供的那一種。
+
+## 內建主題
+
+依名稱選擇內建主題：
+
+```json title="~/.config/opencode/cli.json"
+{
+  "theme": {
+    "name": "catppuccin"
+  }
+}
+```
+
+可用的主題包括：
+
+- `aura`、`ayu`、`carbonfox`、`cobalt2`、`cursor`、`dracula`、`everforest`、`flexoki`
+- `catppuccin`、`catppuccin-frappe`、`catppuccin-macchiato`
+- `github`、`gruvbox`、`kanagawa`、`material`、`matrix`、`mercury`、`monokai`、`nightowl`、`nord`
+- `one-dark`、`opencode`、`orng`、`lucent-orng`、`osaka-jade`、`palenight`、`rosepine`
+- `solarized`、`synthwave84`、`tokyonight`、`vercel`、`vesper`、`zenburn`
+
+當 OpenCode 能讀取終端機的色盤時，就可以使用 `system` 主題。
+
+## 主題檔案
+
+若要建立名為 `ocean` 的全域主題，請使用主題工具，在全域主題目錄中產生完整的檔案。其中相關的結構如下：
+
+```json title="~/.config/opencode/themes/ocean.json (excerpt)"
+{
+  "base": {
+    "text": {
+      "base": "#d8f3ff"
+    }
+  },
+  "dark": {
+    "hue": {
+      "accent": "$hue.cyan"
+    }
+  }
+}
+```
+
+接著在偏好設定中選擇 `ocean`，或在 `cli.json` 中將 `theme.name` 設為 `ocean`。去掉 `.json` 的檔名就是主題名稱。
+
+| 範圍   | 目錄                                  |
+| ------- | ------------------------------------------ |
+| 全域  | `~/.config/opencode/themes/`               |
+| 專案 | 專案目錄樹中的 `.opencode/themes/`    |
+
+OpenCode 只會讀取 `.json` 檔案。離目前目錄較近的主題，會取代同名的全域主題或上層目錄中的主題。
+
+## 格式
+
+每個 V2 主題都要宣告一個完整的 `base` token 樹，以及至少一組 `light` 或 `dark` 色相調色盤。各模式只會繼承該檔案中的 base，不會繼承內建的 OpenCode 主題，模式之間也不會互相繼承。請先使用主題工具產生完整的 base，再進行自訂。
+
+下面的範例只顯示與各個概念相關的部分，並不是完整的主題檔案。
+
+```json title="themes/ocean.json"
+{
+  "base": {
+    "text": {
+      "base": "#16324f"
+    }
+  },
+  "light": {
+    "hue": {}
+  },
+  "dark": {
+    "hue": {},
+    "text": { "base": "#d8f3ff" }
+  }
+}
+```
+
+## 顏色
+
+使用十六進位色碼、`transparent`，或參照其他主題顏色：
+
+```json title="themes/ocean.json"
+{
+  "base": {
+    "text": {
+      "base": "#d8f3ff",
+      "muted": "$hue.neutral.400"
+    },
+    "background": {
+      "base": "transparent"
+    }
+  }
+}
+```
+
+十六進位值可以是 3、4、6 或 8 位數。參照以 `$` 開頭；色相參照的格式為 `$hue.<name>.<step>`。
+
+## 色相
+
+覆寫色相別名，即可一次變更一整組相關的顏色：
+
+```json title="themes/ocean.json"
+{
+  "base": {
+    "categorical": ["accent", "purple", "green"]
+  },
+  "dark": {
+    "hue": {
+      "accent": "$hue.cyan",
+      "interactive": "$hue.blue"
+    }
+  }
+}
+```
+
+| 種類    | 值                                                               |
+| ------- | -------------------------------------------------------------------- |
+| 基本色相    | `gray`、`red`、`orange`、`yellow`、`green`、`cyan`、`blue`、`purple` |
+| 別名   | `accent`、`interactive`、`neutral`                                 |
+| 階層    | `100`、`200`、`300`、`400`、`500`、`600`、`700`、`800`、`900`      |
+
+色相階層會依照模式的對比方向排列：淺色主題從 `100` 的深色漸變到 `900` 的淺色，深色主題則從 `100` 的淺色漸變到 `900` 的深色。
+
+`categorical` 設定一組有順序的色相，用來區分代理和其他重複出現的項目。其中至少要包含一個基本色相或別名。
+
+## 狀態
+
+使用狀態鍵變更互動元素的顏色。未指定的狀態會使用最接近的基本值：
+
+```json title="themes/ocean.json"
+{
+  "base": {
+    "text": {
+      "action": {
+        "primary": {
+          "base": "$hue.interactive.400",
+          "$hovered": "$hue.interactive.300",
+          "$disabled": "$hue.neutral.600"
+        }
+      }
+    }
+  }
+}
+```
+
+| 群組     | 值                                                    |
+| --------- | --------------------------------------------------------- |
+| 動作   | `primary`、`secondary`、`destructive`                     |
+| 狀態    | `$hovered`、`$focused`、`$pressed`、`$selected`、`$disabled` |
+
+表單欄位則直接在 `text.formfield` 或 `background.formfield` 底下使用相同的狀態鍵。
+
+## Token
+
+完整的 `base` 包含所有 token 群組。模式在提供完整的色相調色盤之後，可以覆寫 base 的任何部分：
+
+```json title="themes/ocean.json"
+{
+  "base": {
+    "border": {
+      "base": "$hue.neutral.700"
+    },
+    "syntax": {
+      "comment": "$hue.neutral.500",
+      "keyword": "$hue.accent.400"
+    },
+    "diff": {
+      "text": {
+        "added": "$hue.green.400",
+        "removed": "$hue.red.400"
+      }
+    }
+  }
+}
+```
+
+| 群組        | 用途                                                       |
+| ------------ | ------------------------------------------------------------- |
+| `text`       | 基本、次要、動作、表單欄位和回饋文字         |
+| `background` | 基本、表面、動作、表單欄位和回饋填色    |
+| `border`     | 框線                                                       |
+| `scrollbar`  | 捲軸                                                    |
+| `diff`       | 新增、移除、上下文、醒目提示和行號的顏色     |
+| `syntax`     | 原始碼語法醒目提示                                      |
+| `markdown`   | Markdown 元素                                              |
+
+語法鍵包括 `comment`、`keyword`、`function`、`variable`、`string`、`number`、`type`、`operator` 和 `punctuation`。Markdown 鍵包括 `text`、`heading`、`link`、`linkText`、`code`、`blockQuote`、`emphasis`、`strong`、`horizontalRule`、`listItem`、`listEnumeration`、`image`、`imageText` 和 `codeBlock`。
+
+## 浮層表面
+
+面板、對話方塊、選單和快顯通知會從 `background.raised` 選擇各自的層級深度。對話方塊另外支援情境式的 `@dialog` 表面。TUI 套用 `@dialog` 後會重新解析調色盤，因此參照 `$background.base` 的 token 會跟著對話方塊的背景變化：
+
+```json title="themes/ocean.json"
+{
+  "base": {
+    "background": {
+      "base": "#071521",
+      "raised": {
+        "base": "#0c1f2e",
+        "high": "#102a3c",
+        "max": "#16364b"
+      }
+    },
+    "@dialog": {
+      "background": {
+        "base": "$background.raised.base"
+      }
+    }
+  }
+}
+```
+
+`@dialog` 接受的 token 群組與基本模式相同。動作在情境中的 `base` 也會成為其未指定狀態的備援值；明確設定的狀態覆寫仍然優先。

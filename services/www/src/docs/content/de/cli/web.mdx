@@ -1,0 +1,116 @@
+---
+title: "Web"
+description: "OpenCode im Browser ausführen."
+---
+
+OpenCode bringt eine Weboberfläche mit, die vom selben Server ausgeliefert wird, der
+auch die TUI betreibt. Sie ist standardmäßig verfügbar und passwortgeschützt.
+
+## Zugriff
+
+```bash
+$ opencode pair
+
+  Open a link to connect. Links work once and expire in 5 minutes.
+
+  http://127.0.0.1:49374/auth/connect/...
+
+  █▀▀▀▀▀█ ...
+```
+
+Öffnest du einen Link im Browser, meldet er den Browser mit einem Sitzungscookie an und
+lädt die Weboberfläche. Scannst du den QR-Code mit der OpenCode-App oder fügst du den
+Link in deren Feld für die Serveradresse ein, wird die App auf dieselbe Weise verbunden.
+Diese Anmeldesitzungen gelten 30 Tage; wenn du das Serverpasswort änderst, werden alle
+abgemeldet.
+
+### Über SSH
+
+Lauscht der Server nur auf localhost, leite seinen Port von deinem Rechner aus weiter
+und öffne den ausgegebenen Link lokal:
+
+```bash
+$ ssh -L 49374:127.0.0.1:49374 my-server
+```
+
+Standardmäßig läuft der Server auf Port 49374 und lauscht nur auf localhost. Diese
+Konfiguration kannst du mit dem Befehl `opencode service` ändern.
+
+### Fernzugriff
+
+Um dich von überall aus zu verbinden, koppelst du über eine Remote-Adresse von
+[OpenTunnel](https://github.com/anomalyco/opentunnel):
+
+```bash
+$ opencode pair --remote
+```
+
+Wenn der Befehl den Fernzugriff zum ersten Mal aktiviert, fragt er vorher nach:
+
+```text
+▲  This will expose your OpenCode server to the internet.
+│  Traffic is end-to-end encrypted, and access requires your server password.
+│  To pair locally instead, run `opencode pair` without the --remote flag.
+│
+◆  Expose your server to the internet?
+│  ● Yes / ○ No
+```
+
+Ohne interaktives Terminal schlägt der Befehl fehl, sofern du nicht `--yes` übergibst,
+um zuzustimmen. Nach der Zustimmung entfällt die Abfrage bei späteren Aufrufen – auch
+dann, wenn der Fernzugriff zwischenzeitlich mit `opencode service set remote false`
+deaktiviert wurde.
+
+## Konfigurieren
+
+Jede Option setzt du mit `opencode service set`:
+
+```bash
+# Listen on every network interface
+$ opencode service set hostname 0.0.0.0
+
+# Use a fixed port instead of the channel default
+$ opencode service set port 49374
+
+# Replace the generated password
+$ opencode service set password "a-long-secret"
+
+# Allow a web client served from another origin
+$ opencode service set cors https://app.example.com,https://other.example.com
+
+# Pass an environment variable to the server process
+$ opencode service set env OPENCODE_LOG_LEVEL DEBUG
+```
+
+Wenn du eine Einstellung änderst, wird der Hintergrundserver beendet. So wendest du die
+neue Konfiguration an:
+
+```bash
+$ opencode service start
+```
+
+## Eigenständiger Server
+
+`opencode serve` führt denselben Server im Vordergrund aus statt über den gemeinsamen
+Hintergrunddienst.
+
+```bash
+$ opencode serve --hostname 0.0.0.0 --port 4096
+server listening on http://0.0.0.0:4096
+server password <password>
+```
+
+Verwende ihn, wenn du Folgendes möchtest:
+
+- OpenCode auf einem gemeinsam genutzten, dauerhaft laufenden oder entfernten Host
+  betreiben und Clients mit `opencode --server <url>` verbinden.
+- Hostname, Port und CORS-Origins für einen einzelnen Prozess festlegen.
+- OpenCode unter einem Supervisor wie systemd, in Docker oder in einer anderen Umgebung
+  ausführen, die einen Vordergrundprozess erwartet.
+- Einen dedizierten Server statt des gemeinsamen Hintergrunddienstes betreiben.
+
+Verbinde einen Client mit `--server` damit:
+
+```bash
+$ opencode --server http://127.0.0.1:4096
+```

@@ -1,0 +1,107 @@
+---
+title: "웹"
+description: "브라우저에서 OpenCode를 실행합니다."
+---
+
+OpenCode에는 TUI를 구동하는 서버에서 함께 제공되는 웹 UI가 포함되어 있습니다. 기본적으로 사용할 수 있으며
+비밀번호로 보호됩니다.
+
+## 접속
+
+```bash
+$ opencode pair
+
+  Open a link to connect. Links work once and expire in 5 minutes.
+
+  http://127.0.0.1:49374/auth/connect/...
+
+  █▀▀▀▀▀█ ...
+```
+
+브라우저에서 링크를 열면 세션 쿠키로 로그인되고 웹 UI가 로드됩니다. OpenCode 앱에서 QR 코드를 스캔하거나 앱의 서버
+주소 입력란에 링크를 붙여 넣어도 같은 방식으로 앱이 연결됩니다. 로그인 세션은 30일 동안 유지되며, 서버 비밀번호를
+변경하면 모든 세션이 로그아웃됩니다.
+
+### SSH 사용
+
+서버가 localhost에서만 수신 대기한다면, 로컬 컴퓨터에서 서버 포트를 포워딩한 다음 출력된 링크를 로컬에서 여세요.
+
+```bash
+$ ssh -L 49374:127.0.0.1:49374 my-server
+```
+
+기본적으로 서버는 49374번 포트에서 실행되며 localhost에서만 수신 대기합니다. 이 구성은 `opencode service` 명령으로
+변경할 수 있습니다.
+
+### 원격 접속
+
+어디서든 연결하려면 [OpenTunnel](https://github.com/anomalyco/opentunnel) 원격 주소를 통해 페어링하세요.
+
+```bash
+$ opencode pair --remote
+```
+
+원격 접속을 처음 켤 때는 진행하기 전에 확인을 요청합니다.
+
+```text
+▲  This will expose your OpenCode server to the internet.
+│  Traffic is end-to-end encrypted, and access requires your server password.
+│  To pair locally instead, run `opencode pair` without the --remote flag.
+│
+◆  Expose your server to the internet?
+│  ● Yes / ○ No
+```
+
+대화형 터미널이 아니면 `--yes`를 전달해 수락하지 않는 한 명령이 실패합니다. 한 번 수락하면 이후 실행에서는 확인을
+건너뛰며, `opencode service set remote false`로 원격 접속을 끈 뒤에도 마찬가지입니다.
+
+## 구성
+
+모든 옵션은 `opencode service set`으로 설정합니다.
+
+```bash
+# Listen on every network interface
+$ opencode service set hostname 0.0.0.0
+
+# Use a fixed port instead of the channel default
+$ opencode service set port 49374
+
+# Replace the generated password
+$ opencode service set password "a-long-secret"
+
+# Allow a web client served from another origin
+$ opencode service set cors https://app.example.com,https://other.example.com
+
+# Pass an environment variable to the server process
+$ opencode service set env OPENCODE_LOG_LEVEL DEBUG
+```
+
+설정을 변경하면 백그라운드 서버가 중지됩니다. 새 구성을 적용하려면 서비스를 시작하세요.
+
+```bash
+$ opencode service start
+```
+
+## 독립 실행형
+
+`opencode serve`는 공유 백그라운드 서비스를 거치지 않고 같은 서버를 포그라운드에서 실행합니다.
+
+```bash
+$ opencode serve --hostname 0.0.0.0 --port 4096
+server listening on http://0.0.0.0:4096
+server password <password>
+```
+
+다음과 같은 경우에 사용하세요.
+
+- 공유 호스트, 상시 실행 호스트, 원격 호스트에서 OpenCode를 실행하고 `opencode --server <url>`로 클라이언트를
+  연결하려는 경우
+- 단일 프로세스의 호스트 이름, 포트, CORS 출처를 제어하려는 경우
+- systemd, Docker 등 포그라운드 프로세스를 기대하는 감독 프로세스나 환경에서 실행하려는 경우
+- 공유 백그라운드 서비스 대신 전용 서버를 유지하려는 경우
+
+`--server`로 클라이언트를 이 서버에 연결합니다.
+
+```bash
+$ opencode --server http://127.0.0.1:4096
+```

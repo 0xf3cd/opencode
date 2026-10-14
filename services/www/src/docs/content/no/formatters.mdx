@@ -1,0 +1,197 @@
+---
+title: "Formaterere"
+---
+
+OpenCode kan formatere filer etter at verktøyene `write`, `edit` eller `patch` har endret dem. Formaterere er deaktivert
+som standard, så du må aktivere dem i konfigurasjonen:
+
+```jsonc title="opencode.jsonc"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "formatter": true,
+}
+```
+
+## Aktiver
+
+Sett `formatter` til `true` for å aktivere alle de innebygde formatererne. OpenCode kjører en innebygd formaterer bare
+når den kjørbare filen og eventuelle prosjektspesifikke krav er tilgjengelige.
+
+```jsonc title="opencode.jsonc"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "formatter": true,
+}
+```
+
+Et objekt aktiverer også de innebygde formatererne, og lar deg i tillegg overstyre dem eller legge til egendefinerte
+formaterere. Et tomt objekt beholder arvede formatererinnstillinger, mens `true` tilbakestiller dem til de innebygde.
+
+```jsonc title="opencode.jsonc"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "formatter": {},
+}
+```
+
+## Innebygde
+
+OpenCode har disse formatererdefinisjonene. De fleste krever at den angitte kommandoen er tilgjengelig. Definisjoner
+med ekstra deteksjonsregler har disse oppført nedenfor.
+
+| Formaterer | Filendelser | Krav |
+| --- | --- | --- |
+| `gofmt` | `.go` | Kommandoen `gofmt` |
+| `mix` | `.ex`, `.exs`, `.eex`, `.heex`, `.leex`, `.neex`, `.sface` | Kommandoen `mix` |
+| `oxfmt` | `.js`, `.jsx`, `.mjs`, `.cjs`, `.ts`, `.tsx`, `.mts`, `.cts` | `oxfmt`-avhengighet i `package.json` |
+| `prettier` | `.js`, `.jsx`, `.mjs`, `.cjs`, `.ts`, `.tsx`, `.mts`, `.cts`, `.html`, `.htm`, `.css`, `.scss`, `.sass`, `.less`, `.vue`, `.svelte`, `.json`, `.jsonc`, `.yaml`, `.yml`, `.toml`, `.xml`, `.md`, `.mdx`, `.graphql`, `.gql` | `prettier`-avhengighet i `package.json` |
+| `biome` | Samme filendelser som `prettier` ovenfor | `biome.json` eller `biome.jsonc` og en installert `@biomejs/biome`-binærfil |
+| `zig` | `.zig`, `.zon` | Kommandoen `zig` |
+| `clang-format` | `.c`, `.cc`, `.cpp`, `.cxx`, `.c++`, `.h`, `.hh`, `.hpp`, `.hxx`, `.h++`, `.ino`, `.C`, `.H` | Kommandoen `clang-format` og `.clang-format` |
+| `ktlint` | `.kt`, `.kts` | Kommandoen `ktlint` |
+| `ruff` | `.py`, `.pyi` | Kommandoen `ruff` og en Ruff-konfigurasjon eller avhengighetsdeklarasjon |
+| `air` | `.R` | Kommandoen `air`, som identifiserer seg som R-formatereren |
+| `uv` | `.py`, `.pyi` | Kommandoen `uv` med støtte for `uv format` |
+| `rubocop` | `.rb`, `.rake`, `.gemspec`, `.ru` | Kommandoen `rubocop` |
+| `standardrb` | `.rb`, `.rake`, `.gemspec`, `.ru` | Kommandoen `standardrb` |
+| `htmlbeautifier` | `.erb` | Kommandoen `htmlbeautifier` |
+| `dart` | `.dart` | Kommandoen `dart` |
+| `ocamlformat` | `.ml`, `.mli` | Kommandoen `ocamlformat` og `.ocamlformat` |
+| `terraform` | `.tf`, `.tfvars` | Kommandoen `terraform` |
+| `latexindent` | `.tex` | Kommandoen `latexindent` |
+| `gleam` | `.gleam` | Kommandoen `gleam` |
+| `shfmt` | `.sh`, `.bash` | Kommandoen `shfmt` |
+| `nixfmt` | `.nix` | Kommandoen `nixfmt` |
+| `rustfmt` | `.rs` | Kommandoen `rustfmt` |
+| `pint` | `.php` | `laravel/pint` i `composer.json` |
+| `ormolu` | `.hs` | Kommandoen `ormolu` |
+| `cljfmt` | `.clj`, `.cljs`, `.cljc`, `.edn` | Kommandoen `cljfmt` |
+| `dfmt` | `.d` | Kommandoen `dfmt` |
+
+Når du aktiverer de innebygde formatererne, kan OpenCode for eksempel finne og kjøre en Prettier-avhengighet som er
+installert lokalt i prosjektet, for filer som passer:
+
+```jsonc title="opencode.jsonc"
+{
+  "formatter": true,
+}
+```
+
+## Tilpass
+
+Legg til en navngitt oppføring for å endre en innebygd formaterer eller definere en egendefinert. En egendefinert
+formaterer trenger både `command` og `extensions` for å kunne kjøre.
+
+```jsonc title="opencode.jsonc"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "formatter": {
+    "prettier": {
+      "environment": {
+        "NODE_ENV": "development",
+      },
+      "extensions": [".js", ".ts"],
+    },
+    "deno-markdown": {
+      "command": ["deno", "fmt", "$FILE"],
+      "extensions": [".md"],
+    },
+  },
+}
+```
+
+| Felt | Type | Virkemåte |
+| --- | --- | --- |
+| `disabled` | `boolean` | Fjerner den navngitte formatereren når verdien er `true`. |
+| `command` | `string[]` | Erstatter den innebygde kommandoen eller definerer en egendefinert kommando. |
+| `environment` | `Record<string, string>` | Legger til miljøvariabler og beholder samtidig miljøet fra den overordnede prosessen. |
+| `extensions` | `string[]` | Erstatter den innebygde listen over filendelser eller definerer den egendefinerte listen. Ta med punktumet først. |
+
+Alle feltene er valgfrie. En innebygd oppføring arver verdier som utelates, mens en ny oppføring uten kommando eller
+filendelser ikke kan kjøre.
+
+```jsonc title="opencode.jsonc"
+{
+  "formatter": {
+    "prettier": {
+      "extensions": [".md", ".mdx"],
+    },
+  },
+}
+```
+
+## Kommandoer
+
+`command` er en liste med argumenter, ikke en kommandostreng for skallet. OpenCode erstatter `$FILE` med den absolutte
+filbanen og kjører kommandoen fra den aktive prosjektkatalogen.
+
+```jsonc title="opencode.jsonc"
+{
+  "formatter": {
+    "custom": {
+      "command": ["custom-fmt", "--write", "$FILE"],
+      "extensions": [".custom"],
+    },
+  },
+}
+```
+
+## Matching
+
+OpenCode sammenligner den siste filendelsen med `extensions`. Matchingen skiller mellom store og små bokstaver, og
+sammensatte oppføringer som `.part.md` matcher ikke `notes.part.md`, fordi den siste filendelsen der er `.md`.
+
+```jsonc title="opencode.jsonc"
+{
+  "formatter": {
+    "markdown": {
+      "command": ["deno", "fmt", "$FILE"],
+      "extensions": [".md"],
+    },
+  },
+}
+```
+
+Når flere formaterere matcher, prøver OpenCode dem i registrert rekkefølge og stopper etter den første kommandoen som
+lykkes. De innebygde beholder sin innebygde rekkefølge, og egendefinerte oppføringer følger etter i samme rekkefølge som
+i objektet. Hvis en av dem avslutter med feil, logger OpenCode feilen og prøver neste treff.
+
+```jsonc title="opencode.jsonc"
+{
+  "formatter": {
+    "preferred": {
+      "command": ["preferred-fmt", "$FILE"],
+      "extensions": [".foo"],
+    },
+    "fallback": {
+      "command": ["fallback-fmt", "$FILE"],
+      "extensions": [".foo"],
+    },
+  },
+}
+```
+
+## Deaktiver
+
+Formatering er deaktivert når ingen konfigurasjonsfil setter `formatter`. Vil du deaktivere formatering som en fil med
+lavere prioritet har aktivert, setter du den til `false`.
+
+```jsonc title="opencode.jsonc"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "formatter": false,
+}
+```
+
+Vil du deaktivere én innebygd formaterer og la de andre være aktivert, markerer du den navngitte oppføringen som
+deaktivert.
+
+```jsonc title="opencode.jsonc"
+{
+  "formatter": {
+    "prettier": {
+      "disabled": true,
+    },
+  },
+}
+```

@@ -1,0 +1,283 @@
+---
+title: "Referências"
+---
+
+As referências dão ao OpenCode acesso nomeado a diretórios fora do projeto atual. Adicione uma no `opencode.json` ou
+`opencode.jsonc` e anexe o alias dela no seu cliente quando precisar.
+
+```jsonc title="opencode.jsonc"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "references": {
+    "docs": {
+      "path": "../product-docs",
+      "description": "Use for product behavior and terminology",
+    },
+  },
+}
+```
+
+Depois de anexar `docs`, peça ao agente que examine o caminho relevante:
+
+```text
+Read the attached docs reference and summarize api/authentication.md.
+```
+
+Use referências para documentação, bibliotecas compartilhadas, exemplos ou código-fonte de outro repositório.
+
+## Local
+
+Use `path` para um diretório local:
+
+```jsonc
+{
+  "references": {
+    "design-system": {
+      "path": "../design-system",
+      "description": "Use when working with components or design tokens",
+    },
+  },
+}
+```
+
+Os caminhos se comportam assim:
+
+- Caminhos relativos são resolvidos a partir do diretório que contém o arquivo de configuração.
+- Caminhos absolutos são suportados.
+- Caminhos relativos ao diretório home, como `~/docs`, são suportados.
+
+Use a forma abreviada em string quando nenhum outro campo for necessário:
+
+```jsonc
+{
+  "references": {
+    "docs": "../docs",
+    "shared": "~/work/shared",
+  },
+}
+```
+
+<Callout type="note">
+  Uma string abreviada só é um caminho local quando começa com `.`, `/` ou `~`. Use `./docs`, não `docs`; um valor
+  `docs` sem prefixo é interpretado como um repositório Git.
+</Callout>
+
+## Git
+
+Use `repository` para um repositório Git remoto:
+
+```jsonc
+{
+  "references": {
+    "effect": {
+      "repository": "Effect-TS/effect",
+      "branch": "main",
+    },
+    "internal-sdk": {
+      "repository": "git@gitlab.example.com:platform/sdk.git",
+      "branch": "release/v2",
+    },
+  },
+}
+```
+
+Os formatos de remoto suportados incluem:
+
+- A forma abreviada `owner/repo` do GitHub
+- URLs do Git
+- Formatos host/caminho
+- Remotos no estilo SCP
+
+Repositórios locais `file:` não são suportados.
+
+Use a forma abreviada em string para acompanhar o branch padrão do remoto:
+
+```jsonc
+{
+  "references": {
+    "effect": "Effect-TS/effect",
+    "sdk": "gitlab.com/platform/sdk",
+  },
+}
+```
+
+Sem `branch`, o OpenCode faz checkout do branch padrão do remoto e o mantém atualizado. Nomes de branch podem conter
+letras, números, `/`, `_`, `.` e `-`, mas não podem começar com `-` nem conter `..`.
+
+```jsonc
+{
+  "references": {
+    "sdk": {
+      "repository": "example/sdk",
+      "branch": "release/v2.1",
+    },
+  },
+}
+```
+
+## Armazenamento
+
+O OpenCode normaliza cada remoto e armazena um checkout por remoto e branch dentro do seu diretório global de dados. Sem
+um branch explícito, o caminho tem este formato:
+
+```text
+opencode/repos/<host>/<repository-path>
+```
+
+Em uma instalação típica no Linux, `Effect-TS/effect` fica armazenado em:
+
+```text
+~/.local/share/opencode/repos/github.com/Effect-TS/effect
+```
+
+Um branch explícito adiciona o sufixo codificado `@<branch>`:
+
+```text
+~/.local/share/opencode/repos/github.com/Effect-TS/effect@main
+```
+
+## Atualização
+
+Repositórios ausentes são clonados de forma assíncrona. Os checkouts existentes são verificados em segundo plano quando
+as referências são carregadas ou recarregadas e depois que um novo prompt do usuário é admitido na Location (local de
+execução) correspondente.
+
+```text
+Prompt admitted → refresh check starts in background → agent continues
+```
+
+Um checkout pode ser atualizado quando a última tentativa de atualização aconteceu há pelo menos 24 horas ou quando
+nenhuma tentativa foi registrada. A atualização faz fetch e reset para o branch configurado ou para o branch padrão do
+remoto.
+
+```text
+Last attempt: 25 hours ago → eligible
+Last attempt: 2 hours ago  → skipped
+```
+
+A atualização segue estas regras:
+
+- Os registros de data e hora persistem entre reinicializações do serviço.
+- Locations que usam o mesmo checkout compartilham o registro de data e hora dele.
+- Tentativas com falha são registradas no log e continuam sujeitas ao limite de 24 horas.
+- Não há verificação periódica enquanto uma Location não está em uso.
+- Falhas de clone ou de atualização não impedem que outras referências sejam carregadas.
+
+Os prompts não esperam o clone nem a atualização. Um anexo pode conter conteúdo antigo mesmo que uma leitura posterior
+feita por uma ferramenta veja o checkout atualizado, e uma referência nova pode aparecer antes de o checkout dela ficar
+pronto.
+
+```text
+Attachment created → cached content
+Background refresh completes → later tool read sees newer content
+```
+
+<Callout type="warning">
+  Os checkouts em cache são compartilhados e podem ser atualizados enquanto um agente os usa. Evite editá-los, porque uma
+  atualização os redefine.
+</Callout>
+
+## Orientação
+
+`description` indica aos agentes quando uma referência é relevante. As referências com descrição aparecem nas instruções
+do agente com o alias e o caminho resolvido.
+
+```jsonc
+{
+  "references": {
+    "docs": {
+      "path": "../docs",
+      "description": "Use for product behavior and terminology",
+    },
+  },
+}
+```
+
+As referências sem descrição continuam disponíveis para os clientes, mas não são divulgadas automaticamente.
+
+```jsonc
+{
+  "references": {
+    "archive": {
+      "path": "../archive",
+    },
+  },
+}
+```
+
+## Visibilidade
+
+Defina `hidden` como `true` para remover uma referência dos seletores interativos dos clientes:
+
+```jsonc
+{
+  "references": {
+    "internal": {
+      "path": "../internal",
+      "description": "Use for internal service behavior",
+      "hidden": true,
+    },
+  },
+}
+```
+
+`hidden` afeta apenas a visibilidade interativa. A referência continua na API de referências e, quando tem descrição,
+nas instruções do agente.
+
+## Uso
+
+Os clientes anexam uma referência pelo alias da raiz. O anexo contém uma listagem não recursiva dos arquivos e
+diretórios imediatos da raiz.
+
+```text
+Attached alias: docs
+Ask: Inspect docs/guides/deployment.md and explain the deployment steps.
+```
+
+Peça ao agente que examine um caminho específico quando precisar de conteúdo abaixo da raiz.
+
+## Permissões
+
+As referências não concedem permissões extras de ferramentas. O acesso fora da Location ativa continua seguindo as regras
+normais das ferramentas e a permissão `external_directory`; editar também exige a permissão de edição aplicável.
+
+```text
+Read ../product-docs/api.md
+```
+
+A requisição só é bem-sucedida quando as permissões ativas permitem essa leitura externa.
+
+## Campos
+
+| Campo | Local | Git | Descrição |
+| --- | --- | --- | --- |
+| `path` | Obrigatório | Não | Caminho do diretório local |
+| `repository` | Não | Obrigatório | Repositório Git remoto |
+| `branch` | Não | Opcional | Branch para buscar e fazer checkout |
+| `description` | Opcional | Opcional | Orientação que descreve quando os agentes devem usá-la |
+| `hidden` | Opcional | Opcional | Oculta a referência dos seletores interativos dos clientes |
+
+Uma entrada Git completa pode usar todos os campos compatíveis com Git:
+
+```jsonc
+{
+  "references": {
+    "sdk": {
+      "repository": "example/sdk",
+      "branch": "main",
+      "description": "Use for SDK implementation details",
+      "hidden": false,
+    },
+  },
+}
+```
+
+## Aliases
+
+Um alias não pode ser vazio nem conter `/`, `\`, espaços em branco, crase ou vírgula.
+
+```text
+Valid:   docs
+Invalid: product docs
+Invalid: docs/api
+```

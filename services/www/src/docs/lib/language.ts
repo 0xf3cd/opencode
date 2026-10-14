@@ -1,8 +1,24 @@
 // Locale codes match the opencode.ai website. The code is the URL segment, the `content/<code>/` folder, and the
 // `i18n/<code>.ts` file name. English is the default locale and has no URL segment.
 export const docsLocales = {
-  en: { label: "English", tag: "en", v1: "" },
-  zh: { label: "简体中文", tag: "zh-Hans", v1: "zh-cn" },
+  en: { label: "English", tag: "en", v1: "", dir: "ltr" },
+  zh: { label: "简体中文", tag: "zh-Hans", v1: "zh-cn", dir: "ltr" },
+  zht: { label: "繁體中文", tag: "zh-Hant", v1: "zh-tw", dir: "ltr" },
+  ko: { label: "한국어", tag: "ko", v1: "ko", dir: "ltr" },
+  de: { label: "Deutsch", tag: "de", v1: "de", dir: "ltr" },
+  es: { label: "Español", tag: "es", v1: "es", dir: "ltr" },
+  fr: { label: "Français", tag: "fr", v1: "fr", dir: "ltr" },
+  it: { label: "Italiano", tag: "it", v1: "it", dir: "ltr" },
+  da: { label: "Dansk", tag: "da", v1: "da", dir: "ltr" },
+  ja: { label: "日本語", tag: "ja", v1: "ja", dir: "ltr" },
+  pl: { label: "Polski", tag: "pl", v1: "pl", dir: "ltr" },
+  ru: { label: "Русский", tag: "ru", v1: "ru", dir: "ltr" },
+  uk: { label: "Українська", tag: "uk", v1: "", dir: "ltr" },
+  ar: { label: "العربية", tag: "ar", v1: "ar", dir: "rtl" },
+  no: { label: "Norsk", tag: "no", v1: "nb", dir: "ltr" },
+  br: { label: "Português (Brasil)", tag: "pt-BR", v1: "pt-br", dir: "ltr" },
+  th: { label: "ไทย", tag: "th", v1: "th", dir: "ltr" },
+  tr: { label: "Türkçe", tag: "tr", v1: "tr", dir: "ltr" },
 }
 
 export type DocsLocale = keyof typeof docsLocales
@@ -89,7 +105,7 @@ function matchLocale(language: string) {
 
 const localeAliases: Record<string, string> = { pt: "br", nb: "no", nn: "no" }
 
-// V1 docs use their own locale segments, for example `/docs/zh-cn/`.
+// V1 docs use their own locale segments, for example `/docs/zh-cn/`. Locales V1 never had link to the V1 root.
 export function v1DocsHref(locale: DocsLocale) {
   const segment = docsLocales[locale].v1
   return segment ? `/docs/${segment}/` : "/docs"

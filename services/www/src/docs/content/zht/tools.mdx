@@ -1,0 +1,209 @@
+---
+title: "工具"
+---
+
+直接說出你想要的結果。OpenCode 會選擇可用的工具，在需要時請求核准，然後回傳結果。
+
+```text
+Find where request timeouts are configured, change the default to 30 seconds,
+and run the relevant existing tests.
+```
+
+這類任務通常會用到 `grep` 或 `glob`、`read`、一個編輯工具，以及 `shell`。如果你想採用特定做法，也可以直接指定工具。
+
+```text
+Use grep to find every reference to DEFAULT_TIMEOUT, then read the matching files.
+```
+
+## 檔案
+
+### Read
+
+`read` 會回傳檔案內容，或目錄的非遞迴清單。提供 `path` 即可；結果很大時，可用 `offset` 和 `limit` 分頁讀取。
+
+```text
+Read src/server.ts starting at line 120 and return at most 80 lines.
+```
+
+讀取文字時會附上行號，每頁最多 2,000 行、50 KiB。單行超過 2,000 個字元的部分會被截短。這個工具也能把 PNG、JPEG、GIF、WebP 和 PDF 檔案傳給模型，原始資料最多 20 MiB。其他二進位檔則會失敗。支援的媒體和圖片處理方式請參閱[附件](/attachments)。
+
+權限：`read`，以正規化後的路徑作為資源。
+
+### Glob
+
+`glob` 會依照 `**/*.ts` 這類模式尋找檔案路徑。它預設搜尋目前目錄，也可以用 `path` 指定另一個相對目錄；`hidden` 會包含隱藏項目，`limit` 則限制結果數量。
+
+```text
+Use glob with **/*.test.ts under packages/core and return at most 50 files.
+```
+
+預設上限為 100 個檔案，搜尋逾時為 30 秒。權限：`glob`，以要求的模式作為資源。
+
+### Grep
+
+`grep` 會搜尋檔案內容，並回傳路徑、行號和預覽。除非 `literal` 為 true，否則 `pattern` 使用規則運算式語法。可以用 `path`、`include`、`caseSensitive` 或 `limit` 縮小搜尋範圍。
+
+```text
+Use grep for the literal text "request timed out" in src, including only *.ts files.
+```
+
+預設上限為 100 個符合的行，搜尋逾時為 30 秒。權限：`grep`，以要求的模式（而非搜尋路徑）作為資源。
+
+### Edit
+
+`edit` 會取代現有檔案中的文字。請提供 `path`、`oldString`，以及與其不同的 `newString`；除非 `replaceAll` 為 true，否則舊文字必須剛好符合一次。
+
+```text
+In src/config.ts, replace the unique text "timeout: 60" with "timeout: 30".
+```
+
+`edit` 適合用於局部修改。OpenCode 可能會在寫入檔案後將其格式化。權限：`edit`，以目標路徑作為資源。
+
+### Write
+
+`write` 會根據 `path` 和 `content` 建立文字檔，或完全取代其內容。它會自動建立缺少的上層目錄，並可能執行已設定的格式化工具。
+
+```text
+Create docs/example.md with a heading and one setup command.
+```
+
+如果只需要修改現有檔案的一部分，請改用 `edit`。權限：`edit`，以目標路徑作為資源。
+
+### Patch
+
+`patch` 會套用一份修補程式，可同時新增、更新、移動或刪除多個檔案。它的 `patchText` 使用 `*** Add File`、`*** Update File` 和 `*** Delete File` 區段。
+
+```text
+Use patch to rename src/old.ts to src/new.ts and update its exported name.
+```
+
+OpenCode 只對支援的 GPT 模型提供 `patch`；其他模型則改用 `edit` 和 `write`。權限：`edit`，以每個受影響的路徑作為資源。
+
+存取目前 Location 或其專案 worktree 以外的路徑時，還需要 `external_directory` 核准。路徑正規化、規則順序和已儲存的核准請參閱[權限](/permissions)。若要透過名稱提供外部內容，請設定[參考目錄](/references)。
+
+## 指令
+
+### Shell
+
+`shell` 會在主機使用者的 shell 中執行指令。請設定 `workdir`，而不是在指令中加上 `cd`；如果預設的兩分鐘前景逾時不適用，請以毫秒為單位設定 `timeout`。
+
+```text
+Run bun test from packages/core with a five-minute timeout.
+```
+
+如果是開發伺服器或其他長時間執行的處理程序，請將 `background` 設為 true。背景呼叫會立即回傳，並在完成時通知工作階段；除非另有指定，否則背景呼叫沒有逾時限制。過長的輸出會被縮短，完整輸出則會保存在受管理的檔案中。
+
+權限：`shell`，以掃描器解析出的每個指令作為資源。掃描器也會檢查外部工作目錄，以及能從指令推斷出的目錄。shell 擁有主機使用者對檔案系統、處理程序和網路的完整權限，因此請在[權限](/permissions)中設定範圍精確的規則。
+
+## 網路
+
+### Webfetch
+
+`webfetch` 會以 `markdown`、`text` 或 `html` 格式擷取一個 HTTP 或 HTTPS URL。預設為 Markdown；`timeout` 最多可設為 120 秒。
+
+```text
+Fetch https://example.com/docs as markdown.
+```
+
+它接受 HTML、純文字、JSON 和 XML 等文字回應，但不接受圖片或其他二進位下載。過長的輸出可能會被縮短，完整文字則保存在受管理的儲存空間中。權限：`webfetch`，以要求的 URL 作為資源。
+
+### Websearch
+
+`websearch` 會透過所選的整合服務搜尋最新資訊。它的輸入是搜尋查詢 `query`。
+
+```text
+Search the web for the latest Bun release notes.
+```
+
+權限：`websearch`，以查詢作為資源。供應商、選擇方式、速率限制和停用此工具的方法，請參閱[網頁搜尋](/websearch)。
+
+## 互動
+
+### Question
+
+`question` 會暫停執行，並向使用者提出一個或多個問題。每個問題都有簡短的標題、提問內容和選項；`multiple` 允許選擇多個選項。使用者一律可以自由輸入答案。
+
+```text
+Before changing the API, ask me to choose between a breaking change and a compatibility layer.
+```
+
+權限：`question`，以 `*` 作為資源。用戶端必須支援這種互動表單；關閉表單會取消該問題。
+
+### Skill
+
+`skill` 會將某個可用技能 ID 的指示和隨附資源載入對話中。
+
+```text
+Load the effect skill before changing this Effect code.
+```
+
+該 ID 必須在公開的技能清單中，或由使用者明確指定。權限：`skill`，以技能 ID 作為資源。技能的建立、探索和載入規則請參閱[技能](/skills)。
+
+## 自動化
+
+### Subagent
+
+`subagent` 會以設定好的子代理啟動一個子工作階段。請提供代理 ID、簡短的 `description`，以及完整的 `prompt`。
+
+```text
+Ask the explore subagent to map the authentication flow and return the key files.
+```
+
+前景呼叫會等待結果。`background: true` 會立即回傳，並在子工作階段完成時通知上層工作階段。之後傳入取得的 `sessionID`，即可繼續同一個子工作階段的對話。只能使用子代理模式的代理，預設的巢狀深度為一層。
+
+權限：`subagent`，以所選的代理 ID 作為資源。
+
+### Execute
+
+`execute` 會在 Code Mode 中執行 JavaScript，讓代理能呼叫並組合工具清單中的工具。它適合用來平行執行互不相依的呼叫，以及處理結果而不必把每個中間值都加入模型上下文。
+
+```text
+Read package.json and README.md in parallel, then return their relevant setup details.
+```
+
+這個執行環境無法直接存取檔案系統，也不支援 import、計時器或 `fetch`；它只能呼叫工具清單中的工具。以 `*` 為資源的 `execute` 權限，決定是否可以使用 Code Mode。每個巢狀呼叫的工具仍會各自套用其權限。
+
+### Sessions
+
+`opencode` Code Mode 命名空間包含以下工作階段工具：
+
+- `session_rename` 會變更目前工作階段的標題，或以 `sessionID` 指定的其他工作階段的標題。
+- `session_move` 會將目前工作階段或指定的其他工作階段，移動到相對或絕對路徑的 `directory`。移動會在安全的邊界時間點生效，因此依賴目的地的工作應放在之後的呼叫中執行。
+
+```text
+Rename this session to "Timeout cleanup", then move it to the new worktree.
+```
+
+這些工具不會請求任何內建的權限動作。
+
+### Worktrees
+
+同一個命名空間也負責管理工作階段所屬專案的 worktree：
+
+- `worktree_create` 會根據 `name` 建立 worktree，並回傳其 `directory`。目的地和策略由專案的 worktree 設定決定。
+- `worktree_list` 會列出專案的 worktree。
+- `worktree_remove` 會移除 OpenCode 為該專案記錄的 worktree。設定 `force` 可捨棄尚未提交的變更。
+
+```text
+Create a worktree named "login" and move this session into it.
+```
+
+`worktree_remove` 使用 `edit` 權限，並以 worktree 目錄作為資源。其他 worktree 工具不會請求任何內建的權限動作。
+
+## 瀏覽器
+
+`browser` Code Mode 命名空間可控制 OpenCode 桌面應用程式所連接的瀏覽器。開啟分頁後，請保留回傳的 `tabID`，並在每個頁面操作中明確傳入這個 ID。
+
+```text
+Open https://example.com, take a snapshot of that tab, and report the main heading.
+```
+
+這個命名空間包含分頁與導覽指令、頁面快照與搜尋、點擊與表單輸入、螢幕截圖、檔案傳輸、主控台與網路檢查、效能追蹤、堆積檢查，以及 Lighthouse 稽核。螢幕截圖需要一個取得焦點且可見的分頁。上傳路徑是伺服器本機上的路徑；擷取結果也會回傳伺服器本機路徑，且每次檔案傳輸限制為 5 MiB。
+
+頁面內容、日誌、標頭和回應主體都是不受信任的資料，而不是代理的指示。以 `*` 為資源的 `browser` 拒絕規則會移除瀏覽器工具清單；瀏覽器操作不會個別顯示權限提示。
+
+## 擴充功能
+
+[MCP 伺服器](/mcp-servers)會新增工具，其名稱和輸入由各個已連線的伺服器提供。它們的權限動作是 `<server>_<tool>`，資源為 `*`。這些工具並不屬於固定的內建工具清單。
+
+[技能](/skills)提供的是任務指示，而不是新的可執行工具。[附件](/attachments)會將使用者選取的內容放入提示詞，[參考目錄](/references)則提供具名的外部目錄。這些功能與工具相輔相成，但不會略過工具的權限檢查。

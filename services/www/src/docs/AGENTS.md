@@ -18,6 +18,7 @@
 - English changes may ship before translations. When an English page's heading structure changes, its translations are treated as outdated: the build warns, and the locale URL serves the English page until the translation is updated.
 - UI strings follow the website dictionaries: `i18n/en.ts` defines every key, and each locale spreads English and overrides its strings with `satisfies Dict`. Register new locales in `i18n/index.ts`. A locale's `<code>Nav` map translates header and sidebar labels by their English text from `lib/navigation.ts`.
 - Build all docs links with `docsHref(slug, locale)` or `localizeDocsHref` so readers stay in their language.
+- MDX pitfalls in translated prose: a paragraph that starts with the word `import` or `export` is parsed as JavaScript and breaks the build, and bold text that ends in punctuation directly before a letter (`**Remove…**를`) does not render. Reword the sentence, or use `<strong>…</strong>` for the bold case.
 - Language detection follows the website's `/data` proxy and runs in `../middleware.ts` on every request: URL prefix, then the shared `oc_locale` cookie, then `Accept-Language`. Unprefixed pages redirect to the preferred locale before the cache lookup, and the cache is keyed by the locale-specific URL. Do not re-enable Workers Cache in `wrangler.jsonc`; it would serve cached pages before the locale redirect runs.
 
 ## Writing Style

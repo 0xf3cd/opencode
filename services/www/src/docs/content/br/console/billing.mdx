@@ -1,0 +1,87 @@
+---
+title: "Faturamento"
+description: "Adicione créditos, configure a recarga automática, gerencie formas de pagamento e baixe faturas no OpenCode Console."
+---
+
+O Console é gratuito para equipes de qualquer tamanho, sem cobrança por usuário. Você paga apenas pelo uso, com créditos
+pré-pagos que cobrem o workspace inteiro. Proprietários e administradores gerenciam o faturamento em
+**Settings › Billing**.
+
+O uso pelos [seus próprios provedores](/console/providers) é cobrado pelo provedor, não pelo Console.
+
+## Adicionar uma forma de pagamento
+
+1. Abra **Settings › Billing**.
+2. Em **Payment methods**, clique em **Add**.
+3. Escolha uma forma de pagamento e conclua a configuração no Stripe.
+
+Formas de pagamento aceitas:
+
+- Cartão
+- Link
+- Alipay
+- UPI
+- WeChat Pay
+
+Use **⋯ › Make default** para escolher a forma usada nas cobranças automáticas. Remover uma forma de pagamento pode
+interromper a recarga automática e as renovações do Go que a utilizam.
+
+## Adicionar créditos
+
+1. Em **Credits**, clique em **Add credits**.
+2. Escolha $10, $50 ou $100, ou escolha **Other** e informe um valor.
+3. Escolha uma forma de pagamento e clique em **Confirm and pay**.
+
+Uma taxa de processamento de 4.6% + $0.31 é somada ao valor, então uma compra de $50 custa $52.61, e os $50 inteiros
+são adicionados ao saldo.
+
+## Recarga automática
+
+A recarga automática compra créditos quando o saldo fica baixo.
+
+1. Em **Auto-recharge**, clique em **Add rule**.
+2. Defina o saldo que dispara uma cobrança e o valor a adicionar.
+3. Clique em **Save**.
+
+A recarga automática cobra da forma de pagamento padrão, incluindo a taxa de processamento. Se uma cobrança falhar, a
+recarga automática é desativada até que você a configure de novo.
+
+## Consultar o saldo
+
+O card **Credits** em **Overview** mostra o saldo para proprietários e administradores.
+
+## Quando os créditos acabam
+
+As requisições pagas falham com HTTP `402` assim que o saldo chega a zero. O saldo nunca fica negativo.
+
+```text
+Upstream request failed: Insufficient account funds
+```
+
+## Faturas
+
+Cada pagamento aparece em **Invoices** com o status e um link para **Download invoice** ou **View receipt**.
+
+| Lançamento       | Gerado por                |
+| ---------------- | ------------------------- |
+| Balance top-up   | Adição de créditos        |
+| Automatic top-up | Recarga automática        |
+| Go subscription  | Assinatura do Go          |
+| Go renewal       | Renovação mensal do Go    |
+| Monthly Usage    | Faturamento por fatura    |
+
+## Faturamento por fatura
+
+Workspaces com um contrato de crédito podem receber uma fatura mensal em vez de comprar créditos. Entre em contato com o
+suporte para configurar.
+
+- O uso consome um limite de crédito em vez de um saldo pré-pago.
+- A fatura de cada mês é emitida no dia 1º (UTC) e vence 14 dias depois.
+- As faturas em aberto têm um botão **Pay now**.
+- As requisições falham com HTTP `402` quando o limite de crédito é atingido ou quando há uma fatura vencida.
+
+## Go
+
+As assinaturas do [OpenCode Go](/console/go) usam as mesmas formas de pagamento e aparecem na mesma lista de faturas.
+Ative **Extra usage** no card de créditos em **Overview** para pagar com créditos depois que um limite do Go for
+atingido.

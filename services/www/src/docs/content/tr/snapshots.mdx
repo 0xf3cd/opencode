@@ -1,0 +1,130 @@
+---
+title: "Anlık görüntüler"
+---
+
+Anlık görüntüler, son konuşma ve dosya değişikliklerini birlikte geri almanızı sağlar. Son yapılan işi düzeltmek için
+kullanın, ancak önemli her şey için Git commit'lerine veya yedeklere güvenmeye devam edin.
+
+## İş akışı
+
+Düzeltmek istediğiniz bir yanıttan sonra `/undo` komutunu çalıştırın. OpenCode geri almayı hazırlar, etkilenen dosyaları
+geri yükler ve kaldırılan istemi düzenleyebilmeniz için yazma alanına geri koyar.
+
+```text
+/undo
+
+# Edit the restored prompt, then submit it again.
+Add validation without changing the public API.
+```
+
+Düzenlenen istemi göndermek, hazırlanan geri almayı kesinleştirir. Göndermeden önce `/redo` komutunu çalıştırırsanız
+geri alma iptal edilir ve `/undo` öncesindeki konuşma ile dosyalar geri yüklenir.
+
+```text
+/redo
+```
+
+Terminal ayrıca varsayılan kısayollar sunar:
+
+| Eylem | Komut | Kısayol |
+| --- | --- | --- |
+| Önceki mesajın geri alınmasını hazırla | `/undo` | `<leader>u` |
+| Hazırlanan geri almayı iptal et | `/redo` | `<leader>r` |
+
+Daha önceki bir mesajı seçip **Revert** seçeneğini seçerek o noktaya kadar bir geri alma da hazırlayabilirsiniz.
+
+## Yakalama
+
+OpenCode her model adımı için model çağrısından hemen önce bir anlık görüntü, adım kaydedilmiş bir başarı veya hatayla
+sonuçlandığında da bir anlık görüntü daha almaya çalışır. Asistan mesajı, bu iki anlık görüntü arasında hangi yolların
+değiştiğini kaydeder.
+
+```text
+before model step ── snapshot A
+model edits src/api.ts
+step finishes ────── snapshot B ── changed: src/api.ts
+```
+
+Yakalama en iyi çaba esasına göre yapılır. Anlık görüntülerden biri alınamazsa konuşma devam eder, ancak o adımın dosya
+değişiklikleri geri yüklenemeyebilir.
+
+## Kapsam
+
+Anlık görüntüler, oturumun bir Git worktree'si içindeki etkin dizinini kapsar. Örneğin `packages/app` dizininde açılan
+bir oturum, deponun başka yerlerindeki değişiklikleri değil, `packages/app` altındaki uygun dosyaları yakalar.
+
+| İçerik | Yakalanır | Örnek |
+| --- | --- | --- |
+| Etkin dizindeki izlenen dosyalar | Evet | `packages/app/src/app.tsx` |
+| Yok sayılmayan, her biri en fazla 2 MiB olan izlenmeyen dosyalar | Evet | `packages/app/notes.txt` |
+| Git tarafından yok sayılan dosyalar | Hayır | `packages/app/dist/app.js` |
+| 2 MiB'tan büyük tek tek izlenmeyen dosyalar | Hayır | `packages/app/debug.log` |
+| Etkin dizin dışındaki dosyalar | Hayır | `packages/server/src/index.ts` |
+| Git meta verileri ve diğer yan etkiler | Hayır | commit'ler, branch'ler, veritabanları veya süreçler |
+
+Dosya sistemi anlık görüntüleri bir Git deposu gerektirir. Depo dışında `/undo` yine konuşma geçmişini geri alabilir,
+ancak dosyaları geri yükleyemez.
+
+## Geri yükleme
+
+Geri alma, yalnızca seçilen konuşma sınırından sonraki asistan adımlarına atfedilen yolları geri yükler. Her yol, geri
+alınan ilk adımdan önceki durumuna döner; bu adımların oluşturduğu bir dosya o anda mevcut değilse kaldırılır.
+
+| Zaman çizelgesi | `src/api.ts` | `src/new.ts` |
+| --- | --- | --- |
+| Seçilen sınır | A sürümü | yok |
+| Sonraki asistan adımları | B sürümü | oluşturuldu |
+| Geri almadan sonra | A sürümü | kaldırıldı |
+
+Bu adımlara atfedilmeyen yollara dokunulmaz. Etkilenen bir yoldaki güncel düzenlemelerin üzerine yazılabilir; bu yüzden
+devam etmeden önce geri yükleme özetini ve `git diff` çıktısını inceleyin.
+
+```sh
+git diff --stat
+git diff
+```
+
+## Depolama
+
+OpenCode anlık görüntüleri, veri dizini altındaki ayrı bir dahili Git nesne veritabanında yerel olarak saklar. Anlık
+görüntü yakalama commit oluşturmaz, branch'leri taşımaz ve deponuzun index'ini kasıtlı olarak değiştirmez.
+
+```sh
+# Your repository remains an ordinary dirty worktree after capture.
+git status --short
+```
+
+Anlık görüntü nesneleri, izlenen ve uygun izlenmeyen dosyaların tüm içeriğini barındırabilir. OpenCode veri dizinini
+hassas yerel veri olarak değerlendirin.
+
+## Ayarlar
+
+Anlık görüntüler varsayılan olarak etkindir. Gelecekteki dosya sistemi yakalamalarını durdurmak için
+[yapılandırmanızda](/config#snapshots) `snapshots` değerini `false` olarak ayarlayın.
+
+```jsonc title="opencode.jsonc"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "snapshots": false,
+}
+```
+
+Anlık görüntüleri devre dışı bırakmak, zaten saklanmış anlık görüntüleri silmez. Konuşmayı geri alma kullanılabilir kalır,
+ancak yakalanmış bir dosya sistemi durumu olmadan ilgili dosya değişikliklerini geri yükleyemez.
+
+## Güvenlik
+
+Anlık görüntüler bir kolaylıktır; bir işlem (transaction) veya yedek değildir:
+
+- Shell komutları hizmetleri, süreçleri, ağ kaynaklarını, veritabanlarını, Git durumunu, yok sayılan çıktıları veya etkin
+  dizin dışındaki dosyaları değiştirebilir. Bir anlık görüntüyü geri yüklemek bu etkileri geri almaz.
+- Yakalama başarısız olduğunda veya kullanılabilir bir anlık görüntü çifti olmadığında, yarıda kesilen veya başarısız olan
+  işler değişiklik bırakabilir.
+- Etkilenen yolları geri yüklemek, mevcut içeriklerinin üzerine yazar. Hazırlanan bir geri almayı iptal etmek de sonraki
+  düzenlemelerin üzerine yazabilir.
+- OpenCode, oturum çalışırken geri alma işlemlerini reddeder; ancak harici düzenleyiciler ve komutlar yakalama ile geri
+  yükleme arasında worktree'yi yine de değiştirebilir.
+- Bir geri almayı kesinleştirmek, mesajları kalıcı oturum geçmişinden veya mevcut anlık görüntü deposundan değil, yalnızca
+  etkin konuşma görünümünden kaldırır. Bu, güvenli bir silme değildir.
+
+Değişiklik içeren bir worktree'de `/undo` kullanmadan önce önemli işlerinizi commit'leyin veya yedekleyin.

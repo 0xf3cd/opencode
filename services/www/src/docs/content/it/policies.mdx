@@ -1,0 +1,240 @@
+---
+title: "Policy"
+description: "Consenti o nega le azioni di OpenCode su risorse specifiche, con la policy dell'organizzazione che ha l'ultima parola."
+---
+
+Le policy stabiliscono se OpenCode può eseguire un'azione su una determinata risorsa. Si
+definiscono in `policies` e possono anche essere fornite da un workspace di
+[OpenCode Console](/console) connesso.
+
+Le policy sono distinte dai [permessi](/permissions). I permessi sono regole per gli strumenti,
+definite per agente, che possono valere `allow`, `deny` o `ask`. Le policy sono binarie, non
+chiedono mai conferma e possono solo restringere ciò che permessi e provider consentirebbero
+altrimenti.
+
+## Configurazione
+
+Per negare un provider ovunque, aggiungi una dichiarazione a `opencode.jsonc`:
+
+```jsonc
+{
+  "$schema": "https://opencode.ai/config.json",
+  "policies": [{ "action": "provider.use", "resource": "openai", "effect": "deny" }],
+}
+```
+
+Un provider negato scompare dal catalogo e dalla selezione del modello anche se dispone di
+credenziali valide.
+
+Le versioni precedenti leggevano le policy da `experimental.policies`. Questa chiave funziona
+ancora e viene unita a `policies`:
+
+```jsonc
+{
+  "experimental": {
+    "policies": [{ "action": "provider.use", "resource": "openai", "effect": "deny" }],
+  },
+}
+```
+
+## Dichiarazioni
+
+Ogni dichiarazione ha tre campi:
+
+| Campo      | Valori                                        | Significato                                               |
+| ---------- | --------------------------------------------- | --------------------------------------------------------- |
+| `action`   | `provider.use`, `tool.use`, `integration.use` | L'operazione controllata                                  |
+| `resource` | stringa o pattern con caratteri jolly         | L'oggetto a cui si applica la dichiarazione; dipende dall'azione |
+| `effect`   | `allow`, `deny`                               | La decisione quando la dichiarazione corrisponde              |
+
+Le dichiarazioni che non superano la validazione vengono scartate con un avviso nel log del server,
+mentre il resto dell'elenco continua ad applicarsi. Controlla il log dopo aver modificato un `deny`.
+
+## Corrispondenza
+
+Le risorse usano gli stessi caratteri jolly sull'intero valore dei permessi: `*` corrisponde a zero
+o più caratteri e `?` a uno solo.
+
+```jsonc
+{
+  "policies": [{ "action": "provider.use", "resource": "company-*", "effect": "deny" }],
+}
+```
+
+Questa dichiarazione nega `company-us` e `company-eu`. Un pattern che termina con ` *` corrisponde
+anche al valore senza argomenti, quindi `shell:git push *` copre anche `git push` da solo.
+
+## Ordine
+
+Quando più dichiarazioni corrispondono, prevale l'ultima. Non esiste una regola di specificità, quindi
+metti prima le dichiarazioni generali e dopo le eccezioni. Se nessuna dichiarazione corrisponde, l'azione
+è consentita.
+
+```jsonc
+{
+  "policies": [
+    { "action": "provider.use", "resource": "*", "effect": "deny" },
+    { "action": "provider.use", "resource": "anthropic", "effect": "allow" },
+  ],
+}
+```
+
+Resta disponibile solo Anthropic.
+
+## Provider
+
+`provider.use` stabilisce se un provider è utilizzabile. La risorsa è l'ID del provider:
+`anthropic`, `openai`, `opencode` o un ID personalizzato definito in [`providers`](/providers).
+
+```jsonc
+{
+  "providers": {
+    "company-ai": {
+      "package": "@opencode/ai/providers/openai-compatible",
+      "settings": { "baseURL": "https://ai.company.example/v1" },
+    },
+  },
+  "policies": [
+    { "action": "provider.use", "resource": "*", "effect": "deny" },
+    { "action": "provider.use", "resource": "company-ai", "effect": "allow" },
+  ],
+}
+```
+
+La voce `providers` configura l'endpoint; le dichiarazioni lo rendono l'unico provider che OpenCode
+userà. La policy si applica indipendentemente da come OpenCode è venuto a conoscenza del provider:
+dati del catalogo, variabili d'ambiente, account salvati, plugin integrati o configurazione.
+
+Usa `provider.use` al posto degli elenchi `enabled_providers` e `disabled_providers` di V1. I file
+di V1 vengono comunque caricati; consulta
+[Migrare da V1](/migrate-v1#supported-fields-without-direct-native-equivalents).
+
+## Strumenti
+
+Le dichiarazioni `tool.use` negano in modo definitivo un controllo dei [permessi](/permissions). La
+risorsa è `<action>:<value>` e viene confrontata con ogni risorsa controllata dallo strumento.
+
+```jsonc
+{
+  "policies": [
+    { "action": "tool.use", "resource": "shell:git push *", "effect": "deny" },
+    { "action": "tool.use", "resource": "edit:*.env", "effect": "deny" },
+    { "action": "tool.use", "resource": "webfetch:*", "effect": "deny" },
+  ],
+}
+```
+
+Un controllo negato fallisce con `Blocked by configuration policy` invece di chiedere conferma. Si
+applica dopo le regole dell'agente e le approvazioni salvate, quindi prevale sia su un `ask` sia su
+un'approvazione "Allow always".
+
+| Pattern                      | Blocca                                                   |
+| ---------------------------- | -------------------------------------------------------- |
+| `shell:*`                    | Tutti i comandi della shell                              |
+| `read:*/.ssh/*`              | La lettura di materiale SSH                              |
+| `external_directory:*`       | Qualsiasi accesso al di fuori della Location o del worktree |
+| `subagent:general`           | L'avvio di un subagent specifico                         |
+| `github_delete_repository:*` | Uno strumento MCP specifico                              |
+| `*`                          | Tutto ciò che non è già negato                           |
+
+Una dichiarazione `tool.use` con `allow` non concede mai l'accesso. Revoca soltanto un `deny` più
+generale precedente, dopodiché decidono le regole dell'agente.
+
+```jsonc
+{
+  "policies": [
+    { "action": "tool.use", "resource": "shell:*", "effect": "deny" },
+    { "action": "tool.use", "resource": "shell:git status *", "effect": "allow" },
+  ],
+}
+```
+
+Per `git status` decide la regola `shell` dell'agente; tutti gli altri comandi sono bloccati.
+
+## Integrazioni
+
+`integration.use` stabilisce se un server MCP, una skill o un plugin vengono caricati. La risorsa è
+il tipo di integrazione seguito dal suo ID:
+
+| Risorsa           | Si applica a                                                                  |
+| ----------------- | ----------------------------------------------------------------------------- |
+| `mcp:<server>`    | Un [server MCP](/mcp-servers), tramite il nome configurato                    |
+| `skill:<id>`      | Una [skill](/skills), tramite il suo ID                                       |
+| `plugin:<target>` | Un [plugin](/plugins), tramite il nome del pacchetto senza versione o il percorso assoluto |
+
+```jsonc
+{
+  "policies": [
+    { "action": "integration.use", "resource": "mcp:*", "effect": "deny" },
+    { "action": "integration.use", "resource": "mcp:github", "effect": "allow" },
+    { "action": "integration.use", "resource": "plugin:opencode-acme-cli", "effect": "deny" },
+  ],
+}
+```
+
+Un server MCP o una skill negati vengono rimossi e un plugin negato non viene caricato,
+indipendentemente da come sono stati configurati.
+
+## Precedenza
+
+Per le impostazioni ordinarie prevale la configurazione più vicina. Le policy invertono questa
+logica: le dichiarazioni delle configurazioni più generali vengono valutate dopo, quindi prevalgono su
+quelle più specifiche. La configurazione gestita e la Console connessa hanno sempre l'ultima parola.
+
+| Autorità    | Origine                                                                                                        |
+| ----------- | -------------------------------------------------------------------------------------------------------------- |
+| 1 (massima) | Workspace di OpenCode Console connesso                                                                         |
+| 2           | Preferenze gestite di macOS (`/Library/Managed Preferences/ai.opencode.managed.plist`)                         |
+| 3           | `opencode.json(c)` di sistema (`/Library/Application Support/opencode`, `/etc/opencode`, `%ProgramData%\opencode`) |
+| 4           | `~/.config/opencode/opencode.json(c)` globale                                                                  |
+| 5           | `opencode.json(c)` diretto; le directory esterne prevalgono su quelle interne                                  |
+| 6 (minima)  | `.opencode/opencode.json(c)`; le directory esterne prevalgono su quelle interne                                |
+
+Un repository non può riabilitare un provider che hai negato a livello globale:
+
+```jsonc title="~/.config/opencode/opencode.jsonc"
+{
+  "policies": [{ "action": "provider.use", "resource": "openai", "effect": "deny" }],
+}
+```
+
+```jsonc title="project/opencode.jsonc"
+{
+  "policies": [{ "action": "provider.use", "resource": "openai", "effect": "allow" }],
+}
+```
+
+`openai` resta negato. All'interno di un singolo file, le dichiarazioni mantengono l'ordine in cui
+sono scritte.
+
+## Console
+
+Un workspace di [OpenCode Console](/console) compila le proprie policy Providers e Tools in
+dichiarazioni e le restituisce insieme alla configurazione del workspace. OpenCode le aggiunge dopo
+tutte le dichiarazioni definite localmente, quindi hanno l'ultima parola: un `deny` dell'organizzazione
+non può essere revocato da un `allow` del repository o dell'utente, e un `allow` dell'organizzazione
+revoca un `deny` con autorità inferiore.
+
+I dinieghi derivanti da queste dichiarazioni indicano il nome del workspace:
+
+```text
+Blocked by Acme's policy
+```
+
+Le dichiarazioni seguono l'account connesso.
+
+| Evento                            | Risultato                                                       |
+| --------------------------------- | --------------------------------------------------------------- |
+| Modifica delle policy nella Console | Applicata al recupero successivo, circa una volta al minuto   |
+| Passaggio a un altro workspace    | Le dichiarazioni vengono sostituite con quelle del nuovo workspace |
+| Disconnessione                    | Le dichiarazioni vengono rimosse                                   |
+| Console non raggiungibile         | Restano in vigore le ultime dichiarazioni ricevute per quella connessione |
+
+Il plugin della Console e il plugin delle policy non possono essere disabilitati da `plugins`;
+consulta [controllo dei plugin](/plugins#control).
+
+<Callout type="note">
+  Le policy non configurano endpoint né credenziali e non possono rendere utilizzabile un provider che non lo è. Inoltre
+  non isolano in una sandbox il codice dei plugin: un provider negato viene bloccato nel normale percorso di provider e
+  modelli.
+</Callout>

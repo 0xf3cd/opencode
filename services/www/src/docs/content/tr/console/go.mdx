@@ -1,0 +1,496 @@
+---
+title: "Go"
+description: "İki kullanım katmanıyla açık kodlama modellerine güvenilir erişim."
+---
+
+OpenCode Go, popüler açık kodlama modellerine güvenilir erişim sağlar ve iki aylık plan sunar:
+
+| Plan | Fiyat | Dahil kullanım |
+| ----------- | ------------- | ------------------------------------------- |
+| **Go** | **Aylık $10** | Aşağıdaki modellere daha düşük maliyetli erişim |
+| **Go Plus** | **Aylık $40** | Aşağıdaki modellerde daha yüksek kullanım limitleri |
+
+Go, OpenCode'daki diğer sağlayıcılar gibi çalışır. OpenCode Go'ya abone olur ve API anahtarınızı alırsınız. Kullanımı **tamamen isteğe bağlıdır**; OpenCode'u kullanmak için Go'ya ihtiyacınız yoktur.
+
+Hizmet öncelikle uluslararası kullanıcılar için tasarlanmıştır ve dünya genelinde kararlı erişim sağlar.
+
+## Nasıl çalışır
+
+1. [OpenCode Console'da](https://opencode.ai/console) oturum açın, Go veya Go Plus'a abone olun, fatura bilgilerinizi ekleyin ve API anahtarınızı kopyalayın.
+2. TUI'de `/connect` komutunu çalıştırın, **OpenCode Go** seçeneğini belirleyin ve API anahtarınızı yapıştırın.
+
+   ```text
+   /connect
+   ```
+
+3. Go üzerinden kullanılabilen bir model seçmek için `/models` komutunu çalıştırın.
+
+   ```text
+   /models
+   ```
+
+<Callout>
+  Go ve Go Plus, kaydolduğunuzda oluşturulan **Personal** çalışma alanı gibi tek üyeli çalışma alanları içindir. Go
+  aboneliği olan bir çalışma alanı üye davet edemez.
+</Callout>
+
+Güncel model listesi şunları içerir:
+
+- **Grok 4.7**
+- **Grok 4.6**
+- **GLM-5.3-Flash**
+- **GLM-5.3**
+- **GLM-5.2**
+- **GPT 6 Luna**
+- **GPT 5.6 Luna**
+- **Claude Haiku 5.5**
+- **Gemini 4 Argon Contributor**
+- **Kimi K3**
+- **Kimi K2.7 Code**
+- **Kimi K2.6**
+- **LongCat-2.0**
+- **LongCat 2.5 Preview Free** (sınırlı süre)
+- **Step 5 Preview Free** (sınırlı süre)
+- **Cat Jam Free** (sınırlı süre)
+- **MiMo-V2.6-Flash**
+- **MiMo-V2.6-Pro**
+- **MiMo-V2.5**
+- **MiMo-V2.5-Pro**
+- **MiniMax M3**
+- **MiniMax M2.7**
+- **Muse Spark 1.3 Contributor** ([sınırlı bölgeler](https://ai.developer.meta.com/legal/geographic-use-policy))
+- **Muse Spark 1.2 Contributor** ([sınırlı bölgeler](https://ai.developer.meta.com/legal/geographic-use-policy))
+- **Qwen3.8 Max**
+- **Qwen3.8 Flash**
+- **Qwen3.7 Plus**
+- **DeepSeek V4.1 Flash**
+- **DeepSeek V4 Pro**
+- **Hy4 preview**
+- **Hy3**
+- **Space Bunny**
+
+Yeni modelleri test edip ekledikçe model listesi değişebilir.
+
+## Nerede kullanabilirim?
+
+OpenCode Go, [OpenCode](https://opencode.ai) ve benzer türde istekler üreten diğer kodlama ajanları için tasarlanmıştır.
+Trafik, diğer kullanıcıların deneyimini bozan kötüye kullanıma karşı izlenir.
+
+İstemciniz şunları yapmalıdır:
+
+1. Tipik kodlama ajanı trafiği göndermek
+2. Kendini genel bir SDK veya HTTP kitaplığı adıyla değil, `my-coding-agent/1.0` gibi kendine ait bir user agent ile
+   tanıtmak.
+3. Yönlendirmeyi ve istem önbelleğini optimize edebilmemiz için her konuşmada `x-opencode-session` başlığında sabit bir
+   oturum ID'si göndermek.
+
+### Doğrulanmış istemciler
+
+OpenCode'un yanı sıra aşağıdaki istemcilerin OpenCode Go ile düzgün çalıştığı doğrulanmıştır. Ancak gelecekte de
+çalışmaya devam edeceklerini garanti etmiyoruz.
+
+| İstemci | Oturum desteği |
+| ----------------- | ----------------- |
+| **Hermes** | [PR #101864](https://github.com/NousResearch/hermes-agent/pull/101864) değişikliğini içeren sürümler, başlığı ana ve yardımcı OpenCode isteklerinde gönderir. Düzeltme v0.21.0'dan sonra birleştirildi; yalnızca o sürüm bu düzeltmeyi içermez. |
+| **Claude Code** | Go, istemcinin yerel oturum başlığını tanır. Özel bir başlık sarmalayıcısına gerek yoktur. |
+| **Codex** | Go, istemcinin yerel oturum başlığını tanır. Bazı sürümler ve proxy kurulumları bu başlığı hâlâ göndermez; istekleri iletirken oturum başlığını koruyun. |
+| **ZCode** | Go, istemcinin yerel oturum başlığını tanır. [`x-opencode-session` için açtığımız talep](https://github.com/zai-org/feedback/issues/492) hâlâ açık, ancak artık bu başlığı göndermek gerekli değil. |
+| **Pi** | Güncel sürümler OpenCode için oturum bilgisi gönderir. Eski kurulumları güncelleyin. |
+| **jcode** | [Oturum başlığı düzeltmesini](https://github.com/1jehuang/jcode/issues/1167) içeren **v0.81.6 veya sonraki** bir sürüme güncelleyin. |
+| **Kilo Code CLI** | [PR #13752](https://github.com/Kilo-Org/kilocode/pull/13752) değişikliğini içeren sürümler OpenCode oturum başlıklarını geri getirir. Bu düzeltme VS Code eklentisini değil, CLI'ı kapsar. [Issue #13723](https://github.com/Kilo-Org/kilocode/issues/13723) kaydına bakın. |
+
+### Sorunlu olduğu bilinen istemciler
+
+Bu istemcilerin incelediğimiz sürümlerinde oturum desteği eksik veya yetersizdir. Bağlantılı kayıtlar düzeltmeleri ve
+geçici çözümleri takip eder.
+
+| İstemci | Durum ve takip |
+| ----------------------- | ----------------------- |
+| **DeepSeek Harness** | Oturum bilgisi bazı model yollarında iletiliyor, bazılarında ise eksik. Yerel başlığını tanıyoruz; geriye kalan iş, başlığın tüm bağdaştırıcılarda gönderilmesi. [Discussion #5495](https://github.com/deepseek-ai/deepseek-harness/discussions/5495). |
+| **GitHub Copilot Chat** | Otomatik oturum başlığı desteği [VS Code issue #334186](https://github.com/microsoft/vscode/issues/334186) kaydında talep edildi. |
+| **Kimi Code** | Otomatik oturum başlığı desteği [issue #3506](https://github.com/MoonshotAI/kimi-code/issues/3506) kaydında talep edildi. |
+| **MiMo Code** | [Issue #2317](https://github.com/XiaomiMiMo/MiMo-Code/issues/2317) için [PR #2327](https://github.com/XiaomiMiMo/MiMo-Code/pull/2327) ile bir düzeltme önerildi, ancak henüz birleştirilmedi. |
+
+## Kullanım limitleri
+
+Kullanım limitleri aylık dolar tutarları olarak tanımlanır. Aşağıdaki tablo her planın aylık limitini ve her modelin
+token maliyetlerini gösterir. Token fiyatları Go ve Go Plus için aynıdır.
+
+Her model için aylık limite oranla şu kullanım limitleri geçerlidir: 5 saatlik 20%, haftalık 50% ve aylık 100%.
+
+Aşağıdaki aylık model limitleri, her modelin kullanımının bu haklardan ne ölçüde düşüleceğini belirler.
+
+Token fiyatları 1M token başınadır.
+
+<PlanTabs id="go-pricing" label="Go planı" syncKey="go-plan">
+  <div slot="go">
+
+    | Model | Girdi | Çıktı | Önbellek okuma | Önbellek yazma | Aylık limit |
+    | --- | --- | --- | --- | --- | --- |
+    | GLM-5.3-Flash | $0.15 | $0.50 | $0.03 | - | **$60** |
+    | GLM-5.3 | $1.40 | $4.40 | $0.26 | - | **$15** |
+    | GLM-5.2 | $1.40 | $4.40 | $0.26 | - | **$60** |
+    | Kimi K3 | $3.00 | $15.00 | $0.30 | - | **$15** |
+    | Kimi K2.7 Code | $0.95 | $4.00 | $0.19 | - | **$60** |
+    | Kimi K2.6 | $0.95 | $4.00 | $0.16 | - | **$60** |
+    | LongCat-2.0 | $0.30 | $1.20 | $0.006 | - | **$60** |
+    | LongCat 2.5 Preview Free | Ücretsiz | Ücretsiz | Ücretsiz | - | **Sınırsız**<br /><small>sınırlı süre</small> |
+    | Step 5 Preview Free | Ücretsiz | Ücretsiz | Ücretsiz | - | **Sınırsız**<br /><small>sınırlı süre</small> |
+    | Cat Jam Free | Ücretsiz | Ücretsiz | Ücretsiz | - | **Sınırsız**<br /><small>sınırlı süre</small> |
+    | MiMo-V2.6-Flash | $0.14 | $0.28 | $0.0028 | - | **$60** |
+    | MiMo-V2.6-Pro | $0.435 | $0.87 | $0.003625 | - | **$15** |
+    | MiMo-V2.5 | $0.14 | $0.28 | $0.0028 | - | **$60** |
+    | MiMo-V2.5-Pro | $0.435 | $0.87 | $0.003625 | - | **$15** |
+    | MiniMax M3 | $0.30 | $1.20 | $0.06 | - | **$60** |
+    | MiniMax M2.7 | $0.30 | $1.20 | $0.06 | $0.375 | **$60** |
+    | Muse Spark 1.3 Contributor | $0.10 | $0.20 | $0.002 | - | **$60** |
+    | Muse Spark 1.2 Contributor | $0.10 | $0.20 | $0.002 | - | **$60** |
+    | Qwen3.8 Max | $2.00 | $6.00 | $0.25 | $2.50 | **$15** |
+    | Qwen3.8 Flash | $0.15 | $0.47 | $0.016 | $0.20 | **$30** |
+    | Qwen3.7 Plus (≤ 256K token) | $0.40 | $1.60 | $0.04 | $0.50 | **$60** |
+    | Qwen3.7 Plus (> 256K token) | $1.20 | $4.80 | $0.12 | $1.50 | **$60** |
+    | DeepSeek V4.1 Flash (yoğun saat dışı) | $0.15 | $0.60 | $0.003 | - | **$80** |
+    | DeepSeek V4.1 Flash (yoğun saat) | $0.30 | $1.20 | $0.006 | - | **$80** |
+    | DeepSeek V4 Pro (yoğun saat dışı) | $0.66 | $1.98 | $0.022 | - | **$15** |
+    | DeepSeek V4 Pro (yoğun saat) | $1.32 | $3.96 | $0.044 | - | **$15** |
+    | Hy4 preview | $0.834 | $2.501 | $0.042 | - | **$30** |
+    | Hy3 | $0.14 | $0.58 | $0.035 | - | **$60** |
+    | Space Bunny | $0.15 | $0.60 | $0.03 | - | **$30** |
+    | Grok 4.7 (≤ 200K token) | $2.00 | $6.00 | $0.50 | - | **$15** |
+    | Grok 4.7 (> 200K token) | $4.00 | $12.00 | $1.00 | - | **$15** |
+    | Grok 4.6 (≤ 200K token) | $2.00 | $6.00 | $0.50 | - | **$15** |
+    | Grok 4.6 (> 200K token) | $4.00 | $12.00 | $1.00 | - | **$15** |
+    | GPT 6 Luna (≤ 272K token) | $0.10 | $0.50 | $0.01 | $0.125 | **$15** |
+    | GPT 6 Luna (> 272K token) | $0.20 | $0.75 | $0.02 | $0.25 | **$15** |
+    | GPT 5.6 Luna (≤ 272K token) | $0.20 | $1.20 | $0.02 | $0.25 | **$15** |
+    | GPT 5.6 Luna (> 272K token) | $0.40 | $1.80 | $0.04 | $0.50 | **$15** |
+    | Claude Haiku 5.5 (≤ 100K token) | $0.10 | $0.50 | $0.01 | $0.125 | **$15** |
+    | Claude Haiku 5.5 (> 100K token) | $0.50 | $2.50 | $0.05 | $0.625 | **$15** |
+    | Gemini 4 Argon Contributor | $4.00 | $20.00 | $0.20 | - | ~~$30~~ **$60**<br /><small>2x · Sınırlı süre</small> |
+
+  </div>
+  <div slot="go-plus">
+
+    | Model | Girdi | Çıktı | Önbellek okuma | Önbellek yazma | Aylık limit |
+    | --- | --- | --- | --- | --- | --- |
+    | GLM-5.3-Flash | $0.15 | $0.50 | $0.03 | - | **$180** |
+    | GLM-5.3 | $1.40 | $4.40 | $0.26 | - | **$120** |
+    | GLM-5.2 | $1.40 | $4.40 | $0.26 | - | **$180** |
+    | Kimi K3 | $3.00 | $15.00 | $0.30 | - | **$60** |
+    | Kimi K2.7 Code | $0.95 | $4.00 | $0.19 | - | **$180** |
+    | Kimi K2.6 | $0.95 | $4.00 | $0.16 | - | **$240** |
+    | LongCat-2.0 | $0.30 | $1.20 | $0.006 | - | **$240** |
+    | LongCat 2.5 Preview Free | Ücretsiz | Ücretsiz | Ücretsiz | - | **Sınırsız**<br /><small>sınırlı süre</small> |
+    | Step 5 Preview Free | Ücretsiz | Ücretsiz | Ücretsiz | - | **Sınırsız**<br /><small>sınırlı süre</small> |
+    | Cat Jam Free | Ücretsiz | Ücretsiz | Ücretsiz | - | **Sınırsız**<br /><small>sınırlı süre</small> |
+    | MiMo-V2.6-Flash | $0.14 | $0.28 | $0.0028 | - | **$120** |
+    | MiMo-V2.6-Pro | $0.435 | $0.87 | $0.003625 | - | **$60** |
+    | MiMo-V2.5 | $0.14 | $0.28 | $0.0028 | - | **$120** |
+    | MiMo-V2.5-Pro | $0.435 | $0.87 | $0.003625 | - | **$60** |
+    | MiniMax M3 | $0.30 | $1.20 | $0.06 | - | **$180** |
+    | MiniMax M2.7 | $0.30 | $1.20 | $0.06 | $0.375 | **$240** |
+    | Muse Spark 1.3 Contributor | $0.10 | $0.20 | $0.002 | - | **$120** |
+    | Muse Spark 1.2 Contributor | $0.10 | $0.20 | $0.002 | - | **$120** |
+    | Qwen3.8 Max | $2.00 | $6.00 | $0.25 | $2.50 | **$60** |
+    | Qwen3.8 Flash | $0.15 | $0.47 | $0.016 | $0.20 | **$90** |
+    | Qwen3.7 Plus (≤ 256K token) | $0.40 | $1.60 | $0.04 | $0.50 | **$180** |
+    | Qwen3.7 Plus (> 256K token) | $1.20 | $4.80 | $0.12 | $1.50 | **$180** |
+    | DeepSeek V4.1 Flash (yoğun saat dışı) | $0.15 | $0.60 | $0.003 | - | **$160** |
+    | DeepSeek V4.1 Flash (yoğun saat) | $0.30 | $1.20 | $0.006 | - | **$160** |
+    | DeepSeek V4 Pro (yoğun saat dışı) | $0.66 | $1.98 | $0.022 | - | **$60** |
+    | DeepSeek V4 Pro (yoğun saat) | $1.32 | $3.96 | $0.044 | - | **$60** |
+    | Hy4 preview | $0.834 | $2.501 | $0.042 | - | **$120** |
+    | Hy3 | $0.14 | $0.58 | $0.035 | - | **$240** |
+    | Space Bunny | $0.15 | $0.60 | $0.03 | - | **$120** |
+    | Grok 4.7 (≤ 200K token) | $2.00 | $6.00 | $0.50 | - | **$60** |
+    | Grok 4.7 (> 200K token) | $4.00 | $12.00 | $1.00 | - | **$60** |
+    | Grok 4.6 (≤ 200K token) | $2.00 | $6.00 | $0.50 | - | **$60** |
+    | Grok 4.6 (> 200K token) | $4.00 | $12.00 | $1.00 | - | **$60** |
+    | GPT 6 Luna (≤ 272K token) | $0.10 | $0.50 | $0.01 | $0.125 | **$60** |
+    | GPT 6 Luna (> 272K token) | $0.20 | $0.75 | $0.02 | $0.25 | **$60** |
+    | GPT 5.6 Luna (≤ 272K token) | $0.20 | $1.20 | $0.02 | $0.25 | **$60** |
+    | GPT 5.6 Luna (> 272K token) | $0.40 | $1.80 | $0.04 | $0.50 | **$60** |
+    | Claude Haiku 5.5 (≤ 100K token) | $0.10 | $0.50 | $0.01 | $0.125 | **$60** |
+    | Claude Haiku 5.5 (> 100K token) | $0.50 | $2.50 | $0.05 | $0.625 | **$60** |
+    | Gemini 4 Argon Contributor | $4.00 | $20.00 | $0.20 | - | ~~$120~~ **$240**<br /><small>2x · Sınırlı süre</small> |
+
+  </div>
+</PlanTabs>
+
+**LongCat 2.5 Preview Free:** Sınırlı bir süre için ücretsizdir.
+
+**Step 5 Preview Free:** Sınırlı bir süre için ücretsizdir.
+
+**Cat Jam Free:** Sınırlı bir süre için ücretsizdir.
+
+**DeepSeek V4.1 Flash / V4 Pro:** Yoğun saatler (Peak) pazartesiden cumaya 01:00-04:00 ve 06:00-10:00 UTC arasıdır; hafta sonları dahil diğer tüm saatler yoğun saat dışıdır (Off-Peak). [Daha fazla bilgi](https://api-docs.deepseek.com/quick_start/pricing/).
+
+### Tahmini istek sayıları
+
+Aşağıdaki tablolar, tipik Go kullanım kalıplarına dayanarak istek sayılarını tahmin eder. Go Plus tahminleri, her
+modelin daha yüksek kullanım limitiyle orantılı olarak artar.
+
+<PlanTabs id="go-requests" label="Go planı" syncKey="go-plan">
+  <div slot="go">
+
+    | Model | 5 saatte istek | Haftalık istek | Aylık istek |
+    | --- | --- | --- | --- |
+    | GLM-5.3-Flash | 6,320 | 15,790 | 31,580 |
+    | GLM-5.3 | 220 | 540 | 1,080 |
+    | GLM-5.2 | 880 | 2,150 | 4,300 |
+    | Kimi K3 | 110 | 250 | 490 |
+    | Kimi K2.7 Code | 1,350 | 3,380 | 6,750 |
+    | Kimi K2.6 | 1,150 | 2,880 | 5,750 |
+    | LongCat-2.0 | 11,400 | 28,600 | 57,200 |
+    | LongCat 2.5 Preview Free | Sınırsız | Sınırsız | Sınırsız |
+    | Step 5 Preview Free | Sınırsız | Sınırsız | Sınırsız |
+    | Cat Jam Free | Sınırsız | Sınırsız | Sınırsız |
+    | MiMo-V2.6-Flash | 30,100 | 75,200 | 150,400 |
+    | MiMo-V2.6-Pro | 3,250 | 8,150 | 16,300 |
+    | MiMo-V2.5 | 30,100 | 75,200 | 150,400 |
+    | MiMo-V2.5-Pro | 3,250 | 8,150 | 16,300 |
+    | MiniMax M3 | 3,200 | 8,000 | 16,000 |
+    | MiniMax M2.7 | 3,400 | 8,500 | 17,000 |
+    | Muse Spark 1.3 Contributor | 45,300 | 113,300 | 226,600 |
+    | Muse Spark 1.2 Contributor | 45,300 | 113,300 | 226,600 |
+    | Qwen3.8 Max | 160 | 400 | 810 |
+    | Qwen3.8 Flash | 5,400 | 13,500 | 27,000 |
+    | Qwen3.7 Plus | 4,300 | 10,800 | 21,600 |
+    | DeepSeek V4.1 Flash | 34,670 | 86,670 | 173,330 |
+    | DeepSeek V4 Pro | 1,050 | 2,600 | 5,200 |
+    | Hy4 preview | 1,350 | 3,380 | 6,770 |
+    | Hy3 | 4,300 | 10,750 | 21,500 |
+    | Space Bunny | 3,130 | 7,810 | 15,630 |
+    | Grok 4.7 | 169 | 423 | 845 |
+    | Grok 4.6 | 169 | 423 | 845 |
+    | GPT 6 Luna | 4,230 | 10,560 | 21,130 |
+    | GPT 5.6 Luna | 2,050 | 5,100 | 10,250 |
+    | Claude Haiku 5.5 | 3,850 | 9,620 | 19,230 |
+    | Gemini 4 Argon Contributor<br /><small>2x · Sınırlı süre</small> | ~~220~~<br />**440** | ~~540~~<br />**1,080** | ~~1,060~~<br />**2,120** |
+
+  </div>
+  <div slot="go-plus">
+
+    | Model | 5 saatte istek | Haftalık istek | Aylık istek |
+    | --- | --- | --- | --- |
+    | GLM-5.3-Flash | 18,960 | 47,370 | 94,740 |
+    | GLM-5.3 | 1,760 | 4,320 | 8,640 |
+    | GLM-5.2 | 2,640 | 6,450 | 12,900 |
+    | Kimi K3 | 440 | 1,000 | 1,960 |
+    | Kimi K2.7 Code | 4,050 | 10,140 | 20,250 |
+    | Kimi K2.6 | 4,600 | 11,520 | 23,000 |
+    | LongCat-2.0 | 45,600 | 114,400 | 228,800 |
+    | LongCat 2.5 Preview Free | Sınırsız | Sınırsız | Sınırsız |
+    | Step 5 Preview Free | Sınırsız | Sınırsız | Sınırsız |
+    | Cat Jam Free | Sınırsız | Sınırsız | Sınırsız |
+    | MiMo-V2.6-Flash | 60,200 | 150,400 | 300,800 |
+    | MiMo-V2.6-Pro | 13,000 | 32,600 | 65,200 |
+    | MiMo-V2.5 | 60,200 | 150,400 | 300,800 |
+    | MiMo-V2.5-Pro | 13,000 | 32,600 | 65,200 |
+    | MiniMax M3 | 9,600 | 24,000 | 48,000 |
+    | MiniMax M2.7 | 13,600 | 34,000 | 68,000 |
+    | Muse Spark 1.3 Contributor | 90,600 | 226,600 | 453,200 |
+    | Muse Spark 1.2 Contributor | 90,600 | 226,600 | 453,200 |
+    | Qwen3.8 Max | 640 | 1,600 | 3,240 |
+    | Qwen3.8 Flash | 16,200 | 40,500 | 81,000 |
+    | Qwen3.7 Plus | 12,900 | 32,400 | 64,800 |
+    | DeepSeek V4.1 Flash | 69,330 | 173,330 | 346,670 |
+    | DeepSeek V4 Pro | 4,200 | 10,400 | 20,800 |
+    | Hy4 preview | 5,400 | 13,520 | 27,080 |
+    | Hy3 | 17,200 | 43,000 | 86,000 |
+    | Space Bunny | 12,500 | 31,250 | 62,500 |
+    | Grok 4.7 | 676 | 1,692 | 3,380 |
+    | Grok 4.6 | 676 | 1,692 | 3,380 |
+    | GPT 6 Luna | 16,920 | 42,240 | 84,520 |
+    | GPT 5.6 Luna | 8,200 | 20,400 | 41,000 |
+    | Claude Haiku 5.5 | 15,380 | 38,460 | 76,920 |
+    | Gemini 4 Argon Contributor<br /><small>2x · Sınırlı süre</small> | ~~880~~<br />**1,760** | ~~2,160~~<br />**4,320** | ~~4,240~~<br />**8,480** |
+
+  </div>
+</PlanTabs>
+
+Tahminlerde istek başına aşağıdaki token sayıları kullanılmıştır; gerçek kullanım farklılık gösterebilir.
+
+- Grok 4.7/4.6: istek başına 390 girdi, 32,500 önbellekli, 120 çıktı token'ı
+- GLM-5.3-Flash: istek başına 1,000 girdi, 55,000 önbellekli, 200 çıktı token'ı
+- GLM-5.3/5.2: istek başına 700 girdi, 52,000 önbellekli, 150 çıktı token'ı
+- GPT 6 Luna: istek başına 1,000 girdi, 50,000 önbellekli, 220 çıktı token'ı
+- GPT 5.6 Luna: istek başına 1,000 girdi, 50,000 önbellekli, 220 çıktı token'ı
+- Claude Haiku 5.5: istek başına 1,100 girdi, 55,000 önbellekli, 240 çıktı token'ı
+- Kimi K3: istek başına 1,050 girdi, 76,500 önbellekli, 300 çıktı token'ı
+- Kimi K2.7/K2.6: istek başına 870 girdi, 55,000 önbellekli, 200 çıktı token'ı
+- LongCat-2.0: istek başına 920 girdi, 88,900 önbellekli, 200 çıktı token'ı
+- DeepSeek V4.1 Flash: istek başına 410 girdi, 71,300 önbellekli, 310 çıktı token'ı
+- DeepSeek V4 Pro: istek başına 750 girdi, 82,000 önbellekli, 290 çıktı token'ı
+- MiniMax M3: istek başına 510 girdi, 56,000 önbellekli, 190 çıktı token'ı
+- MiniMax M2.7: istek başına 300 girdi, 55,000 önbellekli, 125 çıktı token'ı
+- Muse Spark 1.3 Contributor: istek başına 620 girdi, 71,400 önbellekli, 300 çıktı token'ı
+- Muse Spark 1.2 Contributor: istek başına 620 girdi, 71,400 önbellekli, 300 çıktı token'ı
+- MiMo-V2.6-Flash: istek başına 830 girdi, 71,500 önbellekli, 295 çıktı token'ı
+- MiMo-V2.6-Pro: istek başına 790 girdi, 86,000 önbellekli, 305 çıktı token'ı
+- MiMo-V2.5: istek başına 830 girdi, 71,500 önbellekli, 295 çıktı token'ı
+- MiMo-V2.5-Pro: istek başına 790 girdi, 86,000 önbellekli, 305 çıktı token'ı
+- Qwen3.8 Max: istek başına 420 girdi, 66,000 önbellekli, 200 çıktı token'ı
+- Qwen3.8 Flash: istek başına 600 girdi, 58,000 önbellekli, 200 çıktı token'ı
+- Qwen3.7 Plus: istek başına 500 girdi, 57,000 önbellekli, 190 çıktı token'ı
+- Hy4 preview: istek başına 830 girdi, 71,500 önbellekli, 295 çıktı token'ı
+- Hy3: istek başına 830 girdi, 71,500 önbellekli, 295 çıktı token'ı
+- Space Bunny: istek başına 1,000 girdi, 55,000 önbellekli, 200 çıktı token'ı
+
+Güncel kullanımınızı [Console'da](https://opencode.ai/console) takip edebilirsiniz.
+
+<Callout type="tip">Kullanım limitine ulaşırsanız ücretsiz modelleri kullanmaya devam edebilirsiniz.</Callout>
+
+Kullanım limitleri, ilk kullanımlardan ve geri bildirimlerden öğrendiklerimize göre değişebilir.
+
+---
+
+### Limitlerin ötesinde kullanım
+
+Console bakiyenizde krediniz de varsa Console'da **Use balance** seçeneğini etkinleştirebilirsiniz. Bu seçenek
+etkinleştirildiğinde Go, kullanım limitlerinize ulaştıktan sonra istekleri engellemek yerine
+[kullandıkça öde bakiyenize](/console/models#pricing) geri döner.
+
+### Bazı modellerde kullanım neden daha düşük
+
+Go'ya dahil aylık kullanım modele göre değişir.
+
+Çoğu model için bunu toplu alım indirimleri ve ayrılmış GPU kapasitesi sayesinde mümkün kılıyoruz. Ardından bu
+tasarrufu size daha yüksek aylık kullanım olarak yansıtıyoruz.
+
+Bazı modeller içinse, ya model yeni olduğu ya da herkese açık fiyatı zaten indirimli olduğu için indirim pazarlığı
+yapma veya modeli daha düşük maliyetle barındırma fırsatımız olmadı.
+
+Bu modellerde yine de model sağlayıcılarına doğrudan ödeme yapmanıza kıyasla biraz daha fazlasını alırsınız; dahil
+olan aylık kullanımlarının daha düşük olmasının nedeni budur.
+
+## Uç noktalar
+
+Go modellerine aşağıdaki API uç noktaları üzerinden doğrudan da erişebilirsiniz.
+
+<div class="docs-table-scroll" role="region" aria-label="Go model uç noktaları" tabIndex={0}>
+
+| Model | Model ID'si | Uç nokta | AI SDK paketi |
+| --- | --- | --- | --- |
+| Grok 4.7 | grok-4.7 | `https://opencode.ai/inference/go/v1/responses` | `@ai-sdk/openai` |
+| Grok 4.6 | grok-4.6 | `https://opencode.ai/inference/go/v1/responses` | `@ai-sdk/openai` |
+| GPT 6 Luna | gpt-6-luna | `https://opencode.ai/inference/go/v1/responses` | `@ai-sdk/openai` |
+| GPT 5.6 Luna | gpt-5.6-luna | `https://opencode.ai/inference/go/v1/responses` | `@ai-sdk/openai` |
+| Claude Haiku 5.5 | claude-haiku-5-5 | `https://opencode.ai/inference/go/v1/messages` | `@ai-sdk/anthropic` |
+| Gemini 4 Argon Contributor | gemini-4-argon-contributor | `https://opencode.ai/inference/go/v1/models/gemini-4-argon-contributor` | `@ai-sdk/google` |
+| GLM-5.3-Flash | glm-5.3-flash | `https://opencode.ai/inference/go/v1/chat/completions` | `@ai-sdk/openai-compatible` |
+| GLM-5.3 | glm-5.3 | `https://opencode.ai/inference/go/v1/chat/completions` | `@ai-sdk/openai-compatible` |
+| GLM-5.2 | glm-5.2 | `https://opencode.ai/inference/go/v1/chat/completions` | `@ai-sdk/openai-compatible` |
+| Kimi K3 | kimi-k3 | `https://opencode.ai/inference/go/v1/chat/completions` | `@ai-sdk/openai-compatible` |
+| Kimi K2.7 Code | kimi-k2.7-code | `https://opencode.ai/inference/go/v1/chat/completions` | `@ai-sdk/openai-compatible` |
+| Kimi K2.6 | kimi-k2.6 | `https://opencode.ai/inference/go/v1/chat/completions` | `@ai-sdk/openai-compatible` |
+| LongCat-2.0 | longcat-2.0 | `https://opencode.ai/inference/go/v1/chat/completions` | `@ai-sdk/openai-compatible` |
+| DeepSeek V4.1 Flash | deepseek-v4.1-flash | `https://opencode.ai/inference/go/v1/chat/completions` | `@ai-sdk/openai-compatible` |
+| DeepSeek V4 Pro | deepseek-v4-pro | `https://opencode.ai/inference/go/v1/chat/completions` | `@ai-sdk/openai-compatible` |
+| MiMo-V2.6-Flash | mimo-v2.6-flash | `https://opencode.ai/inference/go/v1/chat/completions` | `@ai-sdk/openai-compatible` |
+| MiMo-V2.6-Pro | mimo-v2.6-pro | `https://opencode.ai/inference/go/v1/chat/completions` | `@ai-sdk/openai-compatible` |
+| MiMo-V2.5 | mimo-v2.5 | `https://opencode.ai/inference/go/v1/chat/completions` | `@ai-sdk/openai-compatible` |
+| MiMo-V2.5-Pro | mimo-v2.5-pro | `https://opencode.ai/inference/go/v1/chat/completions` | `@ai-sdk/openai-compatible` |
+| MiniMax M3 | minimax-m3 | `https://opencode.ai/inference/go/v1/messages` | `@ai-sdk/anthropic` |
+| MiniMax M2.7 | minimax-m2.7 | `https://opencode.ai/inference/go/v1/messages` | `@ai-sdk/anthropic` |
+| Muse Spark 1.3 Contributor | muse-spark-1.3-contributor | `https://opencode.ai/inference/go/v1/responses` | `@ai-sdk/openai` |
+| Muse Spark 1.2 Contributor | muse-spark-1.2-contributor | `https://opencode.ai/inference/go/v1/responses` | `@ai-sdk/openai` |
+| Qwen3.8 Max | qwen3.8-max | `https://opencode.ai/inference/go/v1/messages` | `@ai-sdk/anthropic` |
+| Qwen3.8 Flash | qwen3.8-flash | `https://opencode.ai/inference/go/v1/messages` | `@ai-sdk/anthropic` |
+| Qwen3.7 Plus | qwen3.7-plus | `https://opencode.ai/inference/go/v1/messages` | `@ai-sdk/anthropic` |
+| Hy4 preview | hy4-preview | `https://opencode.ai/inference/go/v1/chat/completions` | `@ai-sdk/openai-compatible` |
+| Hy3 | hy3 | `https://opencode.ai/inference/go/v1/chat/completions` | `@ai-sdk/openai-compatible` |
+| Space Bunny | space-bunny | `https://opencode.ai/inference/go/v1/chat/completions` | `@ai-sdk/openai-compatible` |
+| LongCat 2.5 Preview Free | longcat-2.5-preview-free | `https://opencode.ai/inference/go/v1/chat/completions` | `@ai-sdk/openai-compatible` |
+| Step 5 Preview Free | step-5-preview-free | `https://opencode.ai/inference/go/v1/chat/completions` | `@ai-sdk/openai-compatible` |
+| Cat Jam Free | cat-jam-free | `https://opencode.ai/inference/go/v1/chat/completions` | `@ai-sdk/openai-compatible` |
+
+</div>
+
+Bu AI SDK paketleri, Go'yu doğrudan çağıran uygulamalar içindir. Go'yu OpenCode'da kullanmak için `/connect` ile
+bağlanın ve [modeli](/models) `opencode-go/<model-id>` biçiminde ayarlayın:
+
+```jsonc title="opencode.jsonc"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "model": "opencode-go/kimi-k3",
+}
+```
+
+### Modeller
+
+Kullanılabilir modellerin tam listesini ve meta verilerini models uç noktasından alın:
+
+```bash
+curl https://opencode.ai/inference/go/v1/models
+```
+
+## Gizlilik
+
+| Model | Model eğitimi | Veri saklama |
+| --- | --- | --- |
+| Grok 4.7 | Kullanılmaz | 30 gün |
+| Grok 4.6 | Kullanılmaz | 30 gün |
+| GPT 6 Luna | Kullanılmaz | 30 gün |
+| GPT 5.6 Luna | Kullanılmaz | 30 gün |
+| Claude Haiku 5.5 | Kullanılmaz | 30 gün |
+| Gemini 4 Argon Contributor | Evet | ZDR değil |
+| GLM-5.3-Flash | Kullanılmaz | 0 gün |
+| GLM-5.3 | Kullanılmaz | 0 gün |
+| GLM-5.2 | Kullanılmaz | 0 gün |
+| Kimi K3 | Kullanılmaz | 0 gün |
+| Kimi K2.7 Code | Kullanılmaz | 0 gün |
+| Kimi K2.6 | Kullanılmaz | 0 gün |
+| LongCat-2.0 | Kullanılmaz | 0 gün |
+| MiMo-V2.6-Pro | Kullanılmaz | 0 gün |
+| MiMo-V2.6-Flash | Kullanılmaz | 0 gün |
+| MiMo-V2.5-Pro | Kullanılmaz | 0 gün |
+| MiMo-V2.5 | Kullanılmaz | 0 gün |
+| Qwen3.8 Max | Kullanılmaz | 0 gün |
+| Qwen3.8 Flash | Kullanılmaz | 0 gün |
+| Qwen3.7 Plus | Kullanılmaz | 0 gün |
+| MiniMax M3 | Kullanılmaz | 0 gün |
+| MiniMax M2.7 | Kullanılmaz | 0 gün |
+| Muse Spark 1.3 Contributor | Evet | ZDR değil |
+| Muse Spark 1.2 Contributor | Evet | ZDR değil |
+| DeepSeek V4.1 Flash | Kullanılmaz | 0 gün\* |
+| DeepSeek V4 Pro | Kullanılmaz | 0 gün\* |
+| Hy4 preview | Kullanılmaz | 0 gün |
+| Hy3 | Kullanılmaz | 0 gün |
+| Space Bunny | Kullanılmaz | 0 gün |
+| LongCat 2.5 Preview Free | Kullanılmaz | 0 gün |
+| Step 5 Preview Free | Kullanılmaz | 0 gün |
+| Cat Jam Free | Kullanılmaz | 30 gün |
+
+- **Grok 4.7/4.6:** ZDR (sıfır veri saklama), durum bilgili Responses API, Files and Collections ve Batch API dahil olmak üzere depolanan verilere dayanan önemli API özelliklerini devre dışı bırakır. [Daha fazla bilgi](https://docs.x.ai/developers/faq/security#what-is-zero-data-retention-zdr).
+- **GPT 6 Luna / GPT 5.6 Luna:** Tüm API özelliklerinin kullanımı için kötüye kullanım izleme günlükleri oluşturulur ve 30 güne kadar saklanır. [Daha fazla bilgi](https://developers.openai.com/api/docs/guides/your-data#data-retention-controls-for-abuse-monitoring).
+- **Claude Haiku 5.5:** İstekler, [Anthropic'in Veri Politikaları](https://docs.anthropic.com/en/docs/claude-code/data-usage) uyarınca 30 gün boyunca saklanır.
+- **Gemini 4 Argon Contributor:** İstemleriniz ve tamamlamalarınız gelecekteki Google modellerini eğitmek için kullanılabilir.
+- **Muse Spark 1.3 Contributor:** İstemlerinizin ve tamamlamalarınızın gelecekteki Meta modellerini eğitmek için kullanılmasına izin vermeniz karşılığında büyük ölçüde indirimli token fiyatlandırması sunar. Kullanılabilirlik, Meta'nın [Coğrafi Kullanım Politikası](https://ai.developer.meta.com/legal/geographic-use-policy) tarafından izin verilen bölgelerle sınırlıdır. [Daha fazla bilgi](https://dev.meta.ai/docs/pricing-rate-limits#contributor-tier).
+- **Muse Spark 1.2 Contributor:** İstemlerinizin ve tamamlamalarınızın gelecekteki Meta modellerini eğitmek için kullanılmasına izin vermeniz karşılığında büyük ölçüde indirimli token fiyatlandırması sunar. Kullanılabilirlik, Meta'nın [Coğrafi Kullanım Politikası](https://ai.developer.meta.com/legal/geographic-use-policy) tarafından izin verilen bölgelerle sınırlıdır. [Daha fazla bilgi](https://dev.meta.ai/docs/pricing-rate-limits#contributor-tier).
+- **DeepSeek:** ZDR sözleşmesi her ay yenilenir. Mevcut sözleşme 31 Ekim 2026 tarihine kadar geçerlidir.
+
+## Arka plan
+
+Açık modeller gerçekten çok iyi hale geldi. Artık kodlama görevlerinde tescilli modellere yakın performansa ulaşıyorlar. Birçok sağlayıcı bu modelleri rekabetçi biçimde sunabildiği için genellikle çok daha ucuzlar.
+
+Ancak bu modellere güvenilir ve düşük gecikmeli erişim sağlamak zor olabilir. Sağlayıcıların kalitesi ve kullanılabilirliği farklılık gösterir.
+
+<Callout type="tip">OpenCode ile iyi çalışan, seçilmiş bir grup model ve sağlayıcıyı test ettik.</Callout>
+
+Bu sorunu çözmek için birkaç şey yaptık:
+
+1. Seçilmiş bir grup açık modeli test ettik ve en iyi nasıl çalıştırılacakları konusunda ekipleriyle görüştük.
+2. Bu modellerin doğru şekilde sunulduğundan emin olmak için birkaç sağlayıcıyla birlikte çalıştık.
+3. Model/sağlayıcı kombinasyonlarını karşılaştırmalı olarak test ettik ve gönül rahatlığıyla önerebileceğimiz bir liste oluşturduk.
+
+Go ve Go Plus'ın her ikisi de bu modellere erişim sağlar; bu modelleri ne kadar kullandığınıza uygun planı seçin.
+
+## Hedefler
+
+OpenCode Go'yu şu amaçlarla oluşturduk:
+
+1. Düşük maliyetli bir abonelikle AI destekli kodlamayı daha fazla kişi için **erişilebilir** kılmak.
+2. En iyi açık kodlama modellerine **güvenilir** erişim sağlamak.
+3. Kodlama ajanı kullanımı için **test edilmiş ve karşılaştırmalı olarak ölçülmüş** modelleri bir araya getirmek.
+4. OpenCode ile başka herhangi bir sağlayıcıyı da kullanmanıza izin vererek **bağımlılık yaratmamak**.

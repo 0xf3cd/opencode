@@ -1,0 +1,125 @@
+---
+title: "プラグイン"
+---
+
+公開済みのパッケージ、バージョン指定付きのパッケージ、スコープ付きパッケージ、ローカルのプラグインディレクトリを `opencode.json(c)` に追加します。
+
+## 設定
+
+```jsonc title="opencode.jsonc"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "plugins": [
+    "opencode-acme-plugin",
+    "opencode-acme-plugin@1.2.0",
+    "@acme/opencode-plugin",
+    "./plugins/local",
+    "../shared/plugin.ts",
+    "/absolute/path/plugin.ts",
+    "file:///home/me/plugins/local",
+    {
+      "package": "@acme/opencode-plugin",
+      "options": {
+        "agent": "reviewer",
+        "strict": true,
+      },
+    },
+  ],
+}
+```
+
+相対パスは、そのエントリを含む設定ファイルを基準に解決されます。該当する各設定ファイルのプラグイン配列は、互いに置き換えられるのではなく、優先順位の低いものから高いものの順に適用されます。
+
+```text
+~/.config/opencode/opencode.jsonc
+./opencode.jsonc
+./.opencode/opencode.jsonc
+```
+
+## 検出
+
+OpenCode は、検出されたすべての `.opencode/plugins/` ディレクトリから、直下にある `.ts` ファイルと `.js` ファイル、およびプラグインパッケージのディレクトリも読み込みます。
+
+```text
+.opencode/
+└── plugins/
+    ├── concise.ts
+    ├── reviewer.js
+    └── acme-package/
+```
+
+グローバルなプラグインも、OpenCode の設定ディレクトリの下で同じ構成で検出されます。
+
+```text
+~/.config/opencode/plugins/
+```
+
+プロジェクトのルートにある `opencode.json(c)` と同じ場所の `plugins/` ディレクトリは、自動的には検出されません。そのファイルを明示的に設定するか、ディレクトリを `.opencode/` の下に移動してください。
+
+```jsonc title="opencode.jsonc"
+{
+  "plugins": ["./plugins/local"]
+}
+```
+
+## 有効化と無効化
+
+プラグインのエントリは順番に処理されます。ID またはワイルドカードの先頭に `-` を付けると無効になります。すべてのプラグインを対象にするには `*` を、ID のプレフィックスに一致させるには `.*` を使用します。後から ID を指定すると、そのプラグインは再び有効になります。
+
+```jsonc title="opencode.jsonc"
+{
+  "plugins": ["*", "-opencode.provider.*", "opencode.provider.openai", "-acme.reviewer"]
+}
+```
+
+リポジトリで[ポリシー](/policies)の適用を無効にできないように、2 つの組み込みプラグインは削除の指定を無視します。`opencode.config.policy` と、組織のポリシーを配信する Console 接続である `opencode.provider.opencode` です。
+
+## 管理
+
+グローバルなパッケージプラグインのインストール、一覧表示、確認、更新、削除は、CLI で行います。
+
+```sh
+opencode plugin add opencode-acme-plugin@1.2.0
+opencode plugin list
+opencode plugin list --builtin
+opencode plugin check
+opencode plugin update
+opencode plugin update opencode-acme-plugin
+opencode plugin remove opencode-acme-plugin@1.2.0
+```
+
+`plugin check` は、サーバーのパッケージプラグインと TUI 専用のパッケージプラグインに更新があるかを確認します。`plugin update` は、古くなったすべてのパッケージを更新します。設定済みのパッケージを対象として渡すと、そのパッケージだけを確認または更新します。ローカルのプラグインと、リビジョンを厳密に指定したパッケージはスキップされます。
+
+パッケージのインストールでは、バージョン、タグ、範囲を指定した npm の名前と、npm 互換の Git パッケージ指定を使用できます。Git リポジトリには、ホスティングサービスの省略形、HTTPS、SSH を使用できます。既存の Git 認証情報でアクセスできるプライベートリポジトリも利用できます。
+
+```sh
+opencode plugin add @acme/opencode-plugin@latest
+opencode plugin add github:acme/opencode-plugin
+opencode plugin add git+ssh://git@github.com/acme/opencode-plugin.git#main
+opencode plugin add 'github:acme/plugins#main::path:packages/opencode-plugin'
+```
+
+ブランチ、タグ、完全なコミットハッシュ、およびリポジトリのサブディレクトリを選択する npm の `::path:` 指定に対応しています。ローカルのパスは直接設定してください。`plugin add` では、tarball や npm エイリアスを対象に指定することはできません。
+
+## 再読み込み
+
+監視対象の設定ディレクトリ内の変更は、自動的に再読み込みされます。サーバーの起動時には、キャッシュ済みのパッケージプラグインがすぐに読み込まれ、不足しているパッケージはバックグラウンドでインストールされます。また、バージョンを固定していない npm と Git のプラグインについては、インストール済みのパッケージを変更せずに更新を確認します。厳密な npm のバージョンと完全な Git のコミットハッシュは固定されたままです。監視対象外のローカルの依存関係を変更した場合は、OpenCode の再起動が必要になることがあります。
+
+```sh
+touch .opencode/plugins/concise/index.ts
+opencode service restart
+```
+
+## ターミナル
+
+CLI 専用のプラグインは別に設定し、リモートサーバーに接続している場合も有効なままです。
+
+```json title="cli.json"
+{
+  "plugins": ["opencode-acme-cli"]
+}
+```
+
+<Card title="プラグインの作成" href="/build/plugins">
+  ツール、フック、インテグレーション、コマンド、エージェントなどの動作を追加するプラグインを作成します。
+</Card>

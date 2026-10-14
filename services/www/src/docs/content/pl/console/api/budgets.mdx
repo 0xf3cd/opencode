@@ -1,0 +1,100 @@
+---
+title: "API budżetów"
+description: "Odczytuj efektywne miesięczne budżety wszystkich członków obszaru roboczego i zarządzaj indywidualnym budżetem każdego członka."
+---
+
+Odczytuj z poziomu integracji efektywne miesięczne budżety wszystkich członków obszaru roboczego i zarządzaj
+indywidualnym budżetem każdego członka.
+
+## Szybki start
+
+Utwórz w [Console](https://opencode.ai/console) klucz API [konta usługi](/console/api#service-accounts) z uprawnieniami **All**.
+Klucze z uprawnieniem tylko do inferencji nie mają dostępu do danych budżetów i nie mogą zmieniać limitów.
+
+```bash
+export CONSOLE_URL="https://opencode.ai/console"
+export SERVICE_API_KEY="oc_sk_..."
+```
+
+Wyświetl budżety członków:
+
+```bash
+curl --fail-with-body \
+  "${CONSOLE_URL}/api/v1/budgets/members" \
+  --header "Authorization: Bearer ${SERVICE_API_KEY}" \
+  --header "Accept: application/json"
+```
+
+## Lista budżetów członków
+
+```text
+GET /api/v1/budgets/members
+```
+
+Odpowiedź zawiera wszystkich obecnych członków, posortowanych według adresu e-mail. Limit ze źródłem `custom` to
+indywidualne nadpisanie dla członka; źródło `default` oznacza limit odziedziczony z domyślnego budżetu obszaru roboczego.
+Wartości null w polach limitu i źródła oznaczają, że członek nie ma limitu.
+
+```json
+[
+  {
+    "user_id": "user_...",
+    "email": "alice@example.com",
+    "limit_micro_cents": "7525000000",
+    "spent_micro_cents": "1250000000",
+    "exceeded": false,
+    "resets_at": "2026-10-01T00:00:00.000Z",
+    "source": "custom",
+    "updated_at": "2026-09-03T12:00:00.000Z"
+  }
+]
+```
+
+Pola kwot w odpowiedzi to ciągi dziesiętne wyrażone w mikrocentach, dzięki czemu integracje nie tracą precyzji. Jeden
+dolar amerykański to 100,000,000 mikrocentów. Wydatki i znacznik czasu resetu dotyczą bieżącego miesiąca
+kalendarzowego w UTC. `updated_at` ma wartość null, gdy członek nie ma indywidualnego nadpisania.
+
+## Ustawianie indywidualnego budżetu
+
+```text
+PUT /api/v1/budgets/members/:user_id
+```
+
+Ustaw miesięczny budżet $75.25 dla jednego członka:
+
+```bash
+curl --fail-with-body --request PUT \
+  "${CONSOLE_URL}/api/v1/budgets/members/user_..." \
+  --header "Authorization: Bearer ${SERVICE_API_KEY}" \
+  --header "Content-Type: application/json" \
+  --data '{"budget_dollars":75.25}'
+```
+
+`budget_dollars` przyjmuje nieujemną kwotę w dolarach amerykańskich z co najwyżej dwoma miejscami po przecinku. Żądanie
+PUT jest idempotentne i zwraca HTTP 204. Użyj ID członka zwróconego przez operację listowania.
+
+## Przywracanie domyślnego budżetu obszaru roboczego
+
+```text
+DELETE /api/v1/budgets/members/:user_id
+```
+
+Usuń indywidualne nadpisanie:
+
+```bash
+curl --fail-with-body --request DELETE \
+  "${CONSOLE_URL}/api/v1/budgets/members/user_..." \
+  --header "Authorization: Bearer ${SERVICE_API_KEY}"
+```
+
+Usunięcie nadpisania nie usuwa członka. Członek dziedziczy następnie domyślny budżet obszaru roboczego, a jeśli obszar
+roboczy nie ma budżetu domyślnego, jego wydatki przestają być ograniczone. Powtórzenie żądania jest bezpieczne i zwraca HTTP 204.
+
+## Błędy
+
+| Status | Znaczenie                                                          |
+| ------ | ------------------------------------------------------------------ |
+| `400`  | Nieprawidłowe ID członka lub kwota budżetu.                        |
+| `401`  | Brakujący, nieprawidłowy, wygasły lub unieważniony klucz API usługi. |
+| `403`  | Klucz API nie ma uprawnień do zarządzania budżetami.               |
+| `404`  | Członek nie należy do obszaru roboczego powiązanego z kluczem API. |

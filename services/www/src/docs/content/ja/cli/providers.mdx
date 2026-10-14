@@ -1,0 +1,123 @@
+---
+title: "プロバイダー"
+description: "CLI と TUI からプロバイダーのアカウントを接続し、認証情報を管理します。"
+---
+
+TUI でプロバイダーに接続し、そのプロバイダーのモデルを選択します。
+
+```text
+/connect
+/models
+```
+
+`/connect` には、現在のサーバーとプロジェクトで利用可能な連携先が一覧表示されます。プロバイダーを選択し、認証方法が複数ある場合はいずれかを選んで、画面の指示に従います。
+
+## TUI
+
+TUI は、API キー、OAuth、プロバイダーの認証コマンドに対応しています。OAuth では、認可 URL が開くか、入力用のコードが表示されます。`o` を押すと URL が開き、`c` を押すと認可の詳細がコピーされます。
+
+```text
+/connect
+# Select OpenAI, then Codex device code (legacy).
+```
+
+別のアカウントを追加するには、もう一度 `/connect` を実行します。接続済みのプロバイダーを選択するとアカウントの一覧が開き、保存済みのアカウントを有効化、名前変更、削除できます。
+
+## CLI
+
+TUI を開かずに同じ認証方法を使うには、`auth login` を使用します。プロバイダーを引数に指定しない場合は、対話型のプロバイダー選択画面が開きます。
+
+```bash
+opencode auth login
+```
+
+連携先の ID または名前を指定すると、最初の選択画面をスキップできます。API キーの入力を明示的に選ぶには、`--method key` を使用します。
+
+```bash
+opencode auth login anthropic --method key
+```
+
+認証方法の ID はプロバイダーによって異なります。プロバイダーに複数の認証方法がある場合は、`--method` を付けずにコマンドを実行すると、利用可能な方法を確認できます。
+
+```bash
+opencode auth login openai
+```
+
+API キーの入力とプロバイダーのフォームには、対話型ターミナルが必要です。認可コードの貼り付けを求める OAuth の認証方法でも、対話型ターミナルが必要です。
+
+## 認証方法
+
+OpenCode は、次の 4 つの連携方法でプロバイダーの認証情報を受け取ります。
+
+| 方法 | 動作 |
+| --- | --- |
+| API キー | シークレットの入力を求め、プロバイダーアカウントとして保存します。 |
+| OAuth | ブラウザー用の URL、デバイスコード、または認可コードの入力欄を表示した後、トークンを保存し、対応している場合はトークンを更新します。 |
+| コマンド | プロバイダーが提供する認証コマンドを実行し、その標準出力をキーとして保存します。 |
+| 環境変数 | サーバープロセスから対応する変数を読み取ります。値は保存しません。 |
+
+プロバイダーは、Azure のリソース名や GitHub Enterprise のドメインなど、必要な情報を入力するフォームを API キーと OAuth の認証方法に追加できます。CLI と TUI は、認証を開始する前にこれらのフォームを表示します。
+
+## 環境変数
+
+プロバイダーが対応している環境変数は、モデルへのリクエストを実行するサーバープロセスに設定します。一時的な専用サーバーの場合は、スタンドアロンモードの起動時に渡します。
+
+```bash
+ANTHROPIC_API_KEY=sk-ant-... opencode --standalone
+```
+
+共有バックグラウンドサーバーの場合は、管理対象の環境変数にその変数を追加します。これにより実行中のサービスは停止し、次に OpenCode のコマンドを実行したときに新しい値でサービスが起動します。
+
+```bash
+opencode service set env ANTHROPIC_API_KEY sk-ant-...
+opencode auth list
+```
+
+環境変数による接続は、`auth list` に種類 `environment` として表示されます。これはアカウントではないため、`auth logout` では削除できません。接続を解除するには、変数の設定を解除してください。同じ連携先では、保存済みのアカウントが環境変数による接続より優先されます。
+
+```bash
+opencode auth list
+opencode service unset env ANTHROPIC_API_KEY
+```
+
+一部のクラウドプロバイダーでは、API キーの変数の代わりに、各サービス固有の認証情報チェーンも使用できます。
+
+- Amazon Bedrock は、プロファイル、アクセスキーの環境変数、Web ID、コンテナの認証情報を含む AWS のデフォルト認証情報チェーンに対応しています。`AWS_BEARER_TOKEN_BEDROCK` にも対応しています。
+- Google Vertex は、アプリケーションのデフォルト認証情報（ADC）と、解決可能なプロジェクトを使用します。たとえば、`gcloud auth application-default login` で認証し、`GOOGLE_CLOUD_PROJECT` を設定します。
+- Azure では、`az` がインストールされている場合、接続方法として **Microsoft Entra ID (Azure CLI)** が表示されます。先に `az login` を実行してから、`/connect` または `auth login azure` でその方法を選択します。
+
+```bash
+gcloud auth application-default login
+GOOGLE_CLOUD_PROJECT=my-project opencode
+```
+
+プロバイダー固有の設定やサーバー側の設定については、[プロバイダー](/providers)を参照してください。
+
+## アカウント
+
+API キー、OAuth、またはコマンドでログインに成功するたびに、保存済みのアカウントが作成されます。最も新しいアカウントが有効になります。有効なアカウントは、ラベルまたは認証情報 ID を指定して切り替えられます。
+
+```bash
+opencode auth list
+opencode auth switch anthropic work
+```
+
+保存済みのアカウントを削除するには、`auth logout` を使用します。どちらのコマンドも、引数を省略すると選択画面が開きます。
+
+```bash
+opencode auth logout anthropic work
+```
+
+TUI では、`/connect` から保存済みアカウントの追加、有効化、名前変更、削除を同じように行えます。
+
+## 保存場所
+
+保存された API キーと OAuth トークンは、サーバーの SQLite データベースに格納されます。ローカルサーバーの場合は、次のコマンドでデータベースのパスを確認できます。
+
+```bash
+opencode debug paths db
+```
+
+通常のリリース版のパスは `~/.local/share/opencode/opencode.db` です。`XDG_DATA_HOME`、リリースチャンネル、`OPENCODE_DB` によって変わる場合があります。認証情報を管理するためにデータベースを直接編集しないでください。`/connect` または `auth` コマンドを使用してください。
+
+V2 は、データベースの移行時に、OpenCode のデータディレクトリにある従来の `auth.json` から対応する認証情報をインポートします。新規または更新された認証情報は SQLite に保存され、このファイルには書き戻されません。

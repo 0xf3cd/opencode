@@ -1,0 +1,56 @@
+---
+title: "プラグイン"
+---
+
+`opencode.json(c)` で設定したプラグインのうち、TUI コンポーネントを公開しているものは、CLI によって自動的に読み込まれます。プラグインの作り方については、[プラグインの開発](/build/plugins)を参照してください。同じパッケージを `cli.json` に追加する必要はありません。CLI は接続先の OpenCode サーバーから有効なプラグインの一覧を取得するため、サーバーがリモートにある場合でも動作します。
+
+CLI 専用のプラグインには `cli.json` を使用します。これらのプラグインはターミナル上でローカルに実行され、CLI がリモートサーバーに接続している場合も有効です。
+
+```json title="cli.json"
+{
+  "plugins": [
+    "opencode.example",
+    "opencode.example@1.0.0",
+    "@example/opencode-tui",
+    "@example/opencode-tui@1.0.0",
+    "./plugins/status",
+    "../plugins/status",
+    "/home/user/plugins/status",
+    "file:///home/user/plugins/status"
+  ]
+}
+```
+
+エントリは順番に処理されます。ID またはワイルドカードの先頭に `-` を付けると、一致するプラグインが無効になります。
+
+```json title="cli.json"
+{
+  "plugins": ["*", "-opencode.notifications", "-team.*"]
+}
+```
+
+プラグインのオプションは、オブジェクト形式で渡します。
+
+```json title="cli.json"
+{
+  "plugins": [
+    {
+      "package": "@example/opencode-tui",
+      "options": {
+        "compact": true
+      }
+    }
+  ]
+}
+```
+
+OpenCode は、グローバル設定ディレクトリとプロジェクトの `.opencode` ディレクトリにあるプラグインも検出します。各プラグインは公開パッケージと同じレイアウトを使用し、サーバーと TUI のエントリポイントを同じ場所に置きます。
+
+```text title="Plugin discovery paths"
+<global-config>/plugins/status/index.ts
+<global-config>/plugins/status/tui.ts
+<project>/.opencode/plugins/status/index.ts
+<project>/.opencode/plugins/status/tui.ts
+```
+
+検出されたプラグインは、`@opencode/plugin/tui` を直接インポートできます。このパッケージは OpenCode が実行時に解決します。例については、[CLI プラグインの開発](/build/plugins/cli)を参照してください。

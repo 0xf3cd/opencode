@@ -1,0 +1,112 @@
+---
+title: "API провайдерів"
+description: "Викликайте провайдерів, підключених до вашого робочого простору, через шлюз Console за допомогою ключа Console."
+---
+
+Кожен [провайдер](/console/providers), підключений до вашого робочого простору, обслуговується через шлюз Console за
+власною URL-адресою. OpenCode використовує його автоматично після `/connect`; викликайте його напряму, щоб
+користуватися тими самими провайдерами з власних інструментів. Console додає облікові дані провайдера перед
+пересиланням запиту, тож секрет провайдера ніколи не залишає робочий простір.
+
+```bash
+curl -X POST "https://opencode.ai/inference/custom/conn_.../chat/completions" \
+  -H "Authorization: Bearer <token>" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "model": "deepseek-chat",
+    "messages": [{ "role": "user", "content": "Say hi" }]
+  }'
+```
+
+## URL-адреса провайдера
+
+Скопіюйте **Console API URL** зі сторінки провайдера в розділі **Providers**.
+
+```text
+https://opencode.ai/inference/custom/<connection_id>
+```
+
+## Автентифікація
+
+Замініть `<token>` на [ключ сервісного облікового запису](/console/api#service-accounts), створений у Console. Перед
+пересиланням Console замінює його обліковими даними з'єднання.
+
+```text
+Authorization: Bearer <token>
+```
+
+Console також зчитує ключ із заголовків `x-api-key`, `api-key` або `x-goog-api-key`, тож SDK провайдерів працюють,
+якщо спрямувати їх на Console API URL.
+
+## Ендпоінти
+
+Додайте шлях API провайдера до Console API URL. Console пересилає запит на базову URL-адресу з'єднання й повертає
+відповідь провайдера без змін.
+
+| Формат               | Шлях                              |
+| -------------------- | --------------------------------- |
+| Chat Completions     | `/chat/completions`               |
+| Responses API        | `/responses`                      |
+| Anthropic Compatible | `/messages`                       |
+| Google Generative AI | `/models/<model>:generateContent` |
+
+Надсилайте ID моделі так, як він указаний на сторінці провайдера. Якщо в провайдера модель має інший API ID, Console
+переписує його. Запити до моделей, не ввімкнених для з'єднання, відхиляються.
+
+### Chat Completions
+
+```bash
+curl -X POST "https://opencode.ai/inference/custom/conn_.../chat/completions" \
+  -H "Authorization: Bearer <token>" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "model": "deepseek-chat",
+    "messages": [{ "role": "user", "content": "Say hi" }]
+  }'
+```
+
+### Responses API
+
+```bash
+curl -X POST "https://opencode.ai/inference/custom/conn_.../responses" \
+  -H "Authorization: Bearer <token>" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "model": "gpt-5.4",
+    "input": "Say hi"
+  }'
+```
+
+### Anthropic Compatible
+
+Параметр `max_tokens` обов'язковий.
+
+```bash
+curl -X POST "https://opencode.ai/inference/custom/conn_.../messages" \
+  -H "Authorization: Bearer <token>" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "model": "claude-sonnet-4-6",
+    "max_tokens": 1024,
+    "messages": [{ "role": "user", "content": "Say hi" }]
+  }'
+```
+
+### Google Generative AI
+
+Модель і метод є частиною шляху. Щоб отримувати відповідь потоком, замініть `:generateContent` на
+`:streamGenerateContent`.
+
+```bash
+curl -X POST "https://opencode.ai/inference/custom/conn_.../models/gemini-3.1-pro:generateContent" \
+  -H "Authorization: Bearer <token>" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "contents": [{ "parts": [{ "text": "Say hi" }] }]
+  }'
+```
+
+## Використання
+
+Запити враховуються в [бюджетах](/console/budgets) за цінами, заданими для кожної моделі. Рахунок за токени вам
+виставляє провайдер.

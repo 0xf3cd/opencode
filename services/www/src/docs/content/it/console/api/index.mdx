@@ -1,0 +1,166 @@
+---
+title: "Panoramica dell'API"
+description: "Autenticati con l'API di OpenCode Console usando le chiavi degli account di servizio o i token utente."
+---
+
+L'API della Console consente alle integrazioni di leggere la configurazione del workspace e gestire i budget. I percorsi
+sono relativi al base URL della Console.
+
+```bash
+export CONSOLE_URL="https://opencode.ai/console"
+export SERVICE_API_KEY="oc_sk_..."
+
+curl --fail-with-body "${CONSOLE_URL}/api/v2/config" \
+  --header "Authorization: Bearer ${SERVICE_API_KEY}"
+```
+
+| API                                         | Endpoint                                   |
+| ------------------------------------------- | ------------------------------------------ |
+| [Inferenza](/console/api/inference)         | `https://opencode.ai/inference/...`        |
+| [Provider](/console/api/providers)          | `https://opencode.ai/inference/custom/...` |
+| [Budget](/console/api/budgets)              | `/api/v1/budgets/members`                  |
+| [Configurazione](#workspace-config)         | `GET /api/v2/config`                       |
+
+## Account di servizio
+
+Le integrazioni si autenticano con un account di servizio: un membro non umano del workspace con chiavi API, utilizzo e
+[budget](/console/budgets#service-account-budgets) propri. Proprietari e amministratori li gestiscono da **Keys**.
+
+1. Apri **Keys** e fai clic su **Add Service Account**, quindi assegnagli un nome, ad esempio `CI Pipeline`.
+2. Apri l'account di servizio e fai clic su **Add API Key**.
+3. Scegli **Key name**, **Permissions** e, facoltativamente, una **Expiry date**, quindi fai clic su **Create key**.
+4. Copia la chiave. Viene mostrata una sola volta.
+
+```text
+oc_sk_1a2b3c4d5e6f_...
+```
+
+Invia la chiave come bearer token. È legata a un solo workspace, quindi non serve alcuna intestazione per indicarlo.
+
+```text
+Authorization: Bearer oc_sk_...
+```
+
+### Permessi
+
+| Permesso       | Consente                                                                                                              |
+| -------------- | --------------------------------------------------------------------------------------------------------------------- |
+| Inference only | Richieste alle API [Inferenza](/console/api/inference) e [Provider](/console/api/providers), e `GET /api/v2/config`. |
+| All            | Tutto quanto sopra, più l'API della Console con accesso da amministratore, esclusa la gestione dei modelli.          |
+
+Alcune azioni richiedono sempre una persona che abbia effettuato l'accesso alla Console, anche con una chiave **All**:
+invitare membri, cambiare ruoli, rimuovere membri e creare o revocare chiavi.
+
+### Revoca delle chiavi
+
+Apri l'account di servizio e revoca una chiave da **API Keys**. La rimozione dell'account di servizio ne revoca tutte le
+chiavi. Le automazioni che usano una chiave revocata o scaduta ricevono subito HTTP `401`.
+
+## Token utente
+
+I token utente agiscono come una persona che ha effettuato l'accesso, con il suo ruolo nel workspace. Invia il token con
+un'intestazione `x-org-id` che indica il workspace.
+
+```bash
+curl --fail-with-body "${CONSOLE_URL}/api/v2/config" \
+  --header "Authorization: Bearer ${USER_TOKEN}" \
+  --header "x-org-id: org_..."
+```
+
+I token ottenuti con il [device flow](#device-flow) sono legati al workspace scelto durante l'accesso e non richiedono
+l'intestazione. Un `x-org-id` diverso restituisce `403`.
+
+## Device flow
+
+OpenCode effettua l'accesso con l'OAuth device authorization grant (RFC 8628). Altre CLI possono usare lo stesso flusso.
+
+1. Richiedi un codice dispositivo. Invia `supports_org_scope=true` per legare il token a un workspace.
+
+   ```bash
+   curl --fail-with-body "${CONSOLE_URL}/auth/device/code" \
+     --data "client_id=my-cli" \
+     --data "supports_org_scope=true"
+   ```
+
+   La risposta include `device_code`, `user_code`, `verification_uri_complete`, `expires_in` (600 secondi) e
+   `interval` (5 secondi).
+
+2. Apri `verification_uri_complete` in un browser. È un percorso come `/console/device?user_code=...`, relativo a
+   `https://opencode.ai`. La persona accede, sceglie un workspace e approva.
+
+3. Interroga l'endpoint per ottenere il token ogni `interval` secondi, con lo stesso `client_id`.
+
+   ```bash
+   curl --fail-with-body "${CONSOLE_URL}/auth/device/token" \
+     --data "grant_type=urn:ietf:params:oauth:grant-type:device_code" \
+     --data "device_code=..." \
+     --data "client_id=my-cli"
+   ```
+
+   Fino all'approvazione la risposta è `400` con `authorization_pending`. In caso di successo restituisce
+   `access_token`, `refresh_token`, `expires_in` e `org_id`.
+
+4. Rinnova il token prima che l'access token scada. Il legame con il workspace viene mantenuto.
+
+   ```bash
+   curl --fail-with-body "${CONSOLE_URL}/auth/device/token" \
+     --data "grant_type=refresh_token" \
+     --data "refresh_token=..." \
+     --data "client_id=my-cli"
+   ```
+
+Ogni refresh token può essere usato una sola volta. Il riutilizzo di un refresh token già usato revoca l'intera sessione.
+
+## Configurazione del workspace
+
+`GET /api/v2/config` restituisce i provider e i modelli disponibili per il workspace nel formato di
+[configurazione](/config) di OpenCode V2. OpenCode la carica dopo `/connect`.
+
+```bash
+curl --fail-with-body "${CONSOLE_URL}/api/v2/config" \
+  --header "Authorization: Bearer ${SERVICE_API_KEY}"
+```
+
+```json
+{
+  "providers": {
+    "opencode": {
+      "name": "OpenCode",
+      "env": ["OPENCODE_CONSOLE_TOKEN"],
+      "package": "aisdk:@ai-sdk/openai-compatible",
+      "settings": {
+        "baseURL": "https://opencode.ai/inference/openai/v1",
+        "apiKey": "{env:OPENCODE_CONSOLE_TOKEN}"
+      },
+      "headers": { "x-opencode-org-id": "org_..." },
+      "models": {
+        "kimi-k2.6": { "name": "Kimi K2.6" }
+      }
+    }
+  }
+}
+```
+
+| Campo                   | Descrizione                                                                                    |
+| ----------------------- | ---------------------------------------------------------------------------------------------- |
+| `providers`             | Console, Go e i provider collegati, ciascuno con le impostazioni del gateway e i suoi modelli. |
+| `websearch`             | [Ricerca web](/console/websearch) ospitata, per i membri quando è abilitata.                   |
+| `mcp`                   | Il server MCP della Console, per i membri.                                                     |
+| `experimental.policies` | Istruzioni di [policy](/policies#console) del workspace.                                       |
+
+Qualsiasi livello di permesso delle chiavi e qualsiasi ruolo dei membri può leggere la configurazione.
+
+## Errori
+
+Gli errori restituiscono un JSON con un campo `_tag` che indica il tipo di errore.
+
+```json
+{ "_tag": "Forbidden" }
+```
+
+| Stato | Significato                                                                                        |
+| ----- | -------------------------------------------------------------------------------------------------- |
+| `400` | `OrgRequired`: è stato inviato un token utente senza `x-org-id`.                                   |
+| `401` | Credenziale mancante, non valida, scaduta o revocata.                                              |
+| `403` | Workspace errato, permesso mancante o chiave **Inference only** usata su un endpoint della Console. |
+| `404` | Il workspace non esiste o è stato eliminato.                                                       |

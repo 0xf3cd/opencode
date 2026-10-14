@@ -1,0 +1,228 @@
+---
+title: "RPC"
+---
+
+Plugins können eigene Methoden und Events bereitstellen, die auf dem Server laufen und von anderen Plugins oder Clients
+aufgerufen werden können.
+
+## Definieren
+
+Mit `Rpc.define` legst du die Methoden, Fehler und Events des RPC fest.
+
+```ts title="src/rpc.ts"
+import { Rpc } from "@opencode/plugin/rpc"
+
+export const Acme = Rpc.define({
+  id: "acme",
+  methods: {
+    search: {
+      input: {
+        type: "object",
+        properties: { query: { type: "string" } },
+        required: ["query"],
+        additionalProperties: false,
+      },
+      output: {
+        type: "object",
+        properties: { text: { type: "string" } },
+        required: ["text"],
+        additionalProperties: false,
+      },
+      errors: {
+        not_found: {
+          type: "object",
+          properties: { query: { type: "string" } },
+          required: ["query"],
+          additionalProperties: false,
+        },
+      },
+    },
+  },
+  events: {
+    updated: {
+      schema: {
+        type: "object",
+        properties: {
+          itemID: { type: "string" },
+          text: { type: "string" },
+        },
+        required: ["itemID", "text"],
+        additionalProperties: false,
+      },
+    },
+  },
+})
+```
+
+### Validierung
+
+Eine RPC-Definition beschreibt die Struktur von Ein- und Ausgaben der Methoden, Events und Fehler. Zwei Schemaformate
+werden unterstützt:
+
+- JSON Schema: einfach und ohne Abhängigkeiten.
+- Jeder Validator, der Standard Schema unterstützt
+  - Zod
+  - Valibot
+  - ArkType
+
+### Ein- und Ausgabe
+
+Jede Methode kann ein `input`-Schema für ihr Argument und ein `output`-Schema für ihren Rückgabewert definieren. Lass
+eines davon weg, wenn die Methode keinen Wert entgegennimmt oder zurückgibt.
+
+```ts
+search: {
+  input: {
+    type: "object",
+    properties: { query: { type: "string" } },
+    required: ["query"],
+  },
+  output: {
+    type: "object",
+    properties: { text: { type: "string" } },
+    required: ["text"],
+  },
+}
+```
+
+Mit JSON Schema sind die Werte in TypeScript `unknown`, daher musst du ihren Typ vor der Verwendung eingrenzen. Standard
+Schema leitet die Ein- und Ausgabetypen automatisch ab.
+
+### Fehler
+
+Für erwartete Fehlerfälle fügst du einer Methode eine `errors`-Map hinzu. Jeder Schlüssel wird zum `type` des Fehlers,
+und sein Schema definiert die `data` des Fehlers.
+
+```ts
+errors: {
+  not_found: {
+    type: "object",
+    properties: { query: { type: "string" } },
+    required: ["query"],
+    additionalProperties: false,
+  },
+}
+```
+
+Fehlernamen, die mit `rpc.` beginnen, sind für OpenCode reserviert.
+
+### Events
+
+Events fügst du der `events`-Map auf oberster Ebene hinzu. Jedes Event hat ein Schema für die Daten, die an Abonnenten
+gesendet werden.
+
+Event-Daten müssen ein Objekt sein. Gibt es keine Daten, verwende ein leeres Objektschema:
+
+```ts
+events: {
+  refreshed: {
+    schema: { type: "object", additionalProperties: false },
+  },
+}
+```
+
+Skalare Werte, Arrays, `null` und `undefined` sind keine gültigen Event-Daten.
+
+## Implementieren
+
+Registriere die Implementierung in `setup`:
+
+```ts title="src/index.ts"
+import { Plugin } from "@opencode/plugin"
+import { Acme } from "./rpc.js"
+
+export default Plugin.define({
+  id: "acme-plugin",
+  async setup(ctx) {
+    const registration = await ctx.rpc.register(Acme, {
+      search: async (input, context) => {
+        const { query } = input as { query: string }
+        const text = await findText(query, { signal: context.signal })
+        if (!text) return context.error("not_found", "Result not found", { query })
+        return { text }
+      },
+    })
+
+    const acme = ctx.rpc(Acme)
+    const result = await acme.search({ query: "hello" })
+
+    await registration.events.emit("updated", { itemID: "item-1", text: "ready" })
+  },
+})
+```
+
+Nach der Registrierung kann dasselbe Plugin den RPC über `ctx.rpc(Acme)` aufrufen.
+
+Das zweite Argument enthält `signal` für den Abbruch und `context.error(...)` für deklarierte Fehler. Du kannst den
+Fehler zurückgeben oder werfen.
+
+Ein Plugin kann mehrere RPCs registrieren. Wird die Registrierung freigegeben, wird der RPC entfernt.
+
+## Aufrufen
+
+Sobald der RPC registriert ist, lässt er sich über HTTP oder aus einem anderen Plugin aufrufen.
+
+### HTTP
+
+Erstelle einen OpenCode-Client und erzeuge dann mit `client.rpc` einen Subclient für den RPC:
+
+```ts
+import { OpenCode } from "@opencode/client"
+import { Acme } from "opencode-acme-plugin/rpc"
+
+const client = OpenCode.make({
+  baseUrl: "http://localhost:4096",
+})
+
+const acme = client.rpc(Acme)
+const result = await acme.search({ query: "hello" })
+```
+
+### Plugin
+
+Plugins verfügen bereits über einen OpenCode-Client. Ein TUI-Plugin kann zum Beispiel denselben RPC-Subclient aus
+`context.client` erzeugen:
+
+```ts title="src/tui.ts"
+import { Plugin } from "@opencode/plugin/tui"
+import { Acme } from "opencode-acme-plugin/rpc"
+
+export default Plugin.define({
+  id: "acme-tui",
+  async setup(context) {
+    const acme = context.client.rpc(Acme)
+    const result = await acme.search({ query: "hello" })
+    console.log(result)
+  },
+})
+```
+
+### Abonnieren
+
+Verwende `events.on` für einen Callback und beende das Abonnement, sobald der Listener nicht mehr gebraucht wird:
+
+```ts
+const unsubscribe = acme.events.on("updated", (event) => {
+  console.log(event.type, event.location.directory, event.data.text)
+})
+
+unsubscribe()
+```
+
+Für ein asynchrones Iterable verwendest du `events.subscribe("updated")`:
+
+```ts
+for await (const event of acme.events.subscribe("updated")) {
+  console.log(event.data.text)
+}
+```
+
+Event-Abonnements sind reine Live-Abonnements: Getrennte Abonnenten verpassen Events.
+
+- Abonniere mit dem lokalen Namen, etwa `updated`.
+- Der empfangene Typ trägt ein Präfix, etwa `rpc.acme.updated`.
+- Jedes Event enthält `data` und `location`.
+- Beim Entladen eines Plugins werden seine Abonnements geschlossen.
+
+Externe Clients empfangen Events aus allen Locations. Prüfe daher bei Bedarf `event.location`. Das Server-Plugin muss
+weiterhin konfiguriert sein und laufen.

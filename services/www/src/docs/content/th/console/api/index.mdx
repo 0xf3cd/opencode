@@ -1,0 +1,156 @@
+---
+title: "ภาพรวม API"
+description: "ยืนยันตัวตนกับ OpenCode Console API ด้วยคีย์ของบัญชีบริการหรือโทเค็นผู้ใช้"
+---
+
+Console API ช่วยให้ระบบที่ผสานรวม (integration) อ่านการกำหนดค่าของ Workspace และจัดการงบประมาณได้ พาธทั้งหมดอ้างอิงจาก base URL ของ Console
+
+```bash
+export CONSOLE_URL="https://opencode.ai/console"
+export SERVICE_API_KEY="oc_sk_..."
+
+curl --fail-with-body "${CONSOLE_URL}/api/v2/config" \
+  --header "Authorization: Bearer ${SERVICE_API_KEY}"
+```
+
+| API                                         | Endpoint                                   |
+| ------------------------------------------- | ------------------------------------------ |
+| [Inference](/console/api/inference)         | `https://opencode.ai/inference/...`        |
+| [ผู้ให้บริการ](/console/api/providers)         | `https://opencode.ai/inference/custom/...` |
+| [งบประมาณ](/console/api/budgets)             | `/api/v1/budgets/members`                  |
+| [การกำหนดค่า](#workspace-config)              | `GET /api/v2/config`                       |
+
+## บัญชีบริการ
+
+ระบบที่ผสานรวมจะยืนยันตัวตนด้วยบัญชีบริการ (service account) ซึ่งเป็นสมาชิกของ Workspace ที่ไม่ใช่บุคคล มีคีย์ API การใช้งาน และ[งบประมาณ](/console/budgets#service-account-budgets)เป็นของตัวเอง เจ้าของและผู้ดูแลระบบจัดการบัญชีบริการได้จาก **Keys**
+
+1. เปิด **Keys** แล้วคลิก **Add Service Account** จากนั้นตั้งชื่อ เช่น `CI Pipeline`
+2. เปิดบัญชีบริการแล้วคลิก **Add API Key**
+3. เลือก **Key name**, **Permissions** และ **Expiry date** (ไม่บังคับ) แล้วคลิก **Create key**
+4. คัดลอกคีย์ คีย์จะแสดงเพียงครั้งเดียว
+
+```text
+oc_sk_1a2b3c4d5e6f_...
+```
+
+ส่งคีย์เป็น bearer token คีย์ผูกกับ Workspace เดียว จึงไม่ต้องส่ง header ระบุ Workspace
+
+```text
+Authorization: Bearer oc_sk_...
+```
+
+### สิทธิ์
+
+| สิทธิ์          | อนุญาตให้                                                                                                        |
+| -------------- | --------------------------------------------------------------------------------------------------------------- |
+| Inference only | คำขอ [Inference](/console/api/inference) และ[ผู้ให้บริการ](/console/api/providers) รวมถึง `GET /api/v2/config`         |
+| All            | ทุกอย่างข้างต้น รวมถึง Console API ด้วยสิทธิ์ผู้ดูแลระบบ ยกเว้นการจัดการโมเดล                                          |
+
+การดำเนินการบางอย่างต้องทำโดยผู้ใช้ที่ลงชื่อเข้าใช้ Console เสมอ แม้จะใช้คีย์ **All** ก็ตาม ได้แก่ การเชิญสมาชิก การเปลี่ยนบทบาท การนำสมาชิกออก และการสร้างหรือเพิกถอนคีย์
+
+### เพิกถอนคีย์
+
+เปิดบัญชีบริการแล้วเพิกถอนคีย์จาก **API Keys** การนำบัญชีบริการออกจะเพิกถอนคีย์ทั้งหมดของบัญชีนั้น ระบบอัตโนมัติที่ใช้คีย์ที่ถูกเพิกถอนหรือหมดอายุจะได้รับ HTTP `401` ทันที
+
+## โทเค็นผู้ใช้
+
+โทเค็นผู้ใช้ทำงานในนามของผู้ใช้ที่ลงชื่อเข้าใช้ตามบทบาทของผู้ใช้นั้นใน Workspace ส่งโทเค็นพร้อม header `x-org-id` ที่ระบุ Workspace
+
+```bash
+curl --fail-with-body "${CONSOLE_URL}/api/v2/config" \
+  --header "Authorization: Bearer ${USER_TOKEN}" \
+  --header "x-org-id: org_..."
+```
+
+โทเค็นจาก[โฟลว์อุปกรณ์](#device-flow)จะผูกกับ Workspace ที่เลือกระหว่างลงชื่อเข้าใช้ จึงไม่ต้องใช้ header นี้ หากส่ง `x-org-id` ที่ต่างออกไปจะได้รับ `403`
+
+## โฟลว์อุปกรณ์
+
+OpenCode ลงชื่อเข้าใช้ด้วย OAuth device authorization grant (RFC 8628) CLI อื่นก็ใช้โฟลว์เดียวกันนี้ได้
+
+1. ขอรหัสอุปกรณ์ (device code) ส่ง `supports_org_scope=true` เพื่อผูกโทเค็นกับ Workspace
+
+   ```bash
+   curl --fail-with-body "${CONSOLE_URL}/auth/device/code" \
+     --data "client_id=my-cli" \
+     --data "supports_org_scope=true"
+   ```
+
+   การตอบกลับประกอบด้วย `device_code`, `user_code`, `verification_uri_complete`, `expires_in` (600 วินาที) และ `interval` (5 วินาที)
+
+2. เปิด `verification_uri_complete` ในเบราว์เซอร์ ค่านี้เป็นพาธ เช่น `/console/device?user_code=...` ที่อ้างอิงจาก `https://opencode.ai` ผู้ใช้จะลงชื่อเข้าใช้ เลือก Workspace แล้วอนุมัติ
+
+3. Poll เพื่อขอโทเค็นทุก `interval` วินาทีด้วย `client_id` เดิม
+
+   ```bash
+   curl --fail-with-body "${CONSOLE_URL}/auth/device/token" \
+     --data "grant_type=urn:ietf:params:oauth:grant-type:device_code" \
+     --data "device_code=..." \
+     --data "client_id=my-cli"
+   ```
+
+   ก่อนได้รับการอนุมัติ การตอบกลับจะเป็น `400` พร้อม `authorization_pending` เมื่อสำเร็จจะส่งคืน `access_token`, `refresh_token`, `expires_in` และ `org_id`
+
+4. รีเฟรชก่อน access token หมดอายุ การผูกกับ Workspace จะยังคงอยู่
+
+   ```bash
+   curl --fail-with-body "${CONSOLE_URL}/auth/device/token" \
+     --data "grant_type=refresh_token" \
+     --data "refresh_token=..." \
+     --data "client_id=my-cli"
+   ```
+
+refresh token แต่ละตัวใช้ได้ครั้งเดียว การนำ refresh token เก่ากลับมาใช้ซ้ำจะเพิกถอนทั้งเซสชัน
+
+## การกำหนดค่า Workspace
+
+`GET /api/v2/config` จะส่งคืนผู้ให้บริการและโมเดลที่ Workspace ใช้ได้ในรูปแบบ[การกำหนดค่า](/config)ของ OpenCode V2 OpenCode จะโหลดการกำหนดค่านี้หลังจาก `/connect`
+
+```bash
+curl --fail-with-body "${CONSOLE_URL}/api/v2/config" \
+  --header "Authorization: Bearer ${SERVICE_API_KEY}"
+```
+
+```json
+{
+  "providers": {
+    "opencode": {
+      "name": "OpenCode",
+      "env": ["OPENCODE_CONSOLE_TOKEN"],
+      "package": "aisdk:@ai-sdk/openai-compatible",
+      "settings": {
+        "baseURL": "https://opencode.ai/inference/openai/v1",
+        "apiKey": "{env:OPENCODE_CONSOLE_TOKEN}"
+      },
+      "headers": { "x-opencode-org-id": "org_..." },
+      "models": {
+        "kimi-k2.6": { "name": "Kimi K2.6" }
+      }
+    }
+  }
+}
+```
+
+| ฟิลด์                    | คำอธิบาย                                                                          |
+| ----------------------- | -------------------------------------------------------------------------------- |
+| `providers`             | Console, Go และผู้ให้บริการที่เชื่อมต่อไว้ แต่ละรายพร้อมการตั้งค่า gateway และโมเดล      |
+| `websearch`             | [การค้นหาเว็บ](/console/websearch)แบบโฮสต์ สำหรับสมาชิกเมื่อเปิดใช้งาน                 |
+| `mcp`                   | เซิร์ฟเวอร์ MCP ของ Console สำหรับสมาชิก                                              |
+| `experimental.policies` | คำสั่ง[นโยบาย](/policies#console)ของ Workspace                                      |
+
+คีย์ทุกระดับสิทธิ์และสมาชิกทุกบทบาทอ่านการกำหนดค่านี้ได้
+
+## ข้อผิดพลาด
+
+ข้อผิดพลาดจะส่งคืน JSON ที่มี `_tag` ระบุชื่อข้อผิดพลาด
+
+```json
+{ "_tag": "Forbidden" }
+```
+
+| สถานะ  | ความหมาย                                                                                  |
+| ------ | ---------------------------------------------------------------------------------------- |
+| `400`  | `OrgRequired`: ส่งโทเค็นผู้ใช้โดยไม่มี `x-org-id`                                           |
+| `401`  | ข้อมูลรับรองขาดหาย ไม่ถูกต้อง หมดอายุ หรือถูกเพิกถอน                                          |
+| `403`  | Workspace ไม่ถูกต้อง ไม่มีสิทธิ์ หรือใช้คีย์ **Inference only** กับ endpoint ของ Console      |
+| `404`  | ไม่มี Workspace นี้ หรือถูกลบไปแล้ว                                                         |

@@ -1,0 +1,132 @@
+---
+title: "Rozgrzewanie"
+---
+
+Rozgrzewanie sesji wysyła okresowe żądania do modelu, aby podtrzymać po stronie dostawcy cache promptów lub inny
+krótkotrwały stan, gdy robisz przerwę między promptami. Domyślnie jest wyłączone.
+
+Włącz rozgrzewanie w dowolnym [pliku konfiguracyjnym OpenCode](/config):
+
+```jsonc title="opencode.jsonc"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "warming": true,
+}
+```
+
+Przy tej konfiguracji OpenCode rozgrzewa niedawno aktywną sesję po czterech minutach bez żądania do modelu. Robi to co
+cztery minuty, aż upłynie 30 minut od ostatniego żądania innego niż rozgrzewające.
+
+## Opcje
+
+Aby zmienić prompt rozgrzewający, interwał bezczynności lub okno aktywności, użyj formy obiektowej:
+
+```jsonc title="opencode.jsonc"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "warming": {
+    "prompt": "Do not perform any work. Reply with exactly: OK",
+    "interval": "5 minutes",
+    "duration": "1 hour",
+  },
+}
+```
+
+| Pole | Wartość domyślna | Przeznaczenie |
+| --- | --- | --- |
+| `prompt` | Instrukcja podtrzymująca | Dołączany jako tymczasowa wiadomość użytkownika do każdego żądania rozgrzewającego. Domyślny prompt prosi model, aby nie wykonywał żadnej pracy, nie używał narzędzi i odpowiedział `OK`. |
+| `interval` | `"4 minutes"` | Czas bezczynności przed kolejnym żądaniem rozgrzewającym. |
+| `duration` | `"30 minutes"` | Okno rozgrzewania liczone od ostatniego żądania do modelu innego niż rozgrzewające. |
+
+Pominięte pola obiektu zachowują wartości domyślne. Na przykład ta konfiguracja zmienia tylko interwał:
+
+```jsonc title="opencode.jsonc"
+{
+  "warming": {
+    "interval": "2 minutes",
+  },
+}
+```
+
+## Czasy trwania
+
+`interval` i `duration` przyjmują ciągi opisujące czas trwania. Oba muszą dawać skończone wartości większe od zera; w
+przeciwnym razie OpenCode pomija rozgrzewanie i zapisuje ostrzeżenie w logach.
+
+```jsonc title="opencode.jsonc"
+{
+  "warming": {
+    "interval": "30 seconds",
+    "duration": "1 hour",
+  },
+}
+```
+
+## Harmonogram
+
+Rozgrzewanie zaczyna się po żądaniu do modelu innym niż rozgrzewające. Po zakończeniu żądania rozgrzewającego zaczyna
+się kolejny interwał bezczynności, ale okno aktywności nie jest wydłużane.
+
+```text
+00:00  normal model request
+00:04  warming request
+00:08  warming request
+00:30  warming stops
+```
+
+Każda nowa aktywność modelu inna niż rozgrzewanie resetuje oba liczniki. Jeśli interwał jest równy czasowi trwania lub
+dłuższy, okno aktywności wygasa, zanim zostanie wysłane jakiekolwiek żądanie rozgrzewające.
+
+```text
+00:00  normal model request
+00:20  normal model request; window restarts
+00:24  warming request
+00:50  warming stops
+```
+
+## Żądania
+
+Żądanie rozgrzewające korzysta z bieżącego modelu, agenta, instrukcji i kontekstu rozmowy sesji. OpenCode tymczasowo
+dołącza skonfigurowany prompt, wykonuje jedno wywołanie modelu i odrzuca odpowiedź.
+
+```text
+[current session context]
+[transient user message: keep-alive prompt]
+→ one model response, discarded
+```
+
+Żądanie nie przyjmuje danych wejściowych, nie dodaje wiadomości do historii i nie zmienia trwałego stanu sesji. OpenCode
+nie wykonuje lokalnych wywołań narzędzi ani nie kontynuuje pętli narzędzi; domyślny prompt dodatkowo instruuje model,
+aby nie używał narzędzi.
+
+## Błędy
+
+Błędy rozgrzewania są zapisywane w logach, ale nie powodują błędu sesji ani jej nie zmieniają. OpenCode czeka do
+następnego interwału, zanim spróbuje ponownie, a pierwotne okno aktywności nadal odlicza czas.
+
+```text
+00:04  warming request fails; session is unchanged
+00:08  next warming attempt
+```
+
+## Koszty
+
+Żądania rozgrzewające to prawdziwe żądania do dostawcy. Mogą zużywać tokeny, generować koszty, wliczać się do limitów
+żądań i kończyć się błędami tak jak inne żądania do modelu.
+
+- Krótsze interwały zwiększają liczbę żądań.
+- Dłuższe czasy trwania pozwalają na więcej żądań rozgrzewających.
+- Włączaj rozgrzewanie tylko wtedy, gdy korzyść po stronie dostawcy jest warta dodatkowego zużycia.
+
+Na przykład przy wartościach domyślnych w jednym nieprzerwanym 30-minutowym oknie możliwych jest do siedmiu prób
+rozgrzewania: w 4., 8., 12., 16., 20., 24. i 28. minucie.
+
+## Wyłączanie
+
+Ustaw `warming` na `false`, aby jawnie wyłączyć rozgrzewanie. Pominięcie tego pola również pozostawia je wyłączone.
+
+```jsonc title="opencode.jsonc"
+{
+  "warming": false,
+}
+```

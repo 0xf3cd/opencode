@@ -1,0 +1,128 @@
+---
+title: "Provedores"
+description: "Conecte as suas próprias contas de provedores de modelos a um workspace do OpenCode Console e escolha quais modelos os membros podem usar."
+---
+
+Conecte contas de provedores que você já paga, como Anthropic, OpenAI ou AWS Bedrock, e compartilhe os modelos delas com
+todos no workspace. O Console armazena a credencial e serve cada provedor pelo seu gateway, então os membros usam os
+modelos sem nunca ver a chave do provedor. O mesmo gateway fica disponível para as suas próprias ferramentas pela
+[API de provedores](/console/api/providers).
+
+Proprietários e administradores gerenciam os provedores na aba **Providers**. Os membros recebem os modelos ativados no
+OpenCode depois de executar `/connect`.
+
+## Conectar um provedor
+
+1. Abra **Providers** e clique em **Connect Provider**.
+2. Escolha um provedor do catálogo e informe a chave de API dele.
+3. Se quiser, clique em **Test connection** e depois em **Save**.
+
+O catálogo inclui Anthropic, OpenAI, Google, xAI, DeepSeek, Mistral, Groq, OpenRouter e muitos outros. Os provedores do
+catálogo já vêm com os modelos pré-configurados.
+
+### Provedores de nuvem
+
+Os provedores de nuvem precisam de alguns dados extras.
+
+| Provedor              | Dados                                 |
+| --------------------- | ------------------------------------- |
+| Azure                 | Nome do recurso e chave de API        |
+| AWS Bedrock           | Região e chave de API                 |
+| Google Vertex AI      | Região e JSON da conta de serviço     |
+| Cloudflare AI Gateway | ID da conta, ID do gateway e token de API |
+| Databricks            | URL do workspace e token              |
+
+### Provedores personalizados
+
+Clique em **Add Custom Provider** para conectar qualquer outro endpoint e depois adicione os modelos dele com
+**Add Model**.
+
+| Campo      | Descrição                                                                       |
+| ---------- | ------------------------------------------------------------------------------- |
+| Base URL   | Para onde o Console encaminha as requisições, por exemplo `https://api.deepseek.com/v1`. |
+| Format     | Chat Completions, Responses API, Anthropic Compatible ou Google Generative AI.  |
+| Auth mode  | Bearer, API key header ou Custom header.                                        |
+| Credential | A chave que o Console envia ao provedor.                                        |
+
+## Escolher modelos
+
+Abra um provedor para ver os modelos dele. Somente os modelos ativados ficam disponíveis para os membros.
+
+- Use a chave **Enabled** para ativar ou desativar um modelo.
+- Ative **New models** para ativar os modelos que o provedor adicionar no futuro.
+
+## Editar modelos
+
+Clique em um modelo para editá-lo. As alterações são salvas quando você fecha o painel.
+
+| Seção         | O que você pode alterar                                         |
+| ------------- | --------------------------------------------------------------- |
+| General       | Nome de exibição, ID da API, suporte a ferramentas, tipos de entrada e saída |
+| Variants      | Variantes com headers ou body próprios                          |
+| Configuration | Variante padrão, headers e body da requisição, limites de tokens |
+| Cost Tiers    | Preços de entrada, saída, leitura em cache e escrita em cache por 1M de tokens |
+
+### Preços personalizados
+
+Os modelos do catálogo começam com o preço de tabela do provedor. Se você negociou preços, por exemplo um desconto no seu
+contrato com a OpenAI, sobrescreva os preços em **Cost Tiers** para que os relatórios de uso e os
+[orçamentos](/console/budgets) correspondam ao que você realmente paga.
+
+| Campo            | Preço de tabela | Seu preço |
+| ---------------- | --------------- | --------- |
+| Input price      | $2.50           | $2.00     |
+| Output price     | $15.00          | $12.00    |
+| Cache read price | $0.25           | $0.20     |
+
+Os preços alterados ficam destacados na página do provedor. Use **Restore default value** em um campo, ou
+**⋯ › Restore...** no modelo, para voltar ao preço de tabela.
+
+Adicione uma faixa **Context** quando um modelo cobrar mais acima de um tamanho de contexto, por exemplo para prompts com
+mais de 200K tokens.
+
+### Modelos personalizados
+
+Clique em **Add Model** para adicionar um modelo que o catálogo não inclui, com o **Display name** e o **Model ID** dele.
+Use **⋯ › Duplicate...** em um modelo existente para partir das configurações dele.
+
+## Modelos do OpenCode
+
+A aba **Models** gerencia os [modelos](/console/models) oferecidos pelo Console, que são pagos com os créditos do
+workspace. Ela funciona como a página de um provedor:
+
+- Ative ou desative modelos individualmente.
+- Desative **Free models** para bloquear os modelos gratuitos no workspace.
+- Ative **New models** para ativar automaticamente os novos modelos do Console.
+
+Desative o provedor inteiro em **⋯ › Disable** para usar apenas os seus próprios provedores.
+
+## Usar no OpenCode
+
+Os membros executam `/connect` e escolhem o workspace. Cada provedor ativado aparece com o nome do workspace seguido do
+nome do provedor, e `/models` lista os modelos ativados dele.
+
+```text
+Acme Inc. / Anthropic
+```
+
+Ative **Managed providers only** em **Settings › General** para restringir o OpenCode aos provedores do workspace para
+todos.
+
+## Desativar ou remover
+
+Abra o menu **⋯** do provedor:
+
+- **Disable** oculta o provedor e os modelos dele para os membros, mas mantém as configurações.
+- **Remove...** exclui o provedor e os modelos dele. A caixa de diálogo mostra quem o usou recentemente e oferece
+  **Disable instead**.
+
+Para fazer a rotação de uma chave, clique na credencial na página do provedor e informe a nova.
+
+## Faturamento
+
+O provedor cobra você pelos tokens; o Console não desconta créditos por eles. Mesmo assim, o Console registra cada
+requisição e o custo dela com base nos preços do modelo, então os relatórios de uso e os [orçamentos](/console/budgets)
+incluem esse uso.
+
+Para chamar um provedor a partir das suas próprias ferramentas em vez do OpenCode, use a
+[API de provedores](/console/api/providers).

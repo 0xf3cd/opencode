@@ -1,0 +1,109 @@
+---
+title: "Giriş"
+---
+
+Tam ekran terminal arayüzünü açmak için CLI'ı bir projede çalıştırın:
+
+```bash
+opencode
+```
+
+Farklı bir projede çalışmak için bir dizin belirtin:
+
+```bash
+opencode ~/code/my-project
+```
+
+Önerilen terminaller:
+
+- [Ghostty](https://ghostty.org)
+- [WezTerm](https://wezterm.org)
+- [Alacritty](https://alacritty.org)
+- [Kitty](https://sw.kovidgoyal.net/kitty/)
+
+Truecolor desteği, temaların renklerini en doğru şekilde göstermesini sağlar. Bu desteği olmayan terminaller, mevcut
+paletle yaklaşık renkler kullanır.
+
+## Otomasyon
+
+Etkileşimli arayüzü açmadan bir istem göndermek için `opencode run` komutunu kullanın. Bu komut, model çıktısına doğrudan
+terminalde ihtiyaç duyan betikler, CI işleri ve diğer iş akışları için tasarlanmıştır.
+
+```bash
+opencode run "Explain this repository"
+```
+
+## Mini
+
+Tam ekran TUI yerine OpenCode'un sade etkileşimli arayüzünü başlatmak için `opencode mini` komutunu kullanın.
+
+```bash
+opencode mini
+```
+
+Oturum, model, ajan, istem ve yeniden oynatma seçeneklerini görmek için `opencode mini --help` komutunu çalıştırın.
+
+## Arka plan hizmeti
+
+OpenCode varsayılan olarak kullanıcı hesabınız için paylaşılan tek bir arka plan sunucusunu bulur veya başlatır. Tüm yerel
+OpenCode istemcileri bu sunucuya bağlanır. Oturumlar, yapılandırma, entegrasyonlar, izinler ve araç yürütme bu sunucuya
+aittir.
+
+Özel bir sunucuyla çalışmak için `--standalone`, belirli bir sunucu URL'sine bağlanmak için `--server` bayrağını kullanın:
+
+```bash
+opencode --standalone
+opencode --server http://localhost:4096
+```
+
+CLI komutlarının paylaşılan hizmeti başlatmak yerine varsayılan olarak özel sunucu kullanmasını istiyorsanız hizmeti devre
+dışı bırakın:
+
+```bash
+opencode service set disabled true
+opencode
+```
+
+Bu işlem çalışan arka plan hizmetini durdurur. `--server` bayrağı açıkça seçilen bir sunucuya bağlanmaya devam eder;
+`opencode service start` komutu da paylaşılan hizmeti açıkça başlatabilir. Otomatik hizmet kullanımına dönmek için
+`opencode service unset disabled` komutunu çalıştırın. Eşleştirme (pairing) paylaşılan hizmeti gerektirir ve hizmet devre
+dışıyken kullanılamaz.
+
+Paylaşılan hizmetin tanılaması için [Sorun giderme](/troubleshooting), sunucu uç noktaları için [API referansı](/api)
+sayfasına bakın.
+
+## Yollar
+
+Diğer araçlarla kullanmak üzere belirli bir yerel yolu yazdırın:
+
+```bash
+opencode debug paths db
+sqlite3 "$(opencode debug paths db)"
+```
+
+İsteğe bağlı seçici `db`, `home`, `data`, `config`, `cache`, `state`, `tmp`, `bin`, `log` veya `repos` değerlerinden birini
+alır ve yalnızca yolu ve ardından bir satır sonu yazdırır. Veritabanı yolu, sürüm kanalını ve `OPENCODE_DB` değişkenini
+dikkate alır. Göreli veritabanı geçersiz kılmaları veri dizini altında çözümlenir; `:memory:` ise olduğu gibi yazdırılır. Bu
+komut sunucu başlatmaz ve veritabanını açmaz.
+
+Tüm yolları etiketleriyle göstermek için seçiciyi atlayın:
+
+```bash
+opencode debug paths
+```
+
+## Kaldırma
+
+Kaldırılacak dosyaları ve kurulumu önizleyin:
+
+```bash
+opencode uninstall --dry-run
+```
+
+Kaldırmayı onaylamak için `opencode uninstall` komutunu çalıştırın. OpenCode, OpenCode sürümleri ve kanalları tarafından
+paylaşılan genel önbellek dizinini kaldırmadan önce kayıtlı arka plan hizmetlerini ve kalıcı terminalleri durdurur. Oturum
+verileri, yapılandırma ve durum bilgileri hiçbir zaman kaldırılmaz.
+
+- `--force` (`-f`) bayrağı onay adımını atlar; etkileşimsiz kaldırma için kullanın.
+- Paket yöneticisiyle yapılan kurulumlar, algılanan paket yöneticisiyle kaldırılır. Curl ile yapılan kurulumlarda,
+  çalıştırılabilir dosyayı elle kaldırmak için gereken son komut yazdırılır.

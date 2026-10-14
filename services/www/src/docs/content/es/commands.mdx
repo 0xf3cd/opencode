@@ -1,0 +1,269 @@
+---
+title: "Comandos"
+---
+
+Crea `.opencode/commands/review.md` para convertir un prompt en `/review`:
+
+```md title=".opencode/commands/review.md"
+Review $ARGUMENTS for bugs and missing tests.
+```
+
+Ejecútalo desde la TUI indicando un objetivo:
+
+```text
+/review src/auth.ts
+```
+
+OpenCode envía `Review src/auth.ts for bugs and missing tests.` como prompt del usuario.
+
+## Markdown
+
+Coloca los comandos globales en `~/.config/opencode/commands/` y los comandos del proyecto en `.opencode/commands/`.
+
+```text
+~/.config/opencode/commands/review.md
+.opencode/commands/review.md
+```
+
+Solo se detectan los archivos `.md`. Las rutas anidadas se convierten en nombres de comando con separadores `/`:
+
+```md title=".opencode/commands/team/review.md"
+Review $ARGUMENTS using the team's checklist.
+```
+
+Ejecuta el comando anidado como `/team/review src/auth.ts`. También se detectan los directorios heredados en singular
+`command/`, pero usa `commands/` para los archivos nuevos.
+
+Añade frontmatter YAML cuando el comando necesite metadatos. El cuerpo Markdown, sin los espacios iniciales y finales,
+es siempre la plantilla del prompt.
+
+```md title=".opencode/commands/review.md"
+---
+description: Review code for correctness
+agent: plan
+model: anthropic/claude-sonnet-4-5#high
+---
+
+Review $ARGUMENTS. Report bugs first.
+```
+
+## JSON
+
+Define comandos en `commands` dentro de cualquier [archivo de configuración](/config) JSON o JSONC de OpenCode. Cada
+comando requiere un `template`.
+
+```jsonc title="opencode.jsonc"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "commands": {
+    "review": {
+      "description": "Review code for correctness",
+      "template": "Review $ARGUMENTS. Report bugs first.",
+    },
+  },
+}
+```
+
+## Campos
+
+El frontmatter de Markdown y las entradas JSON aceptan los mismos campos, salvo que en Markdown `template` se obtiene del
+cuerpo del archivo.
+
+| Campo | Obligatorio | Comportamiento |
+| --- | --- | --- |
+| `template` | Solo en JSON | Plantilla del prompt. |
+| `description` | No | Texto que se muestra en las listas de comandos y en la detección. |
+| `agent` | No | Agente que se selecciona al ejecutar el comando. |
+| `model` | No | Modelo que sobrescribe al actual, con el formato `provider/model` o `provider/model#variant`. |
+| `subagent` | No | `true` lo ejecuta en una sesión hija en segundo plano; `false` fuerza la sesión actual. |
+| `subtask` | No | Alias obsoleto de `subagent`. |
+
+Por ejemplo, este comando JSON define todos los campos opcionales actuales:
+
+```jsonc title="opencode.jsonc"
+{
+  "commands": {
+    "audit": {
+      "template": "Audit $ARGUMENTS.",
+      "description": "Audit a package",
+      "agent": "general",
+      "model": "anthropic/claude-sonnet-4-5#high",
+      "subagent": true,
+    },
+  },
+}
+```
+
+No pongas `template` en el frontmatter de Markdown; lo aporta el cuerpo.
+
+## Argumentos
+
+Usa `$ARGUMENTS` para insertar la cadena completa de argumentos, tal como se escribió.
+
+```md title=".opencode/commands/component.md"
+Create a typed React component named $ARGUMENTS.
+```
+
+Con `/component Account Settings`, el marcador se sustituye por `Account Settings`.
+
+## Posiciones
+
+Usa `$1`, `$2` y números mayores para los argumentos posicionales analizados. Las comillas simples o dobles agrupan
+palabras y se eliminan.
+
+```md title=".opencode/commands/check.md"
+Check $1. Focus on $2.
+```
+
+Con `/check src/auth.ts "error handling"`, `$1` se sustituye por `src/auth.ts` y `$2` por `error handling`.
+
+El marcador con el número más alto consume su argumento y todo lo que va detrás. Las posiciones que faltan se convierten
+en cadenas vacías.
+
+```md title=".opencode/commands/compare.md"
+Compare $1 with $2.
+```
+
+Con `/compare api stable branch`, OpenCode envía `Compare api with stable branch.`
+
+## Comportamiento por defecto
+
+Si una plantilla no tiene `$ARGUMENTS` ni marcadores posicionales, OpenCode añade los argumentos no vacíos al final,
+después de una línea en blanco.
+
+```md title=".opencode/commands/explain.md"
+Explain this code clearly.
+```
+
+Con `/explain src/cache.ts`, el prompt queda así:
+
+```text
+Explain this code clearly.
+
+src/cache.ts
+```
+
+## Shell
+
+Encierra un comando de shell entre comillas invertidas precedidas de `!` para insertar su salida antes de enviar el
+prompt.
+
+```md title=".opencode/commands/review-diff.md"
+Review this diff:
+
+!`git diff --stat && git diff`
+```
+
+OpenCode ejecuta cada bloque con la shell configurada en la ubicación activa del proyecto e inserta su salida combinada.
+Los marcadores de argumentos se expanden primero:
+
+```md title=".opencode/commands/history.md"
+Summarize these commits:
+
+!`git log --oneline -$1`
+```
+
+Con `/history 5`, la shell recibe `git log --oneline -5`. No coloques argumentos que no sean de confianza dentro de los
+bloques de shell.
+
+<Callout type="warning">
+  Los bloques de shell se ejecutan cuando OpenCode evalúa el comando, fuera del flujo de permisos de herramientas del
+  agente. Usa solo comandos de fuentes de confianza.
+</Callout>
+
+## Adjuntos
+
+Las plantillas guardadas no expanden `@path`; se queda como texto normal del prompt.
+
+```md title=".opencode/commands/readme.md"
+Review @README.md.
+```
+
+Para adjuntar un archivo, añádelo desde el editor de mensajes al invocar el comando. OpenCode conserva esos adjuntos al
+enviar el prompt expandido.
+
+## Ejecución
+
+Los comandos expanden los argumentos y los bloques de shell antes de enviar un prompt del usuario, que queda guardado de
+forma persistente. De forma predeterminada, se ejecutan en la sesión actual.
+
+```md title=".opencode/commands/plan.md"
+---
+agent: plan
+---
+
+Plan $ARGUMENTS.
+```
+
+Al ejecutar `/plan migration`, la sesión actual cambia a `plan` antes de enviar el prompt.
+
+La selección del modelo sigue estas reglas:
+
+1. El `model` del comando tiene prioridad sobre cualquier otro modelo.
+2. Si no lo hay, el modelo configurado del agente seleccionado por el comando tiene prioridad sobre el modelo activo al
+   invocarlo.
+3. Si tampoco, se mantiene el modelo actual de la sesión.
+
+Por ejemplo, este comando selecciona tanto su agente como un modelo explícito:
+
+```md title=".opencode/commands/design.md"
+---
+agent: plan
+model: openai/gpt-5#high
+---
+
+Design $ARGUMENTS.
+```
+
+## Segundo plano
+
+Asigna `subagent: true` para ejecutar un comando en una sesión hija en segundo plano.
+
+```md title=".opencode/commands/audit.md"
+---
+description: Audit changes
+agent: general
+subagent: true
+---
+
+Audit $ARGUMENTS for bugs and missing tests.
+```
+
+La sesión padre sigue disponible y conserva su agente y su modelo. Cuando la sesión hija termina, OpenCode envía su
+resultado o su error a la sesión padre.
+
+| Valor | Comportamiento |
+| --- | --- |
+| `true` | Usa siempre una sesión hija, aunque el agente seleccionado tenga `mode: primary`. |
+| `false` | Usa siempre la sesión actual, aunque el agente seleccionado tenga `mode: subagent`. |
+| Omitido | Usa una sesión hija solo si el agente seleccionado tiene `mode: subagent`. |
+
+La sesión hija usa el modelo del comando; si no lo hay, el del agente seleccionado y, si tampoco, el de la sesión padre.
+El campo heredado `subtask` se sigue aceptando; si están presentes ambos campos, prevalece `subagent`.
+
+```yaml
+subagent: false
+subtask: true
+```
+
+Este ejemplo se ejecuta en la sesión actual porque `subagent` tiene prioridad.
+
+## Carga
+
+Los comandos de Markdown y JSON comparten un mismo registro. Los orígenes posteriores reemplazan a los comandos
+anteriores con el mismo nombre.
+
+```text
+~/.config/opencode/commands/review.md   # Lower priority
+.opencode/commands/review.md           # Replaces the global command
+```
+
+Los orígenes del proyecto tienen prioridad sobre los globales, y los orígenes de proyecto más cercanos tienen prioridad
+sobre los de directorios superiores. Una definición personalizada también puede reemplazar un comando integrado
+anterior. OpenCode recarga automáticamente los archivos de comandos y los cambios de configuración.
+
+```md title=".opencode/commands/review.md"
+Review only the staged changes: !`git diff --cached`
+```
+
+Al guardar este archivo, `/review` se actualiza sin reiniciar OpenCode.

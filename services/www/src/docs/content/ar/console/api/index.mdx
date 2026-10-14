@@ -1,0 +1,166 @@
+---
+title: "نظرة عامة على API"
+description: "استخدم مفاتيح حسابات الخدمة أو tokens المستخدمين للمصادقة مع Console API في OpenCode."
+---
+
+تتيح Console API لعمليات التكامل قراءة تهيئة مساحة العمل وإدارة الميزانيات. المسارات نسبية إلى عنوان URL الأساسي
+في Console.
+
+```bash
+export CONSOLE_URL="https://opencode.ai/console"
+export SERVICE_API_KEY="oc_sk_..."
+
+curl --fail-with-body "${CONSOLE_URL}/api/v2/config" \
+  --header "Authorization: Bearer ${SERVICE_API_KEY}"
+```
+
+| API | نقاط النهاية |
+| ----------------------------------- | ------------------------------------------ |
+| [الاستدلال](/console/api/inference) | `https://opencode.ai/inference/...` |
+| [المزوّدون](/console/api/providers) | `https://opencode.ai/inference/custom/...` |
+| [الميزانيات](/console/api/budgets) | `/api/v1/budgets/members` |
+| [التهيئة](#workspace-config) | `GET /api/v2/config` |
+
+## حسابات الخدمة
+
+تُصادِق عمليات التكامل باستخدام حساب خدمة: عضو غير بشري في مساحة العمل له مفاتيح API واستخدام و[ميزانية](/console/budgets#service-account-budgets)
+خاصة به. ويديرها المالكون والمسؤولون من **Keys**.
+
+1. افتح **Keys** وانقر **Add Service Account**، ثم سمّه، مثلًا `CI Pipeline`.
+2. افتح حساب الخدمة وانقر **Add API Key**.
+3. اختر **Key name** و**Permissions** و**Expiry date** اختياريًا، ثم انقر **Create key**.
+4. انسخ المفتاح. لا يُعرض إلا مرة واحدة.
+
+```text
+oc_sk_1a2b3c4d5e6f_...
+```
+
+أرسل المفتاح بوصفه bearer token. المفتاح مرتبط بمساحة عمل واحدة، لذا لا حاجة إلى ترويسة تحدد مساحة العمل.
+
+```text
+Authorization: Bearer oc_sk_...
+```
+
+### الأذونات
+
+| الإذن | ما يسمح به |
+| -------------- | --------------------------------------------------------------------------------------------------------------- |
+| Inference only | طلبات [الاستدلال](/console/api/inference) و[المزوّدين](/console/api/providers)، و`GET /api/v2/config`. |
+| All | كل ما سبق، إضافةً إلى Console API بصلاحيات المسؤول، باستثناء إدارة النماذج. |
+
+تتطلب بعض الإجراءات دائمًا شخصًا مسجّل الدخول إلى Console، حتى مع مفتاح **All**: دعوة الأعضاء، وتغيير الأدوار، وإزالة
+الأعضاء، وإنشاء المفاتيح أو إلغاؤها.
+
+### إلغاء المفاتيح
+
+افتح حساب الخدمة وألغِ المفتاح من **API Keys**. وتؤدي إزالة حساب الخدمة إلى إلغاء جميع مفاتيحه. وتتلقى عمليات الأتمتة
+التي تستخدم مفتاحًا ملغى أو منتهي الصلاحية الرمز HTTP `401` فورًا.
+
+## tokens المستخدمين
+
+تعمل tokens المستخدمين نيابةً عن شخص مسجّل الدخول وبدوره في مساحة العمل. أرسل token مع الترويسة `x-org-id` التي تحدد
+مساحة العمل.
+
+```bash
+curl --fail-with-body "${CONSOLE_URL}/api/v2/config" \
+  --header "Authorization: Bearer ${USER_TOKEN}" \
+  --header "x-org-id: org_..."
+```
+
+ترتبط tokens المأخوذة من [تدفق الجهاز](#device-flow) بمساحة العمل المختارة أثناء تسجيل الدخول، ولا تحتاج إلى هذه
+الترويسة. وتؤدي قيمة `x-org-id` مختلفة إلى الاستجابة `403`.
+
+## تدفق الجهاز
+
+يسجّل OpenCode الدخول باستخدام منح تفويض الجهاز في OAuth (RFC 8628). ويمكن لواجهات CLI الأخرى استخدام التدفق نفسه.
+
+1. اطلب رمز جهاز. أرسل `supports_org_scope=true` لربط token بمساحة عمل.
+
+   ```bash
+   curl --fail-with-body "${CONSOLE_URL}/auth/device/code" \
+     --data "client_id=my-cli" \
+     --data "supports_org_scope=true"
+   ```
+
+   تتضمن الاستجابة `device_code` و`user_code` و`verification_uri_complete` و`expires_in` (600 ثانية)
+   و`interval` (5 ثوانٍ).
+
+2. افتح `verification_uri_complete` في المتصفح. وهو مسار مثل `/console/device?user_code=...`، نسبي إلى
+   `https://opencode.ai`. يسجّل الشخص الدخول، ويختار مساحة عمل، ثم يوافق.
+
+3. استطلع للحصول على token كل `interval` ثانية باستخدام قيمة `client_id` نفسها.
+
+   ```bash
+   curl --fail-with-body "${CONSOLE_URL}/auth/device/token" \
+     --data "grant_type=urn:ietf:params:oauth:grant-type:device_code" \
+     --data "device_code=..." \
+     --data "client_id=my-cli"
+   ```
+
+   قبل الموافقة تكون الاستجابة `400` مع `authorization_pending`. وعند النجاح تعيد `access_token`
+   و`refresh_token` و`expires_in` و`org_id`.
+
+4. حدّث token قبل انتهاء صلاحية access token. ويظل مرتبطًا بمساحة العمل نفسها.
+
+   ```bash
+   curl --fail-with-body "${CONSOLE_URL}/auth/device/token" \
+     --data "grant_type=refresh_token" \
+     --data "refresh_token=..." \
+     --data "client_id=my-cli"
+   ```
+
+لا يمكن استخدام refresh token إلا مرة واحدة. وتؤدي إعادة استخدام refresh token قديم إلى إلغاء الجلسة بأكملها.
+
+## تهيئة مساحة العمل
+
+يعيد `GET /api/v2/config` المزوّدين والنماذج المتاحة لمساحة العمل بصيغة [التهيئة](/config) في OpenCode V2. ويحمّلها
+OpenCode بعد `/connect`.
+
+```bash
+curl --fail-with-body "${CONSOLE_URL}/api/v2/config" \
+  --header "Authorization: Bearer ${SERVICE_API_KEY}"
+```
+
+```json
+{
+  "providers": {
+    "opencode": {
+      "name": "OpenCode",
+      "env": ["OPENCODE_CONSOLE_TOKEN"],
+      "package": "aisdk:@ai-sdk/openai-compatible",
+      "settings": {
+        "baseURL": "https://opencode.ai/inference/openai/v1",
+        "apiKey": "{env:OPENCODE_CONSOLE_TOKEN}"
+      },
+      "headers": { "x-opencode-org-id": "org_..." },
+      "models": {
+        "kimi-k2.6": { "name": "Kimi K2.6" }
+      }
+    }
+  }
+}
+```
+
+| الحقل | الوصف |
+| ----------------------- | -------------------------------------------------------------------------------- |
+| `providers` | مزوّدو Console وGo والمزوّدون المرتبطون، ولكل منهم إعدادات البوابة ونماذجه. |
+| `websearch` | [البحث على الويب](/console/websearch) المستضاف، للأعضاء عند تفعيله. |
+| `mcp` | خادم MCP في Console، للأعضاء. |
+| `experimental.policies` | عبارات [سياسات](/policies#console) مساحة العمل. |
+
+يمكن لكل مستويات أذونات المفاتيح وكل أدوار الأعضاء قراءة التهيئة.
+
+## الأخطاء
+
+تعيد الأخطاء JSON يحتوي على `_tag` يحمل اسم الخطأ.
+
+```json
+{ "_tag": "Forbidden" }
+```
+
+| الحالة | المعنى |
+| ------ | ---------------------------------------------------------------------------------------- |
+| `400` | `OrgRequired`: أُرسل token مستخدم دون `x-org-id`. |
+| `401` | بيانات اعتماد مفقودة أو غير صالحة أو منتهية الصلاحية أو ملغاة. |
+| `403` | مساحة عمل خاطئة، أو إذن مفقود، أو مفتاح **Inference only** على نقطة نهاية في Console. |
+| `404` | مساحة العمل غير موجودة أو حُذفت. |

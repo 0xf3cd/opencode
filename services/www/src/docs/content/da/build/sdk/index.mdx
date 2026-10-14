@@ -1,0 +1,99 @@
+---
+title: "Oversigt"
+---
+
+`@opencode/sdk` afvikler OpenCode direkte i dit program. I modsætning til
+[netværksklienten](/build/client) samler det OpenCode-serveren og sender API-kald
+gennem dens HTTP-router i hukommelsen. Det åbner ingen HTTP-listener og tilføjer
+intet netværkshop mellem klient og server.
+
+Til Cloudflare Durable Objects, se [Cloudflare-vejledningen](/build/sdk/cloudflare).
+
+Installer SDK'et:
+
+```sh
+bun add @opencode/sdk
+```
+
+## Opret en vært
+
+`OpenCode.create()` returnerer en vært med eksplicit ejerskab. Brug `await using` til
+at frigive dens router, Location-tjenester, fibers og scopede plugin-registreringer:
+
+```ts
+import { OpenCode } from "@opencode/sdk"
+
+await using opencode = await OpenCode.create()
+const session = await opencode.sessions.create({
+  location: { directory: "/workspace" },
+})
+
+await opencode.sessions.prompt({
+  sessionID: session.id,
+  text: "Review the current changes",
+})
+```
+
+Kald `await opencode.close()` eksplicit, når eksplicit ressourcestyring ikke er
+tilgængelig.
+
+Den indlejrede vært bruger samme Promise-værdier, erklærede fejl,
+anmodningsindstillinger og `AsyncIterable`-streams som `@opencode/client`. Den
+udstiller hele den genererede klient og tilføjer de praktiske aliasser `sessions`
+og `events` for session- og hændelsesgrupperne.
+
+## Worktrees
+
+Worktree-operationer kræver et `projectID`. Oprettelse og opdatering indlæser konfiguration og plugins fra projektets
+gemte kanoniske checkout. Visning læser kun den gemte oversigt; fjernelse aktiverer de kanoniske plugins og bruger den
+registrerede strategi og fejler, hvis strategien ikke er tilgængelig.
+
+```ts
+const projectID = session.projectID
+const worktree = await opencode.worktree.create({ projectID, name: "task" })
+await opencode.worktree.refresh({ projectID })
+await opencode.worktree.remove({ projectID, directory: worktree.directory, force: false })
+```
+
+Opdatering finder worktrees på tværs af kendte checkout-rødder med alle tilgængelige strategier. Registrer en
+brugerdefineret strategi via [et plugins worktree-transformation](/build/plugins#worktrees).
+
+## Stream hændelser
+
+```ts
+for await (const event of opencode.events.subscribe()) {
+  console.log(event.type)
+}
+```
+
+Angiv et `AbortSignal` via de genererede anmodningsindstillinger, eller forlad en
+iteration for at annullere dens svar-body.
+
+## Tilpas
+
+Tilpas din OpenCode-instans ved at registrere plugins. Giv plugins til
+`OpenCode.create()` for at tilpasse agenter, modeller, værktøjer og anden adfærd,
+når den indlejrede vært starter:
+
+```ts
+import { Plugin } from "@opencode/plugin"
+import { OpenCode } from "@opencode/sdk"
+
+const plugin = Plugin.define({
+  id: "customize-agent",
+  async setup(ctx) {
+    await ctx.agent.transform((agents) => {
+      agents.update("build", (agent) => {
+        agent.description = "Builds features and fixes bugs for our team"
+      })
+    })
+  },
+})
+
+await using opencode = await OpenCode.create({ plugins: [plugin] })
+```
+
+Kald `await opencode.plugin(plugin)` for at registrere endnu et plugin efter opstart.
+
+Se den [fulde plugin-dokumentation](/build/plugins) for plugin-hooks,
+transformationer, værktøjer og den komplette plugin-kontekst.

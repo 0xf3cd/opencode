@@ -1,0 +1,102 @@
+---
+title: "Вебпошук"
+---
+
+Попросіть OpenCode знайти актуальну інформацію — він виконає пошук в інтернеті, прочитає результати й додасть до відповіді
+посилання на джерела.
+
+```text
+Find the latest Bun release and summarize the changes.
+```
+
+Під час першого пошуку OpenCode попросить дозволити вебпошук і вибрати провайдера. Ваш вибір запам'ятовується для
+наступних сесій.
+
+## Провайдери
+
+OpenCode підтримує п'ять провайдерів пошуку:
+
+| Провайдер | ID | Змінна середовища |
+| --- | --- | --- |
+| Exa | `exa` | `EXA_API_KEY` |
+| Firecrawl | `firecrawl` | `FIRECRAWL_API_KEY` |
+| Parallel | `parallel` | `PARALLEL_API_KEY` |
+| Tavily | `tavily` | `TAVILY_API_KEY` |
+| TinyFish | `tinyfish` | `TINYFISH_API_KEY` (необов'язково) |
+
+Підключіть обліковий запис у TUI командою `/connect` або задайте змінну середовища провайдера перед запуском OpenCode.
+
+```bash
+$ TAVILY_API_KEY=your-key opencode
+```
+
+## Вибір провайдера
+
+Укажіть провайдера в `opencode.jsonc`, щоб OpenCode не питав про вибір.
+
+```jsonc title="opencode.jsonc"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "websearch": {
+    "provider": "tavily",
+  },
+}
+```
+
+Значення `"random"` автоматично вибирає одного з доступних провайдерів. Кожна сесія використовує вибраного провайдера,
+доки той не досягне обмеження частоти запитів.
+
+```jsonc title="opencode.jsonc"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "websearch": {
+    "provider": "random",
+  },
+}
+```
+
+## Обмеження
+
+Коли провайдер повертає HTTP 429, випадковий вибір повторює пошук через іншого доступного провайдера. Провайдер, який
+досяг обмеження, очікує період, указаний у `Retry-After`, або 60 секунд, якщо відповідь не містить коректного значення.
+
+```text
+Exa returns HTTP 429
+→ Exa enters cooldown
+→ OpenCode retries with another provider
+```
+
+Якщо всі провайдери перебувають у стані очікування, пошук одразу завершується помилкою. Переміщення сесії або
+перезапуск її сервера скидає запам'ятованого провайдера; періоди очікування спільні для всіх сесій одного робочого
+простору.
+
+## Дозволи
+
+Вебпошук використовує дію дозволу `websearch`, а ресурсом є пошуковий запит. Для пошуків, які не дозволено явно,
+OpenCode запитує підтвердження.
+
+```jsonc title="opencode.jsonc"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "permissions": [
+    {
+      "action": "websearch",
+      "resource": "*",
+      "effect": "ask",
+    },
+  ],
+}
+```
+
+Порядок правил і зіставлення описано в розділі [Дозволи](/permissions).
+
+## Вимкнення
+
+Задайте `websearch` значення `false`, щоб прибрати інструмент вебпошуку із запитів до моделі.
+
+```jsonc title="opencode.jsonc"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "websearch": false,
+}
+```

@@ -1,0 +1,101 @@
+---
+title: "API de orçamentos"
+description: "Leia os orçamentos mensais efetivos de todos os membros do workspace e gerencie o orçamento personalizado de cada membro."
+---
+
+Leia os orçamentos mensais efetivos de todos os membros do workspace e gerencie o orçamento personalizado de cada membro
+a partir de uma integração.
+
+## Início rápido
+
+Crie uma chave de API de [conta de serviço](/console/api#service-accounts) com permissões **All** no
+[Console](https://opencode.ai/console). Chaves somente de inferência não conseguem acessar os dados de orçamento nem
+alterar limites.
+
+```bash
+export CONSOLE_URL="https://opencode.ai/console"
+export SERVICE_API_KEY="oc_sk_..."
+```
+
+Liste os orçamentos dos membros:
+
+```bash
+curl --fail-with-body \
+  "${CONSOLE_URL}/api/v1/budgets/members" \
+  --header "Authorization: Bearer ${SERVICE_API_KEY}" \
+  --header "Accept: application/json"
+```
+
+## Listar os orçamentos dos membros
+
+```text
+GET /api/v1/budgets/members
+```
+
+A resposta inclui todos os membros atuais, ordenados por e-mail. Um limite com origem `custom` é uma sobrescrita do
+membro; a origem `default` indica que o limite é herdado do padrão do workspace. Limite e origem nulos significam que o
+membro não tem limite.
+
+```json
+[
+  {
+    "user_id": "user_...",
+    "email": "alice@example.com",
+    "limit_micro_cents": "7525000000",
+    "spent_micro_cents": "1250000000",
+    "exceeded": false,
+    "resets_at": "2026-10-01T00:00:00.000Z",
+    "source": "custom",
+    "updated_at": "2026-09-03T12:00:00.000Z"
+  }
+]
+```
+
+Os campos monetários da resposta são strings decimais em microcentavos, para que as integrações não percam precisão. Um
+dólar americano equivale a 100,000,000 microcentavos. Os gastos e os timestamps de renovação abrangem o mês-calendário
+atual em UTC. `updated_at` é nulo quando não há sobrescrita personalizada para o membro.
+
+## Definir um orçamento personalizado
+
+```text
+PUT /api/v1/budgets/members/:user_id
+```
+
+Defina um orçamento mensal de $75.25 para um membro:
+
+```bash
+curl --fail-with-body --request PUT \
+  "${CONSOLE_URL}/api/v1/budgets/members/user_..." \
+  --header "Authorization: Bearer ${SERVICE_API_KEY}" \
+  --header "Content-Type: application/json" \
+  --data '{"budget_dollars":75.25}'
+```
+
+`budget_dollars` aceita um valor não negativo em dólares americanos, com no máximo duas casas decimais. O PUT é
+idempotente e retorna HTTP 204. Use o ID do membro retornado pela operação de listagem.
+
+## Voltar ao padrão do workspace
+
+```text
+DELETE /api/v1/budgets/members/:user_id
+```
+
+Remova a sobrescrita personalizada:
+
+```bash
+curl --fail-with-body --request DELETE \
+  "${CONSOLE_URL}/api/v1/budgets/members/user_..." \
+  --header "Authorization: Bearer ${SERVICE_API_KEY}"
+```
+
+Excluir uma sobrescrita não exclui o membro. Depois disso, o membro herda o orçamento padrão do workspace ou passa a não
+ter limite, se o workspace não tiver um padrão. Repetir a requisição é seguro e retorna HTTP 204.
+
+## Erros
+
+| Status | Significado                                              |
+| ------ | -------------------------------------------------------- |
+| `400`  | ID de membro ou valor de orçamento inválido.             |
+| `401`  | Chave de API de serviço ausente, inválida, expirada ou revogada. |
+| `403`  | A chave de API não tem permissão para gerenciar orçamentos. |
+| `404`  | O membro não está no workspace vinculado à chave de API. |

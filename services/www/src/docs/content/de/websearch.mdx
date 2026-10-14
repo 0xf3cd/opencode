@@ -1,0 +1,95 @@
+---
+title: "Websuche"
+---
+
+Fragst du OpenCode nach aktuellen Informationen, kann es das Web durchsuchen, die Ergebnisse lesen und Quellenlinks in seine Antwort aufnehmen.
+
+```text
+Find the latest Bun release and summarize the changes.
+```
+
+Bei der ersten Suche wirst du gebeten, die Websuche zu erlauben und einen Anbieter auszuwählen. OpenCode merkt sich deine Auswahl für spätere Sitzungen.
+
+## Anbieter
+
+OpenCode enthält fünf Suchanbieter:
+
+| Anbieter | ID | Umgebungsvariable |
+| --- | --- | --- |
+| Exa | `exa` | `EXA_API_KEY` |
+| Firecrawl | `firecrawl` | `FIRECRAWL_API_KEY` |
+| Parallel | `parallel` | `PARALLEL_API_KEY` |
+| Tavily | `tavily` | `TAVILY_API_KEY` |
+| TinyFish | `tinyfish` | `TINYFISH_API_KEY` (optional) |
+
+Verbinde ein Konto in der TUI mit `/connect` oder setze die Umgebungsvariable des Anbieters, bevor du OpenCode startest.
+
+```bash
+$ TAVILY_API_KEY=your-key opencode
+```
+
+## Auswahl
+
+Lege in `opencode.jsonc` einen Anbieter fest, um die Auswahlabfrage zu überspringen.
+
+```jsonc title="opencode.jsonc"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "websearch": {
+    "provider": "tavily",
+  },
+}
+```
+
+Mit `"random"` wird automatisch ein verfügbarer Anbieter gewählt. Jede Sitzung verwendet ihren gewählten Anbieter weiter, bis dieser ein Rate-Limit erreicht.
+
+```jsonc title="opencode.jsonc"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "websearch": {
+    "provider": "random",
+  },
+}
+```
+
+## Limits
+
+Gibt ein Anbieter HTTP 429 zurück, wiederholt die zufällige Auswahl die Suche mit einem anderen verfügbaren Anbieter. Der begrenzte Anbieter pausiert für die Dauer aus `Retry-After` oder für 60 Sekunden, wenn die Antwort keine gültige Dauer enthält.
+
+```text
+Exa returns HTTP 429
+→ Exa enters cooldown
+→ OpenCode retries with another provider
+```
+
+Pausieren alle Anbieter, schlägt die Suche sofort fehl. Wird eine Sitzung verschoben oder ihr Server neu gestartet, vergisst sie ihren gemerkten Anbieter. Die Pausen gelten für alle Sitzungen im selben Workspace.
+
+## Berechtigungen
+
+Websuchen verwenden die Berechtigungsaktion `websearch` und die Suchanfrage als Ressource. Die folgende Regel fragt vor jeder Suche nach, die nicht ausdrücklich erlaubt ist.
+
+```jsonc title="opencode.jsonc"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "permissions": [
+    {
+      "action": "websearch",
+      "resource": "*",
+      "effect": "ask",
+    },
+  ],
+}
+```
+
+Reihenfolge und Abgleich der Regeln erklärt [Berechtigungen](/permissions).
+
+## Deaktivieren
+
+Setze `websearch` auf `false`, um das Websuche-Tool aus Modellanfragen zu entfernen.
+
+```jsonc title="opencode.jsonc"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "websearch": false,
+}
+```

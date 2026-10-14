@@ -1,0 +1,87 @@
+---
+title: "Orçamentos"
+description: "Limite os gastos mensais de um workspace, dos membros e das contas de serviço."
+---
+
+Os orçamentos limitam quanto um workspace gasta por mês. Proprietários e administradores os definem no painel
+**Budget limits** das páginas **Members** e **Keys**.
+
+## Níveis de orçamento
+
+| Orçamento                       | Aplica-se a                                       | Onde definir                                       |
+| ------------------------------- | ------------------------------------------------- | -------------------------------------------------- |
+| Workspace                       | Gasto somado de todos no workspace                | **Members** ou **Keys › Monthly workspace budget** |
+| Padrão por usuário              | Cada membro sem limite personalizado              | **Members › Monthly default user budget**          |
+| Personalizado por usuário       | Um membro                                         | Tabela **Members** ou página do membro             |
+| Padrão por conta de serviço     | Cada conta de serviço sem limite personalizado    | **Keys › Monthly default service account budget**  |
+| Personalizado por conta de serviço | Uma conta de serviço                           | Página da conta de serviço                         |
+
+Uma requisição precisa caber tanto no orçamento do workspace quanto no orçamento da própria pessoa. Sem nenhum
+orçamento, os gastos são ilimitados.
+
+## Orçamento do workspace
+
+O orçamento do workspace bloqueia as requisições de todos assim que o workspace o atinge.
+
+1. Abra **Members** ou **Keys**.
+2. Em **Budget limits**, clique em **Monthly workspace budget**.
+3. Informe um **Workspace limit** em USD e clique em **Save**.
+
+## Orçamentos dos membros
+
+O orçamento padrão por usuário vale para todos os membros sem limite personalizado. Defina-o em
+**Monthly default user budget**.
+
+Defina um limite personalizado para um membro em qualquer um destes lugares:
+
+- Clique na célula **Limit** da linha do membro em **Members** e informe um valor.
+- Abra o membro e clique em **Set User Budget** em **Monthly Budget**.
+
+Os limites personalizados ficam destacados na tabela Members. Remova um limite personalizado para que o membro volte ao
+padrão; a página do membro passa a mostrar **Using Default**.
+
+## Orçamentos das contas de serviço
+
+As contas de serviço funcionam da mesma forma. Defina **Monthly default service account budget** na página **Keys**, ou
+abra uma conta de serviço e clique em **Set Service Account Budget**.
+
+## Valores e renovação
+
+- Os valores são em dólares americanos, com até duas casas decimais.
+- Os orçamentos são renovados no dia 1º de cada mês, às 00:00 UTC.
+- Um orçamento de `$0` bloqueia todos os gastos que contam para os orçamentos.
+
+## O que conta
+
+| Gasto                                                                       | Conta para os orçamentos     |
+| --------------------------------------------------------------------------- | ---------------------------- |
+| Modelos pagos do Console                                                    | Sim                          |
+| Modelos dos [seus próprios provedores](/console/providers) com preço definido | Sim, pelo preço configurado |
+| [Pesquisa na web](/console/websearch)                                       | Sim                          |
+| Modelos gratuitos                                                           | Não                          |
+| Uso do [Go](/console/go) dentro do plano                                    | Não                          |
+| Uso extra do Go pago com créditos                                           | Sim                          |
+
+## Quando um orçamento é atingido
+
+As novas requisições falham com HTTP `429` até que o orçamento seja renovado ou que um administrador o aumente. A
+resposta não informa qual orçamento foi atingido.
+
+```text
+Upstream request failed: Account budget exceeded
+```
+
+Os orçamentos são verificados quando uma requisição começa. As requisições que já estão em andamento são concluídas,
+então o gasto pode terminar um pouco acima do limite.
+
+## Acompanhar os gastos
+
+Cada membro vê o próprio orçamento em **Overview**: o valor restante, o valor gasto e a data de renovação.
+
+Proprietários e administradores de workspaces com mais de um membro também veem **Usage**. Essa página detalha o custo por
+dia, modelo e pessoa, e o botão **Export usage** baixa os totais diários dos últimos 7, 30 ou 90 dias em CSV.
+
+## Automatizar os orçamentos
+
+Use a [API de orçamentos](/console/api/budgets) para ler o orçamento de todos os membros e definir limites
+personalizados a partir das suas próprias ferramentas.

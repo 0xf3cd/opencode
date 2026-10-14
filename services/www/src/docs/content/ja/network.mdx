@@ -1,0 +1,94 @@
+---
+title: ネットワーク
+description: プロキシとカスタム認証局を設定します。
+---
+
+標準のプロキシ環境変数を設定し、ループバックアドレスを除外します。OpenCode は CLI とバックグラウンドサービスの間でローカル HTTP 接続を使用するため、CLI の環境でプロキシを設定する場合は、ループバックアドレスの除外が必須です。
+
+```bash
+export HTTP_PROXY=http://proxy.example.com:8080
+export HTTPS_PROXY=http://proxy.example.com:8080
+export NO_PROXY=localhost,127.0.0.1,::1
+
+opencode
+```
+
+`HTTP_PROXY` は HTTP の接続先に、`HTTPS_PROXY` は HTTPS の接続先に使われます。どちらの変数でも、プロキシ URL 自体には `http://` を使用できます。`NO_PROXY` には、プロキシを経由せずに直接接続するホストとアドレスをカンマ区切りで指定します。
+
+## バックグラウンドサービス
+
+シェルでエクスポートした変数がバックグラウンドサービスに反映されるのは、そのサービスがシェルから起動された場合だけです。以降のサービス起動でも同じネットワーク設定が使われるように、変数を管理対象サービスの設定に保存してください。
+
+```bash
+opencode service set env HTTP_PROXY http://proxy.example.com:8080
+opencode service set env HTTPS_PROXY http://proxy.example.com:8080
+opencode service set env NO_PROXY localhost,127.0.0.1,::1
+opencode service start
+```
+
+管理対象の環境変数を変更すると、実行中のサービスは停止します。`service start` を実行すると、新しい環境でサービスが再び起動します。管理対象サービスの変数はサーバープロセスに適用され、CLI プロセスには適用されません。そのため、CLI のシェルでプロキシを設定している場合は、そのシェルでも `NO_PROXY` を設定したままにしてください。
+
+保存した変数は `service unset env` で削除できます。
+
+```bash
+opencode service unset env HTTPS_PROXY
+```
+
+## 認証
+
+URL に認証情報を含める形式に対応したプロキシでは、認証が必要な各プロキシ URL にユーザー名とパスワードを含めます。ユーザー名やパスワードに `@`、`:`、`/` などの文字が含まれる場合は、パーセントエンコードしてください。
+
+```bash
+export HTTPS_PROXY='http://user:p%40ssword@proxy.example.com:8080'
+```
+
+バックグラウンドサービスには、完全な URL を保存します。この値は非公開のサービス設定に保存され、`opencode service get env` で表示されるため、その出力は共有しないでください。
+
+```bash
+opencode service set env HTTPS_PROXY 'http://user:p%40ssword@proxy.example.com:8080'
+```
+
+## 証明書
+
+プロキシまたは接続先が、プライベート認証局によって署名された証明書を使用している場合は、`NODE_EXTRA_CA_CERTS` に PEM ファイルを指定します。指定した認証局は、プロセスの起動時にランタイムのトラストストアに追加されます。
+
+```bash
+export NODE_EXTRA_CA_CERTS=/etc/company/ca.pem
+opencode --standalone
+```
+
+バックグラウンドサービスにはファイルパスを保存し、サービスを再起動します。
+
+```bash
+opencode service set env NODE_EXTRA_CA_CERTS /etc/company/ca.pem
+opencode service start
+```
+
+## フォアグラウンドプロセス
+
+`--standalone` と `serve` は、それぞれ自身のプロセスの環境を使用します。これらのプロセスは `opencode service set env` では設定されません。
+
+```bash
+HTTP_PROXY=http://proxy.example.com:8080 \
+HTTPS_PROXY=http://proxy.example.com:8080 \
+NO_PROXY=localhost,127.0.0.1,::1 \
+opencode --standalone
+```
+
+フォアグラウンドのサーバーにも同じ方法を使用します。
+
+```bash
+HTTPS_PROXY=http://proxy.example.com:8080 \
+NO_PROXY=localhost,127.0.0.1,::1 \
+opencode serve
+```
+
+## 動作確認
+
+設定を適用したら、CLI からバックグラウンドサービスに接続できることを確認します。
+
+```bash
+opencode api get /api/info
+```
+
+ヘルスチェックが成功すれば、ローカルのクライアントとサービス間の接続は正常です。サービスから外部へのプロキシ接続と証明書の検証を確認するには、通常のプロバイダーリクエストを実行します。

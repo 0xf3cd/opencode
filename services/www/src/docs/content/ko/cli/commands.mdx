@@ -1,0 +1,584 @@
+---
+title: "명령"
+description: "opencode 명령줄 레퍼런스입니다."
+---
+
+모든 명령은 `--help`로 전체 플래그 목록을 확인할 수 있습니다(예: `opencode run --help`). 서버를 사용하는 일부 명령은 비공개 서버로 실행하는 `--standalone`이나 특정 서버를 대상으로 하는 `--server <url>`을 지원합니다. 지원되는 플래그는 각 명령의 도움말에서 확인하세요.
+
+## run
+
+대화형 인터페이스를 열지 않고 메시지를 보내고 응답을 출력합니다.
+
+```bash
+$ opencode run "Explain this repository"
+```
+
+### CI
+
+CI에서는 제공자 API 키를 시크릿으로 전달하고, 비공개 서버가 키를 받을 수 있도록 독립 실행 모드를 사용하세요. 다음 GitHub Actions 작업은 체크아웃한 저장소를 검토하는 예입니다.
+
+```yaml
+name: OpenCode review
+on: [pull_request]
+
+jobs:
+  review:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - run: npm install --global @opencode/cli
+      - run: opencode run --standalone --model anthropic/claude-sonnet-4-5 "Review this repository for correctness and summarize any issues."
+        env:
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+```
+
+모델을 선택합니다.
+
+```bash
+$ opencode run --model anthropic/claude-sonnet-4-5 "Refactor parseToken"
+```
+
+마지막 세션을 이어서 진행합니다.
+
+```bash
+$ opencode run --continue "Now handle the expired case"
+```
+
+스크립트용으로 줄 단위 JSON을 출력합니다.
+
+```bash
+$ opencode run --format json "List the TODO comments"
+```
+
+메시지에 파일을 첨부합니다.
+
+```bash
+$ opencode run --file src/server.ts --file src/client.ts "Review these for bugs"
+```
+
+특정 에이전트로 실행합니다.
+
+```bash
+$ opencode run --agent build "Fix the failing test"
+```
+
+모든 하위 명령과 플래그를 확인합니다.
+
+```bash
+$ opencode run --help
+```
+
+## mini
+
+전체 화면 TUI 대신 최소 대화형 인터페이스를 시작합니다.
+
+```bash
+$ opencode mini
+```
+
+마지막 세션을 이어서 진행합니다.
+
+```bash
+$ opencode mini --continue
+```
+
+모델과 초기 프롬프트를 지정해 시작합니다.
+
+```bash
+$ opencode mini --model anthropic/claude-sonnet-4-5 --prompt "Summarize this repository"
+```
+
+모든 하위 명령과 플래그를 확인합니다.
+
+```bash
+$ opencode mini --help
+```
+
+## session
+
+세션을 관리합니다.
+
+```bash
+$ opencode session list
+```
+
+목록 개수를 제한하고 JSON으로 출력합니다.
+
+```bash
+$ opencode session list --max-count 20 --format json
+```
+
+세션과 하위 세션을 삭제합니다.
+
+```bash
+$ opencode session delete ses_9c1b08
+```
+
+세션 데이터를 JSON으로 내보냅니다.
+
+```bash
+$ opencode session export ses_4f2a1c
+```
+
+내보낼 때 대화 기록과 파일 데이터의 민감한 정보를 가립니다.
+
+```bash
+$ opencode session export ses_4f2a1c --sanitize
+```
+
+JSON 파일이나 URL에서 세션 데이터를 가져옵니다.
+
+```bash
+$ opencode session import session.json
+```
+
+특정 디렉터리로 가져옵니다.
+
+```bash
+$ opencode session import session.json --directory ~/code/project
+```
+
+모든 하위 명령과 플래그를 확인합니다.
+
+```bash
+$ opencode session --help
+```
+
+## auth
+
+AI 제공자와 자격 증명을 관리합니다.
+
+```bash
+$ opencode auth list
+```
+
+JSON으로 나열합니다.
+
+```bash
+$ opencode auth list --format json
+```
+
+제공자에 로그인합니다.
+
+```bash
+$ opencode auth login anthropic
+```
+
+특정 인증 방법으로 로그인합니다.
+
+```bash
+$ opencode auth login anthropic --method key
+```
+
+저장된 계정에서 로그아웃합니다.
+
+```bash
+$ opencode auth logout anthropic work
+```
+
+통합의 활성 계정을 전환합니다.
+
+```bash
+$ opencode auth switch anthropic work
+```
+
+모든 하위 명령과 플래그를 확인합니다.
+
+```bash
+$ opencode auth --help
+```
+
+## models
+
+사용 가능한 모든 모델을 나열합니다.
+
+```bash
+$ opencode models
+```
+
+모든 하위 명령과 플래그를 확인합니다.
+
+```bash
+$ opencode models --help
+```
+
+## mcp
+
+MCP(Model Context Protocol) 서버를 관리합니다.
+
+```bash
+$ opencode mcp list
+```
+
+원격 서버를 추가합니다.
+
+```bash
+$ opencode mcp add context7 --url https://mcp.context7.com/mcp
+```
+
+전역 구성에 로컬 서버를 추가합니다.
+
+```bash
+$ opencode mcp add everything --global -- npx -y @modelcontextprotocol/server-everything
+```
+
+환경 변수를 지정해 로컬 서버를 추가합니다.
+
+```bash
+$ opencode mcp add everything --env LOG_LEVEL=debug -- npx -y @modelcontextprotocol/server-everything
+```
+
+헤더를 지정해 원격 서버를 추가합니다.
+
+```bash
+$ opencode mcp add context7 --url https://mcp.context7.com/mcp --header CONTEXT7_API_KEY=secret
+```
+
+OAuth를 지원하는 원격 서버에 인증합니다.
+
+```bash
+$ opencode mcp auth sentry
+```
+
+서버에 저장된 OAuth 자격 증명을 제거합니다.
+
+```bash
+$ opencode mcp logout sentry
+```
+
+모든 하위 명령과 플래그를 확인합니다.
+
+```bash
+$ opencode mcp --help
+```
+
+## plugin
+
+플러그인을 관리합니다.
+
+```bash
+$ opencode plugin list
+```
+
+내장 서버 플러그인도 포함합니다.
+
+```bash
+$ opencode plugin list --builtin
+```
+
+플러그인을 설치하고 전역 구성에 추가합니다.
+
+```bash
+$ opencode plugin add @example/opencode-tui
+```
+
+패키지 플러그인의 업데이트를 확인합니다.
+
+```bash
+$ opencode plugin check
+```
+
+패키지 플러그인을 업데이트합니다.
+
+```bash
+$ opencode plugin update
+```
+
+전역 구성에서 플러그인을 제거합니다.
+
+```bash
+$ opencode plugin remove @example/opencode-tui
+```
+
+모든 하위 명령과 플래그를 확인합니다.
+
+```bash
+$ opencode plugin --help
+```
+
+## stats
+
+공유할 수 있는 사용량 통계를 표시합니다.
+
+```bash
+$ opencode stats
+```
+
+최근 7일간의 통계를 표시합니다.
+
+```bash
+$ opencode stats --days 7
+```
+
+모델별 사용량을 표시합니다.
+
+```bash
+$ opencode stats --models
+```
+
+비용과 토큰 세부 정보를 표시합니다.
+
+```bash
+$ opencode stats --cost
+```
+
+보고서 대신 JSON을 출력합니다.
+
+```bash
+$ opencode stats --json
+```
+
+모든 하위 명령과 플래그를 확인합니다.
+
+```bash
+$ opencode stats --help
+```
+
+## serve
+
+API 서버와 웹 서버를 시작합니다. [웹](/cli/web)을 참고하세요.
+
+```bash
+$ opencode serve
+```
+
+고정 포트로 모든 인터페이스에 바인딩합니다.
+
+```bash
+$ opencode serve --hostname 0.0.0.0 --port 4096
+```
+
+다른 출처의 브라우저 클라이언트를 허용합니다.
+
+```bash
+$ opencode serve --cors https://app.example.com
+```
+
+모든 하위 명령과 플래그를 확인합니다.
+
+```bash
+$ opencode serve --help
+```
+
+## pair
+
+브라우저나 앱을 서버에 로그인시키는 일회용 링크와 첫 번째 링크의 QR 코드를 출력합니다. 링크는 5분 후에 만료되며 한
+번만 사용할 수 있습니다.
+
+```bash
+$ opencode pair
+```
+
+링크에 외부 URL을 사용합니다.
+
+```bash
+$ opencode pair --url https://dev.example.com
+```
+
+OpenTunnel 원격 주소를 통해 어디서든 페어링합니다. 이 방법은 서버를 인터넷에 노출하므로, 원격 접속을 처음 활성화할
+때 이를 설명하고 수락할지 묻습니다. [원격 접속](/cli/web#remote-access)을 참고하세요.
+
+```bash
+$ opencode pair --remote
+```
+
+확인 없이 수락합니다(예: 터미널이 없는 스크립트에서 실행할 때).
+
+```bash
+$ opencode pair --remote --yes
+```
+
+모든 하위 명령과 플래그를 확인합니다.
+
+```bash
+$ opencode pair --help
+```
+
+## service
+
+백그라운드 서버를 관리합니다. [웹](/cli/web)을 참고하세요.
+
+```bash
+$ opencode service start
+```
+
+서버를 다시 시작합니다.
+
+```bash
+$ opencode service restart
+```
+
+상태를 표시합니다.
+
+```bash
+$ opencode service status
+```
+
+서버를 중지합니다.
+
+```bash
+$ opencode service stop
+```
+
+설정 값을 읽습니다.
+
+```bash
+$ opencode service get hostname
+```
+
+설정 값을 지정합니다.
+
+```bash
+$ opencode service set hostname 0.0.0.0
+```
+
+CORS 출처를 추가로 허용합니다.
+
+```bash
+$ opencode service set cors https://app.example.com
+```
+
+서버 프로세스에 환경 변수를 전달합니다.
+
+```bash
+$ opencode service set env OPENCODE_LOG_LEVEL DEBUG
+```
+
+설정을 기본값으로 되돌립니다.
+
+```bash
+$ opencode service unset hostname
+```
+
+모든 하위 명령과 플래그를 확인합니다.
+
+```bash
+$ opencode service --help
+```
+
+## reload
+
+서버를 다시 시작하지 않고 구성을 다시 로드합니다. 실행 중인 세션은 다음 단계 경계에서 새로 로드된 서비스로 계속
+진행됩니다.
+
+```bash
+$ opencode reload
+```
+
+## api
+
+실행 중인 서버에 요청을 보냅니다.
+
+```bash
+$ opencode api GET /api/session
+```
+
+쿼리 매개변수와 함께 작업 ID를 호출합니다.
+
+```bash
+$ opencode api session.list --param limit=10
+```
+
+JSON 본문을 보냅니다.
+
+```bash
+$ opencode api session.create --data '{"title": "New session"}'
+```
+
+요청 헤더를 추가합니다.
+
+```bash
+$ opencode api GET /api/session -H "accept: application/json"
+```
+
+모든 하위 명령과 플래그를 확인합니다.
+
+```bash
+$ opencode api --help
+```
+
+## acp
+
+편집기 통합을 위해 stdin과 stdout으로 통신하는 Agent Client Protocol 서버를 시작합니다. 클라이언트가 연결을 닫을 때까지 실행됩니다.
+
+```bash
+$ opencode acp
+```
+
+모든 하위 명령과 플래그를 확인합니다.
+
+```bash
+$ opencode acp --help
+```
+
+## debug
+
+디버깅 및 문제 해결 도구를 제공합니다.
+
+```bash
+$ opencode debug agents
+```
+
+구성 소스를 나열합니다.
+
+```bash
+$ opencode debug config
+```
+
+전역 경로를 표시합니다.
+
+```bash
+$ opencode debug paths
+```
+
+경로 하나만 출력합니다.
+
+```bash
+$ opencode debug paths db
+```
+
+모든 하위 명령과 플래그를 확인합니다.
+
+```bash
+$ opencode debug --help
+```
+
+## upgrade
+
+OpenCode를 최신 버전이나 특정 버전으로 업그레이드합니다. 별칭: `update`.
+
+```bash
+$ opencode upgrade
+```
+
+특정 패키지 관리자를 사용해 특정 버전으로 업그레이드합니다.
+
+```bash
+$ opencode upgrade 2.0.21 --method bun
+```
+
+모든 하위 명령과 플래그를 확인합니다.
+
+```bash
+$ opencode upgrade --help
+```
+
+## uninstall
+
+OpenCode와 관련된 모든 파일을 제거합니다.
+
+```bash
+$ opencode uninstall
+```
+
+제거될 항목을 미리 확인합니다.
+
+```bash
+$ opencode uninstall --dry-run
+```
+
+모든 하위 명령과 플래그를 확인합니다.
+
+```bash
+$ opencode uninstall --help
+```

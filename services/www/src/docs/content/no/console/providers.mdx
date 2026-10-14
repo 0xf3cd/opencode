@@ -1,0 +1,126 @@
+---
+title: "Leverandører"
+description: "Koble dine egne kontoer hos modelleverandører til et arbeidsområde i OpenCode Console, og velg hvilke modeller medlemmene kan bruke."
+---
+
+Koble til leverandørkontoer du allerede betaler for, for eksempel Anthropic, OpenAI eller AWS Bedrock, og del modellene
+med alle i arbeidsområdet. Console lagrer legitimasjonen og leverer hver leverandør gjennom sin gateway, så medlemmene
+bruker modellene uten noen gang å se leverandørnøkkelen. Den samme gatewayen er tilgjengelig for dine egne verktøy
+gjennom [leverandør-API-et](/console/api/providers).
+
+Eiere og administratorer administrerer leverandører fra **Providers**-fanen. Medlemmene får de aktiverte modellene i
+OpenCode etter å ha kjørt `/connect`.
+
+## Koble til en leverandør
+
+1. Åpne **Providers** og klikk på **Connect Provider**.
+2. Velg en leverandør fra katalogen og skriv inn API-nøkkelen.
+3. Klikk eventuelt på **Test connection**, og klikk deretter på **Save**.
+
+Katalogen inkluderer Anthropic, OpenAI, Google, xAI, DeepSeek, Mistral, Groq, OpenRouter og mange flere. Leverandørene i
+katalogen leveres med ferdig konfigurerte modeller.
+
+### Skyleverandører
+
+Skyleverandører trenger noen ekstra opplysninger.
+
+| Leverandør            | Opplysninger                              |
+| --------------------- | ----------------------------------------- |
+| Azure                 | Ressursnavn og API-nøkkel                 |
+| AWS Bedrock           | Region og API-nøkkel                      |
+| Google Vertex AI      | Region og JSON for tjenestekonto          |
+| Cloudflare AI Gateway | Konto-ID, gateway-ID og API-token         |
+| Databricks            | URL til arbeidsområdet og token           |
+
+### Egendefinerte leverandører
+
+Klikk på **Add Custom Provider** for å koble til et hvilket som helst annet endepunkt, og legg deretter til modellene med
+**Add Model**.
+
+| Felt       | Beskrivelse                                                                          |
+| ---------- | ------------------------------------------------------------------------------------ |
+| Base URL   | Hvor Console videresender forespørsler, for eksempel `https://api.deepseek.com/v1`.  |
+| Format     | Chat Completions, Responses API, Anthropic Compatible eller Google Generative AI.    |
+| Auth mode  | Bearer, API key header eller Custom header.                                          |
+| Credential | Nøkkelen Console sender til leverandøren.                                            |
+
+## Velg modeller
+
+Åpne en leverandør for å se modellene. Bare aktiverte modeller er tilgjengelige for medlemmene.
+
+- Bruk **Enabled**-bryteren for å slå en modell på eller av.
+- Slå på **New models** for å aktivere modeller leverandøren legger til i fremtiden.
+
+## Rediger modeller
+
+Klikk på en modell for å redigere den. Endringene lagres når du lukker panelet.
+
+| Seksjon       | Hva du kan endre                                                             |
+| ------------- | ---------------------------------------------------------------------------- |
+| General       | Visningsnavn, API-ID, støtte for verktøy, input- og outputtyper              |
+| Variants      | Varianter med egne headere eller egen body                                   |
+| Configuration | Standardvariant, headere og body for forespørsler, tokengrenser              |
+| Cost Tiers    | Priser for input, output, cache-lesing og cache-skriving per 1M tokens       |
+
+### Egendefinerte priser
+
+Katalogmodeller starter med leverandørens listepris. Hvis du har forhandlet frem priser, for eksempel en rabatt i
+OpenAI-avtalen din, kan du overstyre prisene under **Cost Tiers**, slik at bruksrapporter og
+[budsjetter](/console/budgets) stemmer med det du faktisk betaler.
+
+| Felt             | Listepris  | Din pris   |
+| ---------------- | ---------- | ---------- |
+| Input price      | $2.50      | $2.00      |
+| Output price     | $15.00     | $12.00     |
+| Cache read price | $0.25      | $0.20      |
+
+Priser du endrer, er uthevet på leverandørsiden. Bruk **Restore default value** på et felt, eller **⋯ › Restore...** på
+modellen, for å gå tilbake til listeprisen.
+
+Legg til et **Context**-nivå når en modell tar mer betalt over en viss kontekststørrelse, for eksempel for prompter over
+200K tokens.
+
+### Egendefinerte modeller
+
+Klikk på **Add Model** for å legge til en modell som ikke finnes i katalogen, med **Display name** og **Model ID**. Bruk
+**⋯ › Duplicate...** på en eksisterende modell for å starte fra innstillingene dens.
+
+## OpenCode-modeller
+
+**Models**-fanen administrerer [modellene](/console/models) som Console leverer, og som betales med kreditt fra
+arbeidsområdet. Den fungerer som en leverandørside:
+
+- Slå enkeltmodeller på eller av.
+- Slå av **Free models** for å blokkere gratis modeller i arbeidsområdet.
+- Slå på **New models** for å aktivere nye Console-modeller automatisk.
+
+Deaktiver hele leverandøren fra **⋯ › Disable** for bare å bruke dine egne leverandører.
+
+## Bruk i OpenCode
+
+Medlemmene kjører `/connect` og velger arbeidsområdet. Hver aktivert leverandør vises som navnet på arbeidsområdet
+etterfulgt av navnet på leverandøren, og `/models` viser de aktiverte modellene.
+
+```text
+Acme Inc. / Anthropic
+```
+
+Slå på **Managed providers only** under **Settings › General** for å begrense OpenCode til leverandørene i
+arbeidsområdet for alle.
+
+## Deaktiver eller fjern
+
+Åpne **⋯**-menyen for leverandøren:
+
+- **Disable** skjuler leverandøren og modellene for medlemmene, men beholder innstillingene.
+- **Remove...** sletter leverandøren og modellene. Dialogen viser hvem som har brukt den nylig, og tilbyr
+  **Disable instead**.
+
+Vil du rotere en nøkkel, klikker du på legitimasjonen på leverandørsiden og skriver inn den nye.
+
+## Fakturering
+
+Leverandøren fakturerer deg for tokens; Console belaster ikke kreditt for dem. Console registrerer likevel hver
+forespørsel og kostnaden ut fra prisene til modellen, så bruksrapporter og [budsjetter](/console/budgets) inkluderer den.
+
+Vil du kalle en leverandør fra dine egne verktøy i stedet for fra OpenCode, bruker du [leverandør-API-et](/console/api/providers).

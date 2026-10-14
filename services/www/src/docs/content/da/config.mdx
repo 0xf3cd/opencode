@@ -1,0 +1,552 @@
+---
+title: "Konfiguration"
+---
+
+Opret `opencode.jsonc` i dit projekt for at konfigurere OpenCode. Tilføj skemaet, så din editor kan validere filen, og angiv kun de indstillinger, du har brug for.
+
+```jsonc title="opencode.jsonc"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "model": "anthropic/claude-sonnet-4-5",
+}
+```
+
+Du kan også bede OpenCode om at opdatere filen for dig.
+
+## Format
+
+OpenCode understøtter JSON og JSONC. Brug JSONC, hvis du vil have kommentarer eller afsluttende kommaer.
+
+```jsonc title="opencode.jsonc"
+{
+  "$schema": "https://opencode.ai/config.json",
+  // Use this model by default.
+  "model": "anthropic/claude-sonnet-4-5",
+}
+```
+
+## Placeringer
+
+Læg administrerede indstillinger for hele maskinen i systemets konfigurationsmappe:
+
+| Platform | Mappe                                   |
+| -------- | --------------------------------------- |
+| macOS    | `/Library/Application Support/opencode` |
+| Linux    | `/etc/opencode`                         |
+| Windows  | `%ProgramData%\opencode`                |
+
+Systemmappen fungerer som den globale mappe. Ud over `opencode.json(c)` indlæser den `agents/`, `commands/`,
+`skills/` og `plugins/` for alle brugere på maskinen:
+
+```text
+/etc/opencode/
+├── opencode.json
+├── agents/review.md
+├── commands/release.md
+└── skills/deploy/SKILL.md
+```
+
+På macOS læser OpenCode også administrerede præferencer, som MDM-værktøjer udruller til domænet
+`ai.opencode.managed`. En brugerspecifik profil erstatter profilen for hele maskinen:
+
+```text
+/Library/Managed Preferences/<user>/ai.opencode.managed.plist
+/Library/Managed Preferences/ai.opencode.managed.plist
+```
+
+Administrerede indstillinger har højest prioritet, så brugere og projekter kan ikke tilsidesætte de værdier, de angiver,
+og administrerede præferencer tilsidesætter systemmappen. Indstillinger alene kan ikke forhindre brugere i at tilføje
+udbydere, MCP-servere, agenter eller plugins. Brug [politikker](/policies#precedence) i den administrerede konfiguration
+til at håndhæve begrænsninger.
+
+Læg brugerindstillinger, der gælder for alle projekter, i den globale konfiguration:
+
+```text
+~/.config/opencode/opencode.json(c)
+```
+
+Læg projektindstillinger i en af disse filer:
+
+```text
+/home/user/projects/my-app/opencode.json(c)
+/home/user/projects/my-app/.opencode/opencode.json(c)
+```
+
+OpenCode søger fra den aktuelle mappe op til roden af filsystemet. Først flettes `opencode.json(c)`-filer, der ligger
+direkte i mapperne, fra den fjerneste mappe til den nærmeste. Derefter flettes filer i `.opencode`-mapper i samme
+rækkefølge. Det betyder, at enhver fundet `.opencode`-konfiguration tilsidesætter alle direkte konfigurationer. Brug
+samme form i hele mappetræet, medmindre du har brug for den adfærd.
+
+Start for eksempel OpenCode fra `/home/user/projects/acme/packages/web`:
+
+```text
+/etc/opencode/opencode.json
+~/.config/opencode/opencode.json
+
+/home/user/projects/acme/
+├── opencode.json
+└── packages/
+    └── web/
+        ├── opencode.json
+        └── src/
+```
+
+OpenCode anvender filerne fra lavest til højest prioritet:
+
+1. `~/.config/opencode/opencode.json`
+2. `/home/user/projects/acme/opencode.json`
+3. `/home/user/projects/acme/packages/web/opencode.json`
+4. `/etc/opencode/opencode.json`
+
+Pakkens konfiguration tilsidesætter tilsvarende indstillinger fra repositoriets konfiguration, som igen tilsidesætter den
+globale konfiguration. Systemkonfigurationen tilsidesætter dem alle. Indstillinger, der ikke er i konflikt, bevares.
+[Politikker](/policies#precedence) fra globale filer og projektfiler evalueres i omvendt rækkefølge, og
+systempolitikker har forrang for dem alle.
+
+## Skema
+
+Det komplette skema for OpenCodes konfiguration findes på
+[opencode.ai/config.json](https://opencode.ai/config.json).
+
+Tilføj feltet `$schema` til din konfigurationsfil for at få validering og autofuldførelse i editorer, der understøtter
+JSON Schema:
+
+```json title="opencode.json"
+{
+  "$schema": "https://opencode.ai/config.json"
+}
+```
+
+Brug skemaet som den autoritative kilde til tilgængelige felter, tilladte værdier og strukturen af indlejret
+konfiguration.
+
+### Shell
+
+Angiv den shell, som terminalen og shell-værktøjerne bruger.
+
+```jsonc
+{
+  "shell": "/bin/zsh",
+}
+```
+
+### Model
+
+Angiv standardmodellen i formatet `provider/model`. Standardværdien på rodniveau bevarer i øjeblikket ikke en
+`#variant`; modelreferencer i agenter og kommandoer kan vælge en.
+
+```jsonc
+{
+  "model": "anthropic/claude-sonnet-4-5",
+}
+```
+
+Se [guiden til modeller](/models) for valg af model og lokale modeller.
+
+### Agent
+
+Vælg den primære agent, der bruges, når en session ikke eksplicit vælger en.
+
+```jsonc
+{
+  "default_agent": "build",
+}
+```
+
+Se [guiden til agenter](/agents) for indbyggede og brugerdefinerede agenter.
+
+### Opdateringer
+
+Styr søgning efter opdateringer fra den globale konfiguration. Sæt `update` til `"disable"` for at springe dem over,
+`"notify"` for at vise tilgængelige opdateringer, før de installeres, eller `"auto"` for at installere opdateringer
+automatisk. Hvis `update` udelades, er standardværdien `"notify"`.
+
+Automatisk installation genstarter ikke en kørende server. Genstart den manuelt for at aktivere den installerede
+opdatering. Værdier på projektniveau ignoreres.
+
+```jsonc
+{
+  "update": "notify",
+}
+```
+
+### Deling
+
+Angiv politikken for deling af sessioner. OpenCode accepterer feltet, men deling af sessioner understøttes endnu ikke.
+
+```jsonc
+{
+  "share": "manual",
+}
+```
+
+Se [guiden til deling](/sharing) for flere detaljer.
+
+### Brugernavn
+
+Angiv et brugernavn. OpenCode accepterer feltet, men viser det ikke i samtaler.
+
+```jsonc
+{
+  "username": "alice",
+}
+```
+
+### Tilladelser
+
+Definer ordnede regler, der tillader, afviser eller spørger, før en agent bruger et værktøj på en matchende ressource.
+
+```jsonc
+{
+  "permissions": [
+    {
+      "action": "shell",
+      "resource": "git push *",
+      "effect": "ask",
+    },
+  ],
+}
+```
+
+Se [guiden til tilladelser](/permissions) for regelmatchning og tilgængelige handlinger.
+
+### Politikker
+
+Tillad eller afvis brug af en udbyder, afvis et tilladelsestjek ubetinget, eller bloker en MCP-server, en skill eller
+et plugin med ordnede udsagn, som en bredere konfiguration kan tilsidesætte.
+
+```jsonc
+{
+  "policies": [
+    { "action": "provider.use", "resource": "*", "effect": "deny" },
+    { "action": "provider.use", "resource": "anthropic", "effect": "allow" },
+    { "action": "tool.use", "resource": "shell:git push *", "effect": "deny" },
+  ],
+}
+```
+
+Se [guiden til politikker](/policies) for matchning, prioritet på tværs af konfigurationsfiler og politikker, der
+administreres i Console.
+
+### Agenter
+
+Tilsidesæt indbyggede agenter, eller definer specialiserede agenter med deres egen model, instruktioner, tilstand og
+tilladelser.
+
+```jsonc
+{
+  "agents": {
+    "reviewer": {
+      "description": "Review changes without editing files",
+      "mode": "subagent",
+      "system": "Focus on correctness, security, and missing tests.",
+      "permissions": [{ "action": "edit", "resource": "*", "effect": "deny" }],
+    },
+  },
+}
+```
+
+Se [guiden til agenter](/agents) for alle agentindstillinger og filbaserede agenter.
+
+### Snapshots
+
+Slå snapshots af filsystemet til eller fra. De bruges til at fortryde og gendanne ændringer.
+
+```jsonc
+{
+  "snapshots": false,
+}
+```
+
+Se [guiden til snapshots](/snapshots) for, hvordan fortryd og annuller fortryd fungerer.
+
+### Watcher
+
+Ignorer filer og mapper, der ikke skal udløse opdateringer af filsystemet.
+
+```jsonc
+{
+  "watcher": {
+    "ignore": ["dist/**", "coverage/**"],
+  },
+}
+```
+
+### Formatter
+
+Formater filer, når værktøjerne `write`, `edit` eller `patch` har ændret dem. Sæt `formatter` til `true` for at aktivere
+de tilgængelige indbyggede formattere.
+
+```jsonc
+{
+  "formatter": true,
+}
+```
+
+Se [guiden til formattere](/formatters) for indbyggede og brugerdefinerede formattere.
+
+### Medier
+
+Styr, hvordan for store billeder, som værktøjet `read` indlæser, skaleres ned eller afvises, før de sendes til en model.
+
+```jsonc
+{
+  "media": {
+    "image": {
+      "auto_resize": true,
+      "max_width": 2000,
+      "max_height": 2000,
+      "max_base64_bytes": 5242880,
+    },
+  },
+}
+```
+
+Se [guiden til vedhæftninger](/attachments) for billedbehandling og grænser.
+
+### Output
+
+Angiv det maksimale antal linjer og bytes, der bevares fra et værktøjsresultat.
+
+```jsonc
+{
+  "tool_output": {
+    "max_lines": 2000,
+    "max_bytes": 51200,
+  },
+}
+```
+
+### Søgning
+
+Vælg, hvordan OpenCode søger på nettet. Brug `"random"` for automatisk at vælge en tilgængelig udbyder.
+
+```jsonc
+{
+  "websearch": {
+    "provider": "random",
+  },
+}
+```
+
+Se [guiden til websøgning](/websearch) for udbydere, legitimationsoplysninger, valg af udbyder, hastighedsgrænser og
+deaktivering af søgning.
+
+### MCP
+
+Konfigurer lokale og eksterne Model Context Protocol-servere. Globale timeouts kan tilsidesættes for den enkelte server.
+
+```jsonc
+{
+  "mcp": {
+    "servers": {
+      "playwright": {
+        "type": "local",
+        "command": ["bunx", "@playwright/mcp"],
+      },
+    },
+  },
+}
+```
+
+Se [guiden til MCP](/mcp-servers) for eksterne servere, OAuth, miljøvariabler og timeouts.
+
+### Komprimering
+
+Styr automatisk kontekstkomprimering, og hvor meget af den seneste kontekst der bevares.
+
+```jsonc
+{
+  "compaction": {
+    "auto": true,
+    "keep": {
+      "tokens": 15000,
+    },
+    "buffer": 20000,
+  },
+}
+```
+
+Lokale opsummeringer er fortsat standard. Slå udbyderens native komprimering til for både automatiske og manuelle
+anmodninger med en politik på udbyder- eller modelniveau:
+
+```jsonc
+{
+  "providers": {
+    "openai": {
+      "settings": { "compaction": { "type": "native" } },
+      "models": {
+        "gpt-4.1": { "settings": { "compaction": { "type": "summary" } } },
+      },
+    },
+  },
+}
+```
+
+En modelindstilling tilsidesætter udbyderens indstilling. Automatisk komprimering bruger det anvendelige inputbudget for
+den valgte model. Udbyderens checkpoints bevarer de seneste brugerbeskeder inden for det samme
+`compaction.keep.tokens`-budget, som lokale opsummeringer bruger til deres bevarede hale. `compaction.auto: false` på
+øverste niveau slår ny automatisk komprimering fra uden at kassere installerede checkpoints. Se [guiden til
+komprimering](/compaction) for budgettering og gendannelse efter overløb.
+
+### Forvarmning
+
+Hold nyligt aktive modelsessioner varme med periodiske, midlertidige anmodninger. Forvarmning er slået fra som standard;
+sæt den til `true` for at bruge et inaktivitetsinterval på fire minutter og et aktivt vindue på 30 minutter.
+
+```jsonc
+{
+  "warming": {
+    "prompt": "Do not perform any work. Reply with exactly: OK",
+    "interval": "4 minutes",
+    "duration": "30 minutes",
+  },
+}
+```
+
+Se [guiden til forvarmning](/warming) for anmodningernes adfærd, tilpasning og omkostninger.
+
+### Skills
+
+Tilføj mapper eller URL'er, hvor OpenCode skal søge efter skills til agenter.
+
+```jsonc
+{
+  "skills": ["./team-skills", "https://example.com/.well-known/skills/"],
+}
+```
+
+Se [guiden til skills](/skills) for strukturen af en skill og automatisk registrering under `.opencode/skills/`.
+
+### Kommandoer
+
+Definer genbrugelige slash-kommandoer som navngivne promptskabeloner.
+
+```jsonc
+{
+  "commands": {
+    "review": {
+      "description": "Review the current changes",
+      "template": "Review the current diff for correctness and missing tests.",
+    },
+  },
+}
+```
+
+Se [guiden til kommandoer](/commands) for argumenter, modeller, agenter og filbaserede kommandoer.
+
+### Instruktioner
+
+Angiv yderligere instruktionsfiler, globs eller URL'er. OpenCode accepterer feltet, men indlæser ikke dets poster; brug
+`AGENTS.md` til instruktioner.
+
+```jsonc
+{
+  "instructions": ["CONTRIBUTING.md", "docs/guidelines/*.md"],
+}
+```
+
+Se [guiden til instruktioner](/instructions) for projektinstruktioner og `AGENTS.md`.
+
+### Referencer
+
+Gør lokale mapper eller Git-repositorier tilgængelige som navngiven, understøttende kontekst.
+
+```jsonc
+{
+  "references": {
+    "docs": {
+      "path": "../product-docs",
+      "description": "Product behavior and terminology",
+    },
+    "effect": {
+      "repository": "Effect-TS/effect",
+      "branch": "main",
+    },
+  },
+}
+```
+
+Se [guiden til referencer](/references) for kortform, synlighed og opløsning af stier.
+
+### Worktrees
+
+Angiv den overordnede mappe til nye lokale worktrees. OpenCode tilføjer det ønskede eller genererede worktree-navn.
+
+```jsonc
+{
+  "worktree": {
+    "directory": "../worktrees",
+  },
+}
+```
+
+Relative stier opløses i forhold til projektets gemte kanoniske checkout. Det gælder både for global konfiguration og
+projektkonfiguration. Absolutte stier bruges som de er, og `~/` opløses i forhold til brugerens hjemmemappe.
+
+Denne globale konfiguration placerer for eksempel nye worktrees i hvert projekts egen `.lane/trees/`-mappe:
+
+```jsonc
+{
+  "worktree": {
+    "directory": ".lane/trees",
+  },
+}
+```
+
+Uden denne indstilling oprettes worktrees i serverens datamappe under
+`worktree/<first-six-project-ID-characters>`. Oprettelse og opdatering af worktrees indlæser konfigurationen fra
+projektets gemte kanoniske checkout, også når andre kloner deler projektets ID. En ændring af indstillingen flytter ikke
+eksisterende worktrees.
+
+Git er den indbyggede standard. Et [plugin](/build/plugins#worktrees), der registrerer en strategi, bliver automatisk
+standard i det plugins runtime. Projekthandlinger bruger runtimen for det kanoniske checkout. Strategispecifikke
+indstillinger hører til i det pågældende plugin, ikke i konfigurationsobjektet `worktree`.
+
+### Plugins
+
+Indlæs plugins fra pakker eller lokale plugin-mapper. Brug objektformen, når et plugin accepterer indstillinger.
+
+```jsonc
+{
+  "plugins": [
+    "opencode-example-plugin",
+    {
+      "package": "./plugins/local",
+      "options": {
+        "enabled": true,
+      },
+    },
+  ],
+}
+```
+
+Se [guiden til plugins](/plugins) for indlæsning og konfiguration af plugins.
+
+### Udbydere
+
+Konfigurer udbydere, og tilføj eller tilsidesæt deres modeller, anmodningsindstillinger, headers og modelvarianter.
+
+```jsonc
+{
+  "providers": {
+    "openai": {
+      "models": {
+        "gpt-5.2-custom": {
+          "modelID": "gpt-5.2",
+          "name": "GPT-5.2 Custom",
+          "limit": {
+            "context": 200000,
+            "output": 32000,
+          },
+        },
+      },
+    },
+  },
+}
+```
+
+Med `settings.transport: "websocket"` på en udbyder bruges udbyderens sessions-WebSocket.
+
+Se [guiden til udbydere](/providers) for legitimationsoplysninger, brugerdefinerede endpoints, udbyderpakker,
+WebSocket-transporten og modelkonfiguration.

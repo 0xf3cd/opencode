@@ -1,0 +1,159 @@
+---
+title: "JavaScript"
+---
+
+الحزمة `@opencode/client` هي عميل TypeScript لواجهة HTTP API في OpenCode. استخدمها عندما يتصل تطبيقك بخادم OpenCode عبر
+الشبكة. تُولَّد أنواعها وطرقها الأصلية من العقد نفسه الذي يستند إليه [مرجع API](/api)، أما أنواع RPC الخاصة بالإضافات
+فتأتي من تعريفات RPC التي تستوردها.
+
+## التثبيت
+
+```sh
+bun add @opencode/client
+```
+
+## إنشاء عميل
+
+أنشئ عميلًا بعنوان URL للخادم، ثم استدعِ الطرق المجمّعة حسب مورد API:
+
+```ts
+import { OpenCode } from "@opencode/client"
+
+const client = OpenCode.make({
+  baseUrl: "http://localhost:4096",
+})
+
+const session = await client.session.create({
+  location: { directory: "/workspace" },
+})
+
+await client.session.prompt({
+  sessionID: session.id,
+  text: "Review the current changes",
+})
+```
+
+## الترويسات والطلبات
+
+مرّر ترويسات المصادقة أو ترويسات التطبيق الافتراضية إلى `OpenCode.make` عبر `headers`. ويمكنك أيضًا توفير تنفيذ مخصص للدالة
+`fetch`. تقبل كل عملية خيارات الطلب في وسيطها الأخير، لتمرير `AbortSignal` أو ترويسات خاصة بذلك الطلب. والاستثناء هو
+اشتراكات الأحداث: فهي لا تقبل إلا إلغاءً محليًا خاصًا بالمشترك، وتستخدم ترويسات العميل الأساسي.
+
+```ts
+const client = OpenCode.make({
+  baseUrl: "https://opencode.example.com",
+  headers: {
+    authorization: `Bearer ${process.env.OPENCODE_TOKEN}`,
+  },
+})
+
+await client.session.list(undefined, {
+  signal: AbortSignal.timeout(10_000),
+})
+```
+
+## بث الأحداث
+
+تُعيد نقاط النهاية المتدفقة كائنات async iterable:
+
+```ts
+for await (const event of client.event.subscribe()) {
+  console.log(event.type)
+}
+```
+
+يتشارك المشتركون في الأحداث الأصلية وأحداث RPC اتصالًا كسولًا (lazy) واحدًا لكل عميل. لا يفتح إنشاء العميل أو المقبض أو
+الكائن القابل للتكرار أي اتصال بالأحداث؛ بل يبدأ الاتصال عند الاستهلاك. ويؤدي الخروج من حلقة التكرار أو إلغاء أحد
+المشتركين إلى إنهاء ذلك المكرِّر وحده، ويُغلق الاتصال عند مغادرة آخر مشترك. ينتظر المصدر المشترك أن يقبل المشتركون النشطون
+كل حدث، لذا ينبغي للمستهلكين تخزين الأحداث مؤقتًا قبل تنفيذ أي عمل بطيء.
+
+الاشتراكات حيّة فقط، بلا إعادة تشغيل للأحداث السابقة (replay) ولا إعادة اتصال تلقائية. يُنهي فشل المصدر الاشتراكات
+الحالية، فاشترك من جديد بعد التعافي. ويتلقى المشترك الأصلي المتأخر العلامة الحالية `server.connected`، لا أحداث العمل
+السابقة.
+
+## استدعاء RPC في الإضافات
+
+استورد العقد المشترك للإضافة ومرّره إلى `client.rpc`:
+
+```ts
+import { OpenCode } from "@opencode/client"
+import { Acme } from "opencode-acme-plugin/rpc"
+
+const acme = client.rpc(Acme)
+const result = await acme.search(
+  { query: "hello" },
+  { location: { directory: "/workspace" }, signal: AbortSignal.timeout(10_000) },
+)
+
+const unsubscribe = acme.events.on("updated", (event) => {
+  console.log(event.type, event.location.directory, event.data.text)
+})
+```
+
+يحمل الوسيط الاختياري الثاني للطريقة الخيارات `location` و`signal` و`headers`، منفصلةً عن المدخلات التي تعرّفها الإضافة.
+وإذا حُذف الموقع، فإنه يتبع القيم الافتراضية للطلبات الأصلية: ترويسات الموقع الأساسية، ثم مجلد العمل الخاص بالخادم. ولا
+يُحدَّد أي موقع عند إنشاء العميل الفرعي.
+
+تستنتج الطرق الوسائط والنتائج من التعريف. ويقع تحليل Schema عند حدود العقد: يرسل المستدعون تمثيل المدخلات المقبول، بينما
+تتلقى المعالِجات قيمًا محلَّلة. يقبل عميل Promise تعريفات Standard Schema أو JSON Schema العادية، ولا يشغّل محللات Schema
+محليًا: إذ يُعيد الخادم مخرجات محلَّلة ومحوَّلة مسبقًا. أما تعريفات Effect Schema فتتطلب عميل Effect.
+
+تؤدي أخطاء الطرق المُعلنة إلى رفض كائن Promise، تمامًا كأخطاء نقاط نهاية عميل Promise الأخرى، وتبقى الأخطاء الملتقطة بلا أنواع. يزيل
+العميل الفرعي ذو الأنواع المحددة أغلفة أخطاء HTTP RPC العامة. وتبقى إخفاقات إطار العمل المحجوزة `rpc.*` إخفاقات RPC عادية،
+بينما تحتفظ أخطاء المصادقة والنقل والبروتوكول غير المرتبطة بتمثيلاتها المعتادة في العميل.
+
+تستخدم اشتراكات RPC أسماءً محلية، وتتلقى أحداث واجهة RPC المعنية من جميع المواقع. افحص الحقل الإلزامي `event.location` لتصفيتها.
+وتطابق `events.subscribe` واجهة async iterable الأصلية:
+
+```ts
+for await (const event of acme.events.subscribe("updated")) {
+  console.log(event.data.text)
+}
+```
+
+أما `events.on` فهي غلاف مُيسِّر فوق المصدر نفسه، وتُعيد دالة لإلغاء الاشتراك، وتُنتظر استدعاءات الرجوع غير المتزامنة
+بالتتابع. تُسجَّل إخفاقات استدعاء الرجوع أو المصدر وتُنهي ذلك المستمع. تتلقى الاشتراكات الأصلية وذات الأنواع المحددة
+المغلّف العادي نفسه `rpc.<rpcID>.<event>`، مع بيانات الحدث ككائن مباشر. ولا تعيد الاشتراكات الحية تشغيل الأحداث الفائتة.
+
+يجب أن تكون إضافة الخادم مهيّأة وأن تنفّذ واجهة RPC؛ فاستيراد التعريف لا يسجّله. راجع [RPC في الإضافات](/build/plugins/rpc)
+للتعرّف على واجهة التعريف والتسجيل. ويمكن لأي عميل HTTP أيضًا استدعاء المسار العام `POST /api/rpc/{rpcID}/{method}` مع
+`{ "input": ... }` وتلقي `{ "output": ... }`. ويعني حذف حقل input أو output عدم وجود قيمة.
+
+## الخدمة الخلفية المحلية
+
+نقاط الدخول الرئيسية للعميل متوافقة مع المتصفح، ولا تتضمن إدارة العمليات المحلية. في تطبيق Node، استورد واجهة الخدمة
+الأصلية المبنية على Promise من `@opencode/client/service`.
+
+- تُعيد `Service.discover()` نقطة نهاية مسجّلة وسليمة دون تشغيل أي عملية.
+- تُعيد `Service.ensure()` خدمة متوافقة، وتشغّل واحدة عند الحاجة.
+- توقف `Service.stop()` نسخة الخدمة المسجّلة بعينها.
+- تنشئ `Service.headers(endpoint)` ترويسات المصادقة لعميل.
+
+```ts
+import { OpenCode } from "@opencode/client"
+import { Service } from "@opencode/client/service"
+
+const endpoint = await Service.ensure()
+const client = OpenCode.make({
+  baseUrl: endpoint.url,
+  headers: Service.headers(endpoint),
+})
+
+const info = await client.server.info()
+```
+
+تقبل `Service.ensure()` اختياريًا ملف تسجيل وإصدارًا وأمر تشغيل الخدمة واستدعاء الرجوع `onStart`. ويقبل `version` إما قيمة
+مطابقة تمامًا أو دالة تحقق من التوافق:
+
+```ts
+const endpoint = await Service.ensure({
+  file: "/var/run/opencode/service.json",
+  version: (version) => version.startsWith("2."),
+  command: ["opencode", "serve", "--service"],
+  onStart(reason, previousVersion) {
+    console.log(reason, previousVersion)
+  },
+})
+```
+
+احذف هذه الخيارات لاستخدام مسار التسجيل القياسي والأمر `opencode serve --service`.

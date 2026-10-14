@@ -1,0 +1,146 @@
+---
+title: "Effect"
+---
+
+`@opencode/client/effect`, OpenCode HTTP API'si için Effect'e özgü istemcidir. Türlü Effect ve Stream değerleri döndürür ve
+yanıtları OpenCode şema değerlerine çözümler.
+
+```sh
+bun add @opencode/client effect
+```
+
+## İstemci oluşturma
+
+Sunucu URL'siyle bir istemci oluşturun, ardından API kaynaklarına göre gruplanmış yöntemleri çağırın.
+
+```ts
+import { AbsolutePath, Location, OpenCode } from "@opencode/client/effect"
+import { Effect } from "effect"
+import { FetchHttpClient } from "effect/http"
+
+const program = Effect.gen(function* () {
+  const client = yield* OpenCode.make({ baseUrl: "http://localhost:4096" })
+  const session = yield* client.session.create({
+    location: Location.Ref.make({ directory: AbsolutePath.make("/workspace") }),
+  })
+  yield* client.session.prompt({
+    sessionID: session.id,
+    text: "Review the current changes",
+  })
+  return session
+})
+
+const session = await Effect.runPromise(program.pipe(Effect.provide(FetchHttpClient.layer)))
+```
+
+## Başlıklar ve istekler
+
+Varsayılan başlıkları, sağladığınız `HttpClient` üzerinde yapılandırın. Yerel işlemler iptal için normal Effect kesintisini
+kullanır. RPC yöntemleri ayrıca çağrı başına konum, başlık ve sinyal seçeneklerini kabul eder.
+
+```ts
+import { HttpClient, HttpClientRequest } from "effect/http"
+
+const httpClient = yield * HttpClient.HttpClient
+const client =
+  yield *
+  OpenCode.make({ baseUrl: "https://opencode.example.com" }).pipe(
+    Effect.provideService(
+      HttpClient.HttpClient,
+      HttpClient.mapRequest(httpClient, (request) =>
+        HttpClientRequest.setHeaders(request, { authorization: `Bearer ${process.env.OPENCODE_TOKEN}` }),
+      ),
+    ),
+  )
+
+const sessions = yield * client.session.list()
+```
+
+## Olay akışı
+
+`event.subscribe()` ve `session.log()` gibi akış işlemleri Effect Stream döndürür.
+
+```ts
+import { Effect, Stream } from "effect"
+
+yield *
+  client.event.subscribe().pipe(Stream.runForEach((event) => Effect.logInfo("OpenCode event", { type: event.type })))
+```
+
+Yerel ve RPC olay Stream'leri, istemci başına tek bir tembel (lazy) bağlantıyı paylaşır. Bir Stream oluşturmak bağlantı
+açmaz; onu tüketmek açar. Bir tüketiciyi durdurmak diğerlerini çalışır durumda bırakır; son tüketici ayrıldığında kaynak
+kapanır. Kaynakta EOF veya hata oluşursa mevcut abonelikler otomatik yeniden deneme veya yeniden oynatma olmadan sona erer.
+Sonradan katılan yerel tüketiciler, canlı olaylardan önce geçerli bağlantı işaretçisini alır.
+
+## Eklenti RPC'si
+
+Promise istemcileri ve sunucu eklentileriyle aynı paylaşılan sözleşmeyi kullanın:
+
+```ts
+import { Acme } from "opencode-acme-plugin/rpc"
+
+const acme = client.rpc(Acme)
+const result = yield * acme.search({ query: "hello" }, { location: { directory: "/workspace" } })
+
+yield *
+  acme.events
+    .subscribe("updated")
+    .pipe(
+      Stream.runForEach((event) =>
+        Effect.logInfo("Plugin event", { type: event.type, location: event.location, text: event.data.text }),
+      ),
+    )
+```
+
+Yöntem argümanları ve sonuçları sözleşmeden çıkarılır. İsteğe bağlı ikinci argüman `location`, `signal` ve `headers`
+alanlarını taşır; konum belirtilmezse normal istek varsayılanları kullanılır. Çağrılar, onları tüketen Effect ile birlikte
+kesintiye uğratılır. Yöntem hata eşlemeleri Effect hata kanalında çıkarılır. Bildirilmiş hatalar, veri şemaları aracılığıyla
+çözümlenir. Türlü alt istemci, genel HTTP RPC hata sarmalayıcısını kaldırır; ayrılmış `rpc.*` türleri çerçeve hatalarını
+belirtir.
+
+RPC olayları, geri çağırma tarzındaki `on` dinleyicileri değil, türlü Stream'lerdir. RPC'nin tüm konumlardaki olaylarını
+alırlar; her olayda zorunlu `location` alanı ve `rpc.acme.updated` gibi normal önekli bir tür bulunur. Bu, yalnızca kendi
+konumlarına bağlı olan sunucu eklentisi tanıtıcılarından (handle) farklıdır. Tanımlar, şemalar, kayıt ve canlı abonelik
+davranışı için [Effect eklenti RPC'si](/build/plugins/effect/rpc) sayfasına bakın.
+
+## Yerel arka plan hizmeti
+
+Yalnızca Node'da çalışan `@opencode/client/effect/service` giriş noktası, yerel arka plan hizmetini Effect olarak keşfeder,
+başlatır, kimlik doğrulamasını yapar ve durdurur.
+
+```sh
+bun add @effect/platform-node
+```
+
+Hazır hale getirilen hizmet için kimliği doğrulanmış bir istemci oluşturun.
+
+```ts
+import { NodeFileSystem } from "@effect/platform-node"
+import { OpenCode } from "@opencode/client/effect"
+import { Service } from "@opencode/client/effect/service"
+import { Effect } from "effect"
+import { FetchHttpClient, HttpClient, HttpClientRequest } from "effect/http"
+
+const program = Effect.gen(function* () {
+  const endpoint = yield* Service.ensure()
+  const httpClient = yield* HttpClient.HttpClient
+  const client = yield* OpenCode.make({ baseUrl: endpoint.url }).pipe(
+    Effect.provideService(
+      HttpClient.HttpClient,
+      HttpClient.mapRequest(httpClient, (request) => HttpClientRequest.setHeaders(request, Service.headers(endpoint))),
+    ),
+  )
+  return yield* client.server.info()
+})
+
+const health = await Effect.runPromise(
+  program.pipe(Effect.provide(FetchHttpClient.layer), Effect.provide(NodeFileSystem.layer)),
+)
+```
+
+Hizmeti başlatmadan keşfedin veya tam olarak kayıtlı hizmeti durdurun.
+
+```ts
+const endpoint = yield * Service.discover()
+yield * Service.stop()
+```

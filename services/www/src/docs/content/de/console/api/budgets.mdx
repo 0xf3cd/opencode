@@ -1,0 +1,101 @@
+---
+title: "Budgets-API"
+description: "Die effektiven Monatsbudgets aller Mitglieder des Workspace auslesen und das eigene Budget jedes Mitglieds verwalten."
+---
+
+Lies aus einer Integration heraus die effektiven Monatsbudgets aller Mitglieder des Workspace aus und verwalte das
+eigene Budget jedes Mitglieds.
+
+## Schnellstart
+
+Erstelle in der [Console](https://opencode.ai/console) einen API-Schlüssel für ein [Dienstkonto](/console/api#service-accounts) mit der Berechtigung **All**.
+Schlüssel mit **Inference only** können weder Budgetdaten lesen noch Limits ändern.
+
+```bash
+export CONSOLE_URL="https://opencode.ai/console"
+export SERVICE_API_KEY="oc_sk_..."
+```
+
+Budgets der Mitglieder auflisten:
+
+```bash
+curl --fail-with-body \
+  "${CONSOLE_URL}/api/v1/budgets/members" \
+  --header "Authorization: Bearer ${SERVICE_API_KEY}" \
+  --header "Accept: application/json"
+```
+
+## Budgets der Mitglieder auflisten
+
+```text
+GET /api/v1/budgets/members
+```
+
+Die Antwort enthält alle aktuellen Mitglieder, sortiert nach E-Mail-Adresse. Ein Limit mit der Quelle `custom` ist eine
+Überschreibung für das Mitglied; bei der Quelle `default` wird der Standardwert des Workspace übernommen. Sind Limit und
+Quelle null, ist das Mitglied unbegrenzt.
+
+```json
+[
+  {
+    "user_id": "user_...",
+    "email": "alice@example.com",
+    "limit_micro_cents": "7525000000",
+    "spent_micro_cents": "1250000000",
+    "exceeded": false,
+    "resets_at": "2026-10-01T00:00:00.000Z",
+    "source": "custom",
+    "updated_at": "2026-09-03T12:00:00.000Z"
+  }
+]
+```
+
+Geldbeträge in der Antwort sind Dezimalstrings in Mikrocent, damit Integrationen keine Genauigkeit verlieren. Ein
+US-Dollar entspricht 100 Millionen Mikrocent. Ausgaben und Zeitpunkte der Zurücksetzung beziehen sich auf den aktuellen
+Kalendermonat in UTC. `updated_at` ist null, wenn es keine eigene Überschreibung für das Mitglied gibt.
+
+## Eigenes Budget festlegen
+
+```text
+PUT /api/v1/budgets/members/:user_id
+```
+
+Ein Monatsbudget von $75.25 für ein Mitglied festlegen:
+
+```bash
+curl --fail-with-body --request PUT \
+  "${CONSOLE_URL}/api/v1/budgets/members/user_..." \
+  --header "Authorization: Bearer ${SERVICE_API_KEY}" \
+  --header "Content-Type: application/json" \
+  --data '{"budget_dollars":75.25}'
+```
+
+`budget_dollars` akzeptiert einen nicht negativen Betrag in US-Dollar mit höchstens zwei Nachkommastellen. Der PUT ist
+idempotent und gibt HTTP 204 zurück. Verwende die Mitglieds-ID, die beim Auflisten zurückgegeben wird.
+
+## Zum Standardbudget des Workspace zurückkehren
+
+```text
+DELETE /api/v1/budgets/members/:user_id
+```
+
+Die eigene Überschreibung entfernen:
+
+```bash
+curl --fail-with-body --request DELETE \
+  "${CONSOLE_URL}/api/v1/budgets/members/user_..." \
+  --header "Authorization: Bearer ${SERVICE_API_KEY}"
+```
+
+Das Löschen einer Überschreibung löscht nicht das Mitglied. Das Mitglied übernimmt danach das Standardbudget des
+Workspace oder ist unbegrenzt, wenn der Workspace keinen Standard hat. Die Anfrage kann gefahrlos wiederholt werden und
+gibt HTTP 204 zurück.
+
+## Fehler
+
+| Status | Bedeutung                                                              |
+| ------ | ---------------------------------------------------------------------- |
+| `400`  | Ungültige Mitglieds-ID oder ungültiger Budgetbetrag.                   |
+| `401`  | Dienst-API-Schlüssel fehlt, ist ungültig, abgelaufen oder widerrufen.  |
+| `403`  | Der API-Schlüssel hat keine Berechtigung, Budgets zu verwalten.        |
+| `404`  | Das Mitglied gehört nicht zu dem Workspace, an den der API-Schlüssel gebunden ist. |

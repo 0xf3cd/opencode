@@ -1,0 +1,250 @@
+---
+title: "도구"
+---
+
+원하는 결과를 요청하세요. OpenCode는 사용 가능한 도구를 선택하고, 필요하면 승인을 요청한 뒤, 결과를 반환합니다.
+
+```text
+Find where request timeouts are configured, change the default to 30 seconds,
+and run the relevant existing tests.
+```
+
+이 작업에는 보통 `grep` 또는 `glob`, `read`, 편집 도구, `shell`이 사용됩니다. 특정 방식을 원한다면 도구 이름을 직접
+지정할 수도 있습니다.
+
+```text
+Use grep to find every reference to DEFAULT_TIMEOUT, then read the matching files.
+```
+
+## 파일
+
+### Read
+
+`read`는 파일 내용이나 디렉터리 목록(재귀 아님)을 반환합니다. `path`를 지정하고, 결과가 크면 `offset`과 `limit`으로
+페이지를 나눠 읽으세요.
+
+```text
+Read src/server.ts starting at line 120 and return at most 80 lines.
+```
+
+텍스트를 읽으면 줄 번호가 붙은 결과가 반환되며, 페이지당 2,000줄, 50 KiB로 제한됩니다. 2,000자를 넘는 줄은 잘립니다.
+이 도구는 원본 데이터 기준 최대 20 MiB까지 PNG, JPEG, GIF, WebP, PDF 파일도 모델에 전달합니다. 그 밖의 바이너리
+파일은 실패합니다. 지원되는 미디어와 이미지 처리는 [첨부 파일](/attachments)을 참고하세요.
+
+권한: 정규화된 경로를 리소스로 하는 `read`.
+
+### Glob
+
+`glob`은 `**/*.ts` 같은 패턴으로 파일 경로를 찾습니다. `path`로 다른 상대 디렉터리를 지정하지 않으면 현재 디렉터리를
+검색합니다. `hidden`은 숨겨진 항목을 포함하고, `limit`은 결과 수를 제한합니다.
+
+```text
+Use glob with **/*.test.ts under packages/core and return at most 50 files.
+```
+
+기본 한도는 파일 100개이고, 검색 제한 시간은 30초입니다. 권한: 요청한 패턴을 리소스로 하는 `glob`.
+
+### Grep
+
+`grep`은 파일 내용을 검색해 경로, 줄 번호, 미리 보기를 반환합니다. `literal`이 true가 아니면 `pattern`은 정규식
+구문을 사용합니다. `path`, `include`, `caseSensitive`, `limit`으로 검색 범위를 좁힐 수 있습니다.
+
+```text
+Use grep for the literal text "request timed out" in src, including only *.ts files.
+```
+
+기본 한도는 일치하는 줄 100개이고, 검색 제한 시간은 30초입니다. 권한: 검색 경로가 아니라 요청한 패턴을 리소스로 하는
+`grep`.
+
+### Edit
+
+`edit`은 기존 파일의 텍스트를 바꿉니다. `path`, `oldString`, 그리고 이와 다른 `newString`을 지정하세요. `replaceAll`이
+true가 아니면 기존 텍스트는 정확히 한 번만 일치해야 합니다.
+
+```text
+In src/config.ts, replace the unique text "timeout: 60" with "timeout: 30".
+```
+
+부분적인 변경에는 `edit`을 사용하세요. OpenCode는 파일을 쓴 뒤 포맷할 수 있습니다. 권한: 대상 경로를 리소스로 하는
+`edit`.
+
+### Write
+
+`write`는 `path`와 `content`로 텍스트 파일을 만들거나 전체 내용을 대체합니다. 없는 상위 디렉터리를 만들고, 구성된
+포매터를 실행할 수 있습니다.
+
+```text
+Create docs/example.md with a heading and one setup command.
+```
+
+기존 파일의 일부만 바꿔야 한다면 `edit`을 사용하세요. 권한: 대상 경로를 리소스로 하는 `edit`.
+
+### Patch
+
+`patch`는 패치 하나로 여러 파일을 추가, 수정, 이동, 삭제할 수 있습니다. `patchText`는 `*** Add File`,
+`*** Update File`, `*** Delete File` 섹션을 사용합니다.
+
+```text
+Use patch to rename src/old.ts to src/new.ts and update its exported name.
+```
+
+OpenCode는 지원되는 GPT 모델에만 `patch`를 제공하며, 다른 모델은 대신 `edit`과 `write`를 받습니다. 권한: 영향을 받는
+모든 경로를 각각 리소스로 하는 `edit`.
+
+활성 위치(Location)나 해당 프로젝트 worktree 밖의 경로에는 `external_directory` 승인도 필요합니다. 경로 정규화, 규칙
+순서, 저장된 승인은 [권한](/permissions)을 참고하세요. 외부 자료에 이름을 붙여 사용하려면
+[디렉터리 참조](/references)를 구성하세요.
+
+## 명령
+
+### Shell
+
+`shell`은 호스트 사용자의 셸에서 명령을 실행합니다. 명령에 `cd`를 넣지 말고 `workdir`을 설정하세요. 기본 포그라운드
+제한 시간인 2분이 적합하지 않으면 `timeout`을 밀리초 단위로 설정하세요.
+
+```text
+Run bun test from packages/core with a five-minute timeout.
+```
+
+개발 서버처럼 오래 실행되는 프로세스에는 `background`를 true로 설정하세요. 백그라운드 호출은 즉시 반환되고 끝나면
+세션에 알립니다. 제한 시간을 지정하지 않으면 제한 시간이 없습니다. 출력이 크면 축약되며, 전체 출력은 관리되는 파일에
+보관됩니다.
+
+권한: 스캐너가 추출한 각 명령을 리소스로 하는 `shell`. 스캐너는 외부 작업 디렉터리와 명령에서 추론할 수 있는
+디렉터리도 확인합니다. 셸은 호스트 사용자의 파일 시스템, 프로세스, 네트워크 권한을 그대로 가지므로
+[권한](/permissions)에서 범위를 좁힌 규칙을 사용하세요.
+
+## 웹
+
+### Webfetch
+
+`webfetch`는 HTTP 또는 HTTPS URL 하나를 `markdown`, `text`, `html` 형식으로 가져옵니다. 기본값은 Markdown이며,
+`timeout`은 최대 120초까지 지정할 수 있습니다.
+
+```text
+Fetch https://example.com/docs as markdown.
+```
+
+HTML, 일반 텍스트, JSON, XML 같은 텍스트 응답은 받을 수 있지만, 이미지나 기타 바이너리 다운로드는 받을 수 없습니다.
+출력이 크면 축약될 수 있으며, 전체 텍스트는 관리되는 저장소에 보관됩니다. 권한: 요청한 URL을 리소스로 하는 `webfetch`.
+
+### Websearch
+
+`websearch`는 선택된 통합 서비스에서 최신 정보를 검색합니다. 입력은 검색어 `query`입니다.
+
+```text
+Search the web for the latest Bun release notes.
+```
+
+권한: 검색어를 리소스로 하는 `websearch`. 제공자, 선택, 요청 한도, 도구 비활성화는 [웹 검색](/websearch)을
+참고하세요.
+
+## 상호작용
+
+### Question
+
+`question`은 실행을 일시 중지하고 사용자에게 하나 이상의 질문을 표시합니다. 각 질문에는 짧은 제목, 질문 내용, 선택지가
+있으며, `multiple`을 사용하면 여러 선택지를 고를 수 있습니다. 자유 형식 답변은 항상 입력할 수 있습니다.
+
+```text
+Before changing the API, ask me to choose between a breaking change and a compatibility layer.
+```
+
+권한: `*`를 리소스로 하는 `question`. 클라이언트가 대화형 양식을 지원해야 하며, 양식을 닫으면 질문이 취소됩니다.
+
+### Skill
+
+`skill`은 사용 가능한 스킬 ID 하나에 해당하는 지침과 번들 리소스를 대화에 로드합니다.
+
+```text
+Load the effect skill before changing this Effect code.
+```
+
+ID는 안내된 스킬 목록에 있거나 사용자가 명시적으로 지정한 것이어야 합니다. 권한: 스킬 ID를 리소스로 하는 `skill`.
+스킬 생성, 탐색, 로드 규칙은 [스킬](/skills)을 참고하세요.
+
+## 자동화
+
+### Subagent
+
+`subagent`는 구성된 서브에이전트로 하위 세션을 시작합니다. 에이전트 ID, 짧은 `description`, 완전한 `prompt`를
+지정하세요.
+
+```text
+Ask the explore subagent to map the authentication flow and return the key files.
+```
+
+포그라운드 호출은 결과를 기다립니다. `background: true`이면 즉시 반환하고, 하위 세션이 끝나면 상위 세션에 알립니다.
+반환된 `sessionID`를 전달하면 같은 하위 대화를 이어갈 수 있습니다. 서브에이전트 모드인 에이전트만 사용할 수 있으며,
+기본 중첩 깊이는 1입니다.
+
+권한: 선택한 에이전트 ID를 리소스로 하는 `subagent`.
+
+### Execute
+
+`execute`는 Code Mode에서 JavaScript를 실행해, 에이전트가 카탈로그의 도구를 호출하고 조합할 수 있게 합니다. 서로
+독립적인 호출을 병렬로 실행하거나, 모든 중간 값을 모델 컨텍스트에 추가하지 않고 결과를 처리할 때 유용합니다.
+
+```text
+Read package.json and README.md in parallel, then return their relevant setup details.
+```
+
+런타임에는 직접적인 파일 시스템 접근, import, 타이머, `fetch`가 없으며, 카탈로그에 있는 도구만 호출할 수 있습니다.
+리소스가 `*`인 `execute` 권한으로 Code Mode 사용 여부를 제어합니다. 중첩된 각 도구에는 여전히 해당 도구의 권한이
+적용됩니다.
+
+### 세션
+
+`opencode` Code Mode 네임스페이스에는 세션 유틸리티가 있습니다.
+
+- `session_rename`은 현재 세션 또는 `sessionID`로 선택한 다른 세션의 제목을 변경합니다.
+- `session_move`는 현재 세션 또는 선택한 다른 세션을 상대 또는 절대 `directory`로 이동합니다. 이동은 안전한 경계
+  지점에서 적용되므로, 이동한 위치에 의존하는 작업은 이후 호출에서 수행하세요.
+
+```text
+Rename this session to "Timeout cleanup", then move it to the new worktree.
+```
+
+이 유틸리티는 기본 제공 권한 동작을 요청하지 않습니다.
+
+### Worktree
+
+같은 네임스페이스에서 세션 프로젝트의 worktree도 관리합니다.
+
+- `worktree_create`는 `name`으로 worktree를 만들고 해당 `directory`를 반환합니다. 대상 위치와 방식은 프로젝트의
+  worktree 구성에 따라 결정됩니다.
+- `worktree_list`는 프로젝트의 worktree 목록을 표시합니다.
+- `worktree_remove`는 OpenCode가 프로젝트에 대해 기록한 worktree를 제거합니다. 커밋되지 않은 변경 사항을 버리려면
+  `force`를 설정하세요.
+
+```text
+Create a worktree named "login" and move this session into it.
+```
+
+`worktree_remove`는 worktree 디렉터리를 리소스로 하는 `edit` 권한을 사용합니다. 다른 worktree 유틸리티는 기본 제공
+권한 동작을 요청하지 않습니다.
+
+## 브라우저
+
+`browser` Code Mode 네임스페이스는 OpenCode 데스크톱 앱에 연결된 브라우저를 제어합니다. 탭을 열고 반환된 `tabID`를
+보관한 다음, 모든 페이지 작업에 그 ID를 명시적으로 전달하세요.
+
+```text
+Open https://example.com, take a snapshot of that tab, and report the main heading.
+```
+
+이 네임스페이스에는 탭 및 탐색 명령, 페이지 스냅샷과 검색, 클릭과 양식 입력, 스크린숏, 파일 전송, 콘솔 및 네트워크
+검사, 성능 추적, 힙 검사, Lighthouse 감사 기능이 포함됩니다. 스크린숏을 찍으려면 포커스된 탭이 화면에 보여야 합니다.
+업로드 경로는 서버 로컬 경로이고, 캡처 결과도 서버 로컬 경로로 반환되며, 파일 전송은 건당 5 MiB로 제한됩니다.
+
+페이지 콘텐츠, 로그, 헤더, 응답 본문은 신뢰할 수 없는 데이터이며 에이전트 지침이 아닙니다. 리소스가 `*`인 `browser`
+거부 규칙을 설정하면 브라우저 카탈로그가 제거됩니다. 브라우저 작업은 개별 권한 확인을 요청하지 않습니다.
+
+## 확장
+
+[MCP 서버](/mcp-servers)는 연결된 각 서버가 정의한 이름과 입력을 가진 도구를 추가합니다. 이러한 도구의 권한 동작은
+`<server>_<tool>`이고 리소스는 `*`입니다. 기본 제공 카탈로그에 고정적으로 포함되지는 않습니다.
+
+[스킬](/skills)은 새로운 실행 도구가 아니라 작업 지침을 추가합니다. [첨부 파일](/attachments)은 사용자가 선택한
+콘텐츠를 프롬프트에 넣고, [디렉터리 참조](/references)는 이름이 붙은 외부 디렉터리를 제공합니다. 이 기능들은 도구를
+보완할 뿐, 도구의 권한 검사를 우회하지 않습니다.

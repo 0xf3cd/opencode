@@ -1,0 +1,207 @@
+---
+title: "原則"
+description: "允許或拒絕 OpenCode 對具名資源執行的動作，並由組織原則擁有最終決定權。"
+---
+
+原則決定 OpenCode 是否可以對具名資源執行某項動作。原則寫在 `policies` 底下，也可以由已連線的 [OpenCode Console](/console) 工作區下發。
+
+原則與[權限](/permissions)是分開的。權限是各代理的工具規則，可以設為 `allow`、`deny` 或 `ask`。原則則只有允許和拒絕兩種結果，從不詢問，而且只會收緊權限和供應商原本允許的範圍。
+
+## 設定
+
+在 `opencode.jsonc` 中加入一條陳述式，即可在所有地方拒絕某個供應商：
+
+```jsonc
+{
+  "$schema": "https://opencode.ai/config.json",
+  "policies": [{ "action": "provider.use", "resource": "openai", "effect": "deny" }],
+}
+```
+
+被拒絕的供應商即使擁有有效的認證資訊，也會從清單和模型選擇中消失。
+
+較早的版本會從 `experimental.policies` 讀取原則。這個鍵仍然有效，並會合併到 `policies` 中：
+
+```jsonc
+{
+  "experimental": {
+    "policies": [{ "action": "provider.use", "resource": "openai", "effect": "deny" }],
+  },
+}
+```
+
+## 陳述式
+
+每條陳述式都有三個欄位：
+
+| 欄位 | 值 | 意義 |
+| --- | --- | --- |
+| `action` | `provider.use`、`tool.use`、`integration.use` | 要控制的操作 |
+| `resource` | 字串或萬用字元模式 | 陳述式套用的對象，視動作而定 |
+| `effect` | `allow`、`deny` | 陳述式符合時的決定 |
+
+驗證失敗的陳述式會被捨棄，並在伺服器日誌中留下警告，清單中的其餘陳述式仍會套用。編輯 `deny` 之後，請檢查日誌。
+
+## 比對規則
+
+資源使用與權限相同的整值萬用字元：`*` 符合零個或多個字元，`?` 符合一個字元。
+
+```jsonc
+{
+  "policies": [{ "action": "provider.use", "resource": "company-*", "effect": "deny" }],
+}
+```
+
+這會拒絕 `company-us` 和 `company-eu`。以 ` *` 結尾的模式也會符合不帶引數的值，因此 `shell:git push *` 也涵蓋單獨的 `git push`。
+
+## 順序
+
+有多條陳述式符合時，以最後一條為準。原則不考慮具體程度，因此請將範圍廣的陳述式放在前面，例外放在後面。如果沒有任何陳述式符合，該動作就會被允許。
+
+```jsonc
+{
+  "policies": [
+    { "action": "provider.use", "resource": "*", "effect": "deny" },
+    { "action": "provider.use", "resource": "anthropic", "effect": "allow" },
+  ],
+}
+```
+
+這樣就只有 Anthropic 可以使用。
+
+## 供應商
+
+`provider.use` 控制供應商是否可以使用。資源是供應商 ID：`anthropic`、`openai`、`opencode`，或在 [`providers`](/providers) 中定義的自訂 ID。
+
+```jsonc
+{
+  "providers": {
+    "company-ai": {
+      "package": "@opencode/ai/providers/openai-compatible",
+      "settings": { "baseURL": "https://ai.company.example/v1" },
+    },
+  },
+  "policies": [
+    { "action": "provider.use", "resource": "*", "effect": "deny" },
+    { "action": "provider.use", "resource": "company-ai", "effect": "allow" },
+  ],
+}
+```
+
+`providers` 項目設定端點，而這些陳述式則讓它成為 OpenCode 唯一會使用的供應商。不論 OpenCode 是從清單資料、環境變數、已儲存的帳號、內建外掛或設定得知該供應商，原則都同樣適用。
+
+請改用 `provider.use`，取代 V1 的 `enabled_providers` 和 `disabled_providers` 清單。V1 的設定檔仍可載入；請參閱[從 V1 遷移](/migrate-v1#supported-fields-without-direct-native-equivalents)。
+
+## 工具
+
+`tool.use` 陳述式會強制拒絕[權限](/permissions)檢查。資源的格式為 `<action>:<value>`，並會與工具檢查的每個資源進行比對。
+
+```jsonc
+{
+  "policies": [
+    { "action": "tool.use", "resource": "shell:git push *", "effect": "deny" },
+    { "action": "tool.use", "resource": "edit:*.env", "effect": "deny" },
+    { "action": "tool.use", "resource": "webfetch:*", "effect": "deny" },
+  ],
+}
+```
+
+被拒絕的檢查會以 `Blocked by configuration policy` 失敗，而不會詢問使用者。原則在代理規則和已儲存的核准之後套用，因此 `ask` 和 **Allow always** 核准都會被它覆寫。
+
+| 模式 | 封鎖對象 |
+| --- | --- |
+| `shell:*` | 所有 shell 指令 |
+| `read:*/.ssh/*` | 讀取 SSH 相關資料 |
+| `external_directory:*` | Location 或 worktree 以外的任何存取 |
+| `subagent:general` | 啟動某一個子代理 |
+| `github_delete_repository:*` | 某一個 MCP 工具 |
+| `*` | 所有尚未被拒絕的項目 |
+
+設為 `allow` 的 `tool.use` 陳述式永遠不會授予存取權。它只會解除先前範圍較廣的 `deny`，之後再由代理本身的規則決定。
+
+```jsonc
+{
+  "policies": [
+    { "action": "tool.use", "resource": "shell:*", "effect": "deny" },
+    { "action": "tool.use", "resource": "shell:git status *", "effect": "allow" },
+  ],
+}
+```
+
+`git status` 會改由代理的 `shell` 規則決定；其他所有指令都會被封鎖。
+
+## 整合
+
+`integration.use` 控制是否載入 MCP 伺服器、技能或外掛。資源由整合類型和其 ID 組成：
+
+| 資源 | 適用對象 |
+| --- | --- |
+| `mcp:<server>` | 以設定名稱指定的 [MCP 伺服器](/mcp-servers) |
+| `skill:<id>` | 以 ID 指定的[技能](/skills) |
+| `plugin:<target>` | 以不含版本的套件名稱或絕對路徑指定的[外掛](/plugins) |
+
+```jsonc
+{
+  "policies": [
+    { "action": "integration.use", "resource": "mcp:*", "effect": "deny" },
+    { "action": "integration.use", "resource": "mcp:github", "effect": "allow" },
+    { "action": "integration.use", "resource": "plugin:opencode-acme-cli", "effect": "deny" },
+  ],
+}
+```
+
+不論是如何設定的，被拒絕的 MCP 伺服器或技能都會被移除，被拒絕的外掛也不會載入。
+
+## 優先順序
+
+一般設定以最接近的設定檔為準。原則則相反：來自範圍較廣之設定的陳述式會較晚評估，因此會覆寫範圍較窄的設定。受管理的設定和已連線的 Console 永遠擁有最終決定權。
+
+| 權威順序 | 來源 |
+| --- | --- |
+| 1（最高） | 已連線的 OpenCode Console 工作區 |
+| 2 | macOS 受管理的偏好設定（`/Library/Managed Preferences/ai.opencode.managed.plist`） |
+| 3 | 系統層級的 `opencode.json(c)`（`/Library/Application Support/opencode`、`/etc/opencode`、`%ProgramData%\opencode`） |
+| 4 | 全域的 `~/.config/opencode/opencode.json(c)` |
+| 5 | 直接放置的 `opencode.json(c)`；外層目錄優先於內層目錄 |
+| 6（最低） | `.opencode/opencode.json(c)`；外層目錄優先於內層目錄 |
+
+儲存庫無法重新啟用你在全域層級拒絕的供應商：
+
+```jsonc title="~/.config/opencode/opencode.jsonc"
+{
+  "policies": [{ "action": "provider.use", "resource": "openai", "effect": "deny" }],
+}
+```
+
+```jsonc title="project/opencode.jsonc"
+{
+  "policies": [{ "action": "provider.use", "resource": "openai", "effect": "allow" }],
+}
+```
+
+`openai` 仍會被拒絕。在同一個檔案中，陳述式會維持書寫的順序。
+
+## Console
+
+[OpenCode Console](/console) 上的工作區會將其 Providers 和 Tools 原則編譯成陳述式，並隨工作區設定一起回傳。OpenCode 會將這些陳述式附加在所有自行撰寫的陳述式之後，因此它們擁有最終決定權：儲存庫或使用者的 `allow` 無法解除組織的 `deny`，而組織的 `allow` 則可以解除權威順序較低的 `deny`。
+
+由這些陳述式造成的拒絕，會標示出工作區名稱：
+
+```text
+Blocked by Acme's policy
+```
+
+陳述式會跟著已連線的帳號。
+
+| 事件 | 結果 |
+| --- | --- |
+| Console 原則變更 | 在下一次擷取時套用，大約每分鐘一次 |
+| 切換到另一個工作區 | 陳述式替換為該工作區的陳述式 |
+| 中斷連線 | 清除陳述式 |
+| 無法連線到 Console | 該連線最後取得的陳述式繼續生效 |
+
+Console 外掛和原則外掛無法從 `plugins` 停用；請參閱[外掛控制](/plugins#control)。
+
+<Callout type="note">
+  原則不會設定端點或認證資訊，也無法讓無法使用的供應商變成可用。原則也不會將外掛程式碼隔離在沙箱中：被拒絕的供應商是在一般的供應商與模型路徑上被封鎖。
+</Callout>

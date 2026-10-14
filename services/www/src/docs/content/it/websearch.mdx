@@ -1,0 +1,95 @@
+---
+title: "Ricerca web"
+---
+
+Quando chiedi a OpenCode informazioni aggiornate, può cercare sul web, leggere i risultati e includere nella risposta i link alle fonti.
+
+```text
+Find the latest Bun release and summarize the changes.
+```
+
+Alla prima ricerca ti viene chiesto di consentire la ricerca web e di scegliere un provider. OpenCode ricorda la tua scelta anche nelle sessioni successive.
+
+## Provider
+
+OpenCode include cinque provider di ricerca:
+
+| Provider | ID | Variabile d'ambiente |
+| --- | --- | --- |
+| Exa | `exa` | `EXA_API_KEY` |
+| Firecrawl | `firecrawl` | `FIRECRAWL_API_KEY` |
+| Parallel | `parallel` | `PARALLEL_API_KEY` |
+| Tavily | `tavily` | `TAVILY_API_KEY` |
+| TinyFish | `tinyfish` | `TINYFISH_API_KEY` (facoltativa) |
+
+Collega un account dalla TUI con `/connect` oppure imposta la variabile d'ambiente del provider prima di avviare OpenCode.
+
+```bash
+$ TAVILY_API_KEY=your-key opencode
+```
+
+## Selezione
+
+Imposta un provider in `opencode.jsonc` per saltare la richiesta di selezione.
+
+```jsonc title="opencode.jsonc"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "websearch": {
+    "provider": "tavily",
+  },
+}
+```
+
+Usa `"random"` per scegliere automaticamente un provider disponibile. Ogni sessione continua a usare il provider selezionato finché questo non raggiunge un limite di frequenza.
+
+```jsonc title="opencode.jsonc"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "websearch": {
+    "provider": "random",
+  },
+}
+```
+
+## Limiti
+
+Quando un provider restituisce HTTP 429, la selezione casuale ripete la ricerca con un altro provider disponibile. Il provider limitato resta in attesa per il periodo indicato da `Retry-After`, oppure per 60 secondi se la risposta non contiene un periodo valido.
+
+```text
+Exa returns HTTP 429
+→ Exa enters cooldown
+→ OpenCode retries with another provider
+```
+
+Se tutti i provider sono in attesa, la ricerca fallisce immediatamente. Spostare una sessione o riavviarne il server azzera il provider memorizzato; i periodi di attesa sono condivisi tra le sessioni dello stesso workspace.
+
+## Permessi
+
+Le ricerche web usano l'azione di permesso `websearch`, con la query di ricerca come risorsa. Questa regola richiede l'approvazione per le ricerche non consentite esplicitamente.
+
+```jsonc title="opencode.jsonc"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "permissions": [
+    {
+      "action": "websearch",
+      "resource": "*",
+      "effect": "ask",
+    },
+  ],
+}
+```
+
+Consulta [Permessi](/permissions) per l'ordine e la corrispondenza delle regole.
+
+## Disattivazione
+
+Imposta `websearch` su `false` per rimuovere lo strumento di ricerca web dalle richieste al modello.
+
+```jsonc title="opencode.jsonc"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "websearch": false,
+}
+```

@@ -1,0 +1,171 @@
+---
+title: "Огляд API"
+description: "Автентифікація в API OpenCode Console за допомогою ключів сервісних облікових записів або токенів користувачів."
+---
+
+API Console дає змогу інтеграціям зчитувати конфігурацію робочого простору та керувати бюджетами. Шляхи вказано
+відносно базової URL-адреси Console.
+
+```bash
+export CONSOLE_URL="https://opencode.ai/console"
+export SERVICE_API_KEY="oc_sk_..."
+
+curl --fail-with-body "${CONSOLE_URL}/api/v2/config" \
+  --header "Authorization: Bearer ${SERVICE_API_KEY}"
+```
+
+| API                                       | Ендпоінти                                  |
+| ----------------------------------------- | ------------------------------------------ |
+| [Інференс](/console/api/inference)        | `https://opencode.ai/inference/...`        |
+| [Провайдери](/console/api/providers)      | `https://opencode.ai/inference/custom/...` |
+| [Бюджети](/console/api/budgets)           | `/api/v1/budgets/members`                  |
+| [Конфігурація](#workspace-config)         | `GET /api/v2/config`                       |
+
+## Сервісні облікові записи
+
+Інтеграції автентифікуються через сервісний обліковий запис — учасника робочого простору, який не є людиною і має
+власні ключі API, використання та [бюджет](/console/budgets#service-account-budgets). Власники та адміністратори
+керують ними на сторінці **Keys**.
+
+1. Відкрийте **Keys** і натисніть **Add Service Account**, потім задайте назву, наприклад `CI Pipeline`.
+2. Відкрийте сервісний обліковий запис і натисніть **Add API Key**.
+3. Укажіть **Key name**, **Permissions** і за бажанням **Expiry date**, потім натисніть **Create key**.
+4. Скопіюйте ключ. Він показується лише один раз.
+
+```text
+oc_sk_1a2b3c4d5e6f_...
+```
+
+Надсилайте ключ як bearer-токен. Він прив'язаний до одного робочого простору, тому заголовок робочого простору
+не потрібен.
+
+```text
+Authorization: Bearer oc_sk_...
+```
+
+### Дозволи
+
+| Дозвіл         | Що дозволяє                                                                                                         |
+| -------------- | ------------------------------------------------------------------------------------------------------------------- |
+| Inference only | Запити до [Інференсу](/console/api/inference) і [Провайдерів](/console/api/providers), а також `GET /api/v2/config`. |
+| All            | Усе перелічене вище, а також API Console з правами адміністратора, крім керування моделями.                         |
+
+Деякі дії завжди потребують людини, яка ввійшла в Console, навіть із ключем **All**: запрошення учасників, зміна
+ролей, видалення учасників, а також створення й відкликання ключів.
+
+### Відкликання ключів
+
+Відкрийте сервісний обліковий запис і відкличте ключ у розділі **API Keys**. Видалення сервісного облікового запису
+відкликає всі його ключі. Автоматизації, що використовують відкликаний або прострочений ключ, відразу отримують
+HTTP `401`.
+
+## Токени користувачів
+
+Токени користувачів діють від імені людини, яка ввійшла, з її роллю в робочому просторі. Надсилайте токен разом
+із заголовком `x-org-id`, що вказує робочий простір.
+
+```bash
+curl --fail-with-body "${CONSOLE_URL}/api/v2/config" \
+  --header "Authorization: Bearer ${USER_TOKEN}" \
+  --header "x-org-id: org_..."
+```
+
+Токени, отримані через [device flow](#device-flow), прив'язані до робочого простору, вибраного під час входу, і
+не потребують цього заголовка. Інший `x-org-id` повертає `403`.
+
+## Device flow
+
+OpenCode входить за допомогою OAuth device authorization grant (RFC 8628). Інші CLI можуть використовувати той самий
+процес.
+
+1. Запросіть код пристрою. Надішліть `supports_org_scope=true`, щоб прив'язати токен до робочого простору.
+
+   ```bash
+   curl --fail-with-body "${CONSOLE_URL}/auth/device/code" \
+     --data "client_id=my-cli" \
+     --data "supports_org_scope=true"
+   ```
+
+   Відповідь містить `device_code`, `user_code`, `verification_uri_complete`, `expires_in` (600 секунд) і
+   `interval` (5 секунд).
+
+2. Відкрийте `verification_uri_complete` у браузері. Це шлях на кшталт `/console/device?user_code=...` відносно
+   `https://opencode.ai`. Людина входить, вибирає робочий простір і підтверджує доступ.
+
+3. Опитуйте сервер для отримання токена кожні `interval` секунд з тим самим `client_id`.
+
+   ```bash
+   curl --fail-with-body "${CONSOLE_URL}/auth/device/token" \
+     --data "grant_type=urn:ietf:params:oauth:grant-type:device_code" \
+     --data "device_code=..." \
+     --data "client_id=my-cli"
+   ```
+
+   До підтвердження відповідь має статус `400` з `authorization_pending`. У разі успіху повертаються `access_token`,
+   `refresh_token`, `expires_in` і `org_id`.
+
+4. Оновіть токен до завершення терміну дії токена доступу. Прив'язка до робочого простору зберігається.
+
+   ```bash
+   curl --fail-with-body "${CONSOLE_URL}/auth/device/token" \
+     --data "grant_type=refresh_token" \
+     --data "refresh_token=..." \
+     --data "client_id=my-cli"
+   ```
+
+Кожен токен оновлення можна використати лише один раз. Повторне використання старого токена оновлення відкликає всю
+сесію.
+
+## Конфігурація робочого простору
+
+`GET /api/v2/config` повертає провайдерів і моделі, доступні робочому простору, у форматі [конфігурації](/config)
+OpenCode V2. OpenCode завантажує її після `/connect`.
+
+```bash
+curl --fail-with-body "${CONSOLE_URL}/api/v2/config" \
+  --header "Authorization: Bearer ${SERVICE_API_KEY}"
+```
+
+```json
+{
+  "providers": {
+    "opencode": {
+      "name": "OpenCode",
+      "env": ["OPENCODE_CONSOLE_TOKEN"],
+      "package": "aisdk:@ai-sdk/openai-compatible",
+      "settings": {
+        "baseURL": "https://opencode.ai/inference/openai/v1",
+        "apiKey": "{env:OPENCODE_CONSOLE_TOKEN}"
+      },
+      "headers": { "x-opencode-org-id": "org_..." },
+      "models": {
+        "kimi-k2.6": { "name": "Kimi K2.6" }
+      }
+    }
+  }
+}
+```
+
+| Поле                    | Опис                                                                                      |
+| ----------------------- | ----------------------------------------------------------------------------------------- |
+| `providers`             | Console, Go і підключені провайдери, кожен зі своїми налаштуваннями шлюзу та моделями.   |
+| `websearch`             | Хостований [вебпошук](/console/websearch) для учасників, якщо його ввімкнено.            |
+| `mcp`                   | Сервер MCP Console для учасників.                                                         |
+| `experimental.policies` | Інструкції [політики](/policies#console) робочого простору.                               |
+
+Конфігурацію може зчитувати ключ із будь-яким рівнем дозволів і учасник із будь-якою роллю.
+
+## Помилки
+
+Помилки повертають JSON з полем `_tag`, що містить назву помилки.
+
+```json
+{ "_tag": "Forbidden" }
+```
+
+| Статус | Значення                                                                                              |
+| ------ | ----------------------------------------------------------------------------------------------------- |
+| `400`  | `OrgRequired`: токен користувача надіслано без `x-org-id`.                                            |
+| `401`  | Облікові дані відсутні, недійсні, прострочені або відкликані.                                         |
+| `403`  | Не той робочий простір, бракує дозволу або ключ **Inference only** використано для ендпоінта Console. |
+| `404`  | Робочий простір не існує або його видалено.                                                           |

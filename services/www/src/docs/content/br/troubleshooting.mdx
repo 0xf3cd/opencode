@@ -1,0 +1,194 @@
+---
+title: "Solução de problemas"
+---
+
+<Callout type="tip">
+  Você pode pedir ao OpenCode que depure a si mesmo. Descreva o problema e peça que ele use esta página de solução de
+  problemas; ele consegue ler os passos abaixo, inspecionar o serviço e os logs e ajudar a identificar a causa.
+</Callout>
+
+O OpenCode usa uma arquitetura cliente-servidor. Um servidor em segundo plano é dono das sessões, dos plugins, das
+permissões e do restante do estado da aplicação. Comece descobrindo se o problema está em um cliente, no servidor
+compartilhado ou em um projeto específico.
+
+## Verifique o serviço em segundo plano
+
+Mostre as informações do servidor atual:
+
+```bash
+opencode service status
+```
+
+Verifique se a API está saudável:
+
+```bash
+opencode api get /api/info
+```
+
+Se o serviço estiver travado ou com problemas, reinicie-o:
+
+```bash
+opencode service restart
+```
+
+Você também pode pará-lo e iniciá-lo explicitamente:
+
+```bash
+opencode service stop
+opencode service start
+```
+
+<Callout type="note">
+  Normalmente, o OpenCode descobre ou inicia o serviço compartilhado em segundo plano automaticamente. Os comandos de
+  serviço só são necessários para diagnosticar o ciclo de vida dele.
+</Callout>
+
+## Permita uma origem de navegador
+
+Se um cliente de navegador em outra origem não consegue se conectar por causa de CORS, adicione a origem do cliente à
+configuração do serviço:
+
+```bash
+opencode service set cors http://192.168.1.10:3001
+opencode service get cors
+```
+
+Use uma origem HTTP ou HTTPS exata, incluindo a porta quando necessário, sem caminho nem barra final. Para permitir
+várias origens, passe uma lista separada por vírgulas como um único argumento; os espaços em volta de cada origem são
+removidos:
+
+```bash
+opencode service set cors "http://192.168.1.10:3001, https://app.example.com"
+```
+
+`service get cors` imprime um array JSON. Para remover a lista configurada, use:
+
+```bash
+opencode service unset cors
+```
+
+Definir ou remover uma configuração do serviço interrompe o serviço em segundo plano. A próxima inicialização carrega a
+nova configuração; use `opencode service start` para iniciá-lo explicitamente.
+
+Em um servidor em primeiro plano, repita `--cors` para cada origem adicional permitida:
+
+```bash
+opencode serve --cors http://192.168.1.10:3001 --cors https://app.example.com
+```
+
+Com `serve --service`, as flags `--cors` informadas sobrescrevem a lista persistida para aquele processo. Sem essas
+flags, o modo de serviço usa a lista persistida. O CORS não muda o endereço de escuta nem ignora a autenticação do
+servidor.
+
+## Inspecione a API
+
+O comando `api` usa o mesmo fluxo local de descoberta e autenticação do serviço. Ele aceita um método HTTP e um caminho
+ou um ID de operação OpenAPI.
+
+Consulte a [referência da API](/api) para ver todos os endpoints e IDs de operação.
+
+Passe um corpo de requisição JSON com `--data` ou `-d` e adicione headers com `--header` ou `-H`.
+
+<Callout type="warning">
+  Executar `opencode api` pode iniciar o serviço em segundo plano quando não há um serviço compatível e saudável
+  disponível.
+</Callout>
+
+## Leia os logs
+
+As versões instaladas gravam os logs em:
+
+```text
+~/.local/share/opencode/log/opencode.log
+```
+
+Acompanhe o log enquanto reproduz o problema:
+
+```bash
+tail -f ~/.local/share/opencode/log/opencode.log
+```
+
+Cada linha inclui o ID `run` do processo e um campo `role`. Use `role=server` para ver a atividade de sessões,
+provedores, plugins, permissões e ferramentas.
+
+```bash
+grep 'role=server' ~/.local/share/opencode/log/opencode.log
+grep 'run=8fc3b1d5' ~/.local/share/opencode/log/opencode.log
+```
+
+## Capture perfis de CPU e memória
+
+No macOS e no Linux, você pode enviar um sinal a um processo do OpenCode em execução para capturar dados de
+diagnóstico. Obtenha o PID do servidor em segundo plano pelo endpoint de health check:
+
+```bash
+opencode api get /api/info
+```
+
+Use o `pid` da resposta com um destes sinais:
+
+- `SIGPROF` captura um perfil de CPU de dez segundos:
+
+  ```bash
+  kill -SIGPROF <pid>
+  ```
+
+  O resultado é gravado no diretório de logs como `cpu-<pid>-<timestamp>.cpuprofile`.
+
+- `SIGUSR1` captura um snapshot de memória (heap):
+
+  ```bash
+  kill -SIGUSR1 <pid>
+  ```
+
+  O resultado é gravado no diretório de logs como `heap-<pid>-<timestamp>.heapsnapshot`.
+
+Espere aparecer `CPU profile written` ou `heap snapshot written` no `opencode.log` antes de abrir o arquivo. A entrada de
+log correspondente inclui o caminho completo. Você pode inspecionar os dois tipos de arquivo no Chrome DevTools.
+
+<Callout type="note">
+  Perfis disparados por sinal não estão disponíveis no Windows. Gravar um snapshot de heap pode pausar o processo e
+  aumentar temporariamente o uso de memória.
+</Callout>
+
+## Arquivos do serviço
+
+O servidor compartilhado se registra em:
+
+```text
+~/.local/state/opencode/service.json
+```
+
+A configuração privada do serviço fica armazenada separadamente em:
+
+```text
+~/.config/opencode/service.json
+```
+
+Normalmente, o banco de dados fica em:
+
+```text
+~/.local/share/opencode/opencode.db
+```
+
+`OPENCODE_DB` pode sobrescrever o local do banco de dados.
+
+<Callout type="warning">
+  Não exclua nem edite os arquivos do serviço ou o banco de dados durante a solução de problemas. Use os comandos de
+  serviço para gerenciar o daemon e faça um backup antes de inspecionar os dados persistidos com ferramentas externas.
+</Callout>
+
+## Relate um problema
+
+Ao relatar um problema reproduzível, inclua:
+
+- A saída de `opencode --version`
+- A saída de `opencode service status`
+- A menor sequência de passos que reproduz o problema
+- Se o problema afeta o serviço compartilhado, um cliente específico ou um único projeto
+- As linhas de log relevantes, incluindo os campos `run` e `role`
+
+Remova chaves de API, headers de autorização, prompts, conteúdo de arquivos e outros dados sensíveis antes de
+compartilhar logs.
+
+Registre problemas reproduzíveis no [GitHub Issues](https://github.com/anomalyco/opencode/issues).

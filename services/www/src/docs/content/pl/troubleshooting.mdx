@@ -1,0 +1,192 @@
+---
+title: "Rozwiązywanie problemów"
+---
+
+<Callout type="tip">
+  Możesz poprosić OpenCode, aby sam się zdiagnozował. Opisz problem i poproś, aby skorzystał z tej strony – może przeczytać
+  poniższe kroki, sprawdzić swoją usługę i logi oraz pomóc ustalić przyczynę.
+</Callout>
+
+OpenCode działa w architekturze klient-serwer. Serwer działający w tle zarządza sesjami, wtyczkami, uprawnieniami i
+pozostałym stanem aplikacji. Zacznij od ustalenia, czy problem dotyczy klienta, współdzielonego serwera, czy konkretnego
+projektu.
+
+## Sprawdzanie usługi w tle
+
+Wyświetl informacje o bieżącym serwerze:
+
+```bash
+opencode service status
+```
+
+Sprawdź, czy jego API działa poprawnie:
+
+```bash
+opencode api get /api/info
+```
+
+Jeśli usługa się zawiesiła lub nie działa poprawnie, uruchom ją ponownie:
+
+```bash
+opencode service restart
+```
+
+Możesz też jawnie ją zatrzymać i uruchomić:
+
+```bash
+opencode service stop
+opencode service start
+```
+
+<Callout type="note">
+  OpenCode zwykle sam odnajduje lub uruchamia współdzieloną usługę w tle. Polecenia `service` są potrzebne tylko przy
+  diagnozowaniu jej cyklu życia.
+</Callout>
+
+## Zezwalanie na pochodzenie przeglądarki
+
+Jeśli klient przeglądarkowy działający pod innym pochodzeniem (origin) nie może się połączyć z powodu CORS, dodaj
+pochodzenie klienta do konfiguracji usługi:
+
+```bash
+opencode service set cors http://192.168.1.10:3001
+opencode service get cors
+```
+
+Podaj dokładne pochodzenie HTTP lub HTTPS – w razie potrzeby z portem – bez ścieżki i bez końcowego ukośnika. Aby
+zezwolić na wiele pochodzeń, przekaż listę rozdzieloną przecinkami jako jeden argument; białe znaki wokół każdego
+pochodzenia są usuwane:
+
+```bash
+opencode service set cors "http://192.168.1.10:3001, https://app.example.com"
+```
+
+`service get cors` wypisuje tablicę JSON. Skonfigurowaną listę usuniesz poleceniem:
+
+```bash
+opencode service unset cors
+```
+
+Ustawienie lub usunięcie konfiguracji usługi zatrzymuje usługę w tle. Przy następnym uruchomieniu wczyta ona nową
+konfigurację; aby uruchomić ją jawnie, użyj `opencode service start`.
+
+W przypadku serwera działającego na pierwszym planie powtórz `--cors` dla każdego dodatkowego dozwolonego pochodzenia:
+
+```bash
+opencode serve --cors http://192.168.1.10:3001 --cors https://app.example.com
+```
+
+W przypadku `serve --service` podane flagi `--cors` nadpisują zapisaną listę dla tego procesu. Bez tych flag tryb usługi
+korzysta z zapisanej listy. CORS nie zmienia adresu nasłuchiwania ani nie omija uwierzytelniania serwera.
+
+## Sprawdzanie API
+
+Polecenie `api` korzysta z lokalnego mechanizmu wykrywania usługi i uwierzytelniania. Przyjmuje metodę HTTP i ścieżkę albo
+ID operacji OpenAPI.
+
+Wszystkie endpointy i ID operacji opisano w [dokumentacji API](/api).
+
+Treść żądania w formacie JSON przekaż za pomocą `--data` lub `-d`, a nagłówki dodaj za pomocą `--header` lub `-H`.
+
+<Callout type="warning">
+  Uruchomienie `opencode api` może uruchomić usługę w tle, jeśli nie jest dostępna żadna zgodna, poprawnie działająca
+  usługa.
+</Callout>
+
+## Czytanie logów
+
+Zainstalowane wersje zapisują logi w pliku:
+
+```text
+~/.local/share/opencode/log/opencode.log
+```
+
+Śledź log podczas odtwarzania problemu:
+
+```bash
+tail -f ~/.local/share/opencode/log/opencode.log
+```
+
+Każdy wiersz zawiera ID procesu `run` i pole `role`. Aktywność sesji, dostawców, wtyczek, uprawnień i narzędzi znajdziesz,
+filtrując po `role=server`.
+
+```bash
+grep 'role=server' ~/.local/share/opencode/log/opencode.log
+grep 'run=8fc3b1d5' ~/.local/share/opencode/log/opencode.log
+```
+
+## Profile CPU i pamięci
+
+W macOS i Linuksie możesz wysłać sygnał do działającego procesu OpenCode, aby zebrać dane diagnostyczne. PID serwera
+działającego w tle pobierzesz z endpointu stanu:
+
+```bash
+opencode api get /api/info
+```
+
+Użyj wartości `pid` z odpowiedzi z jednym z tych sygnałów:
+
+- `SIGPROF` zbiera dziesięciosekundowy profil CPU:
+
+  ```bash
+  kill -SIGPROF <pid>
+  ```
+
+  Wynik jest zapisywany w katalogu logów jako `cpu-<pid>-<timestamp>.cpuprofile`.
+
+- `SIGUSR1` zapisuje migawkę pamięci (sterty):
+
+  ```bash
+  kill -SIGUSR1 <pid>
+  ```
+
+  Wynik jest zapisywany w katalogu logów jako `heap-<pid>-<timestamp>.heapsnapshot`.
+
+Zanim otworzysz plik, poczekaj, aż w `opencode.log` pojawi się `CPU profile written` lub `heap snapshot written`.
+Odpowiedni wpis w logu zawiera pełną ścieżkę pliku. Oba typy plików możesz przeglądać w Chrome DevTools.
+
+<Callout type="note">
+  Profile wywoływane sygnałami nie są dostępne w Windows. Zapisywanie migawki sterty może wstrzymać proces i chwilowo
+  zwiększyć zużycie pamięci.
+</Callout>
+
+## Pliki usługi
+
+Współdzielony serwer rejestruje się w pliku:
+
+```text
+~/.local/state/opencode/service.json
+```
+
+Jego prywatna konfiguracja usługi jest przechowywana osobno w pliku:
+
+```text
+~/.config/opencode/service.json
+```
+
+Baza danych zwykle znajduje się w:
+
+```text
+~/.local/share/opencode/opencode.db
+```
+
+Lokalizację bazy danych można zmienić za pomocą `OPENCODE_DB`.
+
+<Callout type="warning">
+  Podczas rozwiązywania problemów nie usuwaj ani nie edytuj plików usługi ani bazy danych. Do zarządzania demonem używaj
+  poleceń `service`, a przed analizą trwałych danych zewnętrznymi narzędziami zrób kopię zapasową.
+</Callout>
+
+## Zgłaszanie problemu
+
+Zgłaszając powtarzalny problem, dołącz:
+
+- wynik `opencode --version`,
+- wynik `opencode service status`,
+- najkrótszą sekwencję kroków, która odtwarza problem,
+- informację, czy problem dotyczy współdzielonej usługi, konkretnego klienta, czy jednego projektu,
+- odpowiednie wiersze logów wraz z polami `run` i `role`.
+
+Przed udostępnieniem logów usuń z nich klucze API, nagłówki autoryzacji, prompty, zawartość plików i inne wrażliwe dane.
+
+Powtarzalne problemy zgłaszaj w [GitHub Issues](https://github.com/anomalyco/opencode/issues).

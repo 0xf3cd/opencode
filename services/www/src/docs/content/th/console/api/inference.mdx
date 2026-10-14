@@ -1,0 +1,95 @@
+---
+title: "Inference API"
+description: "เรียกใช้โมเดลที่เข้ากันได้กับ OpenAI, Anthropic และ Gemini ผ่าน inference ของ Console ด้วย header ยืนยันตัวตนเพียงตัวเดียว"
+---
+
+Inference ของ Console ให้บริการ API ที่เข้ากันได้กับ OpenAI, Anthropic และ Gemini จาก `https://opencode.ai/inference` ส่งคำขอ JSON แบบ `POST` ไปยัง endpoint ที่ตรงกับตระกูล API ของโมเดล
+
+```bash
+curl -X POST "https://opencode.ai/inference/openai/v1/chat/completions" \
+  -H "Authorization: Bearer <token>" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "model": "kimi-k2.6",
+    "messages": [{ "role": "user", "content": "Say hi" }]
+  }'
+```
+
+## การยืนยันตัวตน
+
+แทนที่ `<token>` ด้วย[คีย์ของบัญชีบริการ](/console/api#service-accounts)ที่สร้างใน [Console](https://opencode.ai/console) โมเดลแบบชำระเงินต้องใช้ header นี้ ส่วนโมเดลแชตฟรีเรียกใช้ได้โดยไม่ต้องมี header
+
+```text
+Authorization: Bearer <token>
+```
+
+## Endpoint
+
+| API                     | พาธ                                                       |
+| ----------------------- | --------------------------------------------------------- |
+| OpenAI Chat Completions | `/inference/openai/v1/chat/completions`                   |
+| OpenAI Responses        | `/inference/openai/v1/responses`                          |
+| Anthropic Messages      | `/inference/anthropic/v1/messages`                        |
+| Gemini                  | `/inference/google/v1beta/models/<model>:generateContent` |
+
+แต่ละโมเดลให้บริการผ่านตระกูล API เดียว ดูตาราง[endpoint ของโมเดล](/console/models#endpoints) หรือดึงรายการล่าสุด:
+
+```bash
+curl https://opencode.ai/inference/v1/models
+```
+
+### OpenAI Chat Completions
+
+โมเดลแบบเปิด เช่น `kimi-k2.6`, `glm-5.1`, `minimax-m2.7` และโมเดลฟรี ใช้ Chat Completions API
+
+```bash
+curl -X POST "https://opencode.ai/inference/openai/v1/chat/completions" \
+  -H "Authorization: Bearer <token>" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "model": "glm-5.1",
+    "messages": [{ "role": "user", "content": "Say hi" }]
+  }'
+```
+
+### OpenAI Responses
+
+โมเดล GPT ใช้ Responses API
+
+```bash
+curl -X POST "https://opencode.ai/inference/openai/v1/responses" \
+  -H "Authorization: Bearer <token>" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "model": "gpt-5.5",
+    "input": "Say hi"
+  }'
+```
+
+### Anthropic Messages
+
+โมเดล Claude และ Qwen ใช้ Messages API และต้องระบุ `max_tokens`
+
+```bash
+curl -X POST "https://opencode.ai/inference/anthropic/v1/messages" \
+  -H "Authorization: Bearer <token>" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "model": "claude-sonnet-4-6",
+    "max_tokens": 1024,
+    "messages": [{ "role": "user", "content": "Say hi" }]
+  }'
+```
+
+### Gemini
+
+โมเดล Gemini ระบุโมเดลและเมธอดไว้ในพาธ แทนที่ `:generateContent` ด้วย `:streamGenerateContent` เพื่อสตรีมการตอบกลับ
+
+```bash
+curl -X POST "https://opencode.ai/inference/google/v1beta/models/gemini-3.1-pro:generateContent" \
+  -H "Authorization: Bearer <token>" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "contents": [{ "parts": [{ "text": "Say hi" }] }]
+  }'
+```

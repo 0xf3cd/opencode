@@ -1,0 +1,103 @@
+---
+title: "API des budgets"
+description: "Lisez les budgets mensuels effectifs de chaque membre de l'espace de travail et gérez le budget personnalisé de chacun."
+---
+
+Lisez les budgets mensuels effectifs de chaque membre de l'espace de travail et gérez le budget personnalisé de chacun
+depuis une intégration.
+
+## Démarrage rapide
+
+Créez une clé API de [compte de service](/console/api#service-accounts) avec les permissions **All** dans la
+[Console](https://opencode.ai/console). Les clés limitées à l'inférence ne peuvent ni accéder aux données de budget ni
+modifier les limites.
+
+```bash
+export CONSOLE_URL="https://opencode.ai/console"
+export SERVICE_API_KEY="oc_sk_..."
+```
+
+Listez les budgets des membres :
+
+```bash
+curl --fail-with-body \
+  "${CONSOLE_URL}/api/v1/budgets/members" \
+  --header "Authorization: Bearer ${SERVICE_API_KEY}" \
+  --header "Accept: application/json"
+```
+
+## Lister les budgets des membres
+
+```text
+GET /api/v1/budgets/members
+```
+
+La réponse contient tous les membres actuels, triés par adresse e-mail. Une limite de source `custom` est un
+remplacement propre au membre ; une source `default` est héritée de la valeur par défaut de l'espace de travail. Une
+limite et une source nulles signifient que le membre n'a pas de limite.
+
+```json
+[
+  {
+    "user_id": "user_...",
+    "email": "alice@example.com",
+    "limit_micro_cents": "7525000000",
+    "spent_micro_cents": "1250000000",
+    "exceeded": false,
+    "resets_at": "2026-10-01T00:00:00.000Z",
+    "source": "custom",
+    "updated_at": "2026-09-03T12:00:00.000Z"
+  }
+]
+```
+
+Les champs monétaires de la réponse sont des chaînes décimales exprimées en microcents, afin que les intégrations ne
+perdent pas de précision. Un dollar américain vaut 100 000 000 microcents. Les dépenses et les horodatages de
+réinitialisation couvrent le mois calendaire UTC en cours. `updated_at` est null en l'absence de remplacement
+personnalisé pour le membre.
+
+## Définir un budget personnalisé
+
+```text
+PUT /api/v1/budgets/members/:user_id
+```
+
+Définissez un budget mensuel de 75,25 $ pour un membre :
+
+```bash
+curl --fail-with-body --request PUT \
+  "${CONSOLE_URL}/api/v1/budgets/members/user_..." \
+  --header "Authorization: Bearer ${SERVICE_API_KEY}" \
+  --header "Content-Type: application/json" \
+  --data '{"budget_dollars":75.25}'
+```
+
+`budget_dollars` accepte un montant positif ou nul en dollars américains, avec au plus deux décimales. Le PUT est
+idempotent et renvoie HTTP 204. Utilisez l'ID de membre renvoyé par l'opération de liste.
+
+## Revenir à la valeur par défaut de l'espace de travail
+
+```text
+DELETE /api/v1/budgets/members/:user_id
+```
+
+Supprimez le remplacement personnalisé :
+
+```bash
+curl --fail-with-body --request DELETE \
+  "${CONSOLE_URL}/api/v1/budgets/members/user_..." \
+  --header "Authorization: Bearer ${SERVICE_API_KEY}"
+```
+
+Supprimer un remplacement ne supprime pas le membre. Celui-ci hérite ensuite du budget par défaut de l'espace de
+travail, ou n'a plus de limite si l'espace de travail n'a pas de valeur par défaut. Répéter la requête est sans risque
+et renvoie HTTP 204.
+
+## Erreurs
+
+| Statut | Signification                                                     |
+| ------ | ----------------------------------------------------------------- |
+| `400`  | ID de membre ou montant de budget invalide.                       |
+| `401`  | Clé API de service absente, invalide, expirée ou révoquée.        |
+| `403`  | La clé API n'a pas la permission de gérer les budgets.            |
+| `404`  | Le membre n'appartient pas à l'espace de travail lié à la clé API. |

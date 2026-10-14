@@ -1,0 +1,584 @@
+---
+title: "Komutlar"
+description: "opencode komut satırı referansı."
+---
+
+Her komut, tam bayrak listesi için `--help` bayrağını kabul eder; örneğin `opencode run --help`. Sunucuya dayanan bazı komutlar, özel bir sunucu çalıştırmak için `--standalone` veya belirli bir sunucuyu hedeflemek için `--server <url>` bayrağını kabul eder. Desteklenen bayraklar için komutun yardım çıktısına bakın.
+
+## run
+
+Etkileşimli arayüzü açmadan bir mesaj gönderir ve yanıtı yazdırır.
+
+```bash
+$ opencode run "Explain this repository"
+```
+
+### CI
+
+CI'da bir sağlayıcı API anahtarını gizli değişken (secret) olarak verin ve özel sunucunun bu anahtarı alması için bağımsız
+modu kullanın. Örneğin bu GitHub Actions işi, checkout yapılan depoyu inceler:
+
+```yaml
+name: OpenCode review
+on: [pull_request]
+
+jobs:
+  review:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - run: npm install --global @opencode/cli
+      - run: opencode run --standalone --model anthropic/claude-sonnet-4-5 "Review this repository for correctness and summarize any issues."
+        env:
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+```
+
+Bir model seçin.
+
+```bash
+$ opencode run --model anthropic/claude-sonnet-4-5 "Refactor parseToken"
+```
+
+Son oturuma devam edin.
+
+```bash
+$ opencode run --continue "Now handle the expired case"
+```
+
+Betikler için satır sonuyla ayrılmış JSON çıktısı üretin.
+
+```bash
+$ opencode run --format json "List the TODO comments"
+```
+
+Mesaja dosya ekleyin.
+
+```bash
+$ opencode run --file src/server.ts --file src/client.ts "Review these for bugs"
+```
+
+Belirli bir ajanla çalıştırın.
+
+```bash
+$ opencode run --agent build "Fix the failing test"
+```
+
+Tüm alt komutları ve bayrakları görüntüleyin.
+
+```bash
+$ opencode run --help
+```
+
+## mini
+
+Tam ekran TUI yerine sade etkileşimli arayüzü başlatır.
+
+```bash
+$ opencode mini
+```
+
+Son oturuma devam edin.
+
+```bash
+$ opencode mini --continue
+```
+
+Bir model ve ilk istemle başlatın.
+
+```bash
+$ opencode mini --model anthropic/claude-sonnet-4-5 --prompt "Summarize this repository"
+```
+
+Tüm alt komutları ve bayrakları görüntüleyin.
+
+```bash
+$ opencode mini --help
+```
+
+## session
+
+Oturumları yönetir.
+
+```bash
+$ opencode session list
+```
+
+Listeyi sınırlayın ve JSON olarak yazdırın.
+
+```bash
+$ opencode session list --max-count 20 --format json
+```
+
+Bir oturumu ve alt oturumlarını silin.
+
+```bash
+$ opencode session delete ses_9c1b08
+```
+
+Oturum verilerini JSON olarak dışa aktarın.
+
+```bash
+$ opencode session export ses_4f2a1c
+```
+
+Dışa aktarırken hassas döküm ve dosya verilerini gizleyin.
+
+```bash
+$ opencode session export ses_4f2a1c --sanitize
+```
+
+Oturum verilerini bir JSON dosyasından veya URL'den içe aktarın.
+
+```bash
+$ opencode session import session.json
+```
+
+Belirli bir dizine içe aktarın.
+
+```bash
+$ opencode session import session.json --directory ~/code/project
+```
+
+Tüm alt komutları ve bayrakları görüntüleyin.
+
+```bash
+$ opencode session --help
+```
+
+## auth
+
+AI sağlayıcılarını ve kimlik bilgilerini yönetir.
+
+```bash
+$ opencode auth list
+```
+
+JSON olarak listeleyin.
+
+```bash
+$ opencode auth list --format json
+```
+
+Bir sağlayıcıda oturum açın.
+
+```bash
+$ opencode auth login anthropic
+```
+
+Belirli bir kimlik doğrulama yöntemiyle oturum açın.
+
+```bash
+$ opencode auth login anthropic --method key
+```
+
+Kayıtlı bir hesaptan çıkış yapın.
+
+```bash
+$ opencode auth logout anthropic work
+```
+
+Bir entegrasyonun etkin hesabını değiştirin.
+
+```bash
+$ opencode auth switch anthropic work
+```
+
+Tüm alt komutları ve bayrakları görüntüleyin.
+
+```bash
+$ opencode auth --help
+```
+
+## models
+
+Kullanılabilir tüm modelleri listeler.
+
+```bash
+$ opencode models
+```
+
+Tüm alt komutları ve bayrakları görüntüleyin.
+
+```bash
+$ opencode models --help
+```
+
+## mcp
+
+MCP (Model Context Protocol) sunucularını yönetir.
+
+```bash
+$ opencode mcp list
+```
+
+Uzak bir sunucu ekleyin.
+
+```bash
+$ opencode mcp add context7 --url https://mcp.context7.com/mcp
+```
+
+Genel yapılandırmaya yerel bir sunucu ekleyin.
+
+```bash
+$ opencode mcp add everything --global -- npx -y @modelcontextprotocol/server-everything
+```
+
+Ortam değişkeniyle yerel bir sunucu ekleyin.
+
+```bash
+$ opencode mcp add everything --env LOG_LEVEL=debug -- npx -y @modelcontextprotocol/server-everything
+```
+
+Başlık (header) ile uzak bir sunucu ekleyin.
+
+```bash
+$ opencode mcp add context7 --url https://mcp.context7.com/mcp --header CONTEXT7_API_KEY=secret
+```
+
+OAuth destekleyen uzak bir sunucuda kimlik doğrulayın.
+
+```bash
+$ opencode mcp auth sentry
+```
+
+Bir sunucu için saklanan OAuth kimlik bilgilerini kaldırın.
+
+```bash
+$ opencode mcp logout sentry
+```
+
+Tüm alt komutları ve bayrakları görüntüleyin.
+
+```bash
+$ opencode mcp --help
+```
+
+## plugin
+
+Eklentileri yönetir.
+
+```bash
+$ opencode plugin list
+```
+
+Yerleşik sunucu eklentilerini de dahil edin.
+
+```bash
+$ opencode plugin list --builtin
+```
+
+Bir eklenti kurun ve genel yapılandırmaya ekleyin.
+
+```bash
+$ opencode plugin add @example/opencode-tui
+```
+
+Paket eklentilerinin güncellemelerini denetleyin.
+
+```bash
+$ opencode plugin check
+```
+
+Paket eklentilerini güncelleyin.
+
+```bash
+$ opencode plugin update
+```
+
+Bir eklentiyi genel yapılandırmadan kaldırın.
+
+```bash
+$ opencode plugin remove @example/opencode-tui
+```
+
+Tüm alt komutları ve bayrakları görüntüleyin.
+
+```bash
+$ opencode plugin --help
+```
+
+## stats
+
+Paylaşılabilir kullanım istatistiklerini gösterir.
+
+```bash
+$ opencode stats
+```
+
+Son 7 günü gösterin.
+
+```bash
+$ opencode stats --days 7
+```
+
+Model kullanımını gösterin.
+
+```bash
+$ opencode stats --models
+```
+
+Maliyet ve token ayrıntılarını gösterin.
+
+```bash
+$ opencode stats --cost
+```
+
+Rapor yerine JSON yazdırın.
+
+```bash
+$ opencode stats --json
+```
+
+Tüm alt komutları ve bayrakları görüntüleyin.
+
+```bash
+$ opencode stats --help
+```
+
+## serve
+
+API ve web sunucusunu başlatır. [Web](/cli/web) sayfasına bakın.
+
+```bash
+$ opencode serve
+```
+
+Sabit bir portta tüm arayüzlere bağlanın.
+
+```bash
+$ opencode serve --hostname 0.0.0.0 --port 4096
+```
+
+Başka bir kaynaktan (origin) gelen tarayıcı istemcisine izin verin.
+
+```bash
+$ opencode serve --cors https://app.example.com
+```
+
+Tüm alt komutları ve bayrakları görüntüleyin.
+
+```bash
+$ opencode serve --help
+```
+
+## pair
+
+Bir tarayıcıda veya uygulamada sunucuya oturum açan tek kullanımlık bağlantıları ve ilk bağlantının QR kodunu yazdırır.
+Bağlantıların süresi 5 dakika sonra dolar ve yalnızca bir kez çalışır.
+
+```bash
+$ opencode pair
+```
+
+Bağlantılarda harici bir URL kullanın.
+
+```bash
+$ opencode pair --url https://dev.example.com
+```
+
+Bir OpenTunnel uzak adresi üzerinden her yerden eşleştirin. Bu, sunucuyu internete açar; bu nedenle uzaktan erişimi ilk
+kez etkinleştirirken bunu açıklar ve onaylamanızı ister. [Uzaktan erişim](/cli/web#remote-access) bölümüne bakın.
+
+```bash
+$ opencode pair --remote
+```
+
+Onay istemi olmadan kabul edin; örneğin terminali olmayan bir betikte.
+
+```bash
+$ opencode pair --remote --yes
+```
+
+Tüm alt komutları ve bayrakları görüntüleyin.
+
+```bash
+$ opencode pair --help
+```
+
+## service
+
+Arka plan sunucusunu yönetir. [Web](/cli/web) sayfasına bakın.
+
+```bash
+$ opencode service start
+```
+
+Yeniden başlatın.
+
+```bash
+$ opencode service restart
+```
+
+Durumunu gösterin.
+
+```bash
+$ opencode service status
+```
+
+Durdurun.
+
+```bash
+$ opencode service stop
+```
+
+Bir ayarı okuyun.
+
+```bash
+$ opencode service get hostname
+```
+
+Bir ayarı belirleyin.
+
+```bash
+$ opencode service set hostname 0.0.0.0
+```
+
+Ek bir CORS kaynağına izin verin.
+
+```bash
+$ opencode service set cors https://app.example.com
+```
+
+Sunucu sürecine bir ortam değişkeni iletin.
+
+```bash
+$ opencode service set env OPENCODE_LOG_LEVEL DEBUG
+```
+
+Bir ayarı varsayılan değerine sıfırlayın.
+
+```bash
+$ opencode service unset hostname
+```
+
+Tüm alt komutları ve bayrakları görüntüleyin.
+
+```bash
+$ opencode service --help
+```
+
+## reload
+
+Sunucuyu yeniden başlatmadan yapılandırmayı yeniden yükler. Çalışan oturumlar bir sonraki adım sınırında yenilenmiş hizmetlerle devam eder.
+
+```bash
+$ opencode reload
+```
+
+## api
+
+Çalışan sunucuya bir istek gönderir.
+
+```bash
+$ opencode api GET /api/session
+```
+
+Bir işlem ID'sini sorgu parametresiyle çağırın.
+
+```bash
+$ opencode api session.list --param limit=10
+```
+
+JSON gövdesi gönderin.
+
+```bash
+$ opencode api session.create --data '{"title": "New session"}'
+```
+
+Bir istek başlığı ekleyin.
+
+```bash
+$ opencode api GET /api/session -H "accept: application/json"
+```
+
+Tüm alt komutları ve bayrakları görüntüleyin.
+
+```bash
+$ opencode api --help
+```
+
+## acp
+
+Düzenleyici entegrasyonları için stdin ve stdout üzerinden bir Agent Client Protocol sunucusu başlatır. İstemci bağlantıyı kapatana kadar çalışır.
+
+```bash
+$ opencode acp
+```
+
+Tüm alt komutları ve bayrakları görüntüleyin.
+
+```bash
+$ opencode acp --help
+```
+
+## debug
+
+Hata ayıklama ve sorun giderme araçları sağlar.
+
+```bash
+$ opencode debug agents
+```
+
+Yapılandırma kaynaklarını listeleyin.
+
+```bash
+$ opencode debug config
+```
+
+Genel yolları gösterin.
+
+```bash
+$ opencode debug paths
+```
+
+Tek bir yol yazdırın.
+
+```bash
+$ opencode debug paths db
+```
+
+Tüm alt komutları ve bayrakları görüntüleyin.
+
+```bash
+$ opencode debug --help
+```
+
+## upgrade
+
+OpenCode'u en son sürüme veya belirli bir sürüme yükseltir. Takma adı: `update`.
+
+```bash
+$ opencode upgrade
+```
+
+Belirli bir paket yöneticisiyle belirli bir sürüme yükseltin.
+
+```bash
+$ opencode upgrade 2.0.21 --method bun
+```
+
+Tüm alt komutları ve bayrakları görüntüleyin.
+
+```bash
+$ opencode upgrade --help
+```
+
+## uninstall
+
+OpenCode'u ve ilgili tüm dosyaları kaldırır.
+
+```bash
+$ opencode uninstall
+```
+
+Nelerin kaldırılacağını önizleyin.
+
+```bash
+$ opencode uninstall --dry-run
+```
+
+Tüm alt komutları ve bayrakları görüntüleyin.
+
+```bash
+$ opencode uninstall --help
+```

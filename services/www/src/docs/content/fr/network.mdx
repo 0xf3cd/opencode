@@ -1,0 +1,110 @@
+---
+title: Réseau
+description: Configurez des proxys et des autorités de certification personnalisées.
+---
+
+Définissez les variables de proxy standard et excluez les adresses de bouclage. Le CLI d'OpenCode communique avec son service
+d'arrière-plan via des connexions HTTP locales : lorsqu'un proxy est configuré dans l'environnement du CLI, l'exclusion des
+adresses de bouclage est donc indispensable.
+
+```bash
+export HTTP_PROXY=http://proxy.example.com:8080
+export HTTPS_PROXY=http://proxy.example.com:8080
+export NO_PROXY=localhost,127.0.0.1,::1
+
+opencode
+```
+
+`HTTP_PROXY` s'applique aux destinations HTTP et `HTTPS_PROXY` aux destinations HTTPS. Dans les deux variables, l'URL du
+proxy elle-même peut utiliser `http://`. `NO_PROXY` est une liste, séparée par des virgules, des hôtes et adresses
+auxquels OpenCode se connecte directement.
+
+## Service d'arrière-plan
+
+Les variables exportées dans un shell n'affectent le service d'arrière-plan que si celui-ci est démarré depuis ce shell.
+Enregistrez-les de façon persistante dans la configuration du service géré pour que les démarrages suivants du service
+utilisent les mêmes paramètres réseau.
+
+```bash
+opencode service set env HTTP_PROXY http://proxy.example.com:8080
+opencode service set env HTTPS_PROXY http://proxy.example.com:8080
+opencode service set env NO_PROXY localhost,127.0.0.1,::1
+opencode service start
+```
+
+La modification d'une variable d'environnement gérée arrête le service en cours d'exécution. `service start` le redémarre
+avec le nouvel environnement. Si le shell du CLI définit un proxy, conservez-y aussi `NO_PROXY` : les variables du
+service géré s'appliquent au processus serveur, pas au processus du CLI.
+
+Supprimez une variable enregistrée avec `service unset env` :
+
+```bash
+opencode service unset env HTTPS_PROXY
+```
+
+## Authentification
+
+Si le proxy accepte des identifiants dans l'URL, indiquez le nom d'utilisateur et le mot de passe dans chaque URL de proxy
+qui nécessite une authentification. Encodez en pourcentage les caractères tels que `@`, `:` et `/` dans le nom
+d'utilisateur comme dans le mot de passe.
+
+```bash
+export HTTPS_PROXY='http://user:p%40ssword@proxy.example.com:8080'
+```
+
+Pour le service d'arrière-plan, enregistrez l'URL complète. La valeur est stockée dans la configuration privée du service
+et s'affiche dans la sortie de `opencode service get env` : ne partagez donc pas cette sortie.
+
+```bash
+opencode service set env HTTPS_PROXY 'http://user:p%40ssword@proxy.example.com:8080'
+```
+
+## Certificats
+
+Si le proxy ou la destination utilise un certificat signé par une autorité de certification privée, définissez
+`NODE_EXTRA_CA_CERTS` sur un fichier PEM. Les autorités supplémentaires sont ajoutées au magasin de certificats de
+confiance du runtime au démarrage du processus.
+
+```bash
+export NODE_EXTRA_CA_CERTS=/etc/company/ca.pem
+opencode --standalone
+```
+
+Pour le service d'arrière-plan, enregistrez le chemin du fichier, puis redémarrez le service :
+
+```bash
+opencode service set env NODE_EXTRA_CA_CERTS /etc/company/ca.pem
+opencode service start
+```
+
+## Premier plan
+
+`--standalone` et `serve` utilisent l'environnement de leur propre processus. `opencode service set env` ne configure pas
+ces processus.
+
+```bash
+HTTP_PROXY=http://proxy.example.com:8080 \
+HTTPS_PROXY=http://proxy.example.com:8080 \
+NO_PROXY=localhost,127.0.0.1,::1 \
+opencode --standalone
+```
+
+Procédez de la même façon pour un serveur au premier plan :
+
+```bash
+HTTPS_PROXY=http://proxy.example.com:8080 \
+NO_PROXY=localhost,127.0.0.1,::1 \
+opencode serve
+```
+
+## Vérification
+
+Après avoir appliqué les paramètres, vérifiez que le CLI parvient à joindre le service d'arrière-plan :
+
+```bash
+opencode api get /api/info
+```
+
+Une réponse positive à ce contrôle d'intégrité confirme la connexion locale entre le client et le service. Envoyez
+ensuite une requête normale à un fournisseur pour vérifier le proxy sortant et la configuration des certificats du
+service.

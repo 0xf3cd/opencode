@@ -1,0 +1,156 @@
+---
+title: "API 總覽"
+description: "使用服務帳戶金鑰或使用者 token 向 OpenCode Console API 進行身分驗證。"
+---
+
+整合服務可以透過 Console API 讀取工作區設定及管理預算。路徑皆相對於 Console 的基礎 URL。
+
+```bash
+export CONSOLE_URL="https://opencode.ai/console"
+export SERVICE_API_KEY="oc_sk_..."
+
+curl --fail-with-body "${CONSOLE_URL}/api/v2/config" \
+  --header "Authorization: Bearer ${SERVICE_API_KEY}"
+```
+
+| API | 端點 |
+| ----------------------------------- | ------------------------------------------ |
+| [Inference](/console/api/inference) | `https://opencode.ai/inference/...` |
+| [Providers](/console/api/providers) | `https://opencode.ai/inference/custom/...` |
+| [Budgets](/console/api/budgets) | `/api/v1/budgets/members` |
+| [Config](#workspace-config) | `GET /api/v2/config` |
+
+## 服務帳戶
+
+整合服務使用服務帳戶進行身分驗證。服務帳戶是工作區中的非人類成員，擁有自己的 API 金鑰、用量和[預算](/console/budgets#service-account-budgets)。擁有者和管理員在 **Keys** 中管理服務帳戶。
+
+1. 開啟 **Keys**，按一下 **Add Service Account**，然後為它命名，例如 `CI Pipeline`。
+2. 開啟該服務帳戶，然後按一下 **Add API Key**。
+3. 設定 **Key name**、**Permissions** 和選用的 **Expiry date**，然後按一下 **Create key**。
+4. 複製金鑰。金鑰只會顯示一次。
+
+```text
+oc_sk_1a2b3c4d5e6f_...
+```
+
+將金鑰以 bearer token 的形式傳送。金鑰綁定單一工作區，因此不需要工作區標頭。
+
+```text
+Authorization: Bearer oc_sk_...
+```
+
+### 權限
+
+| 權限 | 允許的操作 |
+| -------------- | --------------------------------------------------------------------------------------------------------------- |
+| Inference only | [Inference](/console/api/inference) 和 [Providers](/console/api/providers) 請求，以及 `GET /api/v2/config`。 |
+| All | 上述所有操作，再加上具備管理員存取權的 Console API，但不包括管理模型。 |
+
+即使使用 **All** 金鑰，部分操作仍一律需要有人登入 Console 才能執行：邀請成員、變更角色、移除成員，以及建立或撤銷金鑰。
+
+### 撤銷金鑰
+
+開啟服務帳戶，然後在 **API Keys** 中撤銷金鑰。移除服務帳戶會撤銷它的所有金鑰。使用已撤銷或已過期金鑰的自動化作業會立即收到 HTTP `401`。
+
+## 使用者 token
+
+使用者 token 會以已登入使用者的身分和其工作區角色執行操作。傳送 token 時，請加上指定工作區的 `x-org-id` 標頭。
+
+```bash
+curl --fail-with-body "${CONSOLE_URL}/api/v2/config" \
+  --header "Authorization: Bearer ${USER_TOKEN}" \
+  --header "x-org-id: org_..."
+```
+
+透過[裝置流程](#device-flow)取得的 token 會綁定登入時選擇的工作區，因此不需要這個標頭。傳送不同的 `x-org-id` 會回傳 `403`。
+
+## 裝置流程
+
+OpenCode 使用 OAuth 裝置授權許可（RFC 8628）登入。其他 CLI 也可以使用相同的流程。
+
+1. 請求裝置代碼。傳送 `supports_org_scope=true` 可將 token 綁定到工作區。
+
+   ```bash
+   curl --fail-with-body "${CONSOLE_URL}/auth/device/code" \
+     --data "client_id=my-cli" \
+     --data "supports_org_scope=true"
+   ```
+
+   回應會包含 `device_code`、`user_code`、`verification_uri_complete`、`expires_in`（600 秒）和 `interval`（5 秒）。
+
+2. 在瀏覽器中開啟 `verification_uri_complete`。它是相對於 `https://opencode.ai` 的路徑，例如 `/console/device?user_code=...`。使用者登入、選擇工作區，然後核准。
+
+3. 使用相同的 `client_id`，每隔 `interval` 秒輪詢一次 token。
+
+   ```bash
+   curl --fail-with-body "${CONSOLE_URL}/auth/device/token" \
+     --data "grant_type=urn:ietf:params:oauth:grant-type:device_code" \
+     --data "device_code=..." \
+     --data "client_id=my-cli"
+   ```
+
+   在核准之前，回應會是帶有 `authorization_pending` 的 `400`。成功時會回傳 `access_token`、`refresh_token`、`expires_in` 和 `org_id`。
+
+4. 在存取 token 到期前重新整理。工作區綁定會保留下來。
+
+   ```bash
+   curl --fail-with-body "${CONSOLE_URL}/auth/device/token" \
+     --data "grant_type=refresh_token" \
+     --data "refresh_token=..." \
+     --data "client_id=my-cli"
+   ```
+
+每個重新整理 token 只能使用一次。重複使用舊的重新整理 token 會撤銷整個工作階段。
+
+## 工作區設定
+
+`GET /api/v2/config` 會以 OpenCode V2 [設定](/config)格式，回傳工作區可用的供應商和模型。OpenCode 會在執行 `/connect` 後載入它。
+
+```bash
+curl --fail-with-body "${CONSOLE_URL}/api/v2/config" \
+  --header "Authorization: Bearer ${SERVICE_API_KEY}"
+```
+
+```json
+{
+  "providers": {
+    "opencode": {
+      "name": "OpenCode",
+      "env": ["OPENCODE_CONSOLE_TOKEN"],
+      "package": "aisdk:@ai-sdk/openai-compatible",
+      "settings": {
+        "baseURL": "https://opencode.ai/inference/openai/v1",
+        "apiKey": "{env:OPENCODE_CONSOLE_TOKEN}"
+      },
+      "headers": { "x-opencode-org-id": "org_..." },
+      "models": {
+        "kimi-k2.6": { "name": "Kimi K2.6" }
+      }
+    }
+  }
+}
+```
+
+| 欄位 | 說明 |
+| ----------------------- | -------------------------------------------------------------------------------- |
+| `providers` | Console、Go 和已連接的供應商，各自包含閘道設定和模型。 |
+| `websearch` | 代管的[網頁搜尋](/console/websearch)，啟用後提供給成員。 |
+| `mcp` | Console MCP 伺服器，提供給成員。 |
+| `experimental.policies` | 工作區[原則](/policies#console)陳述式。 |
+
+所有金鑰權限等級和成員角色都可以讀取設定。
+
+## 錯誤
+
+錯誤會回傳 JSON，並以 `_tag` 指出錯誤名稱。
+
+```json
+{ "_tag": "Forbidden" }
+```
+
+| 狀態 | 意義 |
+| ------ | ---------------------------------------------------------------------------------------- |
+| `400` | `OrgRequired`：傳送使用者 token 時沒有附上 `x-org-id`。 |
+| `401` | 認證資訊遺失、無效、已過期或已撤銷。 |
+| `403` | 工作區錯誤、缺少權限，或在 Console 端點上使用 **Inference only** 金鑰。 |
+| `404` | 工作區不存在或已刪除。 |

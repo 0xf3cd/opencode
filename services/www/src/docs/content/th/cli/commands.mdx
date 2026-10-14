@@ -1,0 +1,581 @@
+---
+title: "คำสั่ง"
+description: "ข้อมูลอ้างอิงคำสั่ง opencode บนบรรทัดคำสั่ง"
+---
+
+ทุกคำสั่งรับ `--help` เพื่อแสดงรายการแฟล็กทั้งหมด เช่น `opencode run --help` คำสั่งบางคำสั่งที่ทำงานผ่านเซิร์ฟเวอร์รับ `--standalone` เพื่อรันเซิร์ฟเวอร์ส่วนตัว หรือ `--server <url>` เพื่อระบุเซิร์ฟเวอร์ที่ต้องการ ดูแฟล็กที่รองรับได้จากวิธีใช้ของแต่ละคำสั่ง
+
+## run
+
+ส่งข้อความและพิมพ์คำตอบโดยไม่ต้องเปิดอินเทอร์เฟซแบบโต้ตอบ
+
+```bash
+$ opencode run "Explain this repository"
+```
+
+### CI
+
+ใน CI ให้ส่งคีย์ API ของผู้ให้บริการเป็น secret และใช้โหมดสแตนด์อโลนเพื่อให้เซิร์ฟเวอร์ส่วนตัวได้รับคีย์นั้น ตัวอย่างเช่น งาน GitHub Actions นี้จะรีวิว repository ที่ checkout มา:
+
+```yaml
+name: OpenCode review
+on: [pull_request]
+
+jobs:
+  review:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - run: npm install --global @opencode/cli
+      - run: opencode run --standalone --model anthropic/claude-sonnet-4-5 "Review this repository for correctness and summarize any issues."
+        env:
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+```
+
+เลือกโมเดล
+
+```bash
+$ opencode run --model anthropic/claude-sonnet-4-5 "Refactor parseToken"
+```
+
+ทำงานต่อจากเซสชันล่าสุด
+
+```bash
+$ opencode run --continue "Now handle the expired case"
+```
+
+แสดงผลเป็น JSON แบบคั่นด้วยการขึ้นบรรทัดใหม่สำหรับสคริปต์
+
+```bash
+$ opencode run --format json "List the TODO comments"
+```
+
+แนบไฟล์ไปกับข้อความ
+
+```bash
+$ opencode run --file src/server.ts --file src/client.ts "Review these for bugs"
+```
+
+รันด้วยเอเจนต์ที่ระบุ
+
+```bash
+$ opencode run --agent build "Fix the failing test"
+```
+
+ดูคำสั่งย่อยและแฟล็กทั้งหมด
+
+```bash
+$ opencode run --help
+```
+
+## mini
+
+เริ่มอินเทอร์เฟซแบบโต้ตอบขนาดเล็กแทน TUI แบบเต็มหน้าจอ
+
+```bash
+$ opencode mini
+```
+
+ทำงานต่อจากเซสชันล่าสุด
+
+```bash
+$ opencode mini --continue
+```
+
+เริ่มด้วยโมเดลและพรอมต์เริ่มต้นที่ระบุ
+
+```bash
+$ opencode mini --model anthropic/claude-sonnet-4-5 --prompt "Summarize this repository"
+```
+
+ดูคำสั่งย่อยและแฟล็กทั้งหมด
+
+```bash
+$ opencode mini --help
+```
+
+## session
+
+จัดการเซสชัน
+
+```bash
+$ opencode session list
+```
+
+จำกัดจำนวนรายการและพิมพ์เป็น JSON
+
+```bash
+$ opencode session list --max-count 20 --format json
+```
+
+ลบเซสชันและเซสชันลูกของเซสชันนั้น
+
+```bash
+$ opencode session delete ses_9c1b08
+```
+
+ส่งออกข้อมูลเซสชันเป็น JSON
+
+```bash
+$ opencode session export ses_4f2a1c
+```
+
+ปกปิดข้อมูลที่ละเอียดอ่อนในบทสนทนาและไฟล์เมื่อส่งออก
+
+```bash
+$ opencode session export ses_4f2a1c --sanitize
+```
+
+นำเข้าข้อมูลเซสชันจากไฟล์ JSON หรือ URL
+
+```bash
+$ opencode session import session.json
+```
+
+นำเข้าไปยังไดเรกทอรีที่ระบุ
+
+```bash
+$ opencode session import session.json --directory ~/code/project
+```
+
+ดูคำสั่งย่อยและแฟล็กทั้งหมด
+
+```bash
+$ opencode session --help
+```
+
+## auth
+
+จัดการผู้ให้บริการ AI และข้อมูลรับรอง
+
+```bash
+$ opencode auth list
+```
+
+แสดงรายการเป็น JSON
+
+```bash
+$ opencode auth list --format json
+```
+
+เข้าสู่ระบบผู้ให้บริการ
+
+```bash
+$ opencode auth login anthropic
+```
+
+เข้าสู่ระบบด้วยวิธียืนยันตัวตนที่ระบุ
+
+```bash
+$ opencode auth login anthropic --method key
+```
+
+ออกจากระบบบัญชีที่บันทึกไว้
+
+```bash
+$ opencode auth logout anthropic work
+```
+
+สลับบัญชีที่ใช้งานอยู่ของการผสานรวม
+
+```bash
+$ opencode auth switch anthropic work
+```
+
+ดูคำสั่งย่อยและแฟล็กทั้งหมด
+
+```bash
+$ opencode auth --help
+```
+
+## models
+
+แสดงรายการโมเดลทั้งหมดที่ใช้ได้
+
+```bash
+$ opencode models
+```
+
+ดูคำสั่งย่อยและแฟล็กทั้งหมด
+
+```bash
+$ opencode models --help
+```
+
+## mcp
+
+จัดการเซิร์ฟเวอร์ MCP (Model Context Protocol)
+
+```bash
+$ opencode mcp list
+```
+
+เพิ่มเซิร์ฟเวอร์ระยะไกล
+
+```bash
+$ opencode mcp add context7 --url https://mcp.context7.com/mcp
+```
+
+เพิ่มเซิร์ฟเวอร์ในเครื่องลงในการกำหนดค่าส่วนกลาง
+
+```bash
+$ opencode mcp add everything --global -- npx -y @modelcontextprotocol/server-everything
+```
+
+เพิ่มเซิร์ฟเวอร์ในเครื่องพร้อมตัวแปรสภาพแวดล้อม
+
+```bash
+$ opencode mcp add everything --env LOG_LEVEL=debug -- npx -y @modelcontextprotocol/server-everything
+```
+
+เพิ่มเซิร์ฟเวอร์ระยะไกลพร้อม header
+
+```bash
+$ opencode mcp add context7 --url https://mcp.context7.com/mcp --header CONTEXT7_API_KEY=secret
+```
+
+ยืนยันตัวตนกับเซิร์ฟเวอร์ระยะไกลที่รองรับ OAuth
+
+```bash
+$ opencode mcp auth sentry
+```
+
+ลบข้อมูลรับรอง OAuth ที่เก็บไว้ของเซิร์ฟเวอร์
+
+```bash
+$ opencode mcp logout sentry
+```
+
+ดูคำสั่งย่อยและแฟล็กทั้งหมด
+
+```bash
+$ opencode mcp --help
+```
+
+## plugin
+
+จัดการปลั๊กอิน
+
+```bash
+$ opencode plugin list
+```
+
+รวมปลั๊กอินเซิร์ฟเวอร์ในตัวด้วย
+
+```bash
+$ opencode plugin list --builtin
+```
+
+ติดตั้งปลั๊กอินและเพิ่มลงในการกำหนดค่าส่วนกลาง
+
+```bash
+$ opencode plugin add @example/opencode-tui
+```
+
+ตรวจสอบอัปเดตของปลั๊กอินที่ติดตั้งจากแพ็กเกจ
+
+```bash
+$ opencode plugin check
+```
+
+อัปเดตปลั๊กอินที่ติดตั้งจากแพ็กเกจ
+
+```bash
+$ opencode plugin update
+```
+
+นำปลั๊กอินออกจากการกำหนดค่าส่วนกลาง
+
+```bash
+$ opencode plugin remove @example/opencode-tui
+```
+
+ดูคำสั่งย่อยและแฟล็กทั้งหมด
+
+```bash
+$ opencode plugin --help
+```
+
+## stats
+
+แสดงสถิติการใช้งานที่แชร์ได้
+
+```bash
+$ opencode stats
+```
+
+แสดงข้อมูล 7 วันล่าสุด
+
+```bash
+$ opencode stats --days 7
+```
+
+แสดงการใช้งานโมเดล
+
+```bash
+$ opencode stats --models
+```
+
+แสดงรายละเอียดค่าใช้จ่ายและโทเค็น
+
+```bash
+$ opencode stats --cost
+```
+
+พิมพ์เป็น JSON แทนรายงาน
+
+```bash
+$ opencode stats --json
+```
+
+ดูคำสั่งย่อยและแฟล็กทั้งหมด
+
+```bash
+$ opencode stats --help
+```
+
+## serve
+
+เริ่มเซิร์ฟเวอร์ API และเว็บ ดู [Web](/cli/web)
+
+```bash
+$ opencode serve
+```
+
+รับการเชื่อมต่อบนทุกอินเทอร์เฟซด้วยพอร์ตที่กำหนดตายตัว
+
+```bash
+$ opencode serve --hostname 0.0.0.0 --port 4096
+```
+
+อนุญาตไคลเอนต์เบราว์เซอร์จาก origin อื่น
+
+```bash
+$ opencode serve --cors https://app.example.com
+```
+
+ดูคำสั่งย่อยและแฟล็กทั้งหมด
+
+```bash
+$ opencode serve --help
+```
+
+## pair
+
+พิมพ์ลิงก์แบบใช้ครั้งเดียวพร้อม QR code ของลิงก์แรก สำหรับให้เบราว์เซอร์หรือแอปลงชื่อเข้าใช้เซิร์ฟเวอร์ ลิงก์จะหมดอายุภายใน 5 นาทีและใช้ได้เพียงครั้งเดียว
+
+```bash
+$ opencode pair
+```
+
+ใช้ URL ภายนอกในลิงก์
+
+```bash
+$ opencode pair --url https://dev.example.com
+```
+
+จับคู่จากที่ใดก็ได้ผ่านที่อยู่ระยะไกลของ OpenTunnel วิธีนี้จะเปิดเซิร์ฟเวอร์สู่อินเทอร์เน็ต ดังนั้นครั้งแรกที่เปิดการเข้าถึงระยะไกล คำสั่งจะอธิบายเรื่องนี้และขอให้ยอมรับ ดู[การเข้าถึงระยะไกล](/cli/web#remote-access)
+
+```bash
+$ opencode pair --remote
+```
+
+ยอมรับโดยไม่ต้องถาม เช่น ในสคริปต์ที่ไม่มีเทอร์มินัล
+
+```bash
+$ opencode pair --remote --yes
+```
+
+ดูคำสั่งย่อยและแฟล็กทั้งหมด
+
+```bash
+$ opencode pair --help
+```
+
+## service
+
+จัดการเซิร์ฟเวอร์เบื้องหลัง ดู [Web](/cli/web)
+
+```bash
+$ opencode service start
+```
+
+รีสตาร์ตเซิร์ฟเวอร์
+
+```bash
+$ opencode service restart
+```
+
+แสดงสถานะ
+
+```bash
+$ opencode service status
+```
+
+หยุดเซิร์ฟเวอร์
+
+```bash
+$ opencode service stop
+```
+
+อ่านค่าการตั้งค่า
+
+```bash
+$ opencode service get hostname
+```
+
+ตั้งค่าการตั้งค่า
+
+```bash
+$ opencode service set hostname 0.0.0.0
+```
+
+อนุญาต origin ของ CORS เพิ่มเติม
+
+```bash
+$ opencode service set cors https://app.example.com
+```
+
+ส่งตัวแปรสภาพแวดล้อมให้โปรเซสเซิร์ฟเวอร์
+
+```bash
+$ opencode service set env OPENCODE_LOG_LEVEL DEBUG
+```
+
+รีเซ็ตการตั้งค่ากลับเป็นค่าเริ่มต้น
+
+```bash
+$ opencode service unset hostname
+```
+
+ดูคำสั่งย่อยและแฟล็กทั้งหมด
+
+```bash
+$ opencode service --help
+```
+
+## reload
+
+โหลดการกำหนดค่าใหม่โดยไม่ต้องรีสตาร์ตเซิร์ฟเวอร์ เซสชันที่กำลังทำงานจะทำงานต่อด้วยบริการชุดใหม่เมื่อถึงรอยต่อของขั้นตอน (step) ถัดไป
+
+```bash
+$ opencode reload
+```
+
+## api
+
+ส่งคำขอไปยังเซิร์ฟเวอร์ที่กำลังทำงาน
+
+```bash
+$ opencode api GET /api/session
+```
+
+เรียก operation ID พร้อมพารามิเตอร์คิวรี
+
+```bash
+$ opencode api session.list --param limit=10
+```
+
+ส่ง body แบบ JSON
+
+```bash
+$ opencode api session.create --data '{"title": "New session"}'
+```
+
+เพิ่ม header ของคำขอ
+
+```bash
+$ opencode api GET /api/session -H "accept: application/json"
+```
+
+ดูคำสั่งย่อยและแฟล็กทั้งหมด
+
+```bash
+$ opencode api --help
+```
+
+## acp
+
+เริ่มเซิร์ฟเวอร์ Agent Client Protocol ผ่าน stdin และ stdout สำหรับการผสานรวมกับตัวแก้ไขโค้ด และทำงานจนกว่าไคลเอนต์จะปิดการเชื่อมต่อ
+
+```bash
+$ opencode acp
+```
+
+ดูคำสั่งย่อยและแฟล็กทั้งหมด
+
+```bash
+$ opencode acp --help
+```
+
+## debug
+
+มีเครื่องมือสำหรับดีบักและแก้ไขปัญหา
+
+```bash
+$ opencode debug agents
+```
+
+แสดงรายการแหล่งที่มาของการกำหนดค่า
+
+```bash
+$ opencode debug config
+```
+
+แสดงพาธส่วนกลาง
+
+```bash
+$ opencode debug paths
+```
+
+พิมพ์พาธเดียว
+
+```bash
+$ opencode debug paths db
+```
+
+ดูคำสั่งย่อยและแฟล็กทั้งหมด
+
+```bash
+$ opencode debug --help
+```
+
+## upgrade
+
+อัปเกรด OpenCode เป็นเวอร์ชันล่าสุดหรือเวอร์ชันที่ระบุ ชื่อแทน: `update`
+
+```bash
+$ opencode upgrade
+```
+
+อัปเกรดเป็นเวอร์ชันที่ระบุด้วยตัวจัดการแพ็กเกจที่ระบุ
+
+```bash
+$ opencode upgrade 2.0.21 --method bun
+```
+
+ดูคำสั่งย่อยและแฟล็กทั้งหมด
+
+```bash
+$ opencode upgrade --help
+```
+
+## uninstall
+
+ลบ OpenCode และไฟล์ที่เกี่ยวข้องทั้งหมด
+
+```bash
+$ opencode uninstall
+```
+
+ดูตัวอย่างสิ่งที่จะถูกลบ
+
+```bash
+$ opencode uninstall --dry-run
+```
+
+ดูคำสั่งย่อยและแฟล็กทั้งหมด
+
+```bash
+$ opencode uninstall --help
+```

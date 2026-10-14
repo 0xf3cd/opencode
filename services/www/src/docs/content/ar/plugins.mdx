@@ -1,0 +1,138 @@
+---
+title: "الإضافات"
+---
+
+أضف إلى `opencode.json(c)` حزمًا منشورة، أو حزمًا بإصدارات محددة، أو حزمًا ذات نطاق (scoped)، أو دلائل إضافات محلية.
+
+## التهيئة
+
+```jsonc title="opencode.jsonc"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "plugins": [
+    "opencode-acme-plugin",
+    "opencode-acme-plugin@1.2.0",
+    "@acme/opencode-plugin",
+    "./plugins/local",
+    "../shared/plugin.ts",
+    "/absolute/path/plugin.ts",
+    "file:///home/me/plugins/local",
+    {
+      "package": "@acme/opencode-plugin",
+      "options": {
+        "agent": "reviewer",
+        "strict": true,
+      },
+    },
+  ],
+}
+```
+
+تُحلَّل المسارات النسبية انطلاقًا من ملف التهيئة الذي يحتوي على العنصر. وتُطبَّق مصفوفات الإضافات من ملفات التهيئة المعنية
+من الأدنى أولوية إلى الأعلى، بدلًا من أن يحل بعضها محل بعض.
+
+```text
+~/.config/opencode/opencode.jsonc
+./opencode.jsonc
+./.opencode/opencode.jsonc
+```
+
+## الاكتشاف
+
+يحمّل OpenCode أيضًا ملفات `.ts` و`.js` الموجودة مباشرةً، ودلائل حزم الإضافات من المستوى الأول، من كل دليل
+`.opencode/plugins/` مكتشَف.
+
+```text
+.opencode/
+└── plugins/
+    ├── concise.ts
+    ├── reviewer.js
+    └── acme-package/
+```
+
+تستخدم الإضافات العامة بنية الاكتشاف نفسها ضمن دليل تهيئة OpenCode.
+
+```text
+~/.config/opencode/plugins/
+```
+
+لا يُكتشف تلقائيًا دليل `plugins/` الموجود بجوار `opencode.json(c)` في جذر المشروع؛ هيّئ ملفاته صراحةً أو انقله إلى
+داخل `.opencode/`.
+
+```jsonc title="opencode.jsonc"
+{
+  "plugins": ["./plugins/local"]
+}
+```
+
+## التحكم
+
+تُعالَج عناصر الإضافات بالترتيب. أضف البادئة `-` إلى معرّف أو نمط بدل لتعطيله، واستخدم `*` لكل الإضافات، واستخدم `.*`
+لمطابقة بادئة معرّف. ويعيد ذكر المعرّف لاحقًا تفعيل الإضافة.
+
+```jsonc title="opencode.jsonc"
+{
+  "plugins": ["*", "-opencode.provider.*", "opencode.provider.openai", "-acme.reviewer"]
+}
+```
+
+تتجاهل إضافتان مدمجتان محاولات الإزالة حتى لا يستطيع أي مستودع تعطيل فرض [السياسات](/policies):
+`opencode.config.policy` و`opencode.provider.opencode`، وهي اتصال Console الذي ينقل سياسات المؤسسة.
+
+## الإدارة
+
+ثبّت إضافات الحزم العامة أو اعرضها أو تحقق منها أو حدّثها أو أزلها باستخدام CLI.
+
+```sh
+opencode plugin add opencode-acme-plugin@1.2.0
+opencode plugin list
+opencode plugin list --builtin
+opencode plugin check
+opencode plugin update
+opencode plugin update opencode-acme-plugin
+opencode plugin remove opencode-acme-plugin@1.2.0
+```
+
+يتحقق الأمر `plugin check` من وجود تحديثات لإضافات الحزم الخاصة بالخادم وتلك الخاصة بواجهة TUI وحدها. ويحدّث الأمر
+`plugin update` كل حزمة قديمة؛ مرّر حزمة مهيّأة هدفًا للتحقق منها أو تحديثها وحدها. وتُتخطى الإضافات المحلية والحزم
+المثبّتة على مراجعة محددة بدقة.
+
+يقبل تثبيت الحزم أسماء npm مع إصدارات أو وسوم أو نطاقات إصدارات، إضافةً إلى مواصفات حزم Git المتوافقة مع npm. ويمكن
+لمستودعات Git استخدام الاختصارات الخاصة بخدمات الاستضافة أو HTTPS أو SSH، بما في ذلك المستودعات الخاصة المتاحة عبر بيانات
+اعتماد Git الحالية لديك.
+
+```sh
+opencode plugin add @acme/opencode-plugin@latest
+opencode plugin add github:acme/opencode-plugin
+opencode plugin add git+ssh://git@github.com/acme/opencode-plugin.git#main
+opencode plugin add 'github:acme/plugins#main::path:packages/opencode-plugin'
+```
+
+الفروع والوسوم وتجزئات الإيداع (commit hashes) الكاملة ومحددات الأدلة الفرعية للمستودعات `::path:` في npm كلها مدعومة.
+هيّئ المسارات المحلية مباشرةً؛ إذ لا يقبل `plugin add` أهداف ملفات tarball ولا الأسماء البديلة في npm.
+
+## إعادة التحميل
+
+يُعاد التحميل تلقائيًا عند حدوث تغييرات في دلائل التهيئة المراقَبة. عند بدء تشغيل الخادم، تُحمَّل إضافات الحزم المخزّنة
+مؤقتًا فورًا، وتُثبَّت الحزم المفقودة في الخلفية، ويُتحقق من وجود تحديثات لإضافات npm وGit غير المثبّتة على إصدار محدد دون
+تغيير الحزمة المثبّتة. تبقى إصدارات npm الدقيقة وتجزئات Git الكاملة ثابتة. وقد تتطلب التغييرات في التبعيات المحلية غير
+المراقَبة إعادة تشغيل OpenCode.
+
+```sh
+touch .opencode/plugins/concise/index.ts
+opencode service restart
+```
+
+## الطرفية
+
+تُهيّأ الإضافات الخاصة بـ CLI وحده بشكل منفصل، وتظل نشطة عند الاتصال بخادم بعيد.
+
+```json title="cli.json"
+{
+  "plugins": ["opencode-acme-cli"]
+}
+```
+
+<Card title="أنشئ إضافة" href="/build/plugins">
+  أنشئ إضافات تضيف أدوات وخطّافات (hooks) وعمليات تكامل وأوامر ووكلاء وسلوكيات أخرى.
+</Card>

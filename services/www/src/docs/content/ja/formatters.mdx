@@ -1,0 +1,184 @@
+---
+title: "フォーマッター"
+---
+
+OpenCode は、`write`、`edit`、`patch` ツールでファイルを変更した後に、そのファイルをフォーマットできます。フォーマッターはデフォルトで無効になっているため、設定で有効にしてください。
+
+```jsonc title="opencode.jsonc"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "formatter": true,
+}
+```
+
+## 有効化
+
+`formatter` を `true` に設定すると、すべての組み込みフォーマッターが有効になります。OpenCode が組み込みフォーマッターを実行するのは、その実行ファイルが利用可能で、プロジェクト固有の要件を満たしている場合だけです。
+
+```jsonc title="opencode.jsonc"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "formatter": true,
+}
+```
+
+オブジェクトを指定した場合も組み込みフォーマッターが有効になり、さらにそれらのオーバーライドやカスタムフォーマッターの追加ができます。空のオブジェクトは継承されたフォーマッターの設定を維持し、`true` は設定を組み込みの状態にリセットします。
+
+```jsonc title="opencode.jsonc"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "formatter": {},
+}
+```
+
+## 組み込みフォーマッター
+
+OpenCode には、次のフォーマッター定義が含まれています。ほとんどは記載されたコマンドが利用可能である必要があります。追加の検出ルールがある定義については、その内容を記載しています。
+
+| フォーマッター | 拡張子 | 要件 |
+| --- | --- | --- |
+| `gofmt` | `.go` | `gofmt` コマンド |
+| `mix` | `.ex`, `.exs`, `.eex`, `.heex`, `.leex`, `.neex`, `.sface` | `mix` コマンド |
+| `oxfmt` | `.js`, `.jsx`, `.mjs`, `.cjs`, `.ts`, `.tsx`, `.mts`, `.cts` | `package.json` 内の `oxfmt` 依存関係 |
+| `prettier` | `.js`, `.jsx`, `.mjs`, `.cjs`, `.ts`, `.tsx`, `.mts`, `.cts`, `.html`, `.htm`, `.css`, `.scss`, `.sass`, `.less`, `.vue`, `.svelte`, `.json`, `.jsonc`, `.yaml`, `.yml`, `.toml`, `.xml`, `.md`, `.mdx`, `.graphql`, `.gql` | `package.json` 内の `prettier` 依存関係 |
+| `biome` | 上記の `prettier` と同じ拡張子 | `biome.json` または `biome.jsonc` と、インストール済みの `@biomejs/biome` バイナリ |
+| `zig` | `.zig`, `.zon` | `zig` コマンド |
+| `clang-format` | `.c`, `.cc`, `.cpp`, `.cxx`, `.c++`, `.h`, `.hh`, `.hpp`, `.hxx`, `.h++`, `.ino`, `.C`, `.H` | `clang-format` コマンドと `.clang-format` |
+| `ktlint` | `.kt`, `.kts` | `ktlint` コマンド |
+| `ruff` | `.py`, `.pyi` | `ruff` コマンドと、Ruff の設定または依存関係の宣言 |
+| `air` | `.R` | R のフォーマッターとして自身を識別する `air` コマンド |
+| `uv` | `.py`, `.pyi` | `uv format` に対応した `uv` コマンド |
+| `rubocop` | `.rb`, `.rake`, `.gemspec`, `.ru` | `rubocop` コマンド |
+| `standardrb` | `.rb`, `.rake`, `.gemspec`, `.ru` | `standardrb` コマンド |
+| `htmlbeautifier` | `.erb` | `htmlbeautifier` コマンド |
+| `dart` | `.dart` | `dart` コマンド |
+| `ocamlformat` | `.ml`, `.mli` | `ocamlformat` コマンドと `.ocamlformat` |
+| `terraform` | `.tf`, `.tfvars` | `terraform` コマンド |
+| `latexindent` | `.tex` | `latexindent` コマンド |
+| `gleam` | `.gleam` | `gleam` コマンド |
+| `shfmt` | `.sh`, `.bash` | `shfmt` コマンド |
+| `nixfmt` | `.nix` | `nixfmt` コマンド |
+| `rustfmt` | `.rs` | `rustfmt` コマンド |
+| `pint` | `.php` | `composer.json` 内の `laravel/pint` |
+| `ormolu` | `.hs` | `ormolu` コマンド |
+| `cljfmt` | `.clj`, `.cljs`, `.cljc`, `.edn` | `cljfmt` コマンド |
+| `dfmt` | `.d` | `dfmt` コマンド |
+
+たとえば、組み込みフォーマッターを有効にすると、OpenCode はプロジェクトローカルの Prettier の依存関係を検出し、該当するファイルに対して実行します。
+
+```jsonc title="opencode.jsonc"
+{
+  "formatter": true,
+}
+```
+
+## カスタマイズ
+
+組み込みフォーマッターを変更したり、カスタムフォーマッターを定義したりするには、名前付きのエントリを追加します。カスタムフォーマッターを実行するには、`command` と `extensions` の両方が必要です。
+
+```jsonc title="opencode.jsonc"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "formatter": {
+    "prettier": {
+      "environment": {
+        "NODE_ENV": "development",
+      },
+      "extensions": [".js", ".ts"],
+    },
+    "deno-markdown": {
+      "command": ["deno", "fmt", "$FILE"],
+      "extensions": [".md"],
+    },
+  },
+}
+```
+
+| フィールド | 型 | 動作 |
+| --- | --- | --- |
+| `disabled` | `boolean` | `true` の場合、その名前のフォーマッターを除外します。 |
+| `command` | `string[]` | 組み込みのコマンドを置き換えるか、カスタムコマンドを定義します。 |
+| `environment` | `Record<string, string>` | 親プロセスの環境を維持したまま、環境変数を追加します。 |
+| `extensions` | `string[]` | 組み込みの拡張子リストを置き換えるか、カスタムのリストを定義します。先頭のドットも含めてください。 |
+
+すべてのフィールドは省略可能です。組み込みフォーマッターのエントリでは省略した値が継承されますが、新しいエントリでコマンドや拡張子がない場合は実行できません。
+
+```jsonc title="opencode.jsonc"
+{
+  "formatter": {
+    "prettier": {
+      "extensions": [".md", ".mdx"],
+    },
+  },
+}
+```
+
+## コマンド
+
+`command` は引数の配列であり、シェルのコマンド文字列ではありません。OpenCode は `$FILE` をファイルの絶対パスに置き換え、アクティブなプロジェクトディレクトリからコマンドを実行します。
+
+```jsonc title="opencode.jsonc"
+{
+  "formatter": {
+    "custom": {
+      "command": ["custom-fmt", "--write", "$FILE"],
+      "extensions": [".custom"],
+    },
+  },
+}
+```
+
+## マッチング
+
+OpenCode は、ファイルの最後の拡張子を `extensions` と比較します。マッチングでは大文字と小文字が区別されます。また、`.part.md` のような複合的なエントリは `notes.part.md` にマッチしません。このファイルの最後の拡張子は `.md` だからです。
+
+```jsonc title="opencode.jsonc"
+{
+  "formatter": {
+    "markdown": {
+      "command": ["deno", "fmt", "$FILE"],
+      "extensions": [".md"],
+    },
+  },
+}
+```
+
+複数のフォーマッターがマッチした場合、OpenCode は登録順に試し、最初に成功したコマンドで停止します。組み込みフォーマッターは組み込みの順序を保ち、その後にカスタムエントリがオブジェクト内の順序で続きます。いずれかが失敗で終了した場合、OpenCode はその失敗をログに記録し、次にマッチしたフォーマッターを試します。
+
+```jsonc title="opencode.jsonc"
+{
+  "formatter": {
+    "preferred": {
+      "command": ["preferred-fmt", "$FILE"],
+      "extensions": [".foo"],
+    },
+    "fallback": {
+      "command": ["fallback-fmt", "$FILE"],
+      "extensions": [".foo"],
+    },
+  },
+}
+```
+
+## 無効化
+
+どの設定ファイルでも `formatter` が設定されていない場合、フォーマットは無効です。優先度の低いファイルで有効にされたフォーマットを無効にするには、`false` に設定します。
+
+```jsonc title="opencode.jsonc"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "formatter": false,
+}
+```
+
+ほかの組み込みフォーマッターを有効にしたまま 1 つだけを無効にするには、その名前のエントリを無効としてマークします。
+
+```jsonc title="opencode.jsonc"
+{
+  "formatter": {
+    "prettier": {
+      "disabled": true,
+    },
+  },
+}
+```

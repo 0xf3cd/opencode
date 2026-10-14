@@ -1,0 +1,193 @@
+---
+title: "المُنسِّقات"
+---
+
+يستطيع OpenCode تنسيق الملفات بعد أن تغيّرها أدواته `write` أو `edit` أو `patch`. المُنسِّقات معطّلة افتراضيًا، لذا فعّلها
+في ملف التهيئة:
+
+```jsonc title="opencode.jsonc"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "formatter": true,
+}
+```
+
+## التفعيل
+
+اضبط `formatter` على `true` لتفعيل جميع المُنسِّقات المدمجة. ولا يشغّل OpenCode أي مُنسِّق مدمج إلا عند توفر ملفه التنفيذي
+وأي متطلبات خاصة بالمشروع.
+
+```jsonc title="opencode.jsonc"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "formatter": true,
+}
+```
+
+يؤدي استخدام كائن أيضًا إلى تفعيل المُنسِّقات المدمجة، ويتيح لك تجاوز إعداداتها أو إضافة مُنسِّقات مخصصة. ويحافظ الكائن
+الفارغ على إعدادات المُنسِّقات الموروثة، بينما تعيد القيمة `true` ضبطها إلى المُنسِّقات المدمجة.
+
+```jsonc title="opencode.jsonc"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "formatter": {},
+}
+```
+
+## المُنسِّقات المدمجة
+
+يتضمن OpenCode تعريفات المُنسِّقات التالية. يتطلب معظمها توفر الأمر المذكور، أما التعريفات التي لها قواعد اكتشاف إضافية
+فتُذكر قواعدها أدناه.
+
+| المُنسِّق | الامتدادات | المتطلب |
+| --- | --- | --- |
+| `gofmt` | `.go` | الأمر `gofmt` |
+| `mix` | `.ex`, `.exs`, `.eex`, `.heex`, `.leex`, `.neex`, `.sface` | الأمر `mix` |
+| `oxfmt` | `.js`, `.jsx`, `.mjs`, `.cjs`, `.ts`, `.tsx`, `.mts`, `.cts` | الاعتمادية `oxfmt` في `package.json` |
+| `prettier` | `.js`, `.jsx`, `.mjs`, `.cjs`, `.ts`, `.tsx`, `.mts`, `.cts`, `.html`, `.htm`, `.css`, `.scss`, `.sass`, `.less`, `.vue`, `.svelte`, `.json`, `.jsonc`, `.yaml`, `.yml`, `.toml`, `.xml`, `.md`, `.mdx`, `.graphql`, `.gql` | الاعتمادية `prettier` في `package.json` |
+| `biome` | امتدادات `prettier` أعلاه نفسها | الملف `biome.json` أو `biome.jsonc` وملف تنفيذي مثبّت من `@biomejs/biome` |
+| `zig` | `.zig`, `.zon` | الأمر `zig` |
+| `clang-format` | `.c`, `.cc`, `.cpp`, `.cxx`, `.c++`, `.h`, `.hh`, `.hpp`, `.hxx`, `.h++`, `.ino`, `.C`, `.H` | الأمر `clang-format` والملف `.clang-format` |
+| `ktlint` | `.kt`, `.kts` | الأمر `ktlint` |
+| `ruff` | `.py`, `.pyi` | الأمر `ruff` وملف تهيئة Ruff أو إدراجه ضمن الاعتماديات المصرَّح بها |
+| `air` | `.R` | الأمر `air` الذي يعرّف نفسه بأنه مُنسِّق R |
+| `uv` | `.py`, `.pyi` | الأمر `uv` مع دعم `uv format` |
+| `rubocop` | `.rb`, `.rake`, `.gemspec`, `.ru` | الأمر `rubocop` |
+| `standardrb` | `.rb`, `.rake`, `.gemspec`, `.ru` | الأمر `standardrb` |
+| `htmlbeautifier` | `.erb` | الأمر `htmlbeautifier` |
+| `dart` | `.dart` | الأمر `dart` |
+| `ocamlformat` | `.ml`, `.mli` | الأمر `ocamlformat` والملف `.ocamlformat` |
+| `terraform` | `.tf`, `.tfvars` | الأمر `terraform` |
+| `latexindent` | `.tex` | الأمر `latexindent` |
+| `gleam` | `.gleam` | الأمر `gleam` |
+| `shfmt` | `.sh`, `.bash` | الأمر `shfmt` |
+| `nixfmt` | `.nix` | الأمر `nixfmt` |
+| `rustfmt` | `.rs` | الأمر `rustfmt` |
+| `pint` | `.php` | `laravel/pint` في `composer.json` |
+| `ormolu` | `.hs` | الأمر `ormolu` |
+| `cljfmt` | `.clj`, `.cljs`, `.cljc`, `.edn` | الأمر `cljfmt` |
+| `dfmt` | `.d` | الأمر `dfmt` |
+
+مثلًا، عند تفعيل المُنسِّقات المدمجة يستطيع OpenCode اكتشاف اعتمادية Prettier المحلية في المشروع وتشغيلها على الملفات المطابقة:
+
+```jsonc title="opencode.jsonc"
+{
+  "formatter": true,
+}
+```
+
+## التخصيص
+
+أضف إدخالًا مسمّى لتعديل مُنسِّق مدمج أو لتعريف مُنسِّق مخصص. ويحتاج المُنسِّق المخصص إلى `command` و`extensions` معًا
+ليعمل.
+
+```jsonc title="opencode.jsonc"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "formatter": {
+    "prettier": {
+      "environment": {
+        "NODE_ENV": "development",
+      },
+      "extensions": [".js", ".ts"],
+    },
+    "deno-markdown": {
+      "command": ["deno", "fmt", "$FILE"],
+      "extensions": [".md"],
+    },
+  },
+}
+```
+
+| الحقل | النوع | السلوك |
+| --- | --- | --- |
+| `disabled` | `boolean` | يزيل المُنسِّق المسمّى عندما تكون قيمته `true`. |
+| `command` | `string[]` | يستبدل أمر المُنسِّق المدمج أو يعرّف أمرًا مخصصًا. |
+| `environment` | `Record<string, string>` | يضيف متغيرات بيئة مع الحفاظ على بيئة العملية الأم. |
+| `extensions` | `string[]` | يستبدل قائمة الامتدادات المدمجة أو يعرّف القائمة المخصصة. ضمّن النقطة في بداية كل امتداد. |
+
+جميع الحقول اختيارية. يرث الإدخال الخاص بمُنسِّق مدمج القيم المحذوفة، أما الإدخال الجديد الذي لا يحتوي على أمر أو امتدادات
+فلا يمكن تشغيله.
+
+```jsonc title="opencode.jsonc"
+{
+  "formatter": {
+    "prettier": {
+      "extensions": [".md", ".mdx"],
+    },
+  },
+}
+```
+
+## الأوامر
+
+الحقل `command` مصفوفة وسائط، وليس سلسلة أمر shell. يستبدل OpenCode المتغير `$FILE` بالمسار المطلق للملف، ويشغّل الأمر من
+دليل المشروع النشط.
+
+```jsonc title="opencode.jsonc"
+{
+  "formatter": {
+    "custom": {
+      "command": ["custom-fmt", "--write", "$FILE"],
+      "extensions": [".custom"],
+    },
+  },
+}
+```
+
+## المطابقة
+
+يقارن OpenCode الامتداد الأخير للملف بقائمة `extensions`. والمطابقة حساسة لحالة الأحرف، ولا تطابق الإدخالات المركّبة مثل
+`.part.md` الملف `notes.part.md` لأن امتداده الأخير هو `.md`.
+
+```jsonc title="opencode.jsonc"
+{
+  "formatter": {
+    "markdown": {
+      "command": ["deno", "fmt", "$FILE"],
+      "extensions": [".md"],
+    },
+  },
+}
+```
+
+عند تطابق عدة مُنسِّقات، يجرّبها OpenCode بترتيب تسجيلها ويتوقف بعد أول أمر ناجح. تحتفظ المُنسِّقات المدمجة بترتيبها
+المدمج، وتليها الإدخالات المخصصة بترتيبها في الكائن. وإذا انتهى أحدها بالفشل، يسجّل OpenCode الفشل ويجرّب المُنسِّق المطابق التالي.
+
+```jsonc title="opencode.jsonc"
+{
+  "formatter": {
+    "preferred": {
+      "command": ["preferred-fmt", "$FILE"],
+      "extensions": [".foo"],
+    },
+    "fallback": {
+      "command": ["fallback-fmt", "$FILE"],
+      "extensions": [".foo"],
+    },
+  },
+}
+```
+
+## التعطيل
+
+يكون التنسيق معطّلًا إذا لم يضبط أي ملف تهيئة الحقل `formatter`. ولتعطيل تنسيق فعّله ملف ذو أولوية أدنى، اضبطه على `false`.
+
+```jsonc title="opencode.jsonc"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "formatter": false,
+}
+```
+
+لتعطيل مُنسِّق مدمج واحد مع إبقاء البقية مفعّلة، علّم إدخاله المسمّى بأنه معطّل.
+
+```jsonc title="opencode.jsonc"
+{
+  "formatter": {
+    "prettier": {
+      "disabled": true,
+    },
+  },
+}
+```

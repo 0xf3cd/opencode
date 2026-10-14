@@ -1,0 +1,92 @@
+---
+title: "API งบประมาณ"
+description: "อ่านงบประมาณรายเดือนที่มีผลจริงของสมาชิกทุกคนใน Workspace และจัดการงบประมาณกำหนดเองของสมาชิกแต่ละคน"
+---
+
+อ่านงบประมาณรายเดือนที่มีผลจริงของสมาชิกทุกคนใน Workspace และจัดการงบประมาณกำหนดเองของสมาชิกแต่ละคนจากระบบที่ผสานรวม (integration)
+
+## เริ่มต้นอย่างรวดเร็ว
+
+สร้างคีย์ API ของ[บัญชีบริการ](/console/api#service-accounts)ที่มีสิทธิ์ **All** ใน [Console](https://opencode.ai/console) คีย์แบบ Inference only เข้าถึงข้อมูลงบประมาณหรือเปลี่ยนวงเงินไม่ได้
+
+```bash
+export CONSOLE_URL="https://opencode.ai/console"
+export SERVICE_API_KEY="oc_sk_..."
+```
+
+แสดงรายการงบประมาณของสมาชิก:
+
+```bash
+curl --fail-with-body \
+  "${CONSOLE_URL}/api/v1/budgets/members" \
+  --header "Authorization: Bearer ${SERVICE_API_KEY}" \
+  --header "Accept: application/json"
+```
+
+## แสดงรายการงบประมาณของสมาชิก
+
+```text
+GET /api/v1/budgets/members
+```
+
+การตอบกลับประกอบด้วยสมาชิกปัจจุบันทุกคน เรียงตามอีเมล วงเงินที่มี source เป็น `custom` คือค่าที่กำหนดแทนที่ (override) สำหรับสมาชิกคนนั้น ส่วน source `default` คือค่าที่สืบทอดมาจากค่าเริ่มต้นของ Workspace หากวงเงินและ source เป็น null แสดงว่าสมาชิกคนนั้นไม่มีวงเงินจำกัด
+
+```json
+[
+  {
+    "user_id": "user_...",
+    "email": "alice@example.com",
+    "limit_micro_cents": "7525000000",
+    "spent_micro_cents": "1250000000",
+    "exceeded": false,
+    "resets_at": "2026-10-01T00:00:00.000Z",
+    "source": "custom",
+    "updated_at": "2026-09-03T12:00:00.000Z"
+  }
+]
+```
+
+ฟิลด์จำนวนเงินในการตอบกลับเป็นสตริงทศนิยมในหน่วยไมโครเซนต์ เพื่อไม่ให้ระบบที่ผสานรวมสูญเสียความแม่นยำ 1 ดอลลาร์สหรัฐเท่ากับ 100,000,000 ไมโครเซนต์ ยอดใช้จ่ายและเวลารีเซ็ตครอบคลุมเดือนปฏิทินปัจจุบันตาม UTC และ `updated_at` จะเป็น null เมื่อไม่มีค่าแทนที่ที่กำหนดเองสำหรับสมาชิก
+
+## ตั้งงบประมาณกำหนดเอง
+
+```text
+PUT /api/v1/budgets/members/:user_id
+```
+
+ตั้งงบประมาณรายเดือน $75.25 ให้สมาชิกหนึ่งคน:
+
+```bash
+curl --fail-with-body --request PUT \
+  "${CONSOLE_URL}/api/v1/budgets/members/user_..." \
+  --header "Authorization: Bearer ${SERVICE_API_KEY}" \
+  --header "Content-Type: application/json" \
+  --data '{"budget_dollars":75.25}'
+```
+
+`budget_dollars` รับจำนวนเงินดอลลาร์สหรัฐที่ไม่ติดลบ มีทศนิยมไม่เกินสองตำแหน่ง คำขอ PUT เป็นแบบ idempotent และส่งคืน HTTP 204 ใช้ ID สมาชิกที่ได้จากการแสดงรายการ
+
+## กลับไปใช้ค่าเริ่มต้นของ Workspace
+
+```text
+DELETE /api/v1/budgets/members/:user_id
+```
+
+นำค่าแทนที่ที่กำหนดเองออก:
+
+```bash
+curl --fail-with-body --request DELETE \
+  "${CONSOLE_URL}/api/v1/budgets/members/user_..." \
+  --header "Authorization: Bearer ${SERVICE_API_KEY}"
+```
+
+การลบค่าแทนที่ไม่ได้ลบสมาชิก หลังจากนั้นสมาชิกจะสืบทอดงบประมาณเริ่มต้นของ Workspace หรือจะไม่มีวงเงินจำกัดหาก Workspace ไม่มีค่าเริ่มต้น การส่งคำขอซ้ำทำได้อย่างปลอดภัยและส่งคืน HTTP 204
+
+## ข้อผิดพลาด
+
+| สถานะ  | ความหมาย                                                  |
+| ------ | -------------------------------------------------------- |
+| `400`  | ID สมาชิกหรือจำนวนงบประมาณไม่ถูกต้อง                            |
+| `401`  | คีย์ API ของบริการขาดหาย ไม่ถูกต้อง หมดอายุ หรือถูกเพิกถอน          |
+| `403`  | คีย์ API ไม่มีสิทธิ์จัดการงบประมาณ                                |
+| `404`  | สมาชิกไม่ได้อยู่ใน Workspace ที่ผูกกับคีย์ API                       |

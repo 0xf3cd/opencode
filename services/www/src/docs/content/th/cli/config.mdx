@@ -1,0 +1,413 @@
+---
+title: "การตั้งค่า"
+description: "กำหนดค่าการตั้งค่าทั้งหมดของ OpenCode CLI และ TUI"
+---
+
+การตั้งค่า CLI ควบคุมเฉพาะไคลเอนต์บนเทอร์มินัล และแยกจากการตั้งค่าเซิร์ฟเวอร์และโปรเจกต์ใน `opencode.json(c)`
+
+กด `Ctrl+P` แล้วเลือก **Open settings** เพื่อเปลี่ยนการตั้งค่าที่ใช้บ่อยจาก TUI
+
+<img src={`${import.meta.env.BASE_URL}assets/docs/cli/settings.png`} alt="กล่องโต้ตอบการตั้งค่าใน OpenCode TUI" />
+
+## ไฟล์กำหนดค่า
+
+OpenCode เก็บการตั้งค่า CLI ไว้ในไฟล์ส่วนกลางไฟล์เดียว:
+
+```text
+~/.config/opencode/cli.json
+```
+
+เมื่อตั้งค่า `$XDG_CONFIG_HOME` ไว้ OpenCode จะใช้:
+
+```text
+$XDG_CONFIG_HOME/opencode/cli.json
+```
+
+ไม่มีไฟล์การตั้งค่า CLI ระดับโปรเจกต์ เพิ่ม JSON Schema ที่เผยแพร่ไว้เพื่อใช้ตรวจสอบความถูกต้องและเติมข้อความอัตโนมัติ:
+
+```json title="cli.json"
+{
+  "$schema": "https://opencode.ai/v2/cli.json"
+}
+```
+
+OpenCode จะเพิ่ม `$schema` ให้เมื่อสร้างหรือย้ายไฟล์นี้ การตั้งค่าที่ไม่รู้จักจะถูกปฏิเสธ และการแก้ไขที่ถูกต้องจะโหลดใหม่ทันทีขณะที่ TUI ทำงานอยู่
+
+## การกำหนดค่าแบบอินไลน์
+
+ตั้งค่า `OPENCODE_CLI_CONFIG_CONTENT` เพื่อใช้การตั้งค่า CLI จาก JSON แบบอินไลน์:
+
+```sh
+OPENCODE_CLI_CONFIG_CONTENT='{"tabs":{"mode":"off"}}' opencode
+```
+
+OpenCode จะรวมการตั้งค่าแบบอินไลน์ทับ `cli.json` ส่วนกลาง อ็อบเจกต์ที่ซ้อนกันจะถูกรวมเข้าด้วยกัน ส่วนอาร์เรย์และค่าสเกลาร์จากตัวแปรสภาพแวดล้อมจะแทนที่ค่าส่วนกลาง การตั้งค่าแบบอินไลน์จะมีผลเหนือกว่าตลอดเวลาที่ตั้งค่าตัวแปรนี้ไว้
+
+## รูปลักษณ์
+เลือกธีม ควบคุมการเคลื่อนไหวของอินเทอร์เฟซ และแทนที่เคอร์เซอร์ของเทอร์มินัล:
+
+```json title="cli.json"
+{
+  "theme": {
+    "name": "tokyonight",
+    "mode": "system"
+  },
+  "animations": true,
+  "cursor": {
+    "style": "block",
+    "blinking": true
+  }
+}
+```
+
+<div class="docs-table-scroll" role="region" aria-label="การตั้งค่ารูปลักษณ์" tabIndex={0}>
+
+| การตั้งค่า | ค่า | คำอธิบาย |
+| --- | --- | --- |
+| `theme.name` | สตริง | เลือกธีมในตัว ธีมที่กำหนดเอง หรือธีมที่สร้างจากเทอร์มินัล |
+| `theme.mode` | `system`, `dark` หรือ `light` | ใช้รูปลักษณ์ตามเทอร์มินัล หรือล็อกธีมไว้ที่โหมดสีเดียว |
+| `animations` | บูลีน | เปิดใช้งานแอนิเมชันของอินเทอร์เฟซ |
+| `cursor.style` | `block`, `underline`, `line`, `default` | กำหนดรูปร่างเคอร์เซอร์ `default` จะคงรูปร่างเคอร์เซอร์ของเทอร์มินัลไว้ |
+| `cursor.blinking` | บูลีน | ควบคุมการกะพริบของเคอร์เซอร์ ไม่มีผลเมื่อรูปแบบเป็น `default` |
+
+</div>
+
+ดูวิธีเลือกและสร้างธีมได้ที่[ธีม](/cli/theme)
+
+## การป้อนข้อมูล
+
+กำหนดค่าการจับเมาส์ การเลื่อน บริบทจากตัวแก้ไข การวาง และการแสดงตัวอย่างรูปภาพในพรอมต์:
+
+```json title="cli.json"
+{
+  "mouse": true,
+  "scroll": {
+    "speed": 3,
+    "acceleration": false
+  },
+  "prompt": {
+    "editor": true,
+    "paste": "compact",
+    "image_preview": false
+  }
+}
+```
+
+<div class="docs-table-scroll" role="region" aria-label="การตั้งค่าการป้อนข้อมูล" tabIndex={0}>
+
+| การตั้งค่า | ค่า | คำอธิบาย |
+| --- | --- | --- |
+| `mouse` | บูลีน | เปิดใช้งานการจับเมาส์ของเทอร์มินัล |
+| `scroll.speed` | ตัวเลข อย่างน้อย `0.001` | กำหนดระยะคงที่ต่อการเลื่อนหนึ่งครั้ง |
+| `scroll.acceleration` | บูลีน | เร่งความเร็วเมื่อเลื่อนซ้ำ ๆ เมื่อเปิดใช้งานจะมีลำดับความสำคัญเหนือ speed |
+| `prompt.editor` | บูลีน | รวมไฟล์หรือส่วนที่เลือกในตัวแก้ไขที่ใช้งานอยู่เป็นบริบทของพรอมต์ |
+| `prompt.paste` | `compact` หรือ `full` | แสดงข้อความที่วางขนาดใหญ่เป็นตัวยึดตำแหน่งแบบย่อหรือเป็นข้อความเต็ม |
+| `prompt.image_preview` | บูลีน | แสดงตัวอย่างรูปภาพที่แนบไว้เหนือช่องป้อนพรอมต์ |
+
+</div>
+
+## เซสชัน
+
+กำหนดค่าการแสดงผลเซสชันใน TUI แบบเต็มหน้าจอ และตำแหน่งที่เซสชันใหม่เริ่มต้น:
+
+```json title="cli.json"
+{
+  "session": {
+    "sidebar": "auto",
+    "scrollbar": false,
+    "thinking": "hide",
+    "grouping": "auto",
+    "image_preview": false,
+    "tps": true,
+    "markdown": "rendered",
+    "new_location": "launch",
+    "permissions": "prompt"
+  }
+}
+```
+
+<div class="docs-table-scroll" role="region" aria-label="การตั้งค่าเซสชัน" tabIndex={0}>
+
+| การตั้งค่า | ค่า | คำอธิบาย |
+| --- | --- | --- |
+| `session.sidebar` | `auto` หรือ `hide` | แสดงแถบด้านข้างเมื่อมีพื้นที่พอ หรือซ่อนไว้เสมอ |
+| `session.scrollbar` | บูลีน | แสดงแถบเลื่อนของบทสนทนา |
+| `session.thinking` | `show` หรือ `hide` | แสดงหรือซ่อนการให้เหตุผลของโมเดลโดยค่าเริ่มต้น |
+| `session.grouping` | `auto` หรือ `none` | จัดกลุ่มรายการที่เกี่ยวข้องในบทสนทนา หรือแสดงแต่ละรายการแยกกัน |
+| `session.image_preview` | บูลีน | แสดงรูปภาพจากไฟล์แนบของผู้ใช้และผลลัพธ์ของเครื่องมือในบทสนทนา |
+| `session.tps` | บูลีน | แสดงจำนวนโทเค็นเอาต์พุตต่อวินาทีที่ส่วนท้ายของข้อความผู้ช่วย |
+| `session.markdown` | `source` หรือ `rendered` | แสดงเครื่องหมายไวยากรณ์ Markdown หรือซ่อนไว้ในเนื้อหาที่เรนเดอร์แล้ว |
+| `session.new_location` | `launch` หรือ `inherit` | เริ่มในไดเรกทอรีที่เปิด TUI หรือใช้ตำแหน่งของเซสชันที่ใช้งานอยู่ |
+| `session.permissions` | `prompt` หรือ `autoaccept` | ถามเมื่อมีคำขอสิทธิ์ หรือยอมรับทุกคำขอโดยอัตโนมัติ |
+
+</div>
+
+## แท็บ
+
+กำหนดค่าแถบแท็บเซสชันที่คงอยู่ตลอด:
+
+```json title="cli.json"
+{
+  "tabs": {
+    "mode": "auto",
+    "scope": "cwd",
+    "layout": "horizontal",
+    "indicators": "status"
+  }
+}
+```
+
+ยังคงรองรับการตั้งค่าบูลีน `tabs.enabled` แบบเดิม โดย `true` เท่ากับ `on` และ `false` เท่ากับ `off` OpenCode จะอ่านค่านี้โดยไม่เขียนไฟล์กำหนดค่าใหม่
+
+<div class="docs-table-scroll" role="region" aria-label="การตั้งค่าแท็บ" tabIndex={0}>
+
+| การตั้งค่า | ค่า | คำอธิบาย |
+| --- | --- | --- |
+| `tabs.mode` | `auto`, `on` หรือ `off` | ใช้แท็บโดยอัตโนมัติ ใช้เสมอ หรือไม่ใช้เลย โหมด auto จะซ่อนแท็บเมื่ออยู่ใน Herdr |
+| `tabs.scope` | `cwd` หรือ `global` | แยกแท็บตามไดเรกทอรีทำงาน หรือใช้แท็บร่วมกันทั้งหมด |
+| `tabs.layout` | `horizontal` หรือ `vertical` | วางแท็บเป็นแถบแนวนอนหรือแถบด้านข้างแนวตั้ง |
+| `tabs.indicators` | `status` หรือ `numbers` | แสดงไอคอนสถานะ หรือแสดงหมายเลขแท็บเสมอ |
+
+</div>
+
+ตัวบ่งชี้แบบหมายเลขยังคงแสดงสีสถานะและแอนิเมชันพื้นหลัง ปุ่มลัด Ctrl+หมายเลขใช้สลับแท็บได้ในตัวบ่งชี้ทั้งสองโหมด
+
+## Diff
+
+กำหนดค่าขอบเขตเริ่มต้นและการแสดงผลของ diff:
+
+```json title="cli.json"
+{
+  "diffs": {
+    "source": "branch",
+    "wrap": "word",
+    "tree": true,
+    "single": false,
+    "view": "auto"
+  }
+}
+```
+
+<div class="docs-table-scroll" role="region" aria-label="การตั้งค่า diff" tabIndex={0}>
+
+| การตั้งค่า | ค่า | คำอธิบาย |
+| --- | --- | --- |
+| `diffs.source` | `branch`, `committed`, `working` หรือ `turn` | กำหนดขอบเขตการรีวิวเริ่มต้น |
+| `diffs.wrap` | `word` หรือ `none` | ตัดบรรทัดยาวตามคำ หรือไม่ตัดบรรทัด |
+| `diffs.tree` | บูลีน | แสดงแผนผังไฟล์ของ diff |
+| `diffs.single` | บูลีน | แสดงเฉพาะ patch ของไฟล์ที่เลือก |
+| `diffs.view` | `auto`, `split` หรือ `unified` | กำหนดเลย์เอาต์ `auto` จะเลือกตามความกว้างที่มี |
+
+</div>
+
+`branch` แสดง **All** ซึ่งรวมการเปลี่ยนแปลงในบรานช์และในเครื่อง `committed` แสดงเฉพาะคอมมิตในบรานช์ และ `working` แสดงการเปลี่ยนแปลงที่ staged, unstaged และ untracked ส่วน `turn` แสดง **Last turn** คือไฟล์ที่เซสชันเปลี่ยนแปลงในรอบล่าสุด ค่านี้จะรีเฟรชเมื่อเซสชันทำงานจบหนึ่งรอบ และจะใช้ `branch` เป็นค่าสำรองเมื่อไม่ได้เปิด `/diff` จากเซสชัน
+
+ใน `/diff` กด `d` เพื่อเปลี่ยนขอบเขต หรือเลือกบรานช์สำหรับเปรียบเทียบจาก **Base** ตัวเลือกเหล่านี้มีผลจนกว่าจะออกจาก TUI และไม่เปลี่ยน `cli.json`
+
+## การแจ้งเตือน
+
+เปิดใช้งานการแจ้งเตือนของระบบและเสียงเรียกความสนใจแยกกันได้:
+
+```json title="cli.json"
+{
+  "attention": {
+    "notifications": true,
+    "sound": true,
+    "volume": 0.4,
+    "sound_pack": "opencode.default",
+    "sounds": {
+      "permission": "/home/me/sounds/permission.wav"
+    }
+  }
+}
+```
+
+<div class="docs-table-scroll" role="region" aria-label="การตั้งค่าการแจ้งเตือน" tabIndex={0}>
+
+| การตั้งค่า | ค่า | คำอธิบาย |
+| --- | --- | --- |
+| `attention.notifications` | บูลีน | แสดงการแจ้งเตือนของระบบ โดยปกติเมื่อเทอร์มินัลไม่ได้อยู่ในโฟกัส |
+| `attention.sound` | บูลีน | เล่นเสียงเรียกความสนใจ |
+| `attention.volume` | ตัวเลขตั้งแต่ `0` ถึง `1` | กำหนดระดับเสียง |
+| `attention.sound_pack` | สตริง | เลือก ID ของชุดเสียงที่ใช้งาน |
+| `attention.sounds` | อ็อบเจกต์ | แทนที่ไฟล์เสียงสำหรับ `default`, `question`, `permission`, `error`, `done` หรือ `subagent_done` |
+
+</div>
+
+หากไฟล์ที่ใช้แทนที่ไม่ถูกต้องหรืออ่านไม่ได้ จะใช้เสียงในตัวของอีเวนต์นั้นเป็นค่าสำรอง
+
+หลังอัปเดต TUI จะแสดงไฮไลต์ของรีลีสใหม่หนึ่งครั้งที่หน้าจอหลัก รัน `/highlights` เพื่อดูอีกครั้ง หรือปิดกล่องโต้ตอบนี้:
+
+```json title="cli.json"
+{
+  "highlights": false
+}
+```
+
+## เทอร์มินัล
+
+กำหนดค่าการผสานรวมกับเทอร์มินัล:
+
+```json title="cli.json"
+{
+  "terminal": {
+    "title": true,
+    "copy": "select"
+  }
+}
+```
+
+<div class="docs-table-scroll" role="region" aria-label="การตั้งค่าเทอร์มินัล" tabIndex={0}>
+
+| การตั้งค่า | ค่า | คำอธิบาย |
+| --- | --- | --- |
+| `terminal.title` | บูลีน | อัปเดตชื่อหน้าต่างเทอร์มินัล |
+| `terminal.copy` | `manual` หรือ `select` | คัดลอกด้วยตนเอง หรือคัดลอกทันทีหลังเลือก ค่าเริ่มต้นของแพลตฟอร์มคือ `manual` บน Windows และ `select` บนแพลตฟอร์มอื่น |
+
+</div>
+
+## Mini
+
+กลุ่ม `mini` ควบคุม [`opencode mini`](/cli#mini) ซึ่งเป็นอินเทอร์เฟซแบบโต้ตอบขนาดเล็ก:
+
+```json title="cli.json"
+{
+  "mini": {
+    "thinking": "show",
+    "tools": "hide",
+    "shell_output": "hide",
+    "turn_summary": "show",
+    "footer": "show",
+    "splash": "show",
+    "work_spinner": "block-soft-slide",
+    "mono": false,
+    "replay": true,
+    "replay_limit": 200
+  }
+}
+```
+
+<div class="docs-table-scroll" role="region" aria-label="การตั้งค่า Mini" tabIndex={0}>
+
+| การตั้งค่า | ค่า | คำอธิบาย |
+| --- | --- | --- |
+| `mini.thinking` | `show` หรือ `hide` | แสดงหรือซ่อนการให้เหตุผลของโมเดล |
+| `mini.tools` | `show` หรือ `hide` | แสดงหรือซ่อนการเรียกใช้เครื่องมือและข้อความของผู้ช่วยที่อยู่ก่อนหน้า |
+| `mini.shell_output` | `show` หรือ `hide` | แสดงหรือซ่อนเอาต์พุตดิบของเครื่องมือ shell |
+| `mini.turn_summary` | `show` หรือ `hide` | แสดงหรือซ่อนสรุปเอเจนต์ โมเดล และระยะเวลาใน scrollback |
+| `mini.footer` | `show` หรือ `hide` | แสดงหรือซ่อนรายละเอียดกิจกรรม โมเดล การใช้งาน และบริบทที่แสดงค้างไว้ |
+| `mini.splash` | `show` หรือ `hide` | แสดงหรือซ่อนแบนเนอร์ตอนเข้าและออก |
+| `mini.work_spinner` | ID ของ spinner | เลือกแอนิเมชันขณะทำงานที่ส่วนท้าย |
+| `mini.mono` | บูลีน | ใช้เอาต์พุต ASCII แบบขาวดำ |
+| `mini.replay` | บูลีน | กู้คืนประวัติเซสชันเมื่อกลับมาทำงานต่อและเมื่อปรับขนาดเทอร์มินัล |
+| `mini.replay_limit` | จำนวนเต็มบวก | จำกัดการเล่นซ้ำไว้ที่ข้อความล่าสุด ค่าเริ่มต้นคือ `200` |
+
+</div>
+
+ID ของ spinner ที่ใช้ได้มีดังนี้:
+
+```text
+block-soft-slide  block-soft-sweep  block-low-comet  block-low-duet
+block-shuttle     block-bridge      block-squeeze    small-toggle
+square-toggle     grow-shrink       quadrant-orbit   crosshatch
+density-wave      seed
+```
+
+แฟล็กการเล่นซ้ำของ `mini` ในบรรทัดคำสั่งจะแทนที่การตั้งค่าเหล่านี้สำหรับการเรียกใช้ครั้งนั้น
+
+## ปุ่มลัด
+
+แทนที่การผูกปุ่มของคำสั่งและระยะหมดเวลาของปุ่ม leader:
+
+```json title="cli.json"
+{
+  "keybinds": {
+    "leader": "ctrl+x",
+    "app.exit": ["ctrl+c", "ctrl+d", "<leader>q"],
+    "prompt.paste": {
+      "key": "ctrl+v",
+      "event": "press",
+      "preventDefault": false,
+      "fallthrough": false
+    },
+    "help.show": false
+  },
+  "leader": {
+    "timeout": 2000
+  }
+}
+```
+
+<div class="docs-table-scroll" role="region" aria-label="การตั้งค่าปุ่มลัด" tabIndex={0}>
+
+| การตั้งค่า | ค่า | คำอธิบาย |
+| --- | --- | --- |
+| `keybinds.leader` | ค่าการผูกปุ่ม | กำหนดปุ่มที่ `<leader>` อ้างถึงในการผูกปุ่มอื่น |
+| `keybinds.<command>` | ค่าการผูกปุ่ม | แทนที่การผูกปุ่มของ ID คำสั่งหนึ่งรายการ |
+| `keybinds.*.key` | สตริงปุ่มหรือ descriptor | เลือกปุ่มสำหรับการผูกปุ่มแบบอ็อบเจกต์ |
+| `keybinds.*.event` | `press` หรือ `release` | จำกัดการผูกปุ่มแบบอ็อบเจกต์ไว้ที่อีเวนต์ปุ่มเดียว |
+| `keybinds.*.preventDefault` | บูลีน | ควบคุมว่าจะป้องกันการทำงานเริ่มต้นของปุ่มในเทอร์มินัลหรือไม่ |
+| `keybinds.*.fallthrough` | บูลีน | อนุญาตให้ handler ที่มีลำดับความสำคัญต่ำกว่ารับอีเวนต์เดียวกันได้ |
+| `leader.timeout` | จำนวนเต็มบวก | กำหนดเวลารอเป็นมิลลิวินาทีหลังกดปุ่ม leader |
+
+</div>
+
+ค่าการผูกปุ่มเป็นสตริง อาร์เรย์ของตัวเลือก หรืออ็อบเจกต์ก็ได้ ใช้ `"none"` หรือ `false` เพื่อปิดการผูกปุ่ม ดูไวยากรณ์ปุ่มที่รองรับ ID คำสั่งทั้งหมด และการผูกปุ่มเริ่มต้นทั้งหมดได้ที่[ปุ่มลัด](/cli/keybinds)
+
+## ปลั๊กอิน
+
+โหลดปลั๊กอินเฉพาะเทอร์มินัลตามลำดับ:
+
+```json title="cli.json"
+{
+  "plugins": [
+    "-opencode.notifications",
+    {
+      "package": "./plugins/status",
+      "options": {
+        "compact": true
+      }
+    }
+  ]
+}
+```
+
+<div class="docs-table-scroll" role="region" aria-label="การตั้งค่าปลั๊กอิน" tabIndex={0}>
+
+| การตั้งค่า | ค่า | คำอธิบาย |
+| --- | --- | --- |
+| `plugins` | อาร์เรย์ | ประกาศคำสั่งเปิด/ปิดใช้งานตามลำดับและปลั๊กอินภายนอก |
+| `plugins[].package` | สตริง | กำหนดชื่อแพ็กเกจ พาธในเครื่อง หรือ URL ของไฟล์ |
+| `plugins[].options` | อ็อบเจกต์ | ส่งตัวเลือกเฉพาะของปลั๊กอินให้กับปลั๊กอินนั้น |
+
+</div>
+
+ดูรูปแบบแพ็กเกจ การค้นหาปลั๊กอินในเครื่อง wildcard และคำสั่งปิดใช้งานได้ที่[ปลั๊กอิน](/cli/plugins)
+
+## ดีบักและฟีเจอร์ทดลอง
+
+เปิดใช้งานการวินิจฉัย หรือเลือกใช้ฟีเจอร์ทดลองที่มีอยู่ในขณะนี้:
+
+```json title="cli.json"
+{
+  "debug": {
+    "devtools": false,
+    "timing": false,
+    "turn_tokens": "verbose"
+  },
+  "experimental": {}
+}
+```
+
+<div class="docs-table-scroll" role="region" aria-label="การตั้งค่าดีบักและฟีเจอร์ทดลอง" tabIndex={0}>
+
+| การตั้งค่า | ค่า | คำอธิบาย |
+| --- | --- | --- |
+| `debug.devtools` | บูลีน | แสดงแถบดีบัก DevTools |
+| `debug.timing` | บูลีน | แสดงข้อมูลวินิจฉัยเวลาจนถึงการวาดครั้งแรก (time-to-first-draw) ในแถบดีบัก |
+| `debug.turn_tokens` | บูลีน หรือ `verbose` | แสดงการใช้โทเค็นต่อรอบ `verbose` จะรวมอินพุตของการเรียกใช้เครื่องมือด้วย |
+| `experimental` | อ็อบเจกต์ที่แมป ID ฟีเจอร์กับค่าบูลีน | เปิดหรือปิดฟีเจอร์ทดลองที่อาจเปลี่ยนแปลงหรือถูกนำออกโดยไม่แจ้งล่วงหน้า |
+
+</div>
+
+ใช้เฉพาะ ID ฟีเจอร์ที่แสดงอยู่ในกล่องโต้ตอบ **Experiments** ของ TUI ในขณะนั้น ID ที่ไม่รู้จักจะไม่มีผลใด ๆ

@@ -1,0 +1,184 @@
+---
+title: "ตัวจัดรูปแบบโค้ด"
+---
+
+OpenCode สามารถจัดรูปแบบไฟล์หลังจากที่เครื่องมือ `write`, `edit` หรือ `patch` แก้ไขไฟล์นั้น ตัวจัดรูปแบบโค้ด (formatter) ปิดใช้งานโดยค่าเริ่มต้น จึงต้องเปิดใช้งานในการกำหนดค่าก่อน:
+
+```jsonc title="opencode.jsonc"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "formatter": true,
+}
+```
+
+## เปิดใช้งาน
+
+ตั้งค่า `formatter` เป็น `true` เพื่อเปิดใช้งานตัวจัดรูปแบบในตัวทั้งหมด OpenCode จะรันตัวจัดรูปแบบในตัวก็ต่อเมื่อมีไฟล์ executable และข้อกำหนดเฉพาะของโปรเจกต์ครบถ้วนเท่านั้น
+
+```jsonc title="opencode.jsonc"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "formatter": true,
+}
+```
+
+การระบุเป็นออบเจกต์ก็เปิดใช้งานตัวจัดรูปแบบในตัวเช่นกัน และยังให้คุณแทนที่ค่าของตัวในตัวหรือเพิ่มตัวจัดรูปแบบแบบกำหนดเองได้ ออบเจกต์ว่างจะคงการตั้งค่าตัวจัดรูปแบบที่สืบทอดมาไว้ ส่วน `true` จะรีเซ็ตกลับเป็นตัวในตัว
+
+```jsonc title="opencode.jsonc"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "formatter": {},
+}
+```
+
+## ตัวจัดรูปแบบในตัว
+
+OpenCode มีคำจำกัดความตัวจัดรูปแบบต่อไปนี้ในตัว ส่วนใหญ่ต้องมีคำสั่งตามชื่อที่ระบุ ส่วนตัวที่มีกฎการตรวจหาเพิ่มเติมจะระบุไว้ด้านล่าง
+
+| ตัวจัดรูปแบบ | นามสกุลไฟล์ | ข้อกำหนด |
+| --- | --- | --- |
+| `gofmt` | `.go` | คำสั่ง `gofmt` |
+| `mix` | `.ex`, `.exs`, `.eex`, `.heex`, `.leex`, `.neex`, `.sface` | คำสั่ง `mix` |
+| `oxfmt` | `.js`, `.jsx`, `.mjs`, `.cjs`, `.ts`, `.tsx`, `.mts`, `.cts` | dependency `oxfmt` ใน `package.json` |
+| `prettier` | `.js`, `.jsx`, `.mjs`, `.cjs`, `.ts`, `.tsx`, `.mts`, `.cts`, `.html`, `.htm`, `.css`, `.scss`, `.sass`, `.less`, `.vue`, `.svelte`, `.json`, `.jsonc`, `.yaml`, `.yml`, `.toml`, `.xml`, `.md`, `.mdx`, `.graphql`, `.gql` | dependency `prettier` ใน `package.json` |
+| `biome` | นามสกุลเดียวกับ `prettier` ด้านบน | `biome.json` หรือ `biome.jsonc` และไบนารี `@biomejs/biome` ที่ติดตั้งไว้ |
+| `zig` | `.zig`, `.zon` | คำสั่ง `zig` |
+| `clang-format` | `.c`, `.cc`, `.cpp`, `.cxx`, `.c++`, `.h`, `.hh`, `.hpp`, `.hxx`, `.h++`, `.ino`, `.C`, `.H` | คำสั่ง `clang-format` และ `.clang-format` |
+| `ktlint` | `.kt`, `.kts` | คำสั่ง `ktlint` |
+| `ruff` | `.py`, `.pyi` | คำสั่ง `ruff` และการกำหนดค่า Ruff หรือการประกาศ dependency |
+| `air` | `.R` | คำสั่ง `air` ที่ระบุตัวเองว่าเป็นตัวจัดรูปแบบของ R |
+| `uv` | `.py`, `.pyi` | คำสั่ง `uv` ที่รองรับ `uv format` |
+| `rubocop` | `.rb`, `.rake`, `.gemspec`, `.ru` | คำสั่ง `rubocop` |
+| `standardrb` | `.rb`, `.rake`, `.gemspec`, `.ru` | คำสั่ง `standardrb` |
+| `htmlbeautifier` | `.erb` | คำสั่ง `htmlbeautifier` |
+| `dart` | `.dart` | คำสั่ง `dart` |
+| `ocamlformat` | `.ml`, `.mli` | คำสั่ง `ocamlformat` และ `.ocamlformat` |
+| `terraform` | `.tf`, `.tfvars` | คำสั่ง `terraform` |
+| `latexindent` | `.tex` | คำสั่ง `latexindent` |
+| `gleam` | `.gleam` | คำสั่ง `gleam` |
+| `shfmt` | `.sh`, `.bash` | คำสั่ง `shfmt` |
+| `nixfmt` | `.nix` | คำสั่ง `nixfmt` |
+| `rustfmt` | `.rs` | คำสั่ง `rustfmt` |
+| `pint` | `.php` | `laravel/pint` ใน `composer.json` |
+| `ormolu` | `.hs` | คำสั่ง `ormolu` |
+| `cljfmt` | `.clj`, `.cljs`, `.cljc`, `.edn` | คำสั่ง `cljfmt` |
+| `dfmt` | `.d` | คำสั่ง `dfmt` |
+
+ตัวอย่างเช่น การเปิดใช้งานตัวจัดรูปแบบในตัวจะทำให้ OpenCode ค้นพบและรัน dependency Prettier ในโปรเจกต์กับไฟล์ที่ตรงเงื่อนไขได้:
+
+```jsonc title="opencode.jsonc"
+{
+  "formatter": true,
+}
+```
+
+## ปรับแต่ง
+
+เพิ่มรายการที่มีชื่อเพื่อเปลี่ยนตัวจัดรูปแบบในตัวหรือกำหนดตัวจัดรูปแบบแบบกำหนดเอง ตัวจัดรูปแบบแบบกำหนดเองต้องมีทั้ง `command` และ `extensions` จึงจะรันได้
+
+```jsonc title="opencode.jsonc"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "formatter": {
+    "prettier": {
+      "environment": {
+        "NODE_ENV": "development",
+      },
+      "extensions": [".js", ".ts"],
+    },
+    "deno-markdown": {
+      "command": ["deno", "fmt", "$FILE"],
+      "extensions": [".md"],
+    },
+  },
+}
+```
+
+| ฟิลด์ | ชนิด | พฤติกรรม |
+| --- | --- | --- |
+| `disabled` | `boolean` | นำตัวจัดรูปแบบที่ระบุชื่อออกเมื่อเป็น `true` |
+| `command` | `string[]` | แทนที่คำสั่งในตัวหรือกำหนดคำสั่งแบบกำหนดเอง |
+| `environment` | `Record<string, string>` | เพิ่มตัวแปรสภาพแวดล้อมโดยยังคงสภาพแวดล้อมของโปรเซสแม่ไว้ |
+| `extensions` | `string[]` | แทนที่รายการนามสกุลในตัวหรือกำหนดรายการแบบกำหนดเอง ต้องใส่จุดนำหน้าด้วย |
+
+ทุกฟิลด์ไม่บังคับ รายการของตัวในตัวจะสืบทอดค่าที่ไม่ได้ระบุ ส่วนรายการใหม่ที่ไม่มีคำสั่งหรือนามสกุลจะรันไม่ได้
+
+```jsonc title="opencode.jsonc"
+{
+  "formatter": {
+    "prettier": {
+      "extensions": [".md", ".mdx"],
+    },
+  },
+}
+```
+
+## คำสั่ง
+
+`command` เป็นอาร์เรย์ของอาร์กิวเมนต์ ไม่ใช่สตริงคำสั่ง shell OpenCode จะแทนที่ `$FILE` ด้วยพาธสัมบูรณ์ของไฟล์ และรันคำสั่งจากไดเรกทอรีโปรเจกต์ที่ใช้งานอยู่
+
+```jsonc title="opencode.jsonc"
+{
+  "formatter": {
+    "custom": {
+      "command": ["custom-fmt", "--write", "$FILE"],
+      "extensions": [".custom"],
+    },
+  },
+}
+```
+
+## การจับคู่
+
+OpenCode เปรียบเทียบนามสกุลสุดท้ายของไฟล์กับ `extensions` การจับคู่แยกแยะตัวพิมพ์เล็กและใหญ่ และรายการแบบผสมอย่าง `.part.md` จะไม่ตรงกับ `notes.part.md` เพราะนามสกุลสุดท้ายของไฟล์นี้คือ `.md`
+
+```jsonc title="opencode.jsonc"
+{
+  "formatter": {
+    "markdown": {
+      "command": ["deno", "fmt", "$FILE"],
+      "extensions": [".md"],
+    },
+  },
+}
+```
+
+เมื่อมีตัวจัดรูปแบบหลายตัวที่ตรงเงื่อนไข OpenCode จะลองตามลำดับที่ลงทะเบียนไว้และหยุดหลังคำสั่งแรกที่สำเร็จ ตัวในตัวจะคงลำดับเดิมของตัวเอง ส่วนรายการแบบกำหนดเองจะต่อท้ายตามลำดับในออบเจกต์ หากตัวใดจบการทำงานโดยไม่สำเร็จ OpenCode จะบันทึกความล้มเหลวลงในล็อกแล้วลองตัวถัดไปที่ตรงเงื่อนไข
+
+```jsonc title="opencode.jsonc"
+{
+  "formatter": {
+    "preferred": {
+      "command": ["preferred-fmt", "$FILE"],
+      "extensions": [".foo"],
+    },
+    "fallback": {
+      "command": ["fallback-fmt", "$FILE"],
+      "extensions": [".foo"],
+    },
+  },
+}
+```
+
+## ปิดใช้งาน
+
+การจัดรูปแบบจะปิดอยู่เมื่อไม่มีไฟล์กำหนดค่าใดตั้งค่า `formatter` หากต้องการปิดการจัดรูปแบบที่ไฟล์ซึ่งมีลำดับความสำคัญต่ำกว่าเปิดไว้ ให้ตั้งค่าเป็น `false`
+
+```jsonc title="opencode.jsonc"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "formatter": false,
+}
+```
+
+หากต้องการปิดตัวจัดรูปแบบในตัวเพียงตัวเดียวโดยให้ตัวอื่นยังเปิดอยู่ ให้ทำเครื่องหมายรายการที่มีชื่อนั้นว่าปิดใช้งาน
+
+```jsonc title="opencode.jsonc"
+{
+  "formatter": {
+    "prettier": {
+      "disabled": true,
+    },
+  },
+}
+```

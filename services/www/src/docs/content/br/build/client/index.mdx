@@ -1,0 +1,181 @@
+---
+title: "JavaScript"
+---
+
+`@opencode/client` é o cliente TypeScript da HTTP API do OpenCode. Use-o quando
+a sua aplicação se conecta a um servidor OpenCode pela rede. Os tipos e métodos
+nativos dele são gerados a partir do mesmo contrato da
+[referência da API](/api). Os tipos de RPC de plugins vêm das definições de RPC importadas.
+
+## Instalar
+
+```sh
+bun add @opencode/client
+```
+
+## Criar um cliente
+
+Crie um cliente com a URL do servidor e chame os métodos, agrupados por recurso da API:
+
+```ts
+import { OpenCode } from "@opencode/client"
+
+const client = OpenCode.make({
+  baseUrl: "http://localhost:4096",
+})
+
+const session = await client.session.create({
+  location: { directory: "/workspace" },
+})
+
+await client.session.prompt({
+  sessionID: session.id,
+  text: "Review the current changes",
+})
+```
+
+## Headers e requisições
+
+Passe headers padrão de autenticação ou da aplicação para `OpenCode.make` com
+`headers`. Você também pode fornecer uma implementação personalizada de `fetch`.
+Cada operação aceita opções de requisição como último argumento, para um
+`AbortSignal` ou headers por requisição. As assinaturas de eventos são a exceção:
+elas aceitam apenas cancelamento local do assinante e usam os headers do cliente base.
+
+```ts
+const client = OpenCode.make({
+  baseUrl: "https://opencode.example.com",
+  headers: {
+    authorization: `Bearer ${process.env.OPENCODE_TOKEN}`,
+  },
+})
+
+await client.session.list(undefined, {
+  signal: AbortSignal.timeout(10_000),
+})
+```
+
+## Stream de eventos
+
+Endpoints de streaming retornam iteráveis assíncronos:
+
+```ts
+for await (const event of client.event.subscribe()) {
+  console.log(event.type)
+}
+```
+
+Assinantes de eventos nativos e de RPC compartilham uma única conexão lazy por
+cliente. Criar o cliente, o handle ou o iterável não abre nenhuma conexão de
+eventos; ela é aberta quando o consumo começa. Interromper a iteração ou abortar
+um assinante encerra apenas aquele iterador. A conexão é fechada quando o último
+assinante sai. A fonte compartilhada espera que os assinantes ativos aceitem cada
+evento; os consumidores devem usar um buffer antes de executar trabalho lento.
+
+As assinaturas recebem apenas eventos ao vivo, sem replay nem reconexão
+automática. Uma falha na fonte encerra as assinaturas atuais; assine novamente
+depois da recuperação. Um assinante nativo que chega depois recebe o marcador
+`server.connected` atual, não os eventos de negócio anteriores.
+
+## RPC de plugins
+
+Importe o contrato compartilhado de um plugin e passe-o para `client.rpc`:
+
+```ts
+import { OpenCode } from "@opencode/client"
+import { Acme } from "opencode-acme-plugin/rpc"
+
+const acme = client.rpc(Acme)
+const result = await acme.search(
+  { query: "hello" },
+  { location: { directory: "/workspace" }, signal: AbortSignal.timeout(10_000) },
+)
+
+const unsubscribe = acme.events.on("updated", (event) => {
+  console.log(event.type, event.location.directory, event.data.text)
+})
+```
+
+O segundo argumento opcional do método contém `location`, `signal` e `headers`,
+separado da entrada definida pelo plugin. Sem `location`, valem os padrões das
+requisições nativas: os headers de localização base e, depois, o diretório de
+trabalho do servidor. Nenhuma localização é selecionada ao criar o subcliente.
+
+Os métodos inferem argumentos e resultados a partir da definição. O parsing de
+schemas pertence à fronteira do contrato: quem chama envia a representação de
+entrada aceita, enquanto os handlers recebem valores já processados. O cliente
+Promise aceita definições em Standard Schema ou JSON Schema simples e
+não executa parsers de schema localmente: o servidor retorna a saída já
+processada e transformada. Definições em Effect Schema exigem o cliente Effect.
+
+Erros declarados nos métodos rejeitam a Promise como os erros de outros endpoints
+do cliente Promise, e os erros capturados continuam sem tipo. O subcliente tipado
+remove os wrappers genéricos de erro da RPC HTTP. Falhas reservadas do framework
+(`rpc.*`) continuam sendo falhas de RPC simples, enquanto erros não relacionados
+de autenticação, transporte e protocolo mantêm a representação normal no cliente.
+
+As assinaturas de RPC usam nomes locais e recebem os eventos daquela RPC em todas
+as localizações. Inspecione o campo obrigatório `event.location` para filtrá-los.
+`events.subscribe` segue a API nativa de iteráveis assíncronos:
+
+```ts
+for await (const event of acme.events.subscribe("updated")) {
+  console.log(event.data.text)
+}
+```
+
+`events.on` é um wrapper de conveniência sobre a mesma fonte. Ele retorna uma
+função para cancelar a assinatura; callbacks assíncronos são aguardados em
+sequência. Falhas no callback ou na fonte são registradas no log e encerram
+aquele listener. Assinaturas nativas e tipadas recebem o mesmo envelope normal
+`rpc.<rpcID>.<event>`, com os dados do evento diretamente como objeto. Assinaturas
+ao vivo não fazem replay de eventos perdidos.
+
+O plugin de servidor precisa estar configurado e implementar a RPC; importar uma
+definição não a registra. Consulte [RPC de plugins](/build/plugins/rpc) para a API
+de definição e registro. Qualquer cliente HTTP também pode chamar a rota genérica
+`POST /api/rpc/{rpcID}/{method}` com `{ "input": ... }` e receber
+`{ "output": ... }`. Campos de entrada/saída omitidos representam ausência de valor.
+
+## Serviço local em segundo plano
+
+Os pontos de entrada principais do cliente são compatíveis com navegadores e não
+incluem gerenciamento de processos locais. Em uma aplicação Node.js, importe a
+API nativa de serviço baseada em Promise de `@opencode/client/service`.
+
+- `Service.discover()` retorna um endpoint registrado e saudável, sem iniciar
+  nenhum processo.
+- `Service.ensure()` retorna um serviço compatível e inicia um quando necessário.
+- `Service.stop()` para exatamente a instância de serviço registrada.
+- `Service.headers(endpoint)` cria os headers de autenticação para um cliente.
+
+```ts
+import { OpenCode } from "@opencode/client"
+import { Service } from "@opencode/client/service"
+
+const endpoint = await Service.ensure()
+const client = OpenCode.make({
+  baseUrl: endpoint.url,
+  headers: Service.headers(endpoint),
+})
+
+const info = await client.server.info()
+```
+
+`Service.ensure()` aceita, opcionalmente, um arquivo de registro, uma versão, um
+comando de serviço e um callback `onStart`. `version` aceita um valor exato ou um
+predicado de compatibilidade:
+
+```ts
+const endpoint = await Service.ensure({
+  file: "/var/run/opencode/service.json",
+  version: (version) => version.startsWith("2."),
+  command: ["opencode", "serve", "--service"],
+  onStart(reason, previousVersion) {
+    console.log(reason, previousVersion)
+  },
+})
+```
+
+Omita essas opções para usar o caminho de registro padrão e o comando
+`opencode serve --service`.

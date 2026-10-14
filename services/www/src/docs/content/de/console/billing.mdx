@@ -1,0 +1,88 @@
+---
+title: "Abrechnung"
+description: "In der OpenCode Console Guthaben aufladen, die automatische Aufladung einrichten, Zahlungsmethoden verwalten und Rechnungen herunterladen."
+---
+
+Die Console ist für Teams jeder Größe kostenlos, ohne Gebühren pro Platz. Du zahlst nur für die Nutzung, und zwar aus
+vorausbezahltem Guthaben, das für den gesamten Workspace gilt. Owner und Admins verwalten die Abrechnung unter
+**Settings › Billing**.
+
+Nutzung über [deine eigenen Anbieter](/console/providers) wird vom jeweiligen Anbieter abgerechnet, nicht von der Console.
+
+## Zahlungsmethode hinzufügen
+
+1. Öffne **Settings › Billing**.
+2. Klicke unter **Payment methods** auf **Add**.
+3. Wähle eine Methode und schließe die Einrichtung bei Stripe ab.
+
+Unterstützte Zahlungsmethoden:
+
+- Karte
+- Link
+- Alipay
+- UPI
+- WeChat Pay
+
+Mit **⋯ › Make default** legst du die Methode für automatische Abbuchungen fest. Entfernst du eine Methode, kann das
+die automatische Aufladung und Go-Verlängerungen stoppen, die sie verwenden.
+
+## Guthaben aufladen
+
+1. Klicke unter **Credits** auf **Add credits**.
+2. Wähle $10, $50 oder $100 oder wähle **Other** und gib einen Betrag ein.
+3. Wähle eine Zahlungsmethode und klicke auf **Confirm and pay**.
+
+Zusätzlich fällt eine Bearbeitungsgebühr von 4.6% + $0.31 an. Ein Kauf über $50 kostet also $52.61, und die vollen $50
+werden dem Guthaben gutgeschrieben.
+
+## Automatische Aufladung
+
+Die automatische Aufladung kauft Guthaben nach, wenn der Kontostand niedrig ist.
+
+1. Klicke unter **Auto-recharge** auf **Add rule**.
+2. Lege den Kontostand fest, der eine Abbuchung auslöst, und den Betrag, der aufgeladen werden soll.
+3. Klicke auf **Save**.
+
+Die automatische Aufladung belastet die Standardzahlungsmethode, einschließlich der Bearbeitungsgebühr. Schlägt eine
+Abbuchung fehl, wird die automatische Aufladung deaktiviert, bis du sie erneut einrichtest.
+
+## Guthaben prüfen
+
+Die Karte **Credits** unter **Overview** zeigt Ownern und Admins das Guthaben an.
+
+## Wenn das Guthaben aufgebraucht ist
+
+Kostenpflichtige Anfragen schlagen mit HTTP `402` fehl, sobald das Guthaben null erreicht. Das Guthaben wird nie
+negativ.
+
+```text
+Upstream request failed: Insufficient account funds
+```
+
+## Rechnungen
+
+Jede Zahlung erscheint unter **Invoices** mit ihrem Status und einem Link zu **Download invoice** oder **View receipt**.
+
+| Eintrag          | Ausgelöst durch               |
+| ---------------- | ----------------------------- |
+| Balance top-up   | Aufladen von Guthaben         |
+| Automatic top-up | Automatische Aufladung        |
+| Go subscription  | Abschluss eines Go-Abonnements |
+| Go renewal       | Monatliche Go-Verlängerung    |
+| Monthly Usage    | Abrechnung auf Rechnung       |
+
+## Abrechnung auf Rechnung
+
+Workspaces mit einer Kreditvereinbarung können monatlich auf Rechnung zahlen, statt Guthaben zu kaufen. Wende dich zur
+Einrichtung an den Support.
+
+- Die Nutzung wird von einem Kreditrahmen statt von einem vorausbezahlten Guthaben abgezogen.
+- Die Rechnung für jeden Monat wird am 1. (UTC) ausgestellt und ist 14 Tage später fällig.
+- Offene Rechnungen haben eine Schaltfläche **Pay now**.
+- Anfragen schlagen mit HTTP `402` fehl, wenn der Kreditrahmen ausgeschöpft oder eine Rechnung überfällig ist.
+
+## Go
+
+[OpenCode Go](/console/go)-Abonnements verwenden dieselben Zahlungsmethoden und erscheinen in derselben
+Rechnungsliste. Aktiviere **Extra usage** auf der Guthabenkarte unter **Overview**, um nach Erreichen eines Go-Limits
+aus dem Guthaben zu bezahlen.

@@ -1,0 +1,112 @@
+---
+title: "Talimatlar"
+---
+
+OpenCode'a kalıcı proje yönergeleri vermek için bir `AGENTS.md` dosyası ekleyin. Bu dosyayı derleme komutları, mimari notları, kod kuralları ve doğrulama gereksinimleri için kullanın.
+
+```md title="AGENTS.md"
+# Project instructions
+
+- Run `bun typecheck` after changing TypeScript.
+- Keep database queries in `src/database`.
+- Do not edit generated files directly.
+```
+
+Depoda çalışan herkesin aynı yönergeleri alması için proje talimat dosyalarını commit'leyin.
+
+## Kapsam
+
+`AGENTS.md` dosyasını, yönergelerinin geçerli olması gereken dizine yerleştirin. OpenCode önce genel dosyayı, ardından geçerli çalışma alanı dizininden ana dizine doğru bulunan her `AGENTS.md` dosyasını yükler. Ana dizin dışındaki çalışma alanlarında proje kök dizininde durur.
+
+```text
+~/.config/opencode/AGENTS.md
+~/code/my-project/AGENTS.md
+~/code/my-project/packages/AGENTS.md
+~/code/my-project/packages/web/AGENTS.md  ← current workspace
+```
+
+Bu örnekte dört dosyanın tümü yüklenir. Dosyalar şu sırayla birleştirilir:
+
+```text
+~/.config/opencode/AGENTS.md
+packages/web/AGENTS.md
+packages/AGENTS.md
+AGENTS.md
+```
+
+Her yerde geçerli olan yönergeleri genel dosyada tutun. Depo genelindeki yönergeleri proje kök dizinine, daha özel yönergeleri ise kapsadıkları koda daha yakın bir yere koyun. OpenCode dosyaları birleştirir ve aralarındaki çelişkileri çözmez.
+
+Çalışma alanı proje kök dizininin dışındaysa yalnızca genel dosya yüklenir. Genel dosyayı devre dışı bırakmadan proje `AGENTS.md` keşfini atlamak için `OPENCODE_DISABLE_PROJECT_CONFIG=1` ayarlayın.
+
+<Callout type="note">
+  OpenCode V2 yalnızca `AGENTS.md` dosyasını tanır. `CLAUDE.md` dosyasını yedek olarak kullanmaz.
+</Callout>
+
+## Keşif
+
+Çalışma alanının altındaki talimat dosyaları, ajan projeyi keşfettikçe bulunur. Bir dosyayı okumak veya bir dizini listelemek, o hedef ile çalışma alanı arasındaki tüm `AGENTS.md` dosyalarını yükler.
+
+```text
+my-project/                         ← current workspace
+├── AGENTS.md                       loaded initially
+└── packages/
+    └── web/
+        ├── AGENTS.md               loaded when this area is read
+        └── src/
+            └── app.ts              read target
+```
+
+İç içe dosyalar en yakından başlayarak yüklenir ve talimat girdileri modelin gördüğü geçmişte kaldığı sürece tekrar eklenmez. Aynı alanı yeniden okumak normalde bu dosyaları tekrar eklemez. Bağlam sıkıştırma veya bir geri alma bu girdiyi kaldırırsa sonraki bir okuma dosyayı yeniden yükleyebilir.
+
+İç içe bir dosyada yüklendikten sonra yapılan düzenlemeler otomatik olarak algılanmaz. Güncellenen metnin hemen geçerli olması gerekiyorsa yeni bir oturum başlatın.
+
+## Sıralama
+
+Önce seçili ajanın veya sağlayıcının sistem istemi gönderilir. Ardından OpenCode ilk talimatları şu sırayla bir araya getirir:
+
+```text
+1. Agent or provider system prompt
+2. Built-in environment and date context
+3. Code Mode tool guidance, when enabled
+4. Global and project AGENTS.md files
+5. Available skill, reference, and MCP guidance
+6. Session-specific instruction entries supplied through the API
+```
+
+Bu kaynaklar birbirini geçersiz kılmaz, birleştirilir. Sonradan keşfedilen iç içe `AGENTS.md` dosyaları, keşif sırasıyla oturum geçmişine eklenir.
+
+## Güncellemeler
+
+Bir oturum çalışırken yönergelerini güncellemek için genel `AGENTS.md` dosyasını veya yukarı doğru keşfedilmiş bir `AGENTS.md` dosyasını düzenleyin.
+
+```bash
+$ printf '\n- Run the integration suite before committing.\n' >> AGENTS.md
+```
+
+OpenCode bir sonraki model isteğinden önce değişikliği algılar ve bekleyen girdiyi iletmeden önce bir talimat güncellemesi ekler:
+
+```text
+AGENTS.md changes
+→ instruction update
+→ next prompt
+```
+
+- Tüm ortam `AGENTS.md` dosyalarını kaldırmak, oturuma önceki ortam talimatlarının artık geçerli olmadığını bildirir.
+- Geçici bir okuma hatası, son bilinen talimatları silinmiş saymak yerine korur.
+- Bir oturumu taşımak talimat durumunu korur; bu yüzden hedefteki yönergeler bir güncelleme olarak eklenir.
+- Bir oturumdaki geri almayı kesinleştirmek talimat durumunu temizler ve talimatları bir sonraki istemden önce yeniden yükler.
+
+Talimat değerleri ayrıcalıklı kalır. İstemciler hangi kaynakların değiştiğini görebilir, ancak içeriklerini göremez.
+
+## Yapılandırma
+
+V2 yapılandırma şeması bir `instructions` dizisini kabul eder, ancak V2 şu anda bu dizideki dosyaları, glob kalıplarını veya URL'leri çözümlemez. Bu yapılandırma henüz modele talimat eklemez:
+
+```jsonc title="opencode.jsonc"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "instructions": ["CONTRIBUTING.md", "docs/guidelines/*.md", "https://example.com/instructions.md"],
+}
+```
+
+Etkin V2 talimatları için `AGENTS.md` kullanın. Yapılandırma konumları ve öncelik sırası için [Yapılandırma](/config) sayfasına bakın.

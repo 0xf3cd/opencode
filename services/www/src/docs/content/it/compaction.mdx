@@ -1,0 +1,176 @@
+---
+title: "Compattazione"
+---
+
+La compattazione libera spazio in una sessione lunga sostituendo la parte meno recente della
+conversazione con un riepilogo, così la sessione può proseguire oltre il limite di contesto del modello.
+
+## Funzionamento
+
+Quando una sessione si avvicina al limite di contesto del modello, OpenCode riassume tutto tranne
+la conversazione più recente, circa 15.000 token per impostazione predefinita. Quando il riepilogo
+è pronto, viene posto davanti a quella conversazione recente e la sessione prosegue da lì.
+
+```text
+before   [ system prompt ][ older conversation ............ ][ recent 15k ][ pending work ]
+after    [ system prompt ][ summary ][ recent 15k ][ pending work ]
+```
+
+Il modello vede il riepilogo come conversazione passata. Le compattazioni successive aggiornano lo
+stesso riepilogo invece di ricominciare da capo.
+
+## Attivazione
+
+La compattazione automatica è attiva per impostazione predefinita:
+
+```jsonc title="opencode.jsonc"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "compaction": {
+    "auto": true,
+    "keep": { "tokens": 15000 },
+  },
+}
+```
+
+La compattazione comporta una perdita di informazioni. Aumenta `keep.tokens` quando contano i
+dettagli esatti più recenti, oppure richiedi tu stesso la compattazione prima di quella automatica.
+
+## Compattazione manuale
+
+Puoi richiedere la compattazione in qualsiasi momento, anche con una cronologia breve:
+
+```sh
+opencode api post /api/session/ses_example/compact --data '{}'
+```
+
+Il comando `api` individua il servizio in background e si autentica. La risposta conferma che la
+richiesta è stata accettata, ma non attende il riepilogo. Segui gli eventi `session.compaction.*`
+per sapere quando termina. Consulta il [riferimento dell'API](/api) per l'operazione completa.
+
+| Regola | Comportamento |
+| --- | --- |
+| Tempistica | Viene eseguita al successivo punto sicuro, prima dei prompt ancora in attesa. |
+| Ripetizioni | Le richieste effettuate mentre un'altra è in sospeso vengono unite a quest'ultima. |
+| Automazione | Funziona anche quando `compaction.auto` è `false`. |
+
+Passa un `id` per rendere idempotente un nuovo tentativo identico. Riutilizzare quell'ID per una
+richiesta diversa restituisce un conflitto.
+
+```sh
+opencode api post /api/session/ses_example/compact --data '{"id":"msg_compact_once"}'
+```
+
+## Impostazioni
+
+Aggiungi `compaction` a un qualsiasi [file di configurazione di OpenCode](/config):
+
+```jsonc title="opencode.jsonc"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "compaction": {
+    "auto": false,
+    "keep": { "tokens": 24000 },
+    "buffer": 16000,
+  },
+}
+```
+
+| Campo | Predefinito | Comportamento |
+| --- | ---: | --- |
+| `auto` | `true` | Compatta automaticamente in prossimità del limite di contesto e tenta un solo recupero quando un provider rifiuta una richiesta perché troppo lunga. La compattazione manuale funziona sempre. |
+| `keep.tokens` | `15000` | Quantità approssimativa di conversazione recente mantenuta accanto al riepilogo. Valori più alti conservano più dettagli ma lasciano meno spazio al nuovo lavoro. |
+| `buffer` | 10% del limite | Token da lasciare liberi sotto il limite del modello. Valori più alti avviano prima la compattazione automatica. |
+
+`keep.tokens` e `buffer` accettano numeri interi non negativi.
+
+## Provider
+
+Per impostazione predefinita OpenCode scrive il riepilogo da sé, usando il modello della sessione.
+Alcuni provider possono invece compattare la conversazione dal proprio lato. Abilita questa opzione
+per provider o per modello con `settings.compaction`:
+
+```jsonc title="opencode.jsonc"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "providers": {
+    "openai": {
+      "settings": { "compaction": { "type": "native" } },
+      "models": {
+        "gpt-4.1": { "settings": { "compaction": { "type": "summary" } } },
+      },
+    },
+  },
+}
+```
+
+L'impostazione del modello sovrascrive quella del provider. `native` usa la compattazione del
+provider; `summary` usa quella di OpenCode.
+
+Con la compattazione nativa, OpenCode invia la conversazione all'endpoint di compattazione del
+provider. Il provider restituisce un elemento opaco e cifrato che sostituisce la conversazione meno
+recente. I tuoi messaggi e allegati recenti, fino a `keep.tokens`, vengono mantenuti accanto a esso:
+
+```text
+before   [ older conversation ........................ ][ recent user messages ]
+after    [ encrypted checkpoint + recent user messages ]
+```
+
+| Aspetto | Comportamento |
+| --- | --- |
+| Supporto | Modelli OpenAI Responses. Il supporto varia in base al deployment e al modello. |
+| Soglia | Stesse impostazioni `auto` e `buffer` della compattazione tramite riepilogo. Funzionano anche le richieste manuali. |
+| Portabilità | Un checkpoint cifrato funziona solo con lo stesso provider, modello ed endpoint. Se cambi modello, la sessione prosegue invece dalla conversazione originale. |
+| Troppo lunga | Se il provider rifiuta una compattazione perché troppo lunga, OpenCode riprova con una richiesta più piccola. Non passa a un riepilogo. |
+
+## Riepiloghi
+
+Il riepilogo è strutturato in modo che un altro agente possa riprendere il lavoro a partire da esso:
+
+```md
+## Objective
+Finish the authentication migration.
+
+## Next Move
+- Update the callback handler.
+- Verify the login flow.
+```
+
+Copre l'obiettivo e i requisiti, le decisioni, il lavoro completato e in corso, i blocchi e i
+prossimi passi, oltre ai file rilevanti. Nella conversazione recente mantenuta accanto al
+riepilogo, l'output lungo degli strumenti viene accorciato e i dati degli allegati vengono
+sostituiti da una breve descrizione.
+
+Dopo la compattazione, le versioni correnti dei tuoi file di istruzioni diventano la base di
+riferimento della sessione; consulta [Istruzioni](/instructions).
+
+## Limiti
+
+| Limite | Risultato |
+| --- | --- |
+| Modello | La compattazione usa il modello della sessione. Non esiste un modello di compattazione separato. |
+| Cronologia | La compattazione ha bisogno di conversazione meno recente da sostituire. Non può liberare spazio quando una richiesta è composta soprattutto da istruzioni fisse e schemi degli strumenti. |
+| Dimensione | Se la conversazione da compattare è a sua volta troppo lunga, OpenCode invia una versione testuale ridotta e può tralasciare gli scambi meno recenti. |
+| Recupero | Una richiesta rifiutata perché troppo lunga viene compattata e ritentata una sola volta. Un secondo rifiuto viene restituito come errore. |
+| Archiviazione | I messaggi precedenti restano archiviati anche quando non vengono più inviati al modello. |
+
+Ad esempio, qui la compattazione non può aiutare:
+
+```text
+128k context = 120k fixed instructions and tools + 8k conversation
+```
+
+## Migrazione
+
+V1 usava un comportamento basato sui turni finali (tail turn) e sulla potatura (pruning). V2 usa i
+riepiloghi e `compaction.keep.tokens`:
+
+```jsonc
+{
+  "compaction": {
+    "keep": { "tokens": 15000 }
+  }
+}
+```
+
+Le impostazioni e il comportamento descritti in questa pagina si applicano a V2.

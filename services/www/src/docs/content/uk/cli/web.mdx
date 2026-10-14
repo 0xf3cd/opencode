@@ -1,0 +1,110 @@
+---
+title: "Web"
+description: "Запускайте OpenCode у браузері."
+---
+
+OpenCode містить вебінтерфейс, який обслуговує той самий сервер, що й TUI. Вебінтерфейс доступний за замовчуванням і
+захищений паролем.
+
+## Доступ
+
+```bash
+$ opencode pair
+
+  Open a link to connect. Links work once and expire in 5 minutes.
+
+  http://127.0.0.1:49374/auth/connect/...
+
+  █▀▀▀▀▀█ ...
+```
+
+Якщо відкрити посилання в браузері, він увійде за допомогою сесійного cookie і завантажить вебінтерфейс. Якщо
+відсканувати QR-код у застосунку OpenCode або вставити посилання в його поле адреси сервера, застосунок під'єднається
+так само. Сесії діють 30 днів; зміна пароля сервера завершує всі сесії.
+
+### Через SSH
+
+Якщо сервер слухає лише localhost, переадресуйте його порт на свій комп'ютер і відкрийте виведене посилання локально:
+
+```bash
+$ ssh -L 49374:127.0.0.1:49374 my-server
+```
+
+За замовчуванням сервер працює на порту 49374 і слухає лише localhost. Цю конфігурацію можна змінити командою
+`opencode service`.
+
+### Віддалений доступ
+
+Щоб під'єднуватися звідусіль, створіть пару через віддалену адресу
+[OpenTunnel](https://github.com/anomalyco/opentunnel):
+
+```bash
+$ opencode pair --remote
+```
+
+Під час першого ввімкнення віддаленого доступу команда просить підтвердження:
+
+```text
+▲  This will expose your OpenCode server to the internet.
+│  Traffic is end-to-end encrypted, and access requires your server password.
+│  To pair locally instead, run `opencode pair` without the --remote flag.
+│
+◆  Expose your server to the internet?
+│  ● Yes / ○ No
+```
+
+Без інтерактивного термінала команда завершується помилкою, якщо не передати `--yes` для підтвердження. Після
+підтвердження наступні запуски пропускають цей запит, навіть якщо віддалений доступ було вимкнено командою
+`opencode service set remote false`.
+
+## Налаштування
+
+Задайте будь-який параметр командою `opencode service set`:
+
+```bash
+# Listen on every network interface
+$ opencode service set hostname 0.0.0.0
+
+# Use a fixed port instead of the channel default
+$ opencode service set port 49374
+
+# Replace the generated password
+$ opencode service set password "a-long-secret"
+
+# Allow a web client served from another origin
+$ opencode service set cors https://app.example.com,https://other.example.com
+
+# Pass an environment variable to the server process
+$ opencode service set env OPENCODE_LOG_LEVEL DEBUG
+```
+
+Зміна параметра зупиняє фоновий сервер. Щоб застосувати нову конфігурацію, виконайте:
+
+```bash
+$ opencode service start
+```
+
+## Автономний режим
+
+`opencode serve` запускає той самий сервер на передньому плані, а не через спільний фоновий сервіс.
+
+```bash
+$ opencode serve --hostname 0.0.0.0 --port 4096
+server listening on http://0.0.0.0:4096
+server password <password>
+```
+
+Використовуйте цю команду, якщо потрібно:
+
+- Запустити OpenCode на спільному, постійно ввімкненому або віддаленому хості, а потім під'єднувати клієнти командою
+  `opencode --server <url>`.
+- Керувати іменем хоста, портом і джерелами CORS для окремого процесу.
+- Запускати сервер під керуванням супервізора на кшталт systemd, Docker або іншого середовища, яке очікує процес на
+  передньому плані.
+- Мати виділений сервер замість спільного фонового сервісу.
+
+Під'єднайте до нього клієнт за допомогою `--server`:
+
+```bash
+$ opencode --server http://127.0.0.1:4096
+```

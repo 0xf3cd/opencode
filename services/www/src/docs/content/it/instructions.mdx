@@ -1,0 +1,112 @@
+---
+title: "Istruzioni"
+---
+
+Aggiungi un file `AGENTS.md` per fornire a OpenCode indicazioni persistenti sul progetto. Usalo per i comandi di build, le note sull'architettura, le convenzioni del codice e i requisiti di verifica.
+
+```md title="AGENTS.md"
+# Project instructions
+
+- Run `bun typecheck` after changing TypeScript.
+- Keep database queries in `src/database`.
+- Do not edit generated files directly.
+```
+
+Esegui il commit dei file di istruzioni del progetto, così chiunque lavori nel repository riceve le stesse indicazioni.
+
+## Ambito
+
+Posiziona `AGENTS.md` nella directory in cui le sue indicazioni devono valere. OpenCode carica il file globale e poi ogni `AGENTS.md` trovato risalendo dalla directory corrente del workspace fino alla home. Per i workspace al di fuori della home, si ferma alla radice del progetto.
+
+```text
+~/.config/opencode/AGENTS.md
+~/code/my-project/AGENTS.md
+~/code/my-project/packages/AGENTS.md
+~/code/my-project/packages/web/AGENTS.md  ← current workspace
+```
+
+In questo esempio vengono caricati tutti e quattro i file, combinati in quest'ordine:
+
+```text
+~/.config/opencode/AGENTS.md
+packages/web/AGENTS.md
+packages/AGENTS.md
+AGENTS.md
+```
+
+Metti nel file globale le indicazioni valide ovunque. Inserisci quelle relative all'intero repository nella radice del progetto e quelle più specifiche vicino al codice a cui si riferiscono. OpenCode combina i file e non risolve eventuali conflitti tra loro.
+
+Se il workspace si trova al di fuori della radice del progetto, viene caricato solo il file globale. Imposta `OPENCODE_DISABLE_PROJECT_CONFIG=1` per saltare la ricerca degli `AGENTS.md` del progetto senza disabilitare il file globale.
+
+<Callout type="note">
+  OpenCode V2 riconosce solo `AGENTS.md`. Non usa `CLAUDE.md` come ripiego.
+</Callout>
+
+## Individuazione
+
+I file di istruzioni nelle directory sotto il workspace vengono individuati man mano che l'agente esplora il progetto. Leggere un file o elencare una directory carica tutti i file `AGENTS.md` presenti tra quella destinazione e il workspace.
+
+```text
+my-project/                         ← current workspace
+├── AGENTS.md                       loaded initially
+└── packages/
+    └── web/
+        ├── AGENTS.md               loaded when this area is read
+        └── src/
+            └── app.ts              read target
+```
+
+I file annidati vengono caricati a partire dal più vicino e non vengono duplicati finché la relativa voce di istruzioni resta nella cronologia visibile al modello. Di norma, leggere di nuovo la stessa area non li reinserisce. Se una compattazione o un revert rimuove quella voce, una lettura successiva può caricare di nuovo il file.
+
+Dopo il caricamento, le modifiche a un file annidato non vengono rilevate automaticamente. Avvia una nuova sessione quando il testo aggiornato deve valere da subito.
+
+## Ordine
+
+Per primo viene inviato il prompt di sistema dell'agente selezionato o del provider. OpenCode assembla poi le istruzioni iniziali in quest'ordine:
+
+```text
+1. Agent or provider system prompt
+2. Built-in environment and date context
+3. Code Mode tool guidance, when enabled
+4. Global and project AGENTS.md files
+5. Available skill, reference, and MCP guidance
+6. Session-specific instruction entries supplied through the API
+```
+
+Queste fonti vengono combinate, non usate come override l'una dell'altra. I file `AGENTS.md` annidati individuati in seguito vengono aggiunti alla cronologia della sessione nell'ordine in cui vengono trovati.
+
+## Aggiornamenti
+
+Per aggiornare le indicazioni di una sessione in esecuzione, modifica un `AGENTS.md` globale o individuato risalendo le directory.
+
+```bash
+$ printf '\n- Run the integration suite before committing.\n' >> AGENTS.md
+```
+
+Prima della richiesta successiva al modello, OpenCode rileva la modifica e aggiunge un aggiornamento delle istruzioni prima di consegnare l'input in attesa:
+
+```text
+AGENTS.md changes
+→ instruction update
+→ next prompt
+```
+
+- Se rimuovi tutti gli `AGENTS.md` sempre attivi (il file globale e quelli delle directory superiori), la sessione viene informata che le istruzioni precedenti non valgono più.
+- Un errore di lettura temporaneo conserva le ultime istruzioni note invece di considerarle eliminate.
+- Lo spostamento di una sessione ne mantiene lo stato delle istruzioni, quindi le indicazioni presenti nella destinazione vengono introdotte come aggiornamento.
+- La conferma di un revert della sessione ne azzera lo stato delle istruzioni e ricarica le istruzioni prima del prompt successivo.
+
+I valori delle istruzioni restano privilegiati. I client possono vedere quali fonti sono cambiate, ma non il loro contenuto.
+
+## Configurazione
+
+Lo schema di configurazione di V2 accetta un array `instructions`, ma attualmente V2 non risolve i file, i pattern glob o gli URL indicati. Per ora questa configurazione non aggiunge istruzioni al modello:
+
+```jsonc title="opencode.jsonc"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "instructions": ["CONTRIBUTING.md", "docs/guidelines/*.md", "https://example.com/instructions.md"],
+}
+```
+
+Usa `AGENTS.md` per le istruzioni effettivamente attive in V2. Consulta [Configurazione](/config) per le posizioni dei file di configurazione e la precedenza.

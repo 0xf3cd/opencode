@@ -1,0 +1,171 @@
+---
+title: "API'ye genel bakış"
+description: "OpenCode Console API'de hizmet hesabı anahtarları veya kullanıcı token'larıyla kimlik doğrulaması yapın."
+---
+
+Console API, entegrasyonların çalışma alanı yapılandırmasını okumasını ve bütçeleri yönetmesini sağlar. Yollar,
+Console temel URL'sine görelidir.
+
+```bash
+export CONSOLE_URL="https://opencode.ai/console"
+export SERVICE_API_KEY="oc_sk_..."
+
+curl --fail-with-body "${CONSOLE_URL}/api/v2/config" \
+  --header "Authorization: Bearer ${SERVICE_API_KEY}"
+```
+
+| API | Uç noktalar |
+| ----------------------------------- | ----------------------------------- |
+| [Çıkarım](/console/api/inference) | `https://opencode.ai/inference/...` |
+| [Sağlayıcılar](/console/api/providers) | `https://opencode.ai/inference/custom/...` |
+| [Bütçeler](/console/api/budgets) | `/api/v1/budgets/members` |
+| [Yapılandırma](#workspace-config) | `GET /api/v2/config` |
+
+## Hizmet hesapları
+
+Entegrasyonlar bir hizmet hesabıyla kimlik doğrulaması yapar. Hizmet hesabı, çalışma alanının kendi API anahtarlarına,
+kullanımına ve [bütçesine](/console/budgets#service-account-budgets) sahip, insan olmayan bir üyesidir. Sahipler ve
+yöneticiler hizmet hesaplarını **Keys** sayfasından yönetir.
+
+1. **Keys** sayfasını açıp **Add Service Account** düğmesine tıklayın, ardından hesaba bir ad verin (örneğin
+   `CI Pipeline`).
+2. Hizmet hesabını açın ve **Add API Key** düğmesine tıklayın.
+3. Bir **Key name**, **Permissions** ve isteğe bağlı bir **Expiry date** seçin, ardından **Create key** düğmesine
+   tıklayın.
+4. Anahtarı kopyalayın. Anahtar yalnızca bir kez gösterilir.
+
+```text
+oc_sk_1a2b3c4d5e6f_...
+```
+
+Anahtarı bearer token olarak gönderin. Anahtar tek bir çalışma alanına bağlı olduğundan çalışma alanı başlığı gerekmez.
+
+```text
+Authorization: Bearer oc_sk_...
+```
+
+### İzinler
+
+| İzin | İzin verilenler |
+| -------------- | -------------- |
+| Inference only | [Çıkarım](/console/api/inference) ve [Sağlayıcılar](/console/api/providers) API istekleri ile `GET /api/v2/config`. |
+| All | Yukarıdakilerin tümü, ayrıca modelleri yönetmek dışında yönetici erişimiyle Console API. |
+
+Bazı işlemler, **All** anahtarıyla bile her zaman Console'da oturum açmış bir kişi gerektirir: üye davet etme, rolleri
+değiştirme, üyeleri çıkarma ve anahtar oluşturma veya iptal etme.
+
+### Anahtarları iptal etme
+
+Hizmet hesabını açın ve bir anahtarı **API Keys** bölümünden iptal edin. Hizmet hesabını kaldırmak tüm anahtarlarını
+iptal eder. İptal edilmiş veya süresi dolmuş bir anahtar kullanan otomasyonlar hemen HTTP `401` alır.
+
+## Kullanıcı token'ları
+
+Kullanıcı token'ları, oturum açmış bir kişi olarak o kişinin çalışma alanı rolüyle hareket eder. Token'ı, çalışma
+alanını belirten bir `x-org-id` başlığıyla birlikte gönderin.
+
+```bash
+curl --fail-with-body "${CONSOLE_URL}/api/v2/config" \
+  --header "Authorization: Bearer ${USER_TOKEN}" \
+  --header "x-org-id: org_..."
+```
+
+[Cihaz akışından](#device-flow) alınan token'lar, oturum açma sırasında seçilen çalışma alanına bağlıdır ve bu başlığa
+ihtiyaç duymaz. Farklı bir `x-org-id` değeri `403` döndürür.
+
+## Cihaz akışı
+
+OpenCode, OAuth cihaz yetkilendirme izniyle (device authorization grant, RFC 8628) oturum açar. Diğer CLI'lar da aynı
+akışı kullanabilir.
+
+1. Bir cihaz kodu isteyin. Token'ı bir çalışma alanına bağlamak için `supports_org_scope=true` gönderin.
+
+   ```bash
+   curl --fail-with-body "${CONSOLE_URL}/auth/device/code" \
+     --data "client_id=my-cli" \
+     --data "supports_org_scope=true"
+   ```
+
+   Yanıt; `device_code`, `user_code`, `verification_uri_complete`, `expires_in` (600 saniye) ve `interval` (5 saniye)
+   alanlarını içerir.
+
+2. `verification_uri_complete` adresini bir tarayıcıda açın. Bu adres, `https://opencode.ai` adresine göre
+   `/console/device?user_code=...` gibi bir yoldur. Kişi oturum açar, bir çalışma alanı seçer ve onaylar.
+
+3. Aynı `client_id` ile her `interval` saniyede bir token'ı yoklayın.
+
+   ```bash
+   curl --fail-with-body "${CONSOLE_URL}/auth/device/token" \
+     --data "grant_type=urn:ietf:params:oauth:grant-type:device_code" \
+     --data "device_code=..." \
+     --data "client_id=my-cli"
+   ```
+
+   Onay verilene kadar yanıt `authorization_pending` ile birlikte `400` olur. Başarılı olduğunda `access_token`,
+   `refresh_token`, `expires_in` ve `org_id` döndürür.
+
+4. Erişim token'ının süresi dolmadan önce token'ı yenileyin. Çalışma alanı bağlantısı korunur.
+
+   ```bash
+   curl --fail-with-body "${CONSOLE_URL}/auth/device/token" \
+     --data "grant_type=refresh_token" \
+     --data "refresh_token=..." \
+     --data "client_id=my-cli"
+   ```
+
+Her yenileme token'ı yalnızca bir kez kullanılabilir. Eski bir yenileme token'ını yeniden kullanmak oturumun tamamını
+iptal eder.
+
+## Çalışma alanı yapılandırması
+
+`GET /api/v2/config`, çalışma alanının kullanabildiği sağlayıcıları ve modelleri OpenCode V2
+[yapılandırma](/config) biçiminde döndürür. OpenCode bunu `/connect` komutundan sonra yükler.
+
+```bash
+curl --fail-with-body "${CONSOLE_URL}/api/v2/config" \
+  --header "Authorization: Bearer ${SERVICE_API_KEY}"
+```
+
+```json
+{
+  "providers": {
+    "opencode": {
+      "name": "OpenCode",
+      "env": ["OPENCODE_CONSOLE_TOKEN"],
+      "package": "aisdk:@ai-sdk/openai-compatible",
+      "settings": {
+        "baseURL": "https://opencode.ai/inference/openai/v1",
+        "apiKey": "{env:OPENCODE_CONSOLE_TOKEN}"
+      },
+      "headers": { "x-opencode-org-id": "org_..." },
+      "models": {
+        "kimi-k2.6": { "name": "Kimi K2.6" }
+      }
+    }
+  }
+}
+```
+
+| Alan | Açıklama |
+| ----------------------- | ----------------------- |
+| `providers` | Console, Go ve bağlı sağlayıcılar; her biri ağ geçidi ayarları ve modelleriyle birlikte. |
+| `websearch` | Etkinleştirildiğinde üyeler için barındırılan [web araması](/console/websearch). |
+| `mcp` | Üyeler için Console MCP sunucusu. |
+| `experimental.policies` | Çalışma alanı [politika](/policies#console) ifadeleri. |
+
+Tüm anahtar izin düzeyleri ve üye rolleri yapılandırmayı okuyabilir.
+
+## Hatalar
+
+Hatalar, hatayı adlandıran bir `_tag` alanı içeren JSON döndürür.
+
+```json
+{ "_tag": "Forbidden" }
+```
+
+| Durum | Anlamı |
+| ------ | ------ |
+| `400` | `OrgRequired`: Bir kullanıcı token'ı `x-org-id` başlığı olmadan gönderildi. |
+| `401` | Kimlik bilgisi eksik, geçersiz, süresi dolmuş veya iptal edilmiş. |
+| `403` | Yanlış çalışma alanı, eksik izin veya bir Console uç noktasında **Inference only** anahtarı kullanımı. |
+| `404` | Çalışma alanı mevcut değil veya silinmiş. |

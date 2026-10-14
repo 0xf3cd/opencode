@@ -1,0 +1,87 @@
+---
+title: "Budgetter"
+description: "Sæt et loft over det månedlige forbrug for et arbejdsområde, dets medlemmer og dets tjenestekonti."
+---
+
+Budgetter sætter et loft over, hvor meget et arbejdsområde bruger hver måned. Ejere og administratorer angiver dem i
+panelet **Budget limits** på siderne **Members** og **Keys**.
+
+## Budgetniveauer
+
+| Budget                         | Gælder for                                          | Hvor det angives                                   |
+| ------------------------------ | --------------------------------------------------- | -------------------------------------------------- |
+| Arbejdsområde                  | Det samlede forbrug for alle i arbejdsområdet       | **Members** eller **Keys › Monthly workspace budget** |
+| Standard for brugere           | Hvert medlem uden en brugerdefineret grænse         | **Members › Monthly default user budget**          |
+| Brugerdefineret for bruger     | Ét medlem                                           | Tabellen **Members** eller medlemssiden            |
+| Standard for tjenestekonti     | Hver tjenestekonto uden en brugerdefineret grænse   | **Keys › Monthly default service account budget**  |
+| Brugerdefineret for tjenestekonto | Én tjenestekonto                                 | Tjenestekontoens side                              |
+
+En anmodning skal holde sig inden for både arbejdsområdets budget og personens eget budget. Uden budgetter er
+forbruget ubegrænset.
+
+## Arbejdsområdets budget
+
+Arbejdsområdets budget blokerer anmodninger for alle, når arbejdsområdet når det.
+
+1. Åbn **Members** eller **Keys**.
+2. Klik på **Monthly workspace budget** under **Budget limits**.
+3. Indtast en **Workspace limit** i USD, og klik på **Save**.
+
+## Medlemsbudgetter
+
+Standardbudgettet for brugere gælder for alle medlemmer, der ikke har en brugerdefineret grænse. Angiv det under
+**Monthly default user budget**.
+
+Du kan give et enkelt medlem en brugerdefineret grænse to steder:
+
+- Klik på cellen **Limit** i medlemmets række under **Members**, og indtast et beløb.
+- Åbn medlemmet, og klik på **Set User Budget** under **Monthly Budget**.
+
+Brugerdefinerede grænser er fremhævet i medlemstabellen. Ryd en brugerdefineret grænse for at sætte medlemmet tilbage
+til standarden; medlemssiden viser derefter **Using Default**.
+
+## Budgetter for tjenestekonti
+
+Tjenestekonti fungerer på samme måde. Angiv **Monthly default service account budget** på siden **Keys**, eller åbn en
+tjenestekonto, og klik på **Set Service Account Budget**.
+
+## Beløb og nulstilling
+
+- Beløb angives i amerikanske dollars med op til to decimaler.
+- Budgetter nulstilles den 1. i hver måned kl. 00:00 UTC.
+- Et budget på `$0` blokerer alt forbrug, der tæller med i budgetter.
+
+## Hvad tæller med
+
+| Forbrug                                                                         | Tæller med i budgetter          |
+| ------------------------------------------------------------------------------- | ------------------------------- |
+| Betalte Console-modeller                                                        | Ja                              |
+| Modeller hos [dine egne udbydere](/console/providers) med en angivet pris       | Ja, til den konfigurerede pris  |
+| [Websøgning](/console/websearch)                                                | Ja                              |
+| Gratis modeller                                                                 | Nej                             |
+| [Go](/console/go)-forbrug inden for abonnementet                                | Nej                             |
+| Ekstra Go-forbrug, der betales med kredit                                       | Ja                              |
+
+## Når et budget er nået
+
+Nye anmodninger fejler med HTTP `429`, indtil budgettet nulstilles, eller en administrator hæver det. Svaret oplyser
+ikke, hvilket budget der er nået.
+
+```text
+Upstream request failed: Account budget exceeded
+```
+
+Budgetter kontrolleres, når en anmodning starter. Anmodninger, der allerede er i gang, gøres færdige, så forbruget kan
+ende lidt over grænsen.
+
+## Følg forbruget
+
+Hvert medlem ser sit eget budget under **Overview**: det resterende beløb, det brugte beløb og nulstillingsdatoen.
+
+Ejere og administratorer af arbejdsområder med mere end ét medlem ser også **Usage**. Her fordeles omkostningerne pr.
+dag, model og person, og knappen **Export usage** downloader daglige totaler for de seneste 7, 30 eller 90 dage som CSV.
+
+## Automatiser budgetter
+
+Brug [budget-API'et](/console/api/budgets) til at læse alle medlemmers budgetter og angive brugerdefinerede grænser fra
+dine egne værktøjer.

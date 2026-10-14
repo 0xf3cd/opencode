@@ -1,0 +1,101 @@
+---
+title: "Budget-API"
+description: "Læs de gældende månedlige budgetter for alle medlemmer af arbejdsområdet, og administrer hvert medlems brugerdefinerede budget."
+---
+
+Læs de gældende månedlige budgetter for alle medlemmer af arbejdsområdet, og administrer hvert medlems
+brugerdefinerede budget fra en integration.
+
+## Kom hurtigt i gang
+
+Opret en API-nøgle til en [tjenestekonto](/console/api#service-accounts) med tilladelsen **All** i
+[Console](https://opencode.ai/console). Nøgler med kun inferensadgang kan ikke læse budgetdata eller ændre grænser.
+
+```bash
+export CONSOLE_URL="https://opencode.ai/console"
+export SERVICE_API_KEY="oc_sk_..."
+```
+
+Vis medlemsbudgetter:
+
+```bash
+curl --fail-with-body \
+  "${CONSOLE_URL}/api/v1/budgets/members" \
+  --header "Authorization: Bearer ${SERVICE_API_KEY}" \
+  --header "Accept: application/json"
+```
+
+## Vis medlemsbudgetter
+
+```text
+GET /api/v1/budgets/members
+```
+
+Svaret indeholder alle nuværende medlemmer, sorteret efter e-mailadresse. En grænse med kilden `custom` er en
+tilsidesættelse for medlemmet; kilden `default` er arvet fra arbejdsområdets standard. Hvis både grænse og kilde er
+null, er medlemmet ubegrænset.
+
+```json
+[
+  {
+    "user_id": "user_...",
+    "email": "alice@example.com",
+    "limit_micro_cents": "7525000000",
+    "spent_micro_cents": "1250000000",
+    "exceeded": false,
+    "resets_at": "2026-10-01T00:00:00.000Z",
+    "source": "custom",
+    "updated_at": "2026-09-03T12:00:00.000Z"
+  }
+]
+```
+
+Beløbsfelter i svaret er decimalstrenge i mikrocent, så integrationer ikke mister præcision. Der går 100,000,000
+mikrocent på en amerikansk dollar. Forbrug og nulstillingstidspunkter dækker den aktuelle kalendermåned i UTC.
+`updated_at` er null, når der ikke er nogen brugerdefineret tilsidesættelse for medlemmet.
+
+## Angiv et brugerdefineret budget
+
+```text
+PUT /api/v1/budgets/members/:user_id
+```
+
+Angiv et månedligt budget på $75.25 for ét medlem:
+
+```bash
+curl --fail-with-body --request PUT \
+  "${CONSOLE_URL}/api/v1/budgets/members/user_..." \
+  --header "Authorization: Bearer ${SERVICE_API_KEY}" \
+  --header "Content-Type: application/json" \
+  --data '{"budget_dollars":75.25}'
+```
+
+`budget_dollars` accepterer et ikke-negativt beløb i amerikanske dollars med højst to decimaler. PUT-anmodningen er
+idempotent og returnerer HTTP 204. Brug det medlems-ID, som listeoperationen returnerer.
+
+## Gå tilbage til arbejdsområdets standard
+
+```text
+DELETE /api/v1/budgets/members/:user_id
+```
+
+Fjern den brugerdefinerede tilsidesættelse:
+
+```bash
+curl --fail-with-body --request DELETE \
+  "${CONSOLE_URL}/api/v1/budgets/members/user_..." \
+  --header "Authorization: Bearer ${SERVICE_API_KEY}"
+```
+
+Når du sletter en tilsidesættelse, slettes medlemmet ikke. Medlemmet arver derefter arbejdsområdets standardbudget
+eller bliver ubegrænset, hvis arbejdsområdet ikke har nogen standard. Det er sikkert at gentage anmodningen, og den
+returnerer HTTP 204.
+
+## Fejl
+
+| Status | Betydning                                                         |
+| ------ | ----------------------------------------------------------------- |
+| `400`  | Ugyldigt medlems-ID eller budgetbeløb.                            |
+| `401`  | Manglende, ugyldig, udløbet eller tilbagekaldt API-nøgle til tjenestekontoen. |
+| `403`  | API-nøglen har ikke tilladelse til at administrere budgetter.     |
+| `404`  | Medlemmet findes ikke i det arbejdsområde, API-nøglen er bundet til. |

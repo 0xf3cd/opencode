@@ -1,0 +1,135 @@
+---
+title: "Préchauffage"
+---
+
+Le préchauffage de session envoie périodiquement des requêtes au modèle pour préserver les caches de prompts côté
+fournisseur, ou tout autre état de courte durée, pendant vos pauses entre deux prompts. Il est désactivé par défaut.
+
+Activez le préchauffage dans n'importe quel [fichier de configuration d'OpenCode](/config) :
+
+```jsonc title="opencode.jsonc"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "warming": true,
+}
+```
+
+Avec cette configuration, OpenCode préchauffe une session récemment active après quatre minutes sans requête au modèle.
+Il recommence toutes les quatre minutes jusqu'à ce que 30 minutes se soient écoulées depuis la dernière requête hors
+préchauffage.
+
+## Options
+
+Utilisez la forme objet pour modifier le prompt de préchauffage, l'intervalle d'inactivité ou la fenêtre active :
+
+```jsonc title="opencode.jsonc"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "warming": {
+    "prompt": "Do not perform any work. Reply with exactly: OK",
+    "interval": "5 minutes",
+    "duration": "1 hour",
+  },
+}
+```
+
+| Champ | Valeur par défaut | Rôle |
+| --- | --- | --- |
+| `prompt` | Instruction de maintien en vie | Ajouté comme message utilisateur temporaire à chaque requête de préchauffage. Par défaut, il demande au modèle de n'effectuer aucun travail, de n'utiliser aucun outil et de répondre `OK`. |
+| `interval` | `"4 minutes"` | Durée d'inactivité avant la requête de préchauffage suivante. |
+| `duration` | `"30 minutes"` | Fenêtre de préchauffage, mesurée à partir de la dernière requête au modèle hors préchauffage. |
+
+Les champs omis dans l'objet conservent leur valeur par défaut. Par exemple, cette configuration ne modifie que
+l'intervalle :
+
+```jsonc title="opencode.jsonc"
+{
+  "warming": {
+    "interval": "2 minutes",
+  },
+}
+```
+
+## Durées
+
+`interval` et `duration` acceptent des chaînes de durée. Les deux doivent correspondre à des valeurs finies strictement
+positives ; sinon, OpenCode ignore le préchauffage et journalise un avertissement.
+
+```jsonc title="opencode.jsonc"
+{
+  "warming": {
+    "interval": "30 seconds",
+    "duration": "1 hour",
+  },
+}
+```
+
+## Chronologie
+
+Le préchauffage démarre après une requête au modèle hors préchauffage. À la fin d'une requête de préchauffage, l'intervalle
+d'inactivité suivant commence, mais la fenêtre active n'est pas prolongée.
+
+```text
+00:00  normal model request
+00:04  warming request
+00:08  warming request
+00:30  warming stops
+```
+
+Toute nouvelle activité du modèle hors préchauffage réinitialise les deux minuteurs. Si l'intervalle est supérieur ou égal
+à la durée, la fenêtre active expire avant l'envoi d'une requête de préchauffage.
+
+```text
+00:00  normal model request
+00:20  normal model request; window restarts
+00:24  warming request
+00:50  warming stops
+```
+
+## Requêtes
+
+Une requête de préchauffage utilise le modèle, l'agent, les instructions et le contexte de conversation actuels de la
+session. OpenCode ajoute temporairement le prompt configuré, effectue un seul appel au modèle et ignore la réponse.
+
+```text
+[current session context]
+[transient user message: keep-alive prompt]
+→ one model response, discarded
+```
+
+La requête n'admet aucune entrée, n'ajoute aucun message à l'historique et ne modifie pas l'état durable de la session.
+OpenCode n'exécute aucun appel d'outil local et ne poursuit aucune boucle d'outils ; le prompt par défaut demande aussi au
+modèle de ne pas utiliser d'outils.
+
+## Échecs
+
+Les échecs de préchauffage sont journalisés sans faire échouer ni modifier la session. OpenCode attend l'intervalle
+suivant avant de réessayer, tandis que la fenêtre active d'origine continue de s'écouler.
+
+```text
+00:04  warming request fails; session is unchanged
+00:08  next warming attempt
+```
+
+## Coûts
+
+Les requêtes de préchauffage sont de véritables requêtes envoyées au fournisseur. Elles peuvent consommer des tokens,
+engendrer des coûts, être décomptées des limites de débit et échouer comme les autres requêtes au modèle.
+
+- Des intervalles plus courts augmentent le volume de requêtes.
+- Des durées plus longues permettent davantage de requêtes de préchauffage.
+- N'activez le préchauffage que si son bénéfice côté fournisseur justifie la consommation supplémentaire.
+
+Par exemple, les valeurs par défaut autorisent jusqu'à sept tentatives de préchauffage pendant une fenêtre ininterrompue
+de 30 minutes : aux minutes 4, 8, 12, 16, 20, 24 et 28.
+
+## Désactivation
+
+Définissez `warming` sur `false` pour le désactiver explicitement. Omettre le champ laisse également le préchauffage
+désactivé.
+
+```jsonc title="opencode.jsonc"
+{
+  "warming": false,
+}
+```

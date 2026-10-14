@@ -1,0 +1,264 @@
+---
+title: "Polecenia"
+---
+
+Utwórz plik `.opencode/commands/review.md`, aby zamienić prompt w polecenie `/review`:
+
+```md title=".opencode/commands/review.md"
+Review $ARGUMENTS for bugs and missing tests.
+```
+
+Uruchom je w TUI, podając cel:
+
+```text
+/review src/auth.ts
+```
+
+OpenCode wysyła `Review src/auth.ts for bugs and missing tests.` jako prompt użytkownika.
+
+## Markdown
+
+Polecenia globalne umieść w `~/.config/opencode/commands/`, a polecenia projektu w `.opencode/commands/`.
+
+```text
+~/.config/opencode/commands/review.md
+.opencode/commands/review.md
+```
+
+Wykrywane są tylko pliki `.md`. Zagnieżdżone ścieżki stają się nazwami poleceń z separatorem `/`:
+
+```md title=".opencode/commands/team/review.md"
+Review $ARGUMENTS using the team's checklist.
+```
+
+Zagnieżdżone polecenie uruchomisz jako `/team/review src/auth.ts`. Wykrywany jest też starszy katalog `command/` (w liczbie
+pojedynczej), ale nowe pliki umieszczaj w `commands/`.
+
+Jeśli polecenie potrzebuje metadanych, dodaj frontmatter YAML. Treść Markdown (z usuniętymi białymi znakami na początku i
+końcu) zawsze jest szablonem promptu.
+
+```md title=".opencode/commands/review.md"
+---
+description: Review code for correctness
+agent: plan
+model: anthropic/claude-sonnet-4-5#high
+---
+
+Review $ARGUMENTS. Report bugs first.
+```
+
+## JSON
+
+Polecenia zdefiniujesz w `commands` w dowolnym [pliku konfiguracyjnym](/config) OpenCode w formacie JSON lub JSONC. Każde
+polecenie wymaga pola `template`.
+
+```jsonc title="opencode.jsonc"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "commands": {
+    "review": {
+      "description": "Review code for correctness",
+      "template": "Review $ARGUMENTS. Report bugs first.",
+    },
+  },
+}
+```
+
+## Pola
+
+Frontmatter Markdown i wpisy JSON przyjmują te same pola, z tym że w Markdownie `template` pochodzi z treści pliku.
+
+| Pole | Wymagane | Działanie |
+| --- | --- | --- |
+| `template` | Tylko w JSON | Szablon promptu. |
+| `description` | Nie | Tekst wyświetlany na listach poleceń i podczas wyszukiwania. |
+| `agent` | Nie | Agent wybierany po uruchomieniu polecenia. |
+| `model` | Nie | Nadpisanie modelu w formacie `provider/model` lub `provider/model#variant`. |
+| `subagent` | Nie | `true` uruchamia polecenie w podrzędnej sesji w tle; `false` wymusza bieżącą sesję. |
+| `subtask` | Nie | Przestarzały alias pola `subagent`. |
+
+Na przykład to polecenie JSON ustawia wszystkie obecnie dostępne pola opcjonalne:
+
+```jsonc title="opencode.jsonc"
+{
+  "commands": {
+    "audit": {
+      "template": "Audit $ARGUMENTS.",
+      "description": "Audit a package",
+      "agent": "general",
+      "model": "anthropic/claude-sonnet-4-5#high",
+      "subagent": true,
+    },
+  },
+}
+```
+
+Nie umieszczaj `template` we frontmatterze Markdown – szablon pochodzi z treści pliku.
+
+## Argumenty
+
+Użyj `$ARGUMENTS`, aby wstawić cały ciąg argumentów dokładnie w takiej postaci, w jakiej go wpisano.
+
+```md title=".opencode/commands/component.md"
+Create a typed React component named $ARGUMENTS.
+```
+
+Dla `/component Account Settings` symbol zastępczy przyjmuje wartość `Account Settings`.
+
+## Argumenty pozycyjne
+
+Użyj `$1`, `$2` i kolejnych numerów, aby wstawić przetworzone argumenty pozycyjne. Cudzysłowy pojedyncze lub podwójne
+grupują słowa i są usuwane.
+
+```md title=".opencode/commands/check.md"
+Check $1. Focus on $2.
+```
+
+Dla `/check src/auth.ts "error handling"` `$1` przyjmuje wartość `src/auth.ts`, a `$2` – `error handling`.
+
+Symbol zastępczy o najwyższym numerze pobiera swój argument i wszystko, co po nim następuje. Brakujące pozycje stają się
+pustymi ciągami.
+
+```md title=".opencode/commands/compare.md"
+Compare $1 with $2.
+```
+
+Dla `/compare api stable branch` OpenCode wysyła `Compare api with stable branch.`
+
+## Zachowanie domyślne
+
+Jeśli szablon nie zawiera `$ARGUMENTS` ani symbolu pozycyjnego, OpenCode dołącza niepuste argumenty po pustym wierszu.
+
+```md title=".opencode/commands/explain.md"
+Explain this code clearly.
+```
+
+Dla `/explain src/cache.ts` prompt wygląda tak:
+
+```text
+Explain this code clearly.
+
+src/cache.ts
+```
+
+## Powłoka
+
+Otocz polecenie powłoki znakiem `!` i odwrotnymi apostrofami, aby wstawić jego wynik przed wysłaniem promptu.
+
+```md title=".opencode/commands/review-diff.md"
+Review this diff:
+
+!`git diff --stat && git diff`
+```
+
+OpenCode uruchamia każdy blok w skonfigurowanej powłoce w lokalizacji aktywnego projektu i wstawia jego połączony wynik.
+Symbole zastępcze argumentów są rozwijane najpierw:
+
+```md title=".opencode/commands/history.md"
+Summarize these commits:
+
+!`git log --oneline -$1`
+```
+
+Dla `/history 5` powłoka otrzymuje `git log --oneline -5`. Nie umieszczaj niezaufanych argumentów w blokach powłoki.
+
+<Callout type="warning">
+  Bloki powłoki są uruchamiane, gdy OpenCode przetwarza polecenie – poza mechanizmem uprawnień narzędzi agenta. Używaj
+  tylko poleceń z zaufanych źródeł.
+</Callout>
+
+## Załączniki
+
+Zapisane szablony nie rozwijają `@path` – pozostaje to zwykłym tekstem promptu.
+
+```md title=".opencode/commands/readme.md"
+Review @README.md.
+```
+
+Aby załączyć plik, dodaj go w polu edycji wiadomości podczas wywoływania polecenia. OpenCode zachowuje takie załączniki,
+gdy wysyła rozwinięty prompt.
+
+## Wykonywanie
+
+Polecenia rozwijają argumenty i bloki powłoki, zanim wyślą trwały prompt użytkownika. Domyślnie działają w bieżącej
+sesji.
+
+```md title=".opencode/commands/plan.md"
+---
+agent: plan
+---
+
+Plan $ARGUMENTS.
+```
+
+Uruchomienie `/plan migration` przełącza bieżącą sesję na agenta `plan` przed wysłaniem promptu.
+
+Wybór modelu podlega tym regułom:
+
+1. `model` polecenia nadpisuje każdy inny model.
+2. W przeciwnym razie skonfigurowany model agenta wybranego przez polecenie nadpisuje model aktywny w chwili wywołania.
+3. W przeciwnym razie aktywny pozostaje bieżący model sesji.
+
+Na przykład to polecenie wybiera zarówno agenta, jak i jawnie określony model:
+
+```md title=".opencode/commands/design.md"
+---
+agent: plan
+model: openai/gpt-5#high
+---
+
+Design $ARGUMENTS.
+```
+
+## Działanie w tle
+
+Ustaw `subagent: true`, aby uruchomić polecenie w podrzędnej sesji w tle.
+
+```md title=".opencode/commands/audit.md"
+---
+description: Audit changes
+agent: general
+subagent: true
+---
+
+Audit $ARGUMENTS for bugs and missing tests.
+```
+
+Sesja nadrzędna pozostaje dostępna i zachowuje swojego agenta oraz model. Gdy sesja podrzędna się zakończy, OpenCode
+przekazuje jej wynik lub błąd do sesji nadrzędnej.
+
+| Wartość | Działanie |
+| --- | --- |
+| `true` | Zawsze używa sesji podrzędnej, nawet gdy wybrany agent ma `mode: primary`. |
+| `false` | Zawsze używa bieżącej sesji, nawet gdy wybrany agent ma `mode: subagent`. |
+| Pominięte | Używa sesji podrzędnej tylko wtedy, gdy wybrany agent ma `mode: subagent`. |
+
+Sesja podrzędna używa modelu polecenia, następnie modelu wybranego agenta, a na końcu modelu sesji nadrzędnej. Starsze
+pole `subtask` jest nadal akceptowane; jeśli występują oba pola, wygrywa `subagent`.
+
+```yaml
+subagent: false
+subtask: true
+```
+
+Ten przykład działa w bieżącej sesji, ponieważ `subagent` ma pierwszeństwo.
+
+## Wczytywanie
+
+Polecenia z Markdown i JSON trafiają do jednego rejestru. Późniejsze źródła zastępują wcześniejsze polecenia o tej samej
+nazwie.
+
+```text
+~/.config/opencode/commands/review.md   # Lower priority
+.opencode/commands/review.md           # Replaces the global command
+```
+
+Źródła projektowe mają pierwszeństwo przed globalnymi, a bliższe źródła projektowe – przed źródłami z katalogów
+nadrzędnych. Własna definicja może też zastąpić wcześniejsze polecenie wbudowane. OpenCode automatycznie przeładowuje
+pliki poleceń i zmiany w konfiguracji.
+
+```md title=".opencode/commands/review.md"
+Review only the staged changes: !`git diff --cached`
+```
+
+Zapisanie tego pliku aktualizuje `/review` bez ponownego uruchamiania OpenCode.

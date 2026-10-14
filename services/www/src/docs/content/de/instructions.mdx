@@ -1,0 +1,112 @@
+---
+title: "Anweisungen"
+---
+
+Mit einer `AGENTS.md`-Datei gibst du OpenCode dauerhafte Projektvorgaben. Nutze sie für Build-Befehle, Architekturhinweise, Code-Konventionen und Anforderungen an die Überprüfung.
+
+```md title="AGENTS.md"
+# Project instructions
+
+- Run `bun typecheck` after changing TypeScript.
+- Keep database queries in `src/database`.
+- Do not edit generated files directly.
+```
+
+Committe Anweisungsdateien des Projekts, damit alle, die im Repository arbeiten, dieselben Vorgaben erhalten.
+
+## Geltungsbereich
+
+Lege `AGENTS.md` in das Verzeichnis, für das ihre Vorgaben gelten sollen. OpenCode lädt zuerst die globale Datei und dann jede `AGENTS.md` vom aktuellen Workspace-Verzeichnis aufwärts bis zum Home-Verzeichnis. Bei Workspaces außerhalb des Home-Verzeichnisses endet die Suche am Projektstamm.
+
+```text
+~/.config/opencode/AGENTS.md
+~/code/my-project/AGENTS.md
+~/code/my-project/packages/AGENTS.md
+~/code/my-project/packages/web/AGENTS.md  ← current workspace
+```
+
+In diesem Beispiel werden alle vier Dateien geladen. Sie werden in dieser Reihenfolge kombiniert:
+
+```text
+~/.config/opencode/AGENTS.md
+packages/web/AGENTS.md
+packages/AGENTS.md
+AGENTS.md
+```
+
+Vorgaben, die überall gelten, gehören in die globale Datei. Repository-weite Vorgaben legst du im Projektstamm ab, speziellere näher am Code, den sie betreffen. OpenCode kombiniert die Dateien und löst keine Widersprüche zwischen ihnen auf.
+
+Liegt der Workspace außerhalb des Projektstamms, wird nur die globale Datei geladen. Setze `OPENCODE_DISABLE_PROJECT_CONFIG=1`, um die Suche nach `AGENTS.md`-Dateien im Projekt zu überspringen, ohne die globale Datei zu deaktivieren.
+
+<Callout type="note">
+  OpenCode V2 erkennt ausschließlich `AGENTS.md`. `CLAUDE.md` wird nicht als Fallback verwendet.
+</Callout>
+
+## Erkennung
+
+Anweisungsdateien unterhalb des Workspace werden erkannt, während der Agent das Projekt erkundet. Liest er eine Datei oder listet ein Verzeichnis auf, werden alle `AGENTS.md`-Dateien zwischen diesem Ziel und dem Workspace geladen.
+
+```text
+my-project/                         ← current workspace
+├── AGENTS.md                       loaded initially
+└── packages/
+    └── web/
+        ├── AGENTS.md               loaded when this area is read
+        └── src/
+            └── app.ts              read target
+```
+
+Verschachtelte Dateien werden von der nächstgelegenen an geladen und nicht doppelt aufgenommen, solange ihr Anweisungseintrag im für das Modell sichtbaren Verlauf bleibt. Wird derselbe Bereich erneut gelesen, werden sie normalerweise nicht noch einmal eingefügt. Entfernt eine Kompaktierung oder ein Zurücksetzen diesen Eintrag, kann ein späterer Lesevorgang die Datei erneut laden.
+
+Änderungen an einer verschachtelten Datei werden nach dem Laden nicht automatisch erkannt. Starte eine neue Sitzung, wenn aktualisierter Text sofort gelten soll.
+
+## Reihenfolge
+
+Zuerst wird der System-Prompt des gewählten Agenten oder Anbieters gesendet. Danach stellt OpenCode die anfänglichen Anweisungen in dieser Reihenfolge zusammen:
+
+```text
+1. Agent or provider system prompt
+2. Built-in environment and date context
+3. Code Mode tool guidance, when enabled
+4. Global and project AGENTS.md files
+5. Available skill, reference, and MCP guidance
+6. Session-specific instruction entries supplied through the API
+```
+
+Diese Quellen werden kombiniert, nicht gegenseitig überschrieben. Später erkannte verschachtelte `AGENTS.md`-Dateien werden in der Reihenfolge ihrer Erkennung zum Sitzungsverlauf hinzugefügt.
+
+## Aktualisierungen
+
+Bearbeite eine globale oder aufwärts gefundene `AGENTS.md`, während eine Sitzung läuft, um deren Vorgaben zu aktualisieren.
+
+```bash
+$ printf '\n- Run the integration suite before committing.\n' >> AGENTS.md
+```
+
+Vor der nächsten Modellanfrage erkennt OpenCode die Änderung und fügt eine Anweisungsaktualisierung hinzu, bevor ausstehende Eingaben zugestellt werden:
+
+```text
+AGENTS.md changes
+→ instruction update
+→ next prompt
+```
+
+- Werden alle umgebenden `AGENTS.md`-Dateien entfernt, erfährt die Sitzung, dass die bisherigen umgebenden Anweisungen nicht mehr gelten.
+- Ein vorübergehender Lesefehler behält die zuletzt bekannten Anweisungen bei, statt sie als gelöscht zu behandeln.
+- Beim Verschieben einer Sitzung bleibt ihr Anweisungszustand erhalten, sodass Vorgaben am Ziel als Aktualisierung eingeführt werden.
+- Ein festgeschriebenes Zurücksetzen einer Sitzung löscht ihren Anweisungszustand und lädt die Anweisungen vor dem nächsten Prompt neu.
+
+Anweisungsinhalte bleiben privilegiert. Clients sehen, welche Quellen sich geändert haben, aber nicht deren Inhalt.
+
+## Konfiguration
+
+Das V2-Konfigurationsschema akzeptiert ein `instructions`-Array, aber V2 löst die darin angegebenen Dateien, Glob-Muster und URLs derzeit nicht auf. Diese Konfiguration fügt dem Modell also noch keine Anweisungen hinzu:
+
+```jsonc title="opencode.jsonc"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "instructions": ["CONTRIBUTING.md", "docs/guidelines/*.md", "https://example.com/instructions.md"],
+}
+```
+
+Verwende `AGENTS.md` für aktive V2-Anweisungen. Speicherorte und Vorrang der Konfiguration erklärt [Konfiguration](/config).

@@ -1,0 +1,268 @@
+---
+title: "ไดเรกทอรีอ้างอิง"
+---
+
+ไดเรกทอรีอ้างอิง (reference) ช่วยให้ OpenCode เข้าถึงไดเรกทอรีนอกโปรเจกต์ปัจจุบันผ่านชื่อที่กำหนดไว้ เพิ่มไดเรกทอรีอ้างอิงใน `opencode.json` หรือ `opencode.jsonc` แล้วแนบด้วยชื่อแทน (alias) ในไคลเอนต์เมื่อต้องการใช้
+
+```jsonc title="opencode.jsonc"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "references": {
+    "docs": {
+      "path": "../product-docs",
+      "description": "Use for product behavior and terminology",
+    },
+  },
+}
+```
+
+หลังแนบ `docs` แล้ว ให้ขอให้เอเจนต์ตรวจดูพาธที่เกี่ยวข้อง:
+
+```text
+Read the attached docs reference and summarize api/authentication.md.
+```
+
+ใช้ไดเรกทอรีอ้างอิงสำหรับเอกสาร ไลบรารีที่ใช้ร่วมกัน ตัวอย่าง หรือซอร์สโค้ดจาก repository อื่น
+
+## ในเครื่อง
+
+ใช้ `path` สำหรับไดเรกทอรีในเครื่อง:
+
+```jsonc
+{
+  "references": {
+    "design-system": {
+      "path": "../design-system",
+      "description": "Use when working with components or design tokens",
+    },
+  },
+}
+```
+
+พาธมีพฤติกรรมดังนี้:
+
+- พาธสัมพัทธ์จะ resolve จากไดเรกทอรีที่มีไฟล์กำหนดค่านั้นอยู่
+- รองรับพาธสัมบูรณ์
+- รองรับพาธที่อ้างอิงจากโฮมไดเรกทอรี เช่น `~/docs`
+
+ใช้รูปแบบย่อแบบสตริงเมื่อไม่ต้องการฟิลด์อื่น:
+
+```jsonc
+{
+  "references": {
+    "docs": "../docs",
+    "shared": "~/work/shared",
+  },
+}
+```
+
+<Callout type="note">
+  สตริงแบบย่อจะเป็นพาธในเครื่องก็ต่อเมื่อขึ้นต้นด้วย `.`, `/` หรือ `~` เท่านั้น ให้ใช้ `./docs` ไม่ใช่ `docs` เพราะค่า `docs` เปล่า ๆ จะถูกตีความว่าเป็น Git repository
+</Callout>
+
+## Git
+
+ใช้ `repository` สำหรับ Git repository ระยะไกล:
+
+```jsonc
+{
+  "references": {
+    "effect": {
+      "repository": "Effect-TS/effect",
+      "branch": "main",
+    },
+    "internal-sdk": {
+      "repository": "git@gitlab.example.com:platform/sdk.git",
+      "branch": "release/v2",
+    },
+  },
+}
+```
+
+รูปแบบ remote ที่รองรับ ได้แก่:
+
+- รูปแบบย่อ `owner/repo` ของ GitHub
+- Git URL
+- รูปแบบ host/path
+- remote แบบ SCP
+
+ไม่รองรับ repository ในเครื่องแบบ `file:`
+
+ใช้รูปแบบย่อแบบสตริงเพื่อติดตาม branch เริ่มต้นของ remote:
+
+```jsonc
+{
+  "references": {
+    "effect": "Effect-TS/effect",
+    "sdk": "gitlab.com/platform/sdk",
+  },
+}
+```
+
+หากไม่ระบุ `branch` OpenCode จะ checkout และรีเฟรช branch เริ่มต้นของ remote ชื่อ branch ประกอบด้วยตัวอักษร ตัวเลข `/`, `_`, `.` และ `-` ได้ แต่ห้ามขึ้นต้นด้วย `-` หรือมี `..`
+
+```jsonc
+{
+  "references": {
+    "sdk": {
+      "repository": "example/sdk",
+      "branch": "release/v2.1",
+    },
+  },
+}
+```
+
+## พื้นที่จัดเก็บ
+
+OpenCode จะปรับรูปแบบของแต่ละ remote ให้เป็นมาตรฐาน และจัดเก็บ checkout หนึ่งชุดต่อ remote และ branch ไว้ใต้ไดเรกทอรีข้อมูลระดับ global ของ OpenCode หากไม่ระบุ branch อย่างชัดเจน พาธจะมีรูปแบบดังนี้:
+
+```text
+opencode/repos/<host>/<repository-path>
+```
+
+ในการติดตั้งบน Linux ทั่วไป `Effect-TS/effect` จะถูกจัดเก็บที่:
+
+```text
+~/.local/share/opencode/repos/github.com/Effect-TS/effect
+```
+
+การระบุ branch อย่างชัดเจนจะเพิ่มส่วนต่อท้าย `@<branch>` ที่เข้ารหัสแล้ว:
+
+```text
+~/.local/share/opencode/repos/github.com/Effect-TS/effect@main
+```
+
+## การรีเฟรช
+
+repository ที่ยังไม่มีจะถูก clone แบบอะซิงโครนัส ส่วน checkout ที่มีอยู่แล้วจะถูกตรวจสอบในเบื้องหลังเมื่อไดเรกทอรีอ้างอิงโหลดหรือโหลดใหม่ และหลังจากมีพรอมต์ใหม่ของผู้ใช้ถูกรับเข้าใน Location ของ checkout นั้น
+
+```text
+Prompt admitted → refresh check starts in background → agent continues
+```
+
+checkout จะเข้าเงื่อนไขการรีเฟรชเมื่อความพยายามรีเฟรชครั้งล่าสุดผ่านมาแล้วอย่างน้อย 24 ชั่วโมง หรือเมื่อยังไม่มีการบันทึกความพยายามใดเลย การรีเฟรชจะ fetch และรีเซ็ตไปยัง branch ที่กำหนดไว้หรือ branch เริ่มต้นของ remote
+
+```text
+Last attempt: 25 hours ago → eligible
+Last attempt: 2 hours ago  → skipped
+```
+
+การรีเฟรชเป็นไปตามกฎต่อไปนี้:
+
+- เวลาประทับจะคงอยู่แม้บริการรีสตาร์ต
+- Location ที่ใช้ checkout เดียวกันจะใช้เวลาประทับร่วมกัน
+- ความพยายามที่ล้มเหลวจะถูกบันทึกลงในล็อก และยังอยู่ภายใต้ขีดจำกัด 24 ชั่วโมง
+- ไม่มีการตรวจสอบเป็นระยะระหว่างที่ไม่มีการใช้งาน Location
+- ความล้มเหลวในการ clone หรือรีเฟรชจะไม่หยุดการโหลดไดเรกทอรีอ้างอิงอื่น
+
+พรอมต์ไม่ต้องรอการ clone หรือรีเฟรช ไฟล์แนบอาจมีเนื้อหาเก่า แม้การอ่านด้วยเครื่องมือในภายหลังจะเห็น checkout ที่อัปเดตแล้ว และไดเรกทอรีอ้างอิงใหม่อาจปรากฏก่อนที่ checkout จะพร้อม
+
+```text
+Attachment created → cached content
+Background refresh completes → later tool read sees newer content
+```
+
+<Callout type="warning">
+  checkout ที่แคชไว้ใช้ร่วมกันและอาจอัปเดตขณะที่เอเจนต์กำลังใช้งานอยู่ อย่าแก้ไข checkout ที่แคชไว้ เพราะการรีเฟรชจะรีเซ็ตการแก้ไขเหล่านั้น
+</Callout>
+
+## คำแนะนำสำหรับเอเจนต์
+
+`description` บอกเอเจนต์ว่าไดเรกทอรีอ้างอิงนั้นเกี่ยวข้องเมื่อใด ไดเรกทอรีอ้างอิงที่มี description จะปรากฏในคำแนะนำของเอเจนต์พร้อมชื่อแทนและพาธที่ resolve แล้ว
+
+```jsonc
+{
+  "references": {
+    "docs": {
+      "path": "../docs",
+      "description": "Use for product behavior and terminology",
+    },
+  },
+}
+```
+
+ไดเรกทอรีอ้างอิงที่ไม่มี description ยังคงใช้งานได้ในไคลเอนต์ แต่จะไม่ถูกแจ้งให้เอเจนต์ทราบโดยอัตโนมัติ
+
+```jsonc
+{
+  "references": {
+    "archive": {
+      "path": "../archive",
+    },
+  },
+}
+```
+
+## การแสดงผล
+
+ตั้งค่า `hidden` เป็น `true` เพื่อนำไดเรกทอรีอ้างอิงออกจากตัวเลือกแบบโต้ตอบของไคลเอนต์:
+
+```jsonc
+{
+  "references": {
+    "internal": {
+      "path": "../internal",
+      "description": "Use for internal service behavior",
+      "hidden": true,
+    },
+  },
+}
+```
+
+`hidden` มีผลเฉพาะกับการแสดงผลแบบโต้ตอบ ไดเรกทอรีอ้างอิงยังคงอยู่ใน API ของไดเรกทอรีอ้างอิง และหากมี description ก็ยังอยู่ในคำแนะนำของเอเจนต์
+
+## การใช้งาน
+
+ไคลเอนต์แนบไดเรกทอรีอ้างอิงด้วยชื่อแทนของราก ไฟล์แนบจะมีรายการไฟล์และไดเรกทอรีในระดับถัดไปของรากเท่านั้น (ไม่ recursive)
+
+```text
+Attached alias: docs
+Ask: Inspect docs/guides/deployment.md and explain the deployment steps.
+```
+
+หากต้องการเนื้อหาที่อยู่ลึกกว่าราก ให้ขอให้เอเจนต์ตรวจดูพาธที่ต้องการโดยเฉพาะ
+
+## สิทธิ์
+
+ไดเรกทอรีอ้างอิงไม่ได้ให้สิทธิ์เครื่องมือเพิ่มเติม การเข้าถึงนอก Location ที่ใช้งานอยู่ยังคงเป็นไปตามกฎปกติของเครื่องมือและสิทธิ์ `external_directory` ส่วนการแก้ไขก็ต้องมีสิทธิ์แก้ไขที่เกี่ยวข้องด้วย
+
+```text
+Read ../product-docs/api.md
+```
+
+คำขอจะสำเร็จก็ต่อเมื่อสิทธิ์ที่ใช้งานอยู่อนุญาตให้อ่านภายนอกนั้นเท่านั้น
+
+## ฟิลด์
+
+| ฟิลด์ | ในเครื่อง | Git | คำอธิบาย |
+| --- | --- | --- | --- |
+| `path` | จำเป็น | ไม่ใช้ | พาธไดเรกทอรีในเครื่อง |
+| `repository` | ไม่ใช้ | จำเป็น | Git repository ระยะไกล |
+| `branch` | ไม่ใช้ | ไม่บังคับ | branch ที่จะ fetch และ checkout |
+| `description` | ไม่บังคับ | ไม่บังคับ | คำแนะนำที่อธิบายว่าเอเจนต์ควรใช้เมื่อใด |
+| `hidden` | ไม่บังคับ | ไม่บังคับ | ซ่อนจากตัวเลือกแบบโต้ตอบของไคลเอนต์ |
+
+รายการ Git แบบสมบูรณ์ใช้ฟิลด์ที่เข้ากันได้กับ Git ได้ทุกฟิลด์:
+
+```jsonc
+{
+  "references": {
+    "sdk": {
+      "repository": "example/sdk",
+      "branch": "main",
+      "description": "Use for SDK implementation details",
+      "hidden": false,
+    },
+  },
+}
+```
+
+## ชื่อแทน
+
+ชื่อแทนต้องไม่ว่าง และต้องไม่มี `/`, `\`, ช่องว่าง, backtick หรือเครื่องหมายจุลภาค
+
+```text
+Valid:   docs
+Invalid: product docs
+Invalid: docs/api
+```

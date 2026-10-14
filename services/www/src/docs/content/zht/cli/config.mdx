@@ -1,0 +1,414 @@
+---
+title: "偏好設定"
+description: "設定 OpenCode CLI 和 TUI 的所有偏好設定。"
+---
+
+CLI 偏好設定只會影響終端機用戶端，與 `opencode.json(c)` 中的伺服器和專案設定是分開的。
+
+按下 `Ctrl+P`，然後選擇 **Open settings**，即可在 TUI 中變更常用的偏好設定。
+
+<img src={`${import.meta.env.BASE_URL}assets/docs/cli/settings.png`} alt="OpenCode TUI 偏好設定對話方塊" />
+
+## 設定檔
+
+OpenCode 將 CLI 偏好設定儲存在單一的全域檔案中：
+
+```text
+~/.config/opencode/cli.json
+```
+
+如果設定了 `$XDG_CONFIG_HOME`，OpenCode 會改用：
+
+```text
+$XDG_CONFIG_HOME/opencode/cli.json
+```
+
+CLI 偏好設定沒有專案層級的設定檔。加入已發布的 JSON Schema，即可取得驗證和自動完成功能：
+
+```json title="cli.json"
+{
+  "$schema": "https://opencode.ai/v2/cli.json"
+}
+```
+
+OpenCode 建立或遷移這個檔案時會自動加入 `$schema`。未知的設定會被拒絕；TUI 執行期間，有效的編輯會自動重新載入。
+
+## 內嵌設定
+
+設定 `OPENCODE_CLI_CONFIG_CONTENT`，即可用內嵌 JSON 套用 CLI 偏好設定：
+
+```sh
+OPENCODE_CLI_CONFIG_CONTENT='{"tabs":{"mode":"off"}}' opencode
+```
+
+OpenCode 會將內嵌設定合併到全域的 `cli.json` 之上。巢狀物件會合併，而環境變數中的陣列和純量值則會取代全域的值。只要這個變數仍然設定著，內嵌設定就具有最終決定權。
+
+## 外觀
+
+選擇主題、控制介面動畫，並覆寫終端機游標：
+
+```json title="cli.json"
+{
+  "theme": {
+    "name": "tokyonight",
+    "mode": "system"
+  },
+  "animations": true,
+  "cursor": {
+    "style": "block",
+    "blinking": true
+  }
+}
+```
+
+<div class="docs-table-scroll" role="region" aria-label="外觀設定" tabIndex={0}>
+
+| 設定 | 值 | 說明 |
+| --- | --- | --- |
+| `theme.name` | 字串 | 選擇內建、自訂或從終端機取得顏色的主題。 |
+| `theme.mode` | `system`、`dark` 或 `light` | 跟隨終端機外觀，或將主題固定為一種色彩模式。 |
+| `animations` | 布林值 | 啟用介面動畫。 |
+| `cursor.style` | `block`、`underline`、`line`、`default` | 設定游標形狀。`default` 會保留終端機原本的游標形狀。 |
+| `cursor.blinking` | 布林值 | 控制游標是否閃爍。樣式為 `default` 時沒有作用。 |
+
+</div>
+
+選擇與建立主題的方式，請參閱[主題](/cli/theme)。
+
+## 輸入
+
+設定滑鼠擷取、捲動、編輯器上下文、貼上內容，以及提示詞的圖片預覽：
+
+```json title="cli.json"
+{
+  "mouse": true,
+  "scroll": {
+    "speed": 3,
+    "acceleration": false
+  },
+  "prompt": {
+    "editor": true,
+    "paste": "compact",
+    "image_preview": false
+  }
+}
+```
+
+<div class="docs-table-scroll" role="region" aria-label="輸入設定" tabIndex={0}>
+
+| 設定 | 值 | 說明 |
+| --- | --- | --- |
+| `mouse` | 布林值 | 啟用終端機滑鼠擷取。 |
+| `scroll.speed` | 數字，至少為 `0.001` | 設定每次捲動輸入的固定捲動距離。 |
+| `scroll.acceleration` | 布林值 | 加速連續捲動。啟用時優先於捲動速度設定。 |
+| `prompt.editor` | 布林值 | 將編輯器中目前開啟的檔案或選取範圍加入提示詞上下文。 |
+| `prompt.paste` | `compact` 或 `full` | 將大量貼上的內容顯示為精簡的預留位置，或顯示完整文字。 |
+| `prompt.image_preview` | 布林值 | 在提示詞輸入框上方顯示圖片附件預覽。 |
+
+</div>
+
+## 工作階段
+
+設定全螢幕 TUI 工作階段的呈現方式，以及新工作階段的起始位置：
+
+```json title="cli.json"
+{
+  "session": {
+    "sidebar": "auto",
+    "scrollbar": false,
+    "thinking": "hide",
+    "grouping": "auto",
+    "image_preview": false,
+    "tps": true,
+    "markdown": "rendered",
+    "new_location": "launch",
+    "permissions": "prompt"
+  }
+}
+```
+
+<div class="docs-table-scroll" role="region" aria-label="工作階段設定" tabIndex={0}>
+
+| 設定 | 值 | 說明 |
+| --- | --- | --- |
+| `session.sidebar` | `auto` 或 `hide` | 空間足夠時顯示側邊欄，或一律隱藏。 |
+| `session.scrollbar` | 布林值 | 顯示對話紀錄的捲軸。 |
+| `session.thinking` | `show` 或 `hide` | 預設顯示或隱藏模型的推理過程。 |
+| `session.grouping` | `auto` 或 `none` | 將相關的對話紀錄項目分組，或個別顯示每個項目。 |
+| `session.image_preview` | 布林值 | 在對話紀錄中顯示使用者附件和工具結果中的圖片。 |
+| `session.tps` | 布林值 | 在助理訊息頁尾顯示每秒輸出 token 數。 |
+| `session.markdown` | `source` 或 `rendered` | 顯示 Markdown 語法標記，或在轉譯後的內容中隱藏標記。 |
+| `session.new_location` | `launch` 或 `inherit` | 從啟動 TUI 的目錄開始，或沿用目前工作階段的位置。 |
+| `session.permissions` | `prompt` 或 `autoaccept` | 針對權限請求詢問你，或自動接受所有請求。 |
+
+</div>
+
+## 分頁
+
+設定常駐的工作階段分頁列：
+
+```json title="cli.json"
+{
+  "tabs": {
+    "mode": "auto",
+    "scope": "cwd",
+    "layout": "horizontal",
+    "indicators": "status"
+  }
+}
+```
+
+舊版的布林值設定 `tabs.enabled` 仍然支援：`true` 等同 `on`，`false` 等同 `off`。OpenCode 會讀取這個設定，但不會改寫設定檔。
+
+<div class="docs-table-scroll" role="region" aria-label="分頁設定" tabIndex={0}>
+
+| 設定 | 值 | 說明 |
+| --- | --- | --- |
+| `tabs.mode` | `auto`、`on` 或 `off` | 自動使用、一律使用或永不使用分頁。`auto` 模式在 Herdr 中會隱藏分頁。 |
+| `tabs.scope` | `cwd` 或 `global` | 依工作目錄分別保留分頁，或在全域共用分頁。 |
+| `tabs.layout` | `horizontal` 或 `vertical` | 將分頁放在水平分頁列或垂直側邊欄中。 |
+| `tabs.indicators` | `status` 或 `numbers` | 顯示狀態圖示，或一律顯示分頁編號。 |
+
+</div>
+
+編號指示標記仍會保留狀態顏色和背景動畫。無論使用哪種指示標記模式，都可以用 Ctrl+數字快速鍵切換分頁。
+
+## 差異
+
+設定差異檢視的初始範圍與呈現方式：
+
+```json title="cli.json"
+{
+  "diffs": {
+    "source": "branch",
+    "wrap": "word",
+    "tree": true,
+    "single": false,
+    "view": "auto"
+  }
+}
+```
+
+<div class="docs-table-scroll" role="region" aria-label="差異設定" tabIndex={0}>
+
+| 設定 | 值 | 說明 |
+| --- | --- | --- |
+| `diffs.source` | `branch`、`committed`、`working` 或 `turn` | 設定初始的審查範圍。 |
+| `diffs.wrap` | `word` 或 `none` | 在單字處換行顯示長行，或不換行。 |
+| `diffs.tree` | 布林值 | 顯示差異檔案樹。 |
+| `diffs.single` | 布林值 | 只顯示所選檔案的修補內容。 |
+| `diffs.view` | `auto`、`split` 或 `unified` | 設定版面配置。`auto` 會依可用寬度自動選擇。 |
+
+</div>
+
+`branch` 會顯示 **All**，也就是分支與本機的所有變更；`committed` 只顯示分支上的提交；`working` 顯示已暫存、未暫存和未追蹤的變更。`turn` 會顯示 **Last turn**，也就是工作階段在最近一輪中變更的檔案；工作階段每完成一輪就會重新整理，而且如果 `/diff` 不是從工作階段中開啟，則會改用 `branch`。
+
+在 `/diff` 中，按 `d` 可以變更範圍，或從 **Base** 選擇要比較的分支。這些在檢視中所做的選擇只會持續到 TUI 結束，不會變更 `cli.json`。
+
+## 提醒
+
+系統通知和提醒音效可以分別啟用：
+
+```json title="cli.json"
+{
+  "attention": {
+    "notifications": true,
+    "sound": true,
+    "volume": 0.4,
+    "sound_pack": "opencode.default",
+    "sounds": {
+      "permission": "/home/me/sounds/permission.wav"
+    }
+  }
+}
+```
+
+<div class="docs-table-scroll" role="region" aria-label="提醒設定" tabIndex={0}>
+
+| 設定 | 值 | 說明 |
+| --- | --- | --- |
+| `attention.notifications` | 布林值 | 顯示系統通知，通常在終端機不在焦點時顯示。 |
+| `attention.sound` | 布林值 | 播放提醒音效。 |
+| `attention.volume` | `0` 到 `1` 之間的數字 | 設定音量。 |
+| `attention.sound_pack` | 字串 | 選擇要使用的音效包 ID。 |
+| `attention.sounds` | 物件 | 覆寫 `default`、`question`、`permission`、`error`、`done` 或 `subagent_done` 的音效檔案。 |
+
+</div>
+
+如果覆寫的音效檔案無效或無法讀取，該事件會改用內建音效。
+
+更新後，TUI 會在主畫面顯示一次新版本的重點功能。執行 `/highlights` 可以再次查看，也可以關閉這個對話方塊：
+
+```json title="cli.json"
+{
+  "highlights": false
+}
+```
+
+## 終端機
+
+設定終端機整合：
+
+```json title="cli.json"
+{
+  "terminal": {
+    "title": true,
+    "copy": "select"
+  }
+}
+```
+
+<div class="docs-table-scroll" role="region" aria-label="終端機設定" tabIndex={0}>
+
+| 設定 | 值 | 說明 |
+| --- | --- | --- |
+| `terminal.title` | 布林值 | 更新終端機視窗標題。 |
+| `terminal.copy` | `manual` 或 `select` | 手動複製，或在選取後立即複製。平台預設值在 Windows 上為 `manual`，其他平台為 `select`。 |
+
+</div>
+
+## Mini
+
+`mini` 群組用來控制精簡互動式介面 [`opencode mini`](/cli#mini)：
+
+```json title="cli.json"
+{
+  "mini": {
+    "thinking": "show",
+    "tools": "hide",
+    "shell_output": "hide",
+    "turn_summary": "show",
+    "footer": "show",
+    "splash": "show",
+    "work_spinner": "block-soft-slide",
+    "mono": false,
+    "replay": true,
+    "replay_limit": 200
+  }
+}
+```
+
+<div class="docs-table-scroll" role="region" aria-label="Mini 設定" tabIndex={0}>
+
+| 設定 | 值 | 說明 |
+| --- | --- | --- |
+| `mini.thinking` | `show` 或 `hide` | 顯示或隱藏模型的推理過程。 |
+| `mini.tools` | `show` 或 `hide` | 顯示或隱藏工具呼叫，以及工具呼叫之前的助理文字。 |
+| `mini.shell_output` | `show` 或 `hide` | 顯示或隱藏 shell 工具的原始輸出。 |
+| `mini.turn_summary` | `show` 或 `hide` | 在捲動緩衝區中顯示或隱藏代理、模型和耗時摘要。 |
+| `mini.footer` | `show` 或 `hide` | 顯示或隱藏常駐的活動、模型、用量和上下文詳細資料。 |
+| `mini.splash` | `show` 或 `hide` | 顯示或隱藏進入和離開時的啟動橫幅。 |
+| `mini.work_spinner` | spinner ID | 選擇頁尾的工作動畫。 |
+| `mini.mono` | 布林值 | 使用單色 ASCII 輸出。 |
+| `mini.replay` | 布林值 | 在恢復工作階段和調整終端機大小時，還原工作階段歷程記錄。 |
+| `mini.replay_limit` | 正整數 | 將重播限制為最新的幾則訊息。預設上限為 `200`。 |
+
+</div>
+
+可用的 spinner ID 如下：
+
+```text
+block-soft-slide  block-soft-sweep  block-low-comet  block-low-duet
+block-shuttle     block-bridge      block-squeeze    small-toggle
+square-toggle     grow-shrink       quadrant-orbit   crosshatch
+density-wave      seed
+```
+
+命令列中 `mini` 的重播旗標會在該次執行中覆寫這些設定。
+
+## 快速鍵
+
+覆寫指令的快速鍵綁定，以及前導鍵的逾時時間：
+
+```json title="cli.json"
+{
+  "keybinds": {
+    "leader": "ctrl+x",
+    "app.exit": ["ctrl+c", "ctrl+d", "<leader>q"],
+    "prompt.paste": {
+      "key": "ctrl+v",
+      "event": "press",
+      "preventDefault": false,
+      "fallthrough": false
+    },
+    "help.show": false
+  },
+  "leader": {
+    "timeout": 2000
+  }
+}
+```
+
+<div class="docs-table-scroll" role="region" aria-label="快速鍵設定" tabIndex={0}>
+
+| 設定 | 值 | 說明 |
+| --- | --- | --- |
+| `keybinds.leader` | 綁定值 | 設定其他綁定中 `<leader>` 所代表的按鍵。 |
+| `keybinds.<command>` | 綁定值 | 覆寫單一指令 ID 的綁定。 |
+| `keybinds.*.key` | 按鍵字串或描述物件 | 選擇物件形式綁定所使用的按鍵。 |
+| `keybinds.*.event` | `press` 或 `release` | 將物件形式綁定限制為單一按鍵事件。 |
+| `keybinds.*.preventDefault` | 布林值 | 控制是否阻止終端機預設的按鍵行為。 |
+| `keybinds.*.fallthrough` | 布林值 | 允許優先順序較低的處理常式接收同一個事件。 |
+| `leader.timeout` | 正整數 | 設定按下前導鍵後等待的毫秒數。 |
+
+</div>
+
+綁定值可以是字串、多個替代按鍵組成的陣列，或物件。使用 `"none"` 或 `false` 可以停用綁定。可接受的按鍵語法、所有指令 ID 和所有預設綁定，請參閱[快速鍵](/cli/keybinds)。
+
+## 外掛
+
+依序載入僅在終端機中使用的外掛：
+
+```json title="cli.json"
+{
+  "plugins": [
+    "-opencode.notifications",
+    {
+      "package": "./plugins/status",
+      "options": {
+        "compact": true
+      }
+    }
+  ]
+}
+```
+
+<div class="docs-table-scroll" role="region" aria-label="外掛設定" tabIndex={0}>
+
+| 設定 | 值 | 說明 |
+| --- | --- | --- |
+| `plugins` | 陣列 | 宣告有順序的啟用指示和外部外掛。 |
+| `plugins[].package` | 字串 | 設定套件名稱、本機路徑或檔案 URL。 |
+| `plugins[].options` | 物件 | 將外掛專屬的選項傳給該外掛。 |
+
+</div>
+
+套件形式、本機探索、萬用字元和停用指示的說明，請參閱[外掛](/cli/plugins)。
+
+## 偵錯與實驗性功能
+
+啟用診斷功能，或選擇加入目前可用的實驗性功能：
+
+```json title="cli.json"
+{
+  "debug": {
+    "devtools": false,
+    "timing": false,
+    "turn_tokens": "verbose"
+  },
+  "experimental": {}
+}
+```
+
+<div class="docs-table-scroll" role="region" aria-label="偵錯與實驗性功能設定" tabIndex={0}>
+
+| 設定 | 值 | 說明 |
+| --- | --- | --- |
+| `debug.devtools` | 布林值 | 顯示 DevTools 偵錯列。 |
+| `debug.timing` | 布林值 | 在偵錯列中顯示首次繪製時間的診斷資訊。 |
+| `debug.turn_tokens` | 布林值或 `verbose` | 顯示每一輪的 token 用量；`verbose` 還會包含工具呼叫的輸入內容。 |
+| `experimental` | 由功能 ID 對應到布林值的物件 | 啟用或停用實驗性功能；這些功能可能隨時變更或移除，恕不另行通知。 |
+
+</div>
+
+請只使用 TUI 的 **Experiments** 對話方塊中目前列出的功能 ID。未知的 ID 不會有任何作用。

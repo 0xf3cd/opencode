@@ -1,0 +1,184 @@
+---
+title: "格式化工具"
+---
+
+OpenCode 可以在 `write`、`edit` 或 `patch` 工具變更檔案之後，對檔案進行格式化。格式化工具預設為停用，請在設定中啟用：
+
+```jsonc title="opencode.jsonc"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "formatter": true,
+}
+```
+
+## 啟用
+
+將 `formatter` 設為 `true` 即可啟用所有內建的格式化工具。只有在內建工具的執行檔和專案特定需求都具備時，OpenCode 才會執行該工具。
+
+```jsonc title="opencode.jsonc"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "formatter": true,
+}
+```
+
+使用物件同樣會啟用內建工具，還能覆寫內建工具或新增自訂格式化工具。空物件會保留繼承而來的格式化工具設定，而 `true` 則會將設定重設為內建工具。
+
+```jsonc title="opencode.jsonc"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "formatter": {},
+}
+```
+
+## 內建工具
+
+OpenCode 內建以下格式化工具定義。大多數只需要對應的指令可用；有額外偵測規則的定義會列在下方。
+
+| 格式化工具 | 副檔名 | 需求 |
+| --- | --- | --- |
+| `gofmt` | `.go` | `gofmt` 指令 |
+| `mix` | `.ex`, `.exs`, `.eex`, `.heex`, `.leex`, `.neex`, `.sface` | `mix` 指令 |
+| `oxfmt` | `.js`, `.jsx`, `.mjs`, `.cjs`, `.ts`, `.tsx`, `.mts`, `.cts` | `package.json` 中有 `oxfmt` 相依套件 |
+| `prettier` | `.js`, `.jsx`, `.mjs`, `.cjs`, `.ts`, `.tsx`, `.mts`, `.cts`, `.html`, `.htm`, `.css`, `.scss`, `.sass`, `.less`, `.vue`, `.svelte`, `.json`, `.jsonc`, `.yaml`, `.yml`, `.toml`, `.xml`, `.md`, `.mdx`, `.graphql`, `.gql` | `package.json` 中有 `prettier` 相依套件 |
+| `biome` | 與上方 `prettier` 相同的副檔名 | `biome.json` 或 `biome.jsonc`，以及已安裝的 `@biomejs/biome` 執行檔 |
+| `zig` | `.zig`, `.zon` | `zig` 指令 |
+| `clang-format` | `.c`, `.cc`, `.cpp`, `.cxx`, `.c++`, `.h`, `.hh`, `.hpp`, `.hxx`, `.h++`, `.ino`, `.C`, `.H` | `clang-format` 指令和 `.clang-format` |
+| `ktlint` | `.kt`, `.kts` | `ktlint` 指令 |
+| `ruff` | `.py`, `.pyi` | `ruff` 指令，以及 Ruff 設定或相依性宣告 |
+| `air` | `.R` | 會表明自己是 R 格式化工具的 `air` 指令 |
+| `uv` | `.py`, `.pyi` | 支援 `uv format` 的 `uv` 指令 |
+| `rubocop` | `.rb`, `.rake`, `.gemspec`, `.ru` | `rubocop` 指令 |
+| `standardrb` | `.rb`, `.rake`, `.gemspec`, `.ru` | `standardrb` 指令 |
+| `htmlbeautifier` | `.erb` | `htmlbeautifier` 指令 |
+| `dart` | `.dart` | `dart` 指令 |
+| `ocamlformat` | `.ml`, `.mli` | `ocamlformat` 指令和 `.ocamlformat` |
+| `terraform` | `.tf`, `.tfvars` | `terraform` 指令 |
+| `latexindent` | `.tex` | `latexindent` 指令 |
+| `gleam` | `.gleam` | `gleam` 指令 |
+| `shfmt` | `.sh`, `.bash` | `shfmt` 指令 |
+| `nixfmt` | `.nix` | `nixfmt` 指令 |
+| `rustfmt` | `.rs` | `rustfmt` 指令 |
+| `pint` | `.php` | `composer.json` 中有 `laravel/pint` |
+| `ormolu` | `.hs` | `ormolu` 指令 |
+| `cljfmt` | `.clj`, `.cljs`, `.cljc`, `.edn` | `cljfmt` 指令 |
+| `dfmt` | `.d` | `dfmt` 指令 |
+
+例如，啟用內建工具後，OpenCode 就能找到專案本機的 Prettier 相依套件，並對符合的檔案執行它：
+
+```jsonc title="opencode.jsonc"
+{
+  "formatter": true,
+}
+```
+
+## 自訂
+
+新增具名項目，即可變更內建工具或定義自訂格式化工具。自訂格式化工具必須同時設定 `command` 和 `extensions` 才能執行。
+
+```jsonc title="opencode.jsonc"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "formatter": {
+    "prettier": {
+      "environment": {
+        "NODE_ENV": "development",
+      },
+      "extensions": [".js", ".ts"],
+    },
+    "deno-markdown": {
+      "command": ["deno", "fmt", "$FILE"],
+      "extensions": [".md"],
+    },
+  },
+}
+```
+
+| 欄位 | 類型 | 行為 |
+| --- | --- | --- |
+| `disabled` | `boolean` | 設為 `true` 時移除該具名格式化工具。 |
+| `command` | `string[]` | 取代內建指令，或定義自訂指令。 |
+| `environment` | `Record<string, string>` | 在保留父處理程序環境的同時加入環境變數。 |
+| `extensions` | `string[]` | 取代內建的副檔名清單，或定義自訂清單。請包含開頭的點。 |
+
+所有欄位都是選用的。內建項目會繼承省略的值，而新項目如果沒有指令或副檔名，就無法執行。
+
+```jsonc title="opencode.jsonc"
+{
+  "formatter": {
+    "prettier": {
+      "extensions": [".md", ".mdx"],
+    },
+  },
+}
+```
+
+## 指令
+
+`command` 是引數陣列，而不是 shell 指令字串。OpenCode 會將 `$FILE` 替換成檔案的絕對路徑，並在作用中的專案目錄執行該指令。
+
+```jsonc title="opencode.jsonc"
+{
+  "formatter": {
+    "custom": {
+      "command": ["custom-fmt", "--write", "$FILE"],
+      "extensions": [".custom"],
+    },
+  },
+}
+```
+
+## 比對
+
+OpenCode 會將檔案的最後一個副檔名與 `extensions` 比對。比對會區分大小寫，而像 `.part.md` 這樣的複合項目不會比對到 `notes.part.md`，因為該檔案的最後一個副檔名是 `.md`。
+
+```jsonc title="opencode.jsonc"
+{
+  "formatter": {
+    "markdown": {
+      "command": ["deno", "fmt", "$FILE"],
+      "extensions": [".md"],
+    },
+  },
+}
+```
+
+如果有多個格式化工具符合，OpenCode 會依照註冊順序逐一嘗試，並在第一個成功的指令之後停止。內建工具維持其內建順序，自訂項目則依物件中的順序排在後面。如果某個工具以失敗狀態結束，OpenCode 會記錄失敗，並嘗試下一個符合的工具。
+
+```jsonc title="opencode.jsonc"
+{
+  "formatter": {
+    "preferred": {
+      "command": ["preferred-fmt", "$FILE"],
+      "extensions": [".foo"],
+    },
+    "fallback": {
+      "command": ["fallback-fmt", "$FILE"],
+      "extensions": [".foo"],
+    },
+  },
+}
+```
+
+## 停用
+
+如果沒有任何設定檔設定 `formatter`，格式化就會停用。若要停用由較低優先順序的設定檔所啟用的格式化，請將它設為 `false`。
+
+```jsonc title="opencode.jsonc"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "formatter": false,
+}
+```
+
+若只想停用某一個內建工具、保留其他工具，請將它的具名項目標記為停用。
+
+```jsonc title="opencode.jsonc"
+{
+  "formatter": {
+    "prettier": {
+      "disabled": true,
+    },
+  },
+}
+```

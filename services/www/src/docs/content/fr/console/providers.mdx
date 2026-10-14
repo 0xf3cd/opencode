@@ -1,0 +1,127 @@
+---
+title: "Fournisseurs"
+description: "Connectez vos propres comptes de fournisseurs de modèles à un espace de travail OpenCode Console et choisissez les modèles accessibles aux membres."
+---
+
+Connectez les comptes de fournisseurs que vous payez déjà, comme Anthropic, OpenAI ou AWS Bedrock, et partagez leurs
+modèles avec tout l'espace de travail. La Console stocke les identifiants et sert chaque fournisseur via sa passerelle :
+les membres utilisent les modèles sans jamais voir la clé du fournisseur. Cette même passerelle est accessible à vos
+propres outils via l'[API des fournisseurs](/console/api/providers).
+
+Les propriétaires et les administrateurs gèrent les fournisseurs depuis l'onglet **Providers**. Les membres obtiennent
+les modèles activés dans OpenCode après avoir exécuté `/connect`.
+
+## Connecter un fournisseur
+
+1. Ouvrez **Providers** et cliquez sur **Connect Provider**.
+2. Choisissez un fournisseur dans le catalogue et saisissez sa clé API.
+3. Cliquez éventuellement sur **Test connection**, puis sur **Save**.
+
+Le catalogue comprend Anthropic, OpenAI, Google, xAI, DeepSeek, Mistral, Groq, OpenRouter et bien d'autres. Les
+fournisseurs du catalogue sont livrés avec leurs modèles préconfigurés.
+
+### Fournisseurs cloud
+
+Les fournisseurs cloud nécessitent quelques informations supplémentaires.
+
+| Fournisseur           | Informations                                   |
+| --------------------- | ---------------------------------------------- |
+| Azure                 | Nom de la ressource et clé API                 |
+| AWS Bedrock           | Région et clé API                              |
+| Google Vertex AI      | Région et JSON du compte de service            |
+| Cloudflare AI Gateway | ID du compte, ID de la passerelle et token API |
+| Databricks            | URL de l'espace de travail et token            |
+
+### Fournisseurs personnalisés
+
+Cliquez sur **Add Custom Provider** pour connecter tout autre point de terminaison, puis ajoutez ses modèles avec
+**Add Model**.
+
+| Champ      | Description                                                                              |
+| ---------- | ---------------------------------------------------------------------------------------- |
+| Base URL   | Destination vers laquelle la Console transfère les requêtes, par exemple `https://api.deepseek.com/v1`. |
+| Format     | Chat Completions, Responses API, Anthropic Compatible ou Google Generative AI.            |
+| Auth mode  | Bearer, API key header ou Custom header.                                                 |
+| Credential | La clé que la Console envoie au fournisseur.                                             |
+
+## Choisir les modèles
+
+Ouvrez un fournisseur pour afficher ses modèles. Seuls les modèles activés sont accessibles aux membres.
+
+- Utilisez l'interrupteur **Enabled** pour activer ou désactiver un modèle.
+- Activez **New models** pour activer automatiquement les modèles que le fournisseur ajoutera à l'avenir.
+
+## Modifier les modèles
+
+Cliquez sur un modèle pour le modifier. Les modifications sont enregistrées à la fermeture du panneau.
+
+| Section       | Ce que vous pouvez modifier                                                      |
+| ------------- | -------------------------------------------------------------------------------- |
+| General       | Nom d'affichage, ID d'API, prise en charge des outils, types d'entrée et de sortie |
+| Variants      | Variantes avec leurs propres en-têtes ou corps                                   |
+| Configuration | Variante par défaut, en-têtes et corps des requêtes, limites de tokens            |
+| Cost Tiers    | Prix d'entrée, de sortie, de lecture et d'écriture en cache par million de tokens |
+
+### Tarifs personnalisés
+
+Les modèles du catalogue démarrent au prix catalogue du fournisseur. Si vous avez négocié vos tarifs, par exemple une
+remise sur votre contrat OpenAI, remplacez les prix sous **Cost Tiers** afin que les rapports d'utilisation et les
+[budgets](/console/budgets) correspondent à ce que vous payez réellement.
+
+| Champ            | Prix catalogue | Votre prix |
+| ---------------- | -------------- | ---------- |
+| Input price      | $2.50          | $2.00      |
+| Output price     | $15.00         | $12.00     |
+| Cache read price | $0.25          | $0.20      |
+
+Les prix modifiés sont mis en évidence sur la page du fournisseur. Utilisez **Restore default value** sur un champ, ou
+**⋯ › Restore...** sur le modèle, pour revenir au prix catalogue.
+
+Ajoutez un palier **Context** lorsqu'un modèle facture davantage au-delà d'une certaine taille de contexte, par exemple
+pour les prompts de plus de 200K tokens.
+
+### Modèles personnalisés
+
+Cliquez sur **Add Model** pour ajouter un modèle absent du catalogue, avec son **Display name** et son **Model ID**.
+Utilisez **⋯ › Duplicate...** sur un modèle existant pour partir de ses paramètres.
+
+## Modèles OpenCode
+
+L'onglet **Models** gère les [modèles](/console/models) fournis par la Console, payés avec les crédits de l'espace de
+travail. Il fonctionne comme une page de fournisseur :
+
+- Activez ou désactivez chaque modèle.
+- Désactivez **Free models** pour bloquer les modèles gratuits dans l'espace de travail.
+- Activez **New models** pour activer automatiquement les nouveaux modèles de la Console.
+
+Désactivez le fournisseur entier via **⋯ › Disable** pour n'utiliser que vos propres fournisseurs.
+
+## Utilisation dans OpenCode
+
+Les membres exécutent `/connect` et choisissent l'espace de travail. Chaque fournisseur activé apparaît sous le nom de
+l'espace de travail suivi du nom du fournisseur, et `/models` liste ses modèles activés.
+
+```text
+Acme Inc. / Anthropic
+```
+
+Activez **Managed providers only** dans **Settings › General** pour limiter OpenCode aux fournisseurs de l'espace de
+travail pour tout le monde.
+
+## Désactiver ou supprimer
+
+Ouvrez le menu **⋯** du fournisseur :
+
+- **Disable** masque le fournisseur et ses modèles aux membres, mais conserve ses paramètres.
+- **Remove...** supprime le fournisseur et ses modèles. La boîte de dialogue indique qui l'a utilisé récemment et propose
+  **Disable instead**.
+
+Pour renouveler une clé, cliquez sur les identifiants dans la page du fournisseur et saisissez la nouvelle clé.
+
+## Facturation
+
+Le fournisseur vous facture les tokens ; la Console ne prélève pas de crédits pour ceux-ci. Elle enregistre néanmoins
+chaque requête et son coût selon la tarification du modèle, afin que les rapports d'utilisation et les
+[budgets](/console/budgets) en tiennent compte.
+
+Pour appeler un fournisseur depuis vos propres outils plutôt que depuis OpenCode, utilisez l'[API des fournisseurs](/console/api/providers).

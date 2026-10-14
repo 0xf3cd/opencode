@@ -1,0 +1,572 @@
+---
+title: "Configuration"
+---
+
+Créez un fichier `opencode.jsonc` dans votre projet pour configurer OpenCode. Ajoutez le schéma pour bénéficier de la
+validation dans votre éditeur, puis définissez uniquement les options dont vous avez besoin.
+
+```jsonc title="opencode.jsonc"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "model": "anthropic/claude-sonnet-4-5",
+}
+```
+
+Vous pouvez aussi demander à OpenCode de mettre à jour ce fichier pour vous.
+
+## Format
+
+OpenCode prend en charge JSON et JSONC. Utilisez JSONC si vous voulez des commentaires ou des virgules finales.
+
+```jsonc title="opencode.jsonc"
+{
+  "$schema": "https://opencode.ai/config.json",
+  // Use this model by default.
+  "model": "anthropic/claude-sonnet-4-5",
+}
+```
+
+## Emplacements
+
+Placez les paramètres gérés, valables pour toute la machine, dans le répertoire de configuration système :
+
+| Plateforme | Répertoire                              |
+| ---------- | --------------------------------------- |
+| macOS      | `/Library/Application Support/opencode` |
+| Linux      | `/etc/opencode`                         |
+| Windows    | `%ProgramData%\opencode`                |
+
+Le répertoire système fonctionne comme le répertoire global. En plus de `opencode.json(c)`, il charge `agents/`,
+`commands/`, `skills/` et `plugins/` pour tous les utilisateurs de la machine :
+
+```text
+/etc/opencode/
+├── opencode.json
+├── agents/review.md
+├── commands/release.md
+└── skills/deploy/SKILL.md
+```
+
+Sur macOS, OpenCode lit aussi les préférences gérées que les outils MDM déploient pour le domaine
+`ai.opencode.managed`. Un profil propre à l'utilisateur remplace le profil valable pour toute la machine :
+
+```text
+/Library/Managed Preferences/<user>/ai.opencode.managed.plist
+/Library/Managed Preferences/ai.opencode.managed.plist
+```
+
+Les paramètres gérés ont la priorité la plus élevée : les utilisateurs et les projets ne peuvent pas remplacer les
+valeurs qu'ils définissent, et les préférences gérées ont priorité sur le répertoire système. Les paramètres seuls ne
+peuvent pas empêcher les utilisateurs d'ajouter des fournisseurs, des serveurs MCP, des agents ou des plugins : pour
+imposer des restrictions, utilisez des [politiques](/policies#precedence) dans la configuration gérée.
+
+Placez les paramètres utilisateur valables pour tous vos projets dans la configuration globale :
+
+```text
+~/.config/opencode/opencode.json(c)
+```
+
+Placez les paramètres du projet dans l'un de ces fichiers :
+
+```text
+/home/user/projects/my-app/opencode.json(c)
+/home/user/projects/my-app/.opencode/opencode.json(c)
+```
+
+OpenCode effectue sa recherche du répertoire courant jusqu'à la racine du système de fichiers. Il fusionne d'abord les
+fichiers `opencode.json(c)` placés directement dans les répertoires, du plus éloigné au plus proche, puis les fichiers
+situés dans les répertoires `.opencode`, dans le même ordre. Toute configuration `.opencode` découverte remplace donc
+toutes les configurations directes. Utilisez une seule forme dans toute une arborescence, sauf si vous avez besoin de ce
+comportement.
+
+Par exemple, démarrez OpenCode depuis `/home/user/projects/acme/packages/web` :
+
+```text
+/etc/opencode/opencode.json
+~/.config/opencode/opencode.json
+
+/home/user/projects/acme/
+├── opencode.json
+└── packages/
+    └── web/
+        ├── opencode.json
+        └── src/
+```
+
+OpenCode applique ces fichiers de la priorité la plus basse à la plus élevée :
+
+1. `~/.config/opencode/opencode.json`
+2. `/home/user/projects/acme/opencode.json`
+3. `/home/user/projects/acme/packages/web/opencode.json`
+4. `/etc/opencode/opencode.json`
+
+La configuration du paquet remplace les paramètres correspondants de la configuration du dépôt, qui remplace elle-même
+la configuration globale. La configuration système les remplace toutes. Les paramètres qui n'entrent pas en conflit sont
+conservés. Les [politiques](/policies#precedence) des fichiers globaux et de projet sont évaluées dans l'ordre inverse,
+et les politiques système l'emportent sur toutes les autres.
+
+## Schéma
+
+Le schéma de configuration complet d'OpenCode est disponible sur
+[opencode.ai/config.json](https://opencode.ai/config.json).
+
+Ajoutez le champ `$schema` à votre fichier de configuration pour activer la validation et l'autocomplétion dans les
+éditeurs qui prennent en charge JSON Schema :
+
+```json title="opencode.json"
+{
+  "$schema": "https://opencode.ai/config.json"
+}
+```
+
+Le schéma fait référence pour les champs disponibles, les valeurs acceptées et la structure des configurations
+imbriquées.
+
+### Shell
+
+Définissez le shell utilisé par le terminal et les outils shell.
+
+```jsonc
+{
+  "shell": "/bin/zsh",
+}
+```
+
+### Modèle
+
+Définissez le modèle par défaut au format `provider/model`. La valeur par défaut racine ne conserve pas de `#variant`
+pour le moment ; les références de modèle des agents et des commandes peuvent en sélectionner une.
+
+```jsonc
+{
+  "model": "anthropic/claude-sonnet-4-5",
+}
+```
+
+Consultez le [guide des modèles](/models) pour la sélection des modèles et les modèles locaux.
+
+### Agent
+
+Choisissez l'agent principal utilisé lorsqu'une session n'en sélectionne pas explicitement.
+
+```jsonc
+{
+  "default_agent": "build",
+}
+```
+
+Consultez le [guide des agents](/agents) pour les agents intégrés et personnalisés.
+
+### Mises à jour
+
+Contrôlez la vérification des mises à jour depuis la configuration globale. Définissez `update` sur `"disable"` pour
+la désactiver, sur `"notify"` pour afficher les mises à jour disponibles avant de les installer, ou sur `"auto"` pour les
+installer automatiquement. Si `update` est omis, sa valeur par défaut est `"notify"`.
+
+L'installation automatique ne redémarre pas un serveur en cours d'exécution. Redémarrez-le manuellement pour activer la
+mise à jour installée. Les valeurs définies au niveau du projet sont ignorées.
+
+```jsonc
+{
+  "update": "notify",
+}
+```
+
+### Partage
+
+Définissez la politique de partage des sessions. OpenCode accepte ce champ, mais le partage de sessions n'est pas encore
+pris en charge.
+
+```jsonc
+{
+  "share": "manual",
+}
+```
+
+Consultez le [guide du partage](/sharing) pour plus de détails.
+
+### Nom d'utilisateur
+
+Définissez un nom d'utilisateur. OpenCode accepte ce champ mais ne l'affiche pas dans les conversations.
+
+```jsonc
+{
+  "username": "alice",
+}
+```
+
+### Permissions
+
+Définissez des règles ordonnées qui autorisent, refusent ou demandent une confirmation avant qu'un agent utilise un outil
+sur une ressource correspondante.
+
+```jsonc
+{
+  "permissions": [
+    {
+      "action": "shell",
+      "resource": "git push *",
+      "effect": "ask",
+    },
+  ],
+}
+```
+
+Consultez le [guide des permissions](/permissions) pour la correspondance des règles et les actions disponibles.
+
+### Politiques
+
+Autorisez ou refusez l'utilisation d'un fournisseur, refusez de manière stricte une vérification de permission, ou
+bloquez un serveur MCP, un skill ou un plugin, à l'aide d'instructions ordonnées qu'une configuration plus large peut
+remplacer.
+
+```jsonc
+{
+  "policies": [
+    { "action": "provider.use", "resource": "*", "effect": "deny" },
+    { "action": "provider.use", "resource": "anthropic", "effect": "allow" },
+    { "action": "tool.use", "resource": "shell:git push *", "effect": "deny" },
+  ],
+}
+```
+
+Consultez le [guide des politiques](/policies) pour la correspondance, la priorité entre fichiers de configuration et les
+politiques gérées depuis la Console.
+
+### Agents
+
+Remplacez les agents intégrés ou définissez des agents spécialisés avec leurs propres modèle, instructions, mode et
+permissions.
+
+```jsonc
+{
+  "agents": {
+    "reviewer": {
+      "description": "Review changes without editing files",
+      "mode": "subagent",
+      "system": "Focus on correctness, security, and missing tests.",
+      "permissions": [{ "action": "edit", "resource": "*", "effect": "deny" }],
+    },
+  },
+}
+```
+
+Consultez le [guide des agents](/agents) pour toutes les options d'agent et les agents définis dans des fichiers.
+
+### Instantanés
+
+Activez ou désactivez les instantanés du système de fichiers utilisés pour annuler et rétablir des modifications.
+
+```jsonc
+{
+  "snapshots": false,
+}
+```
+
+Consultez le [guide des instantanés](/snapshots) pour le fonctionnement de l'annulation et du rétablissement.
+
+### Surveillance des fichiers
+
+Ignorez les fichiers et répertoires qui ne doivent pas déclencher de mises à jour du système de fichiers.
+
+```jsonc
+{
+  "watcher": {
+    "ignore": ["dist/**", "coverage/**"],
+  },
+}
+```
+
+### Formateur
+
+Formatez les fichiers après leur modification par les outils `write`, `edit` ou `patch`. Définissez `formatter` sur
+`true` pour activer les formateurs intégrés disponibles.
+
+```jsonc
+{
+  "formatter": true,
+}
+```
+
+Consultez le [guide des formateurs](/formatters) pour les formateurs intégrés et personnalisés.
+
+### Médias
+
+Contrôlez la façon dont les images trop volumineuses chargées par l'outil `read` sont redimensionnées ou refusées avant
+d'être envoyées à un modèle.
+
+```jsonc
+{
+  "media": {
+    "image": {
+      "auto_resize": true,
+      "max_width": 2000,
+      "max_height": 2000,
+      "max_base64_bytes": 5242880,
+    },
+  },
+}
+```
+
+Consultez le [guide des pièces jointes](/attachments) pour le traitement des images et les limites.
+
+### Sortie
+
+Définissez le nombre maximal de lignes et d'octets conservés d'un résultat d'outil.
+
+```jsonc
+{
+  "tool_output": {
+    "max_lines": 2000,
+    "max_bytes": 51200,
+  },
+}
+```
+
+### Recherche
+
+Choisissez comment OpenCode effectue ses recherches web. Utilisez `"random"` pour sélectionner automatiquement un
+fournisseur disponible.
+
+```jsonc
+{
+  "websearch": {
+    "provider": "random",
+  },
+}
+```
+
+Consultez le [guide de la recherche web](/websearch) pour les fournisseurs, les identifiants, la sélection, les limites
+de débit et la désactivation de la recherche.
+
+### MCP
+
+Configurez des serveurs Model Context Protocol locaux et distants. Chaque serveur peut remplacer les délais d'expiration
+globaux.
+
+```jsonc
+{
+  "mcp": {
+    "servers": {
+      "playwright": {
+        "type": "local",
+        "command": ["bunx", "@playwright/mcp"],
+      },
+    },
+  },
+}
+```
+
+Consultez le [guide MCP](/mcp-servers) pour les serveurs distants, OAuth, les variables d'environnement et les délais
+d'expiration.
+
+### Compaction
+
+Contrôlez la compaction automatique du contexte et la quantité de contexte récent qu'elle préserve.
+
+```jsonc
+{
+  "compaction": {
+    "auto": true,
+    "keep": {
+      "tokens": 15000,
+    },
+    "buffer": 20000,
+  },
+}
+```
+
+Les résumés locaux restent le comportement par défaut. Activez la compaction native du fournisseur, pour les requêtes
+automatiques comme manuelles, avec une politique au niveau du fournisseur ou du modèle :
+
+```jsonc
+{
+  "providers": {
+    "openai": {
+      "settings": { "compaction": { "type": "native" } },
+      "models": {
+        "gpt-4.1": { "settings": { "compaction": { "type": "summary" } } },
+      },
+    },
+  },
+}
+```
+
+Un paramètre de modèle remplace le paramètre du fournisseur. La compaction automatique utilise le budget d'entrée
+utilisable du modèle sélectionné. Les points de contrôle du fournisseur conservent les messages utilisateur récents dans
+le même budget `compaction.keep.tokens` que celui utilisé par les résumés locaux pour leur fin conservée. Au niveau
+racine, `compaction.auto: false` désactive toute nouvelle compaction automatique sans supprimer les points de contrôle
+déjà installés. Consultez le [guide de la compaction](/compaction) pour la gestion du budget et la récupération en cas de
+dépassement.
+
+### Préchauffage
+
+Gardez au chaud les sessions de modèle récemment actives grâce à des requêtes transitoires périodiques. Le préchauffage
+est désactivé par défaut ; définissez-le sur `true` pour utiliser l'intervalle d'inactivité de quatre minutes et la
+fenêtre d'activité de 30 minutes.
+
+```jsonc
+{
+  "warming": {
+    "prompt": "Do not perform any work. Reply with exactly: OK",
+    "interval": "4 minutes",
+    "duration": "30 minutes",
+  },
+}
+```
+
+Consultez le [guide du préchauffage](/warming) pour le comportement des requêtes, la personnalisation et les
+considérations de coût.
+
+### Skills
+
+Ajoutez des répertoires ou des URL dans lesquels OpenCode doit rechercher des skills d'agent.
+
+```jsonc
+{
+  "skills": ["./team-skills", "https://example.com/.well-known/skills/"],
+}
+```
+
+Consultez le [guide des skills](/skills) pour la structure d'un skill et la découverte automatique sous
+`.opencode/skills/`.
+
+### Commandes
+
+Définissez des commandes slash réutilisables sous forme de modèles de prompt nommés.
+
+```jsonc
+{
+  "commands": {
+    "review": {
+      "description": "Review the current changes",
+      "template": "Review the current diff for correctness and missing tests.",
+    },
+  },
+}
+```
+
+Consultez le [guide des commandes](/commands) pour les arguments, les modèles, les agents et les commandes définies dans
+des fichiers.
+
+### Instructions
+
+Déclarez des fichiers d'instructions, des globs ou des URL supplémentaires. OpenCode accepte ce champ mais ne charge pas
+ses entrées : utilisez `AGENTS.md` pour les instructions.
+
+```jsonc
+{
+  "instructions": ["CONTRIBUTING.md", "docs/guidelines/*.md"],
+}
+```
+
+Consultez le [guide des instructions](/instructions) pour les instructions de projet et `AGENTS.md`.
+
+### Références
+
+Rendez des répertoires locaux ou des dépôts Git disponibles comme contexte d'appui nommé.
+
+```jsonc
+{
+  "references": {
+    "docs": {
+      "path": "../product-docs",
+      "description": "Product behavior and terminology",
+    },
+    "effect": {
+      "repository": "Effect-TS/effect",
+      "branch": "main",
+    },
+  },
+}
+```
+
+Consultez le [guide des références](/references) pour la forme abrégée, la visibilité et la résolution des chemins.
+
+### Worktrees
+
+Définissez le répertoire parent des nouveaux worktrees locaux. OpenCode y ajoute le nom de worktree demandé ou généré.
+
+```jsonc
+{
+  "worktree": {
+    "directory": "../worktrees",
+  },
+}
+```
+
+Les chemins relatifs sont résolus par rapport au checkout canonique enregistré du projet. Cela s'applique aussi bien à la
+configuration globale qu'à celle du projet ; les chemins absolus sont utilisés tels quels, et `~/` est résolu par rapport
+au répertoire personnel de l'utilisateur.
+
+Par exemple, cette configuration globale place les nouveaux worktrees dans le répertoire `.lane/trees/` propre à chaque
+projet :
+
+```jsonc
+{
+  "worktree": {
+    "directory": ".lane/trees",
+  },
+}
+```
+
+Sans ce paramètre, la création utilise le répertoire de données du serveur, sous
+`worktree/<first-six-project-ID-characters>` (les six premiers caractères de l'ID du projet). La création et
+l'actualisation des worktrees chargent la configuration depuis le checkout canonique enregistré du projet, y compris
+lorsque d'autres clones partagent son ID de projet. Modifier ce paramètre ne déplace pas les worktrees existants.
+
+Git est la valeur par défaut intégrée. Un [plugin](/build/plugins#worktrees) qui enregistre une stratégie devient
+automatiquement la valeur par défaut dans le runtime de ce plugin. Les opérations de projet utilisent le runtime du
+checkout canonique. Les options propres à une stratégie appartiennent à ce plugin, et non à l'objet de configuration
+`worktree`.
+
+### Plugins
+
+Chargez des plugins depuis des paquets ou des répertoires de plugins locaux. Utilisez la forme objet lorsqu'un plugin
+accepte des options.
+
+```jsonc
+{
+  "plugins": [
+    "opencode-example-plugin",
+    {
+      "package": "./plugins/local",
+      "options": {
+        "enabled": true,
+      },
+    },
+  ],
+}
+```
+
+Consultez le [guide des plugins](/plugins) pour le chargement et la configuration des plugins.
+
+### Fournisseurs
+
+Configurez les fournisseurs et ajoutez ou remplacez leurs modèles, paramètres de requête, en-têtes et variantes de
+modèle.
+
+```jsonc
+{
+  "providers": {
+    "openai": {
+      "models": {
+        "gpt-5.2-custom": {
+          "modelID": "gpt-5.2",
+          "name": "GPT-5.2 Custom",
+          "limit": {
+            "context": 200000,
+            "output": 32000,
+          },
+        },
+      },
+    },
+  },
+}
+```
+
+Le paramètre de fournisseur `settings.transport: "websocket"` sélectionne la connexion WebSocket de session de ce
+fournisseur.
+
+Consultez le [guide des fournisseurs](/providers) pour les identifiants, les points de terminaison personnalisés, les
+paquets de fournisseur, le transport WebSocket et la configuration des modèles.

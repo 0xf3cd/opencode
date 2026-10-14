@@ -1,0 +1,330 @@
+---
+title: "ACP"
+description: "Agent Client Protocol クライアントから OpenCode を使用します。"
+---
+
+`opencode acp` は OpenCode を [Agent Client Protocol](https://agentclientprotocol.com) のエージェントとして実行するため、Zed などの ACP クライアントから OpenCode を使用できます。次の例では、Zed に OpenCode を追加します。
+
+```json title="~/.config/zed/settings.json"
+{
+  "agent_servers": {
+    "OpenCode": {
+      "command": "opencode",
+      "args": ["acp"]
+    }
+  }
+}
+```
+
+他の ACP クライアントでも同じコマンドと `acp` 引数を使用しますが、設定ファイルやフィールド名は異なる場合があります。GUI のクライアントが `opencode` を見つけられない場合は、`which opencode` が出力する絶対パスを `command` に設定してください。
+
+## 認証
+
+OpenCode は、すでに保存されているプロバイダーの認証情報を使用します。ACP クライアントを起動する前に、ターミナルからサインインしてください。
+
+```bash
+opencode auth login
+```
+
+OpenCode が提供する認証方法は `opencode-login` の 1 つだけです。デフォルトでは、これはエージェント認証方法です。`authenticate` リクエストはこの方法のみを受け付け、認証情報の入力は求めません。プロバイダーの認証が必要なためにプロンプトが失敗した場合、OpenCode は ACP の `auth_required` エラーを返します。
+
+クライアントが `clientCapabilities.auth.terminal` を `true` に設定した場合、この認証方法はターミナル認証方法になります。
+
+```json
+{
+  "id": "opencode-login",
+  "name": "Login with opencode",
+  "description": "Run `opencode auth login` in the terminal",
+  "type": "terminal",
+  "args": ["--login"]
+}
+```
+
+クライアントは、この方法を `authenticate` に送信してはいけません。代わりに、OpenCode を起動するコマンドに `--login` を追加し（たとえば `opencode acp --login`）、ターミナルで実行します。OpenCode は `opencode auth login` のフローを実行して終了します。終了ステータスが 0 であれば、ログインは成功しています。その後、クライアントは再接続し、もう一度 `initialize` を送信します。
+
+クライアントが `clientCapabilities._meta["terminal-auth"]` を `true` に設定した場合、認証方法にログインコマンドが含まれます。
+
+```json
+{
+  "id": "opencode-login",
+  "name": "Login with opencode",
+  "description": "Run `opencode auth login` in the terminal",
+  "_meta": { "terminal-auth": { "command": "opencode", "args": ["auth", "login"], "label": "OpenCode Login" } }
+}
+```
+
+## トラブルシューティング
+
+`opencode acp` は stdin で ACP メッセージを待ち受けるため、ターミナルで直接実行すると止まっているように見えます。ACP クライアントから起動してください。
+
+プロセスが終了した、または不正なプロトコル出力を書き込んだとクライアントが報告する場合は、クライアントの引数で `acp` の前に `--print-logs` を追加します。これにより、OpenCode は ACP と専用サーバーのログを stderr に書き込みます。stdout には ACP メッセージだけが流れます。
+
+```bash
+opencode --print-logs acp
+```
+
+## プロトコルリファレンス
+
+このセクションは ACP クライアントの開発者向けです。OpenCode が対応している ACP の機能と、OpenCode が追加する `_meta` キーを説明します。これらのキーを認識しないクライアントは、無視してかまいません。メッセージの定義については、[ACP のドキュメント](https://agentclientprotocol.com)を参照してください。
+
+### トランスポート
+
+クライアントは `opencode acp` を子プロセスとして起動します。両者は ACP プロトコルバージョン 1 を使用し、stdin と stdout を介して改行区切りの JSON-RPC メッセージをやり取りします。
+
+`opencode acp` は、自身が使用するための専用の OpenCode サーバーを起動します。共有バックグラウンドサービスには接続せず、ACP 用のネットワークポートも開きません。1 つのプロセスで複数の ACP セッションを処理できます。クライアントが stdin を閉じると終了します。
+
+### ケイパビリティ
+
+OpenCode の `initialize` レスポンスには、次のエージェントケイパビリティが含まれます。
+
+```json
+{
+  "loadSession": true,
+  "mcpCapabilities": { "http": true, "sse": false },
+  "promptCapabilities": { "embeddedContext": true, "image": true },
+  "sessionCapabilities": {
+    "additionalDirectories": {},
+    "close": {},
+    "delete": {},
+    "fork": {},
+    "list": {},
+    "resume": {}
+  }
+}
+```
+
+OpenCode は、次のクライアントケイパビリティを読み取ります。
+
+| ケイパビリティ | 効果 |
+| -------------------------------------- | -------------------------------------------------------------- |
+| `auth.terminal` が `true`          | 認証方法が[ターミナル認証方法](#authentication)になります。  |
+| `elicitation.form`                     | OpenCode は[質問](#questions)をフォームとして送信します。                |
+| `session.compaction`                   | OpenCode は ACP の更新通知で[圧縮](#compaction)を報告します。 |
+| `_meta["terminal-auth"]` が `true` | 認証方法に[ログインコマンド](#authentication)が含まれます。 |
+
+### セッション
+
+クライアントは、セッションを作成するときに作業ディレクトリを設定します。OpenCode は、そのディレクトリの設定（モデル、エージェント、コマンド、スキル、指示、プラグイン、MCP サーバーなど）を使用します。
+
+- `cwd` は絶対パスである必要があります。相対パスの `cwd` は、invalid params エラーで拒否されます。
+- `session/load` は保存済みのメッセージを再生します。`session/resume` と `session/fork` は再生しません。
+- セッションを読み込み、再開、またはフォークするには、クライアントはそのセッションのディレクトリを `cwd` として渡す必要があります。異なる `cwd` は、invalid params エラーで拒否されます。
+- `session/list` は 1 ページあたり最大 100 件のセッションを返します。`cwd` によるフィルターと `cursor` を指定できます。
+- `session/close` は実行中の作業を中断し、セッションを ACP プロセスから切り離します。保存されたセッションは保持されます。
+- `session/delete` は `session/cancel` と同様に実行中のプロンプトを終了してから、セッションを削除します。存在しないセッションの削除も成功します。
+- 1 つのセッションで実行できるプロンプトは一度に 1 つです。最初のプロンプトの実行中に 2 つ目の `session/prompt` を送信すると、OpenCode はエラーを返します。
+
+### キャンセル
+
+`session/cancel` は、実行中のプロンプトを `stopReason: "cancelled"` で終了します。プロンプトのリクエストに対する `$/cancel_request` も同じ動作をします。OpenCode は保留中の権限リクエストを拒否し、キャンセル後に完了しなかったツール呼び出しを `failed` として報告します。
+
+### 追加ディレクトリ
+
+クライアントは、`session/new`、`session/load`、`session/resume`、`session/fork` で `additionalDirectories` を渡せます。
+
+```json
+{ "cwd": "/work/app", "additionalDirectories": ["/work/shared"], "mcpServers": [] }
+```
+
+- 各エントリは、`*` や `?` を含まない絶対パスである必要があります。
+- OpenCode は、各ルート内での外部ディレクトリへのアクセスを許可します。読み取り、編集、シェルの権限ルールは引き続き適用されます。
+- [追加ディレクトリの RFD](https://agentclientprotocol.com/rfds/additional-directories) の仕様どおり、各リクエストのリストはセッションの以前のリストを置き換えます。
+- OpenCode はこの許可をセッションに保存するため、別の OpenCode クライアントがそのセッションを使う場合にも適用されます。子セッションは、OpenCode が作成する時点でこの許可を引き継ぎます。
+
+`session/list` は、各セッションに保存されているリストを `additionalDirectories` で返します。
+
+### 設定オプション
+
+新しいセッションでは、ディレクトリのデフォルトのモデルとプライマリエージェントが使われます。`session/new`、`session/load`、`session/resume`、`session/fork` のレスポンスには、次の設定オプションが含まれます。
+
+| ID       | カテゴリ        | 値                                                                        |
+| -------- | --------------- | ----------------------------------------------------------------------------- |
+| `model`  | `model`         | 有効なモデル（`provider/model` 形式）。`/variant` サフィックスを付けると effort も設定されます。 |
+| `effort` | `thought_level` | モデルのバリアントと `default`。バリアントがあるモデルでのみ表示されます。    |
+| `mode`   | `mode`          | 表示可能なプライマリエージェント。                                                       |
+
+`session/set_config_option` は文字列の値を受け取ります。
+
+```json
+{ "sessionId": "ses_123", "configId": "model", "value": "anthropic/claude-sonnet-4" }
+```
+
+`session/set_mode` でもエージェントを設定できます。OpenCode は、利用可能なモデルやエージェントが変わったときに `config_option_update` を送信します。別のクライアントがセッションのモデルやエージェントを変更したときにも送信します。
+
+### プロンプトの内容
+
+プロンプトには、テキスト、画像、埋め込みリソース、リソースリンクを含められます。OpenCode は音声ブロックを無視し、その他のブロックを次のように処理します。
+
+| ブロック | OpenCode の処理 |
+| ----------------------------------------------------- | -------------------------------------------------------------------------------------- |
+| `text`                                                | モデルに送信します。                                                                 |
+| audience が `assistant` のみの `text`                 | ユーザーのメッセージとは別のコンテキストとしてモデルに送信します。                 |
+| audience が `user` のみの `text`                      | モデルの入力には含めません。                                                     |
+| `data` を持つ `image`                                   | プロンプトに添付します。                                                             |
+| `uri` のみを持つ `image`                               | リソースリンクとして扱います。                                                         |
+| `text` を持つ `resource`                                | リソースのパスまたは URI の後にテキストをインラインで挿入します。                                     |
+| `blob` を持つ `resource`                                | `mimeType` があれば添付し、なければ破棄します。                                |
+| `file://` URI への `resource_link`                    | ファイルを添付します。ファイルが存在しないか読み取れない場合は、代わりに Markdown リンクを送信します。 |
+| `path` クエリを持つ `zed://` URI への `resource_link` | `path` にあるファイルを添付します。                                                           |
+| その他の URI への `resource_link`                        | `[spec](https://example.com/spec.md)` のような Markdown リンクを送信します。                   |
+
+audience はブロックの `annotations` から取得されます。OpenCode は、`data` と `uri` のどちらも持たない `image` ブロックを拒否します。次のブロックは、モデル専用のコンテキストです。
+
+```json
+{ "type": "text", "text": "Open file: src/app.ts", "annotations": { "audience": ["assistant"] } }
+```
+
+### コマンド
+
+`session/new`、`session/load`、`session/resume`、`session/fork` の後、OpenCode はディレクトリのコマンドと組み込みの `compact` コマンドを含む `available_commands_update` を送信します。コマンドが変更されたときにも、更新を送信します。
+
+```json
+{
+  "sessionUpdate": "available_commands_update",
+  "availableCommands": [{ "name": "compact", "description": "Compact the session" }]
+}
+```
+
+プロンプトが `/` と利用可能なコマンド名で始まる場合、OpenCode は残りのテキストを引数としてそのコマンドを実行します。それ以外の `/` で始まるテキストは、通常のプロンプトとして送信します。`/compact` は[コンテキスト圧縮](/compaction)を実行します。
+
+### MCP サーバー
+
+クライアントは、`session/new`、`session/load`、`session/resume`、`session/fork` で stdio と HTTP の MCP サーバーを渡せます。OpenCode は、`opencode acp` プロセスが動作している間、これらをセッションのディレクトリに追加するため、同じディレクトリの他のセッションでも使用できます。OpenCode は HTTP ヘッダーをそのまま渡し、これらのサーバーには OAuth を使用しません。SSE 経由の MCP はアドバタイズせず、ACP 経由の MCP には対応していません。
+
+```json
+{ "type": "http", "name": "docs", "url": "https://mcp.example.com", "headers": [] }
+```
+
+### 権限
+
+権限リクエストには、次の 3 つの選択肢があります。
+
+```json
+[
+  { "optionId": "once", "kind": "allow_once", "name": "Allow once" },
+  { "optionId": "always", "kind": "allow_always", "name": "Always allow" },
+  { "optionId": "reject", "kind": "reject_once", "name": "Reject" }
+]
+```
+
+リクエストがファイルを変更する場合、変更のプレビューを作成できれば、OpenCode は `diff` コンテンツを含めます。
+
+### 質問
+
+クライアントが `elicitation.form` をアドバタイズしている場合、OpenCode はフォームモードの `elicitation/create` で質問します。このセッションに対して OpenCode がそのツール呼び出しを `session/update` として送信済みの場合、リクエストには `toolCallId` が含まれます。
+
+```json
+{
+  "mode": "form",
+  "sessionId": "ses_123",
+  "toolCallId": "call_1",
+  "message": "Which package manager?",
+  "requestedSchema": {
+    "type": "object",
+    "properties": { "pm": { "type": "string", "oneOf": [{ "const": "bun", "title": "Bun" }] } },
+    "required": ["pm"]
+  }
+}
+```
+
+- OpenCode は、シークレットを収集する可能性のあるフォームは送信しません。
+- 選択肢に加えて自由入力の回答を受け付けるフィールドでは、スキーマに省略可能な文字列プロパティ `<key>_custom` が追加されます。単一選択の場合、空でない自由入力の回答は選択された選択肢を置き換えます。複数選択の場合、OpenCode はその回答を選択された選択肢に追加します。
+- ユーザーがフォームを拒否またはキャンセルした場合、OpenCode は質問をキャンセルします。
+
+OpenCode が質問を表示できない場合は、質問をキャンセルし、回答なしで続行するようモデルに伝えます。
+
+### コンテキスト圧縮
+
+クライアントが `session.compaction` をアドバタイズしている場合、OpenCode は ACP の [session compaction](https://agentclientprotocol.com/rfds/session-compaction) RFD（Preview 段階）で定義されている `compaction_update` と `compaction_summary_chunk` の更新通知で圧縮を報告します。クライアントがセッションを読み込むと、OpenCode は完了または失敗した各圧縮を 1 つの更新通知として再生します。
+
+```json
+{
+  "sessionUpdate": "compaction_update",
+  "compactionId": "msg_123",
+  "status": "completed",
+  "summary": [{ "type": "text", "text": "..." }]
+}
+```
+
+それ以外のクライアントには、代わりに[圧縮マーカー](#compaction-marker)が送信されます。子セッションの圧縮も同様です。
+
+### 使用量
+
+プロンプトのレスポンスには、[end-turn usage](https://agentclientprotocol.com/rfds/end-turn-token-usage) RFD（ドラフト）で定義されている `usage` が含まれます。`usage` は、このセッションでのプロンプトのモデル呼び出しを合計したものです。子セッションは含まれません。
+
+```json
+{ "stopReason": "end_turn", "usage": { "inputTokens": 1200, "outputTokens": 340, "totalTokens": 1540 }, "_meta": {} }
+```
+
+レスポンスの前に、OpenCode は [session usage](https://agentclientprotocol.com/rfds/session-usage) RFD で定義されている `usage_update` を送信します。これは、プロンプトがトークンを使用し、OpenCode がモデルのコンテキストサイズを把握している場合にのみ送信されます。`cost` は、セッションの合計コスト（USD）です。
+
+```json
+{ "sessionUpdate": "usage_update", "used": 1540, "size": 200000, "cost": { "amount": 0.012, "currency": "USD" } }
+```
+
+### 子セッション
+
+プロンプトの実行中、OpenCode は子セッションからの更新を、プロンプトのセッションに対する `session/update` 通知として送信します。各更新には `_meta["opencode/child-session"]` が含まれます。OpenCode はツール呼び出し ID の先頭に `<childSessionId>:` を付けます。子セッションにタイトルがある場合は、ツール呼び出しのタイトルの先頭にそのタイトルを付けます。
+
+```json
+{
+  "sessionUpdate": "tool_call",
+  "toolCallId": "ses_child:call_1",
+  "title": "Explore the codebase: src/app.ts",
+  "_meta": {
+    "opencode/child-session": { "id": "ses_child", "parentID": "ses_123", "depth": 1, "title": "Explore the codebase" }
+  }
+}
+```
+
+| フィールド | 型 | 説明 |
+| ---------- | -------- | -------------------------------------------------------------------------------------- |
+| `id`       | `string` | 子セッションの ID。                                                                |
+| `parentID` | `string` | 子セッションの親セッションの ID。                                          |
+| `depth`    | `number` | プロンプトのセッションの子なら 1、その子セッションの子なら 2、以降も同様です。 |
+| `title`    | `string` | 子セッションのタイトル。子セッションにタイトルがない場合は省略されます。      |
+
+子セッションからの権限リクエストでは、`toolCall._meta` に同じキーが含まれます。プロンプトが終了すると、OpenCode は子セッションの更新の送信を停止します。ただし、子セッションからの権限リクエストと質問は引き続きクライアントに届きます。
+
+### リトライの状態
+
+モデル呼び出しが失敗し、OpenCode がリトライをスケジュールすると、`_meta["opencode/retry"]` を含む `session_info_update` を送信します。リトライが開始されると、OpenCode は `"opencode/retry": null` を送信します。プロンプトのレスポンスを受け取ったら、リトライの状態をクリアしてください。
+
+```json
+{
+  "sessionUpdate": "session_info_update",
+  "_meta": {
+    "opencode/retry": {
+      "attempt": 1,
+      "nextRetryAt": "2026-10-02T12:00:05.000Z",
+      "error": { "type": "provider.rate-limit", "message": "Rate limit exceeded", "status": 429 }
+    }
+  }
+}
+```
+
+| フィールド | 型 | 説明 |
+| ------------- | -------- | ------------------------------------------------------------------------------------------ |
+| `attempt`     | `number` | リトライの試行回数。                                                                  |
+| `nextRetryAt` | `string` | 次の試行の時刻（ISO 8601 形式）。                                          |
+| `error`       | `object` | `type` と `message` を持ちます。プロバイダーが送信した場合は、`status` と `response.body` も含まれます。 |
+
+### 圧縮マーカー
+
+クライアントが `session.compaction` をアドバタイズしていない場合、OpenCode は圧縮の進行状況を `_meta["opencode/compaction"]` を含む `session_info_update` として報告します。子セッションの圧縮には、常にこのマーカーが使われます。
+
+```json
+{
+  "sessionUpdate": "session_info_update",
+  "_meta": { "opencode/compaction": { "status": "started", "messageId": "msg_123", "reason": "auto" } }
+}
+```
+
+| フィールド | 型 | 説明 |
+| ----------- | -------- | ------------------------------------------------------------------------------------ |
+| `status`    | `string` | `started`、`completed`、`failed` のいずれか。キャンセルされた圧縮は `failed` になります。             |
+| `messageId` | `string` | 圧縮の開始と終了を対応付けます。不透明なキーとして扱ってください。                  |
+| `reason`    | `string` | `auto` または `manual`。                                                                  |
+| `error`     | `object` | `status` が `failed` の場合に含まれます。[リトライ](#retry-status)の `error` と同じ形式です。 |
+
+マーカーには要約は含まれません。自動圧縮は、`started` マーカーなしで失敗することがあります。クライアントがセッションを読み込むと、OpenCode は完了または失敗した各圧縮を 1 つのマーカーとして再生します。

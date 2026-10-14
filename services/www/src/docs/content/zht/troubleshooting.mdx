@@ -1,0 +1,176 @@
+---
+title: "疑難排解"
+---
+
+<Callout type="tip">
+  你可以請 OpenCode 為自己除錯。描述遇到的問題，並請它參考這個疑難排解頁面；它可以讀取下方的步驟、檢查自己的服務和記錄檔，協助找出問題。
+</Callout>
+
+OpenCode 採用用戶端－伺服器架構。背景伺服器負責管理工作階段、外掛、權限和其他應用程式狀態。請先判斷問題出在用戶端、共用的伺服器，還是特定專案。
+
+## 檢查背景服務
+
+顯示目前的伺服器資訊：
+
+```bash
+opencode service status
+```
+
+確認伺服器的 API 運作正常：
+
+```bash
+opencode api get /api/info
+```
+
+如果服務卡住或狀態異常，請重新啟動：
+
+```bash
+opencode service restart
+```
+
+你也可以明確地停止再啟動服務：
+
+```bash
+opencode service stop
+opencode service start
+```
+
+<Callout type="note">
+  OpenCode 通常會自動找到或啟動共用的背景服務。只有在診斷服務的生命週期時，才需要使用這些服務指令。
+</Callout>
+
+## 允許瀏覽器來源
+
+如果其他來源的瀏覽器用戶端因為 CORS 而無法連線，請將該用戶端的來源加入服務設定：
+
+```bash
+opencode service set cors http://192.168.1.10:3001
+opencode service get cors
+```
+
+請使用精確的 HTTP 或 HTTPS 來源，必要時包含連接埠，但不要包含路徑或結尾斜線。若要允許多個來源，請將以逗號分隔的清單當作一個引數傳入；每個來源前後的空白都會被移除：
+
+```bash
+opencode service set cors "http://192.168.1.10:3001, https://app.example.com"
+```
+
+`service get cors` 會輸出 JSON 陣列。使用下列指令移除已設定的清單：
+
+```bash
+opencode service unset cors
+```
+
+設定或取消設定服務設定時，背景服務會停止，並在下次啟動時套用新的設定；你可以使用 `opencode service start` 明確啟動服務。
+
+對於前景伺服器，每多允許一個來源，就重複加上一個 `--cors`：
+
+```bash
+opencode serve --cors http://192.168.1.10:3001 --cors https://app.example.com
+```
+
+使用 `serve --service` 時，傳入的 `--cors` 旗標會覆寫該處理程序已保存的清單。沒有這些旗標時，服務模式會使用已保存的清單。CORS 不會變更監聽位址，也不會略過伺服器的身分驗證。
+
+## 檢查 API
+
+`api` 指令會使用本機的服務探索和身分驗證流程。它接受 HTTP 方法加路徑，或 OpenAPI 操作 ID。
+
+所有端點和操作 ID，請參閱 [API 參考](/api)。
+
+使用 `--data` 或 `-d` 傳入 JSON 請求本文，並使用 `--header` 或 `-H` 加入標頭。
+
+<Callout type="warning">
+  如果沒有可用的相容且正常的服務，執行 `opencode api` 可能會啟動背景服務。
+</Callout>
+
+## 讀取記錄檔
+
+安裝版會將記錄寫入：
+
+```text
+~/.local/share/opencode/log/opencode.log
+```
+
+重現問題時，持續追蹤記錄檔：
+
+```bash
+tail -f ~/.local/share/opencode/log/opencode.log
+```
+
+每一行都包含處理程序的 `run` ID 和 `role` 欄位。工作階段、供應商、外掛、權限和工具的活動，請使用 `role=server` 篩選。
+
+```bash
+grep 'role=server' ~/.local/share/opencode/log/opencode.log
+grep 'run=8fc3b1d5' ~/.local/share/opencode/log/opencode.log
+```
+
+## 擷取 CPU 和記憶體分析資料
+
+在 macOS 和 Linux 上，你可以對執行中的 OpenCode 處理程序傳送訊號，擷取診斷資料。從健康檢查端點取得背景伺服器的 PID：
+
+```bash
+opencode api get /api/info
+```
+
+使用回應中的 `pid`，搭配下列其中一個訊號：
+
+- `SIGPROF` 會擷取 10 秒的 CPU 分析資料：
+
+  ```bash
+  kill -SIGPROF <pid>
+  ```
+
+  結果會以 `cpu-<pid>-<timestamp>.cpuprofile` 寫入記錄目錄。
+
+- `SIGUSR1` 會擷取記憶體（heap）快照：
+
+  ```bash
+  kill -SIGUSR1 <pid>
+  ```
+
+  結果會以 `heap-<pid>-<timestamp>.heapsnapshot` 寫入記錄目錄。
+
+請等到 `opencode.log` 中出現 `CPU profile written` 或 `heap snapshot written` 後再開啟檔案。對應的記錄項目會包含檔案的完整路徑。這兩種檔案都可以在 Chrome DevTools 中檢視。
+
+<Callout type="note">
+  Windows 不支援以訊號觸發的分析。寫入 heap 快照可能會讓處理程序暫停，並暫時增加記憶體用量。
+</Callout>
+
+## 服務檔案
+
+共用伺服器會在下列位置註冊自己：
+
+```text
+~/.local/state/opencode/service.json
+```
+
+其私有的服務設定另外儲存在：
+
+```text
+~/.config/opencode/service.json
+```
+
+資料庫通常位於：
+
+```text
+~/.local/share/opencode/opencode.db
+```
+
+`OPENCODE_DB` 可以覆寫資料庫的位置。
+
+<Callout type="warning">
+  進行疑難排解時，請勿刪除或編輯服務檔案或資料庫。請使用服務指令管理背景程式；以外部工具檢查保存的資料之前，請先備份。
+</Callout>
+
+## 回報問題
+
+回報可重現的問題時，請附上下列資訊：
+
+- `opencode --version` 的輸出
+- `opencode service status` 的輸出
+- 能重現問題的最少步驟
+- 問題影響的是共用服務、特定用戶端，還是單一專案
+- 相關的記錄行，包括其中的 `run` 和 `role` 欄位
+
+分享記錄檔之前，請移除 API 金鑰、授權標頭、提示詞、檔案內容和其他敏感資料。
+
+可重現的問題請提交到 [GitHub Issues](https://github.com/anomalyco/opencode/issues)。

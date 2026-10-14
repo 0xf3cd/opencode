@@ -1,0 +1,135 @@
+---
+title: "Snapshots"
+---
+
+Mit Snapshots machst du kürzliche Änderungen an Unterhaltung und Dateien gemeinsam rückgängig. Nutze sie, um aktuelle
+Arbeit zu überarbeiten, aber verlasse dich für alles Wichtige auf Git-Commits oder Backups.
+
+## Ablauf
+
+Führe `/undo` nach einer Antwort aus, die du überarbeiten möchtest. OpenCode bereitet das Zurücksetzen vor, stellt die
+betroffenen Dateien wieder her und setzt den entfernten Prompt zurück in das Eingabefeld, damit du ihn bearbeiten kannst.
+
+```text
+/undo
+
+# Edit the restored prompt, then submit it again.
+Add validation without changing the public API.
+```
+
+Sendest du den bearbeiteten Prompt ab, wird das vorbereitete Zurücksetzen festgeschrieben. Vorher kannst du es mit
+`/redo` verwerfen und die Unterhaltung und Dateien wiederherstellen, die vor `/undo` vorhanden waren.
+
+```text
+/redo
+```
+
+Im Terminal gibt es außerdem Standard-Tastenkürzel:
+
+| Aktion | Befehl | Tastenkürzel |
+| --- | --- | --- |
+| Zurücksetzen der vorherigen Nachricht vorbereiten | `/undo` | `<leader>u` |
+| Vorbereitetes Zurücksetzen verwerfen | `/redo` | `<leader>r` |
+
+Du kannst auch eine frühere Nachricht auswählen und **Revert** wählen, um ein Zurücksetzen bis zu diesem Punkt
+vorzubereiten.
+
+## Erfassung
+
+Für jeden Modellschritt versucht OpenCode, unmittelbar vor dem Modellaufruf einen Snapshot zu erstellen und einen
+weiteren, sobald der Schritt einen erfassten Erfolg oder Fehlschlag erreicht. Die Assistant-Nachricht hält fest, welche
+Pfade sich zwischen diesen Snapshots geändert haben.
+
+```text
+before model step ── snapshot A
+model edits src/api.ts
+step finishes ────── snapshot B ── changed: src/api.ts
+```
+
+Die Erfassung erfolgt nach bestem Bemühen. Fehlt einer der beiden Snapshots, läuft die Unterhaltung weiter, aber für
+diesen Schritt lassen sich möglicherweise keine Dateiänderungen wiederherstellen.
+
+## Umfang
+
+Snapshots umfassen das aktive Verzeichnis der Sitzung innerhalb eines Git-Worktrees. Eine in `packages/app` geöffnete
+Sitzung erfasst zum Beispiel geeignete Dateien unterhalb von `packages/app`, aber keine Änderungen an anderer Stelle im
+Repository.
+
+| Inhalt | Erfasst | Beispiel |
+| --- | --- | --- |
+| Versionierte Dateien im aktiven Verzeichnis | Ja | `packages/app/src/app.tsx` |
+| Nicht ignorierte, unversionierte Dateien bis jeweils 2 MiB | Ja | `packages/app/notes.txt` |
+| Von Git ignorierte Dateien | Nein | `packages/app/dist/app.js` |
+| Einzelne unversionierte Dateien über 2 MiB | Nein | `packages/app/debug.log` |
+| Dateien außerhalb des aktiven Verzeichnisses | Nein | `packages/server/src/index.ts` |
+| Git-Metadaten und andere Nebenwirkungen | Nein | Commits, Branches, Datenbanken oder Prozesse |
+
+Dateisystem-Snapshots erfordern ein Git-Repository. Außerhalb davon kann `/undo` zwar weiterhin den Gesprächsverlauf
+zurücksetzen, aber keine Dateien wiederherstellen.
+
+## Wiederherstellen
+
+Ein Zurücksetzen stellt nur Pfade wieder her, die Assistant-Schritten nach der gewählten Gesprächsgrenze zugeordnet sind.
+Jeder Pfad kehrt in den Zustand vor dem ersten zurückgesetzten Schritt zurück. Eine Datei, die diese Schritte erstellt
+haben, wird entfernt, wenn sie damals noch nicht existierte.
+
+| Zeitverlauf | `src/api.ts` | `src/new.ts` |
+| --- | --- | --- |
+| Gewählte Grenze | Version A | fehlt |
+| Spätere Assistant-Schritte | Version B | erstellt |
+| Nach dem Zurücksetzen | Version A | entfernt |
+
+Pfade, die diesen Schritten nicht zugeordnet sind, bleiben unberührt. Aktuelle Änderungen an einem betroffenen Pfad
+können überschrieben werden. Prüfe deshalb die angezeigte Zusammenfassung und `git diff`, bevor du weitermachst.
+
+```sh
+git diff --stat
+git diff
+```
+
+## Speicherung
+
+OpenCode speichert Snapshots lokal in einer separaten internen Git-Objektdatenbank in seinem Datenverzeichnis. Beim
+Erfassen von Snapshots werden keine Commits erstellt, keine Branches verschoben und der Index deines Repositorys nicht
+absichtlich verändert.
+
+```sh
+# Your repository remains an ordinary dirty worktree after capture.
+git status --short
+```
+
+Snapshot-Objekte können den vollständigen Inhalt versionierter und geeigneter unversionierter Dateien enthalten. Behandle
+das OpenCode-Datenverzeichnis als sensible lokale Daten.
+
+## Einstellungen
+
+Snapshots sind standardmäßig aktiviert. Setze `snapshots` in deiner [Konfiguration](/config#snapshots) auf `false`, um
+künftig keine Dateisystemzustände mehr zu erfassen.
+
+```jsonc title="opencode.jsonc"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "snapshots": false,
+}
+```
+
+Das Deaktivieren löscht bereits gespeicherte Snapshots nicht. Die Unterhaltung lässt sich weiterhin zurücksetzen, aber
+ohne erfassten Dateisystemzustand können die zugehörigen Dateiänderungen nicht wiederhergestellt werden.
+
+## Sicherheit
+
+Snapshots sind eine Komfortfunktion, keine Transaktion und kein Backup:
+
+- Shell-Befehle können Dienste, Prozesse, Netzwerkressourcen, Datenbanken, den Git-Zustand, ignorierte Ausgaben oder
+  Dateien außerhalb des aktiven Verzeichnisses verändern. Das Wiederherstellen eines Snapshots macht diese Auswirkungen
+  nicht rückgängig.
+- Unterbrochene oder fehlgeschlagene Arbeit kann Änderungen hinterlassen, wenn die Erfassung fehlschlägt oder kein
+  nutzbares Snapshot-Paar existiert.
+- Das Wiederherstellen betroffener Pfade überschreibt ihren aktuellen Inhalt. Auch das Verwerfen eines vorbereiteten
+  Zurücksetzens kann spätere Änderungen überschreiben.
+- OpenCode lehnt das Zurücksetzen ab, solange die Sitzung läuft. Externe Editoren und Befehle können den Worktree
+  zwischen Erfassung und Wiederherstellung trotzdem verändern.
+- Ein festgeschriebenes Zurücksetzen entfernt Nachrichten aus der aktiven Gesprächsansicht, aber nicht aus dem dauerhaft
+  gespeicherten Sitzungsverlauf oder dem vorhandenen Snapshot-Speicher. Es ist kein sicheres Löschen.
+
+Committe wichtige Arbeit oder sichere sie, bevor du `/undo` in einem Worktree mit nicht committeten Änderungen verwendest.

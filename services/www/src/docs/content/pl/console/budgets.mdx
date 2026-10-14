@@ -1,0 +1,88 @@
+---
+title: "Budżety"
+description: "Ograniczaj miesięczne wydatki obszaru roboczego, jego członków i kont usługi."
+---
+
+Budżety ograniczają, ile obszar roboczy wydaje w każdym miesiącu. Właściciele i administratorzy ustawiają je w panelu
+**Budget limits** na stronach **Members** i **Keys**.
+
+## Poziomy budżetów
+
+| Budżet                         | Obejmuje                                        | Gdzie go ustawić                                   |
+| ------------------------------ | ----------------------------------------------- | -------------------------------------------------- |
+| Obszar roboczy                 | Łączne wydatki wszystkich w obszarze roboczym | **Members** lub **Keys › Monthly workspace budget** |
+| Domyślny budżet użytkownika    | Każdego członka bez indywidualnego limitu       | **Members › Monthly default user budget**          |
+| Indywidualny budżet użytkownika | Jednego członka                                | Tabela **Members** lub strona członka              |
+| Domyślny budżet konta usługi   | Każde konto usługi bez indywidualnego limitu   | **Keys › Monthly default service account budget**  |
+| Indywidualny budżet konta usługi | Jedno konto usługi                            | Strona konta usługi                                |
+
+Żądanie musi zmieścić się zarówno w budżecie obszaru roboczego, jak i we własnym budżecie danej osoby. Bez żadnego
+budżetu wydatki są nieograniczone.
+
+## Budżet obszaru roboczego
+
+Budżet obszaru roboczego blokuje żądania wszystkich, gdy obszar roboczy go osiągnie.
+
+1. Otwórz **Members** lub **Keys**.
+2. W panelu **Budget limits** kliknij **Monthly workspace budget**.
+3. Wpisz **Workspace limit** w USD i kliknij **Save**.
+
+## Budżety członków
+
+Domyślny budżet użytkownika dotyczy każdego członka, który nie ma indywidualnego limitu. Ustawisz go w
+**Monthly default user budget**.
+
+Indywidualny limit dla jednego członka ustawisz w jednym z dwóch miejsc:
+
+- Kliknij komórkę **Limit** w jego wierszu w tabeli **Members** i wpisz kwotę.
+- Otwórz stronę członka i kliknij **Set User Budget** w sekcji **Monthly Budget**.
+
+Indywidualne limity są wyróżnione w tabeli Members. Wyczyść indywidualny limit, aby przywrócić członkowi budżet
+domyślny; strona członka pokaże wtedy **Using Default**.
+
+## Budżety kont usługi
+
+Konta usługi działają tak samo. Ustaw **Monthly default service account budget** na stronie **Keys** albo otwórz konto
+usługi i kliknij **Set Service Account Budget**.
+
+## Kwoty i resetowanie
+
+- Kwoty są podawane w dolarach amerykańskich, z dokładnością do dwóch miejsc po przecinku.
+- Budżety resetują się 1. dnia każdego miesiąca o 00:00 UTC.
+- Budżet `$0` blokuje wszystkie wydatki wliczane do budżetów.
+
+## Co się wlicza
+
+| Wydatki                                                                  | Wliczane do budżetów            |
+| ------------------------------------------------------------------------ | ------------------------------- |
+| Płatne modele Console                                                    | Tak                             |
+| Modele u [własnych dostawców](/console/providers) z ustawioną ceną       | Tak, według ustawionej ceny     |
+| [Wyszukiwanie w sieci](/console/websearch)                               | Tak                             |
+| Modele bezpłatne                                                         | Nie                             |
+| Użycie [Go](/console/go) w ramach planu                                  | Nie                             |
+| Dodatkowe użycie Go opłacane ze środków                                  | Tak                             |
+
+## Po osiągnięciu budżetu
+
+Nowe żądania kończą się błędem HTTP `429`, dopóki budżet się nie zresetuje lub administrator go nie podniesie. Odpowiedź
+nie informuje, który budżet został osiągnięty.
+
+```text
+Upstream request failed: Account budget exceeded
+```
+
+Budżety są sprawdzane w chwili rozpoczęcia żądania. Żądania już trwające zostają dokończone, więc wydatki mogą
+nieznacznie przekroczyć limit.
+
+## Śledzenie wydatków
+
+Każdy członek widzi swój budżet na stronie **Overview**: pozostałą kwotę, wydaną kwotę i datę resetu.
+
+Właściciele i administratorzy obszarów roboczych z więcej niż jednym członkiem widzą też stronę **Usage**. Pokazuje ona
+koszty w podziale na dni, modele i osoby, a przycisk **Export usage** pobiera dzienne sumy z ostatnich 7, 30 lub 90 dni
+w formacie CSV.
+
+## Automatyzacja budżetów
+
+Użyj [API budżetów](/console/api/budgets), aby odczytywać budżety wszystkich członków i ustawiać indywidualne limity z
+poziomu własnych narzędzi.

@@ -1,0 +1,286 @@
+---
+title: "Tillatelser"
+---
+
+Tillatelser styrer om en agent får utføre en handling på en ressurs.
+
+## Konfigurer
+
+Et vanlig oppsett er å spørre før skallkommandoer kjøres, tillate rutinemessig inspeksjon med Git og alltid blokkere
+push. Legg til disse ordnede reglene i `opencode.jsonc`:
+
+```jsonc
+{
+  "$schema": "https://opencode.ai/config.json",
+  "permissions": [
+    { "action": "shell", "resource": "*", "effect": "ask" },
+    { "action": "shell", "resource": "git status *", "effect": "allow" },
+    { "action": "shell", "resource": "git diff *", "effect": "allow" },
+    { "action": "shell", "resource": "git push *", "effect": "deny" },
+  ],
+}
+```
+
+Den siste regelen som matcher, vinner, så de spesifikke unntakene kommer etter den brede regelen.
+
+<Callout type="warning">
+  V1 bruker andre navn på felt og handlinger. I V2 bruker du `permissions`, `shell` og `subagent` i stedet for
+  `permission`, `bash` og `task`.
+</Callout>
+
+## Regler
+
+Hver regel krever tre strengfelt:
+
+| Felt       | Betydning                                                                  |
+| ---------- | -------------------------------------------------------------------------- |
+| `action`   | Tillatelseshandlingen til verktøyet                                        |
+| `resource` | Verdien som brukes, for eksempel en filbane, kommando, URL, søkestreng, skill-ID eller agent-ID |
+| `effect`   | `allow`, `deny` eller `ask`                                                |
+
+```jsonc
+{
+  "permissions": [
+    { "action": "read", "resource": "*", "effect": "allow" },
+    { "action": "read", "resource": "*.env", "effect": "deny" },
+  ],
+}
+```
+
+| Effekt  | Resultat                            |
+| ------- | ----------------------------------- |
+| `allow` | Fortsetter uten å spørre            |
+| `deny`  | Blokkerer operasjonen               |
+| `ask`   | Venter på en avgjørelse fra klienten |
+
+Hvis ingen regel matcher, bruker OpenCode `ask`.
+
+## Matching
+
+Handlinger og ressurser bruker enkle jokertegn som gjelder hele verdien:
+
+| Mønster | Matcher                                    |
+| ------- | ------------------------------------------ |
+| `*`     | Null eller flere tegn, inkludert `/`       |
+| `?`     | Nøyaktig ett tegn                          |
+| Andre   | Tegnet slik det står                       |
+
+```jsonc
+{
+  "permissions": [
+    { "action": "edit", "resource": "packages/docs/*.mdx", "effect": "allow" },
+  ],
+}
+```
+
+Dette mønsteret matcher hele den normaliserte filbanen. Omvendte skråstreker normaliseres til skråstreker, og på Windows
+skiller ikke matchingen mellom store og små bokstaver.
+
+Et skallmønster som slutter på ` *`, matcher også kommandoen uten argumenter:
+
+```jsonc
+{ "action": "shell", "resource": "git status *", "effect": "allow" }
+```
+
+Dette matcher både `git status` og `git status --short`.
+
+OpenCode kombinerer reglene i rekkefølge og bruker det siste treffet. Konfigurasjon med lavere prioritet lastes inn
+først, deretter legges globale regler til, og agentregler legges til sist.
+
+```jsonc
+{
+  "permissions": [
+    { "action": "read", "resource": "*", "effect": "allow" },
+    { "action": "read", "resource": "secrets/*", "effect": "deny" },
+  ],
+}
+```
+
+Operasjoner kan kontrollere flere ressurser, for eksempel en patch som berører flere filer. Én `deny` avslår
+operasjonen. Ellers fører én `ask` til at du blir spurt, og ellers blir operasjonen tillatt.
+
+## Handlinger
+
+Handlingsnavn i V2 er strenger, så plugins kan definere flere handlinger. De innebygde verktøyene bruker for øyeblikket
+disse handlingene og ressursene:
+
+| Handling             | Ressurs                                                                     |
+| -------------------- | --------------------------------------------------------------------------- |
+| `read`               | Intern filbane relativt til Location, eller kanonisk absolutt ekstern filbane |
+| `edit`               | Målfilbane for `edit`, `write` og `patch`                                   |
+| `glob`               | Det forespurte glob-mønsteret                                               |
+| `grep`               | Det forespurte regulære uttrykket, ikke søkebanen                           |
+| `shell`              | Kommandostreng fra skanneren. Sammensatte kommandoer kan gi flere           |
+| `subagent`           | ID-en til målagenten                                                        |
+| `skill`              | Skill-ID                                                                    |
+| `question`           | `*`                                                                         |
+| `webfetch`           | Den forespurte URL-en                                                       |
+| `websearch`          | Søkestreng                                                                  |
+| `external_directory` | Kanonisk grense for ekstern katalog, vanligvis med `/*` til slutt           |
+| `<server>_<tool>`    | `*` for et MCP-verktøy. Tegn som ikke støttes i de to navnene, blir `_`     |
+| `execute`            | `*`. Styrer om Code Mode er tilgjengelig, mens nestede verktøy håndhever sine egne regler |
+
+Slik tillater du for eksempel én skill og avslår alle andre:
+
+```jsonc
+{
+  "permissions": [
+    { "action": "skill", "resource": "*", "effect": "deny" },
+    { "action": "skill", "resource": "effect", "effect": "allow" },
+  ],
+}
+```
+
+`doom_loop` og `lsp` er ikke tillatelseshandlinger i V2 Core for øyeblikket.
+
+## Kataloger
+
+En filbane som ligger utenfor både den aktive Location og prosjektets worktree (når det ikke er roten), trenger
+godkjenning for `external_directory` før godkjenningen for `read` eller `edit`.
+
+```jsonc
+{
+  "$schema": "https://opencode.ai/config.json",
+  "permissions": [
+    { "action": "external_directory", "resource": "~/projects/reference/*", "effect": "allow" },
+    { "action": "read", "resource": "~/projects/reference/*", "effect": "allow" },
+    { "action": "edit", "resource": "~/projects/reference/*", "effect": "deny" },
+  ],
+}
+```
+
+Dette gjelder eksterne filbaner som brukes av `read`, `edit`, `write` og `patch`. Shell kontrollerer den eksterne
+arbeidskatalogen sin og kataloger som skanneren utleder, før `shell`-ressursene kontrolleres.
+
+For `external_directory`, `read` og `edit` utvides en innledende `~`, `~/`, `$HOME` eller `$HOME/` når konfigurasjonen
+lastes inn:
+
+```jsonc
+{ "action": "read", "resource": "$HOME/reference/*", "effect": "allow" }
+```
+
+Shell-ressurser forblir rå kommandotekst, og hjemmekatalogen utvides ikke.
+
+<Callout type="warning">
+  `shell` kjører med samme tilgang til filsystem, prosesser og nettverk som brukeren på vertsmaskinen. Å utlede kataloger
+  fra kommandotekst skjer etter beste evne, så velg heller en smal tillatelsesliste for skallet enn mønstre som prøver å
+  gjenkjenne alle farlige kommandoer.
+</Callout>
+
+Relative filbaner for endringer kan gå ut av den aktive Location og likevel ligge innenfor prosjektets worktree.
+Eksplisitte eksterne filbaner kanoniseres før matching, så gi bare tilgang til katalogavgrensninger du stoler på.
+
+## Skanner
+
+Aktiver den eksperimentelle portable skallskanneren slik:
+
+```jsonc
+{
+  "$schema": "https://opencode.ai/config.json",
+  "experimental": {
+    "portable_shell_scanner": true,
+  },
+}
+```
+
+Den portable skanneren erstatter standardskanneren basert på tree-sitter. Tree-sitter brukes verken som fallback eller
+som en ekstra kontroll. En kommando den portable skanneren ikke kan analysere, gir en skannerfeil, ikke et avslag på
+tillatelse.
+
+Flagget endrer bare hvilken parser som velges. Eksisterende tillatelsesregler, lagrede godkjenningsmønstre og utledning
+av kataloger etter beste evne gjelder fortsatt. Det finnes ingen ekstra godkjenningsmodus eller generell begrensning for
+ukjente kataloger.
+
+## Standardverdier
+
+Alle agenter, også egendefinerte, starter med denne ordnede grunnpolicyen:
+
+```jsonc
+[
+  { "action": "*", "resource": "*", "effect": "allow" },
+  { "action": "external_directory", "resource": "*", "effect": "ask" },
+  { "action": "read", "resource": "*.env", "effect": "ask" },
+  { "action": "read", "resource": "*.env.*", "effect": "ask" },
+  { "action": "read", "resource": "*.env.example", "effect": "allow" },
+]
+```
+
+De medfølgende agentene legger til disse policyene:
+
+| Agent        | Ekstra policy                                                                  |
+| ------------ | ------------------------------------------------------------------------------ |
+| `build`      | Tillater spørsmål                                                              |
+| `plan`       | Tillater spørsmål. Avslår redigering, unntatt filer under `~/.opencode/plan`   |
+| `general`    | Avslår spørsmål og oppstart av subagenter                                      |
+| `explore`    | Avslår alt unntatt lesing, glob, grep, nettinnhenting og nettsøk. Spør ved eksterne kataloger og lesing av `.env` |
+| `title`      | Avslår alle handlinger                                                         |
+| `summary`    | Avslår alle handlinger                                                         |
+| `compaction` | Beholder grunnpolicyen                                                         |
+
+OpenCode tillater også tilgang til de administrerte katalogene for verktøyutdata, skallutdata, midlertidige filer og
+global konfigurasjon som eksterne kataloger. Den underliggende `read`-, `edit`- eller andre handlingen bruker fortsatt
+sine egne regler. Senere globale regler og agentregler kan overstyre disse standardverdiene.
+
+## Agenter
+
+Legg felles regler på toppnivået og smalere regler under `agents.<id>.permissions`:
+
+```jsonc
+{
+  "$schema": "https://opencode.ai/config.json",
+  "permissions": [
+    { "action": "shell", "resource": "*", "effect": "ask" },
+    { "action": "shell", "resource": "git status *", "effect": "allow" },
+  ],
+  "agents": {
+    "reviewer": {
+      "description": "Review code without changing it",
+      "mode": "subagent",
+      "permissions": [
+        { "action": "edit", "resource": "*", "effect": "deny" },
+      ],
+    },
+  },
+}
+```
+
+Agentregler legges til etter de globale reglene. De erstatter ikke den globale listen. En egendefinert subagent bruker
+sine egne tillatelser, ikke et utvalg av tillatelsene til den overordnede agenten.
+
+## Godkjenninger
+
+Når en regel gir `ask`, kan klienter svare med:
+
+| Valg         | Svar       | Resultat                                                             |
+| ------------ | ---------- | -------------------------------------------------------------------- |
+| Allow once   | `once`     | Godkjenner bare den ventende forespørselen                           |
+| Allow always | `always`   | Godkjenner den og lagrer mønstrene verktøyet foreslår, for prosjektet |
+| Reject       | `reject`   | Avviser den og alle andre ventende tillatelsesforespørsler i økten   |
+
+Hvis du for eksempel velger **Allow always** for `git status --short`, kan et skallprefiks som dekker senere
+`git status`-kommandoer, bli lagret:
+
+```text
+shell: git status * → allow
+```
+
+Lagrede godkjenninger er varige `allow`-regler som gjelder for prosjektet. De overstyrer aldri en konfigurert `deny`.
+Verktøyene velger hvilket mønster som foreslås lagret: Noen foreslår `*`, shell foreslår kommandoprefikser, og skills og
+subagenter foreslår ID-ene sine. Gå gjennom brede godkjenninger, og fjern dem du ikke lenger trenger.
+
+Klienter kan legge ved en tilbakemelding når de avviser. Ikke-interaktive klienter må selv avgjøre hvordan
+godkjenningsforespørsler skal håndteres. Konfigurerte `deny`-regler håndheves alltid.
+
+## Policyer
+
+En [policy](/policies) kan avslå en tillatelseskontroll ufravikelig etter at disse reglene og lagrede godkjenninger er
+vurdert. Den gjør `allow` eller `ask` om til `deny`, og gir aldri tilgang.
+
+```jsonc
+{
+  "policies": [{ "action": "tool.use", "resource": "shell:sudo *", "effect": "deny" }],
+}
+```
+
+Globale policyer og policyer som administreres i Console, overstyrer prosjektkonfigurasjonen. Slik kan en organisasjon
+blokkere en kommando som et repositorium ellers ville tillatt.

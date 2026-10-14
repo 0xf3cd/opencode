@@ -1,0 +1,89 @@
+---
+title: "Budgets"
+description: "Monatliche Ausgaben für einen Workspace, seine Mitglieder und seine Dienstkonten begrenzen."
+---
+
+Budgets begrenzen, wie viel ein Workspace pro Monat ausgibt. Owner und Admins legen sie im Bereich **Budget limits**
+auf den Seiten **Members** und **Keys** fest.
+
+## Budgetebenen
+
+| Budget                     | Gilt für                                    | Wo festlegen                                       |
+| -------------------------- | ------------------------------------------- | -------------------------------------------------- |
+| Workspace                  | Gesamtausgaben aller im Workspace           | **Members** oder **Keys › Monthly workspace budget** |
+| Standard für Benutzer      | Jedes Mitglied ohne eigenes Limit           | **Members › Monthly default user budget**          |
+| Eigenes Benutzerlimit      | Ein Mitglied                                | Tabelle **Members** oder Mitgliederseite           |
+| Standard für Dienstkonten  | Jedes Dienstkonto ohne eigenes Limit        | **Keys › Monthly default service account budget**  |
+| Eigenes Dienstkontolimit   | Ein Dienstkonto                             | Seite des Dienstkontos                             |
+
+Eine Anfrage muss sowohl in das Budget des Workspace als auch in das eigene Budget der Person passen. Ohne Budget
+sind die Ausgaben unbegrenzt.
+
+## Workspace-Budget
+
+Erreicht der Workspace sein Budget, werden Anfragen für alle blockiert.
+
+1. Öffne **Members** oder **Keys**.
+2. Klicke unter **Budget limits** auf **Monthly workspace budget**.
+3. Gib ein **Workspace limit** in USD ein und klicke auf **Save**.
+
+## Budgets für Mitglieder
+
+Das Standardbudget für Benutzer gilt für jedes Mitglied ohne eigenes Limit. Lege es unter **Monthly default user
+budget** fest.
+
+Ein eigenes Limit für ein einzelnes Mitglied legst du an einer dieser Stellen fest:
+
+- Klicke in der Zeile des Mitglieds unter **Members** auf die Zelle **Limit** und gib einen Betrag ein.
+- Öffne das Mitglied und klicke unter **Monthly Budget** auf **Set User Budget**.
+
+Eigene Limits sind in der Mitgliedertabelle hervorgehoben. Entfernst du ein eigenes Limit, gilt für das Mitglied
+wieder der Standard; die Mitgliederseite zeigt dann **Using Default** an.
+
+## Budgets für Dienstkonten
+
+Dienstkonten funktionieren genauso. Lege auf der Seite **Keys** das **Monthly default service account budget** fest
+oder öffne ein Dienstkonto und klicke auf **Set Service Account Budget**.
+
+## Beträge und Zurücksetzen
+
+- Beträge werden in US-Dollar mit bis zu zwei Nachkommastellen angegeben.
+- Budgets werden am 1. jedes Monats um 00:00 UTC zurückgesetzt.
+- Ein Budget von `$0` blockiert alle Ausgaben, die auf Budgets angerechnet werden.
+
+## Was angerechnet wird
+
+| Ausgaben                                                                    | Wird auf Budgets angerechnet   |
+| --------------------------------------------------------------------------- | ------------------------------ |
+| Kostenpflichtige Console-Modelle                                            | Ja                             |
+| Modelle bei [deinen eigenen Anbietern](/console/providers) mit festgelegtem Preis | Ja, zum konfigurierten Preis |
+| [Websuche](/console/websearch)                                              | Ja                             |
+| Kostenlose Modelle                                                          | Nein                           |
+| [Go](/console/go)-Nutzung im Rahmen des Tarifs                              | Nein                           |
+| Zusätzliche Go-Nutzung, die aus dem Guthaben bezahlt wird                   | Ja                             |
+
+## Wenn ein Budget erreicht ist
+
+Neue Anfragen schlagen mit HTTP `429` fehl, bis das Budget zurückgesetzt wird oder ein Admin es erhöht. Die Antwort
+gibt nicht an, welches Budget erreicht wurde.
+
+```text
+Upstream request failed: Account budget exceeded
+```
+
+Budgets werden beim Start einer Anfrage geprüft. Bereits laufende Anfragen werden abgeschlossen, sodass die Ausgaben
+das Limit leicht überschreiten können.
+
+## Ausgaben verfolgen
+
+Jedes Mitglied sieht sein eigenes Budget unter **Overview**: den verbleibenden Betrag, den ausgegebenen Betrag und das
+Datum der Zurücksetzung.
+
+Owner und Admins von Workspaces mit mehr als einem Mitglied sehen außerdem **Usage**. Dort werden die Kosten nach Tag,
+Modell und Person aufgeschlüsselt, und die Schaltfläche **Export usage** lädt die Tagessummen der letzten 7, 30 oder
+90 Tage als CSV herunter.
+
+## Budgets automatisieren
+
+Mit der [Budgets-API](/console/api/budgets) kannst du die Budgets aller Mitglieder auslesen und eigene Limits aus
+deinen eigenen Tools heraus festlegen.

@@ -1,0 +1,63 @@
+---
+title: "Plugins"
+---
+
+Les plugins configurés dans `opencode.json(c)` qui exposent un composant TUI sont chargés automatiquement par le CLI.
+Pour apprendre à créer des plugins, consultez [Créer des plugins](/build/plugins). Inutile d'ajouter le même paquet à
+`cli.json` : le CLI récupère la liste des plugins actifs auprès du serveur OpenCode auquel il est connecté, ce qui
+fonctionne aussi lorsque le serveur est distant.
+
+Utilisez `cli.json` pour les plugins propres au CLI. Ces plugins s'exécutent localement dans le terminal et restent actifs
+lorsque le CLI se connecte à un serveur distant :
+
+```json title="cli.json"
+{
+  "plugins": [
+    "opencode.example",
+    "opencode.example@1.0.0",
+    "@example/opencode-tui",
+    "@example/opencode-tui@1.0.0",
+    "./plugins/status",
+    "../plugins/status",
+    "/home/user/plugins/status",
+    "file:///home/user/plugins/status"
+  ]
+}
+```
+
+Les entrées sont traitées dans l'ordre. Préfixez un ID ou un caractère générique par `-` pour désactiver les plugins
+correspondants :
+
+```json title="cli.json"
+{
+  "plugins": ["*", "-opencode.notifications", "-team.*"]
+}
+```
+
+Passez des options à un plugin avec la forme objet :
+
+```json title="cli.json"
+{
+  "plugins": [
+    {
+      "package": "@example/opencode-tui",
+      "options": {
+        "compact": true
+      }
+    }
+  ]
+}
+```
+
+OpenCode détecte aussi les plugins placés dans le répertoire de configuration global et dans les répertoires `.opencode`
+des projets. Chaque plugin suit la même structure qu'un paquet publié, avec ses points d'entrée serveur et TUI réunis.
+
+```text title="Plugin discovery paths"
+<global-config>/plugins/status/index.ts
+<global-config>/plugins/status/tui.ts
+<project>/.opencode/plugins/status/index.ts
+<project>/.opencode/plugins/status/tui.ts
+```
+
+Les plugins détectés peuvent importer directement `@opencode/plugin/tui` ; OpenCode résout le paquet au moment de
+l'exécution. Consultez [Créer des plugins CLI](/build/plugins/cli) pour des exemples.

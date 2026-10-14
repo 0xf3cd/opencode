@@ -1,0 +1,149 @@
+---
+title: "Effect"
+---
+
+`@opencode/client/effect` est le client natif Effect de l'API HTTP d'OpenCode. Il renvoie des Effects et des Streams
+typés, et décode les réponses en valeurs des schémas d'OpenCode.
+
+```sh
+bun add @opencode/client effect
+```
+
+## Créer un client
+
+Créez un client avec l'URL du serveur, puis appelez les méthodes, regroupées par ressource de l'API.
+
+```ts
+import { AbsolutePath, Location, OpenCode } from "@opencode/client/effect"
+import { Effect } from "effect"
+import { FetchHttpClient } from "effect/http"
+
+const program = Effect.gen(function* () {
+  const client = yield* OpenCode.make({ baseUrl: "http://localhost:4096" })
+  const session = yield* client.session.create({
+    location: Location.Ref.make({ directory: AbsolutePath.make("/workspace") }),
+  })
+  yield* client.session.prompt({
+    sessionID: session.id,
+    text: "Review the current changes",
+  })
+  return session
+})
+
+const session = await Effect.runPromise(program.pipe(Effect.provide(FetchHttpClient.layer)))
+```
+
+## En-têtes et requêtes
+
+Configurez les en-têtes par défaut sur le `HttpClient` fourni. Les opérations natives s'appuient sur l'interruption
+Effect habituelle pour l'annulation. Les méthodes RPC acceptent en plus des options d'emplacement, d'en-têtes et de
+signal pour chaque appel.
+
+```ts
+import { HttpClient, HttpClientRequest } from "effect/http"
+
+const httpClient = yield * HttpClient.HttpClient
+const client =
+  yield *
+  OpenCode.make({ baseUrl: "https://opencode.example.com" }).pipe(
+    Effect.provideService(
+      HttpClient.HttpClient,
+      HttpClient.mapRequest(httpClient, (request) =>
+        HttpClientRequest.setHeaders(request, { authorization: `Bearer ${process.env.OPENCODE_TOKEN}` }),
+      ),
+    ),
+  )
+
+const sessions = yield * client.session.list()
+```
+
+## Flux d'événements
+
+Les opérations de streaming, comme `event.subscribe()` et `session.log()`, renvoient des Streams Effect.
+
+```ts
+import { Effect, Stream } from "effect"
+
+yield *
+  client.event.subscribe().pipe(Stream.runForEach((event) => Effect.logInfo("OpenCode event", { type: event.type })))
+```
+
+Les Streams d'événements natifs et RPC partagent une connexion paresseuse par client. Construire un Stream n'ouvre pas
+de connexion ; c'est sa consommation qui l'ouvre. L'arrêt d'un consommateur n'affecte pas les autres, et le départ du
+dernier consommateur ferme la source. La fin (EOF) ou la défaillance de la source met fin aux abonnements en cours, sans
+nouvelle tentative ni relecture automatique. Les consommateurs natifs tardifs reçoivent le marqueur de connexion actuel
+avant les événements en direct.
+
+## RPC des plugins
+
+Utilisez le même contrat partagé que les clients Promise et les plugins serveur :
+
+```ts
+import { Acme } from "opencode-acme-plugin/rpc"
+
+const acme = client.rpc(Acme)
+const result = yield * acme.search({ query: "hello" }, { location: { directory: "/workspace" } })
+
+yield *
+  acme.events
+    .subscribe("updated")
+    .pipe(
+      Stream.runForEach((event) =>
+        Effect.logInfo("Plugin event", { type: event.type, location: event.location, text: event.data.text }),
+      ),
+    )
+```
+
+Les arguments et les résultats des méthodes sont inférés à partir du contrat. Le second argument facultatif contient
+`location`, `signal` et `headers` ; si l'emplacement est omis, les valeurs par défaut habituelles des requêtes
+s'appliquent. Les appels sont interrompus avec l'Effect qui les consomme. Les maps d'erreurs des méthodes sont inférées
+dans le canal d'erreur de l'Effect. Les erreurs déclarées sont décodées via leurs schémas de données. Le sous-client
+typé retire l'enveloppe d'erreur RPC HTTP générique ; les types réservés `rpc.*` identifient les échecs du framework.
+
+Les événements RPC sont des Streams typés, et non des écouteurs `on` à base de callbacks. Ils reçoivent les événements
+du RPC pour tous les emplacements, chacun avec un champ obligatoire `location` et un type préfixé normal, comme
+`rpc.acme.updated`. Ils diffèrent en cela des handles des plugins serveur, qui sont liés à leur propre emplacement.
+Consultez [RPC des plugins Effect](/build/plugins/effect/rpc) pour les définitions, les schémas, l'enregistrement et la
+sémantique des abonnements en direct.
+
+## Service d'arrière-plan local
+
+Le point d'entrée `@opencode/client/effect/service`, réservé à Node, découvre, démarre, authentifie et arrête le
+service d'arrière-plan local sous forme d'Effects.
+
+```sh
+bun add @effect/platform-node
+```
+
+Créez un client authentifié pour le service obtenu avec `Service.ensure()`.
+
+```ts
+import { NodeFileSystem } from "@effect/platform-node"
+import { OpenCode } from "@opencode/client/effect"
+import { Service } from "@opencode/client/effect/service"
+import { Effect } from "effect"
+import { FetchHttpClient, HttpClient, HttpClientRequest } from "effect/http"
+
+const program = Effect.gen(function* () {
+  const endpoint = yield* Service.ensure()
+  const httpClient = yield* HttpClient.HttpClient
+  const client = yield* OpenCode.make({ baseUrl: endpoint.url }).pipe(
+    Effect.provideService(
+      HttpClient.HttpClient,
+      HttpClient.mapRequest(httpClient, (request) => HttpClientRequest.setHeaders(request, Service.headers(endpoint))),
+    ),
+  )
+  return yield* client.server.info()
+})
+
+const health = await Effect.runPromise(
+  program.pipe(Effect.provide(FetchHttpClient.layer), Effect.provide(NodeFileSystem.layer)),
+)
+```
+
+Découvrez le service sans le démarrer, ou arrêtez précisément le service enregistré.
+
+```ts
+const endpoint = yield * Service.discover()
+yield * Service.stop()
+```

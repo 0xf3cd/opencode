@@ -1,0 +1,263 @@
+---
+title: "Temaer"
+---
+
+Vælg et tema i terminalbrugerfladen ved at trykke på `Ctrl+P`, vælge **Open settings** og åbne **Theme**. Du kan også
+angive det direkte i din globale CLI-konfiguration:
+
+```json title="~/.config/opencode/cli.json"
+{
+  "theme": {
+    "name": "tokyonight",
+    "mode": "system"
+  }
+}
+```
+
+Temaer hører til terminalklienten. Angiv valget af tema i `cli.json`, ikke i `opencode.json`. Se
+[CLI-indstillinger](/cli/config) for konfigurationens placering og andre terminalindstillinger.
+
+## Tilstande
+
+Brug `system` for at følge terminalens udseende, eller lås temaet til én tilstand:
+
+```json title="~/.config/opencode/cli.json"
+{
+  "theme": {
+    "name": "opencode",
+    "mode": "dark"
+  }
+}
+```
+
+| Værdi    | Adfærd                                              |
+| -------- | --------------------------------------------------- |
+| `system` | Følger terminalens lyse eller mørke tilstand.       |
+| `dark`   | Bruger altid det mørke tema.                        |
+| `light`  | Bruger altid det lyse tema.                         |
+
+Hvis et brugerdefineret tema kun har én tilstand, bruger OpenCode den tilstand, når den anden ønskes.
+
+## Indbyggede temaer
+
+Vælg et indbygget tema efter navn:
+
+```json title="~/.config/opencode/cli.json"
+{
+  "theme": {
+    "name": "catppuccin"
+  }
+}
+```
+
+Tilgængelige temaer omfatter:
+
+- `aura`, `ayu`, `carbonfox`, `cobalt2`, `cursor`, `dracula`, `everforest`, `flexoki`
+- `catppuccin`, `catppuccin-frappe`, `catppuccin-macchiato`
+- `github`, `gruvbox`, `kanagawa`, `material`, `matrix`, `mercury`, `monokai`, `nightowl`, `nord`
+- `one-dark`, `opencode`, `orng`, `lucent-orng`, `osaka-jade`, `palenight`, `rosepine`
+- `solarized`, `synthwave84`, `tokyonight`, `vercel`, `vesper`, `zenburn`
+
+Temaet `system` er tilgængeligt, når OpenCode kan læse din terminals farvepalet.
+
+## Filer
+
+Hvis du vil oprette et globalt tema med navnet `ocean`, så brug temaværktøjet til at generere en komplet fil i den
+globale temamappe. Den relevante struktur ser sådan ud:
+
+```json title="~/.config/opencode/themes/ocean.json (excerpt)"
+{
+  "base": {
+    "text": {
+      "base": "#d8f3ff"
+    }
+  },
+  "dark": {
+    "hue": {
+      "accent": "$hue.cyan"
+    }
+  }
+}
+```
+
+Vælg derefter `ocean` i indstillingerne, eller sæt `theme.name` til `ocean` i `cli.json`. Filnavnet uden `.json` er
+temaets navn.
+
+| Omfang  | Mappe                                      |
+| ------- | ------------------------------------------ |
+| Global  | `~/.config/opencode/themes/`               |
+| Projekt | `.opencode/themes/` i projekttræet         |
+
+OpenCode læser kun `.json`-filer. Et tema tættere på den aktuelle mappe erstatter et globalt eller overordnet tema med
+samme navn.
+
+## Format
+
+Hvert V2-tema angiver ét komplet `base`-tokentræ og mindst én `light`- eller `dark`-farvepalet (hue). Tilstande arver
+kun fra filens egen base; de arver ikke fra det indbyggede OpenCode-tema eller fra hinanden. Brug temaværktøjet til at
+generere en komplet base, før du tilpasser den.
+
+Eksemplerne nedenfor viser kun de afsnit, der er relevante for hvert begreb; de er ikke komplette temafiler.
+
+```json title="themes/ocean.json"
+{
+  "base": {
+    "text": {
+      "base": "#16324f"
+    }
+  },
+  "light": {
+    "hue": {}
+  },
+  "dark": {
+    "hue": {},
+    "text": { "base": "#d8f3ff" }
+  }
+}
+```
+
+## Farver
+
+Brug en hexfarve, `transparent` eller en reference til en anden temafarve:
+
+```json title="themes/ocean.json"
+{
+  "base": {
+    "text": {
+      "base": "#d8f3ff",
+      "muted": "$hue.neutral.400"
+    },
+    "background": {
+      "base": "transparent"
+    }
+  }
+}
+```
+
+Hexværdier kan have 3, 4, 6 eller 8 cifre. Referencer begynder med `$`; hue-referencer har formen
+`$hue.<name>.<step>`.
+
+## Farvetoner
+
+Tilsidesæt et hue-alias for at ændre en hel familie af beslægtede farver på én gang:
+
+```json title="themes/ocean.json"
+{
+  "base": {
+    "categorical": ["accent", "purple", "green"]
+  },
+  "dark": {
+    "hue": {
+      "accent": "$hue.cyan",
+      "interactive": "$hue.blue"
+    }
+  }
+}
+```
+
+| Type    | Værdier                                                              |
+| ------- | -------------------------------------------------------------------- |
+| Basis   | `gray`, `red`, `orange`, `yellow`, `green`, `cyan`, `blue`, `purple` |
+| Alias   | `accent`, `interactive`, `neutral`                                   |
+| Trin    | `100`, `200`, `300`, `400`, `500`, `600`, `700`, `800`, `900`        |
+
+Hue-trinene følger tilstandens kontrastretning: Lyse temaer går fra mørk ved `100` til lys ved `900`, mens mørke temaer
+går fra lys ved `100` til mørk ved `900`.
+
+`categorical` angiver de ordnede farvetoner, der bruges til at skelne agenter og andre gentagne elementer. Den skal
+indeholde mindst én basisfarvetone eller ét alias.
+
+## Tilstande for interaktion
+
+Brug tilstandsnøgler til at ændre interaktive farver. Tilstande, der ikke er angivet, bruger den nærmeste basisværdi:
+
+```json title="themes/ocean.json"
+{
+  "base": {
+    "text": {
+      "action": {
+        "primary": {
+          "base": "$hue.interactive.400",
+          "$hovered": "$hue.interactive.300",
+          "$disabled": "$hue.neutral.600"
+        }
+      }
+    }
+  }
+}
+```
+
+| Gruppe     | Værdier                                                      |
+| ---------- | ------------------------------------------------------------ |
+| Handlinger | `primary`, `secondary`, `destructive`                        |
+| Tilstande  | `$hovered`, `$focused`, `$pressed`, `$selected`, `$disabled` |
+
+Formularfelter bruger de samme tilstandsnøgler direkte under `text.formfield` eller `background.formfield`.
+
+## Tokens
+
+Den komplette `base` indeholder alle tokengrupper. En tilstand kan tilsidesætte en hvilken som helst del af den, når den
+har angivet sin komplette hue-palet:
+
+```json title="themes/ocean.json"
+{
+  "base": {
+    "border": {
+      "base": "$hue.neutral.700"
+    },
+    "syntax": {
+      "comment": "$hue.neutral.500",
+      "keyword": "$hue.accent.400"
+    },
+    "diff": {
+      "text": {
+        "added": "$hue.green.400",
+        "removed": "$hue.red.400"
+      }
+    }
+  }
+}
+```
+
+| Gruppe       | Formål                                                                |
+| ------------ | --------------------------------------------------------------------- |
+| `text`       | Basis-, nedtonet, handlings-, formularfelt- og feedbacktekst          |
+| `background` | Basis, flader, handlinger, formularfelter og feedbackudfyldning       |
+| `border`     | Kanter                                                                |
+| `scrollbar`  | Rullepaneler                                                          |
+| `diff`       | Farver for tilføjet, fjernet, kontekst, fremhævning og linjenumre     |
+| `syntax`     | Syntaksfremhævning af kildekode                                       |
+| `markdown`   | Markdown-elementer                                                    |
+
+Syntaksnøglerne er `comment`, `keyword`, `function`, `variable`, `string`, `number`, `type`, `operator` og
+`punctuation`. Markdown-nøglerne er `text`, `heading`, `link`, `linkText`, `code`, `blockQuote`, `emphasis`, `strong`,
+`horizontalRule`, `listItem`, `listEnumeration`, `image`, `imageText` og `codeBlock`.
+
+## Hævede flader
+
+Paneler, dialoger, menuer og toast-notifikationer vælger deres dybde fra `background.raised`. Dialoger understøtter
+desuden en kontekstuel `@dialog`-flade. TUI'en opløser paletten igen efter at have anvendt `@dialog`, så tokens, der
+refererer til `$background.base`, følger dialogens baggrund:
+
+```json title="themes/ocean.json"
+{
+  "base": {
+    "background": {
+      "base": "#071521",
+      "raised": {
+        "base": "#0c1f2e",
+        "high": "#102a3c",
+        "max": "#16364b"
+      }
+    },
+    "@dialog": {
+      "background": {
+        "base": "$background.raised.base"
+      }
+    }
+  }
+}
+```
+
+`@dialog` accepterer de samme tokengrupper som basistilstanden. En handlings kontekstuelle `base` bliver også fallback
+for dens tilstande, der ikke er angivet; en eksplicit tilsidesættelse af en tilstand vinder stadig.

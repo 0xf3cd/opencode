@@ -1,0 +1,112 @@
+---
+title: "API dostawców"
+description: "Wywołuj dostawców podłączonych do obszaru roboczego przez bramkę Console, używając klucza Console."
+---
+
+Każdy [dostawca](/console/providers) podłączony do obszaru roboczego jest udostępniany przez bramkę Console pod własnym
+URL-em. OpenCode korzysta z niej automatycznie po `/connect`; wywołuj ją bezpośrednio, aby używać tych samych dostawców
+z własnych narzędzi. Console dodaje dane uwierzytelniające dostawcy przed przekazaniem żądania, więc sekret dostawcy
+nigdy nie opuszcza obszaru roboczego.
+
+```bash
+curl -X POST "https://opencode.ai/inference/custom/conn_.../chat/completions" \
+  -H "Authorization: Bearer <token>" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "model": "deepseek-chat",
+    "messages": [{ "role": "user", "content": "Say hi" }]
+  }'
+```
+
+## URL dostawcy
+
+Skopiuj **Console API URL** ze strony dostawcy w sekcji **Providers**.
+
+```text
+https://opencode.ai/inference/custom/<connection_id>
+```
+
+## Uwierzytelnianie
+
+Zastąp `<token>` [kluczem konta usługi](/console/api#service-accounts) utworzonym w Console. Przed przekazaniem żądania
+Console zamienia go na dane uwierzytelniające połączenia.
+
+```text
+Authorization: Bearer <token>
+```
+
+Console odczytuje klucz także z nagłówków `x-api-key`, `api-key` i `x-goog-api-key`, więc SDK dostawców działają po
+skierowaniu ich na Console API URL.
+
+## Endpointy
+
+Dołącz ścieżkę API dostawcy do Console API URL. Console przekazuje żądanie na bazowy URL połączenia i zwraca odpowiedź
+dostawcy bez zmian.
+
+| Format               | Ścieżka                           |
+| -------------------- | --------------------------------- |
+| Chat Completions     | `/chat/completions`               |
+| Responses API        | `/responses`                      |
+| Anthropic Compatible | `/messages`                       |
+| Google Generative AI | `/models/<model>:generateContent` |
+
+Wysyłaj ID modelu w takiej postaci, w jakiej widnieje na stronie dostawcy. Jeśli model ma inne ID w API dostawcy,
+Console je podmienia. Żądania do modeli, które nie są włączone w połączeniu, są odrzucane.
+
+### Chat Completions
+
+```bash
+curl -X POST "https://opencode.ai/inference/custom/conn_.../chat/completions" \
+  -H "Authorization: Bearer <token>" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "model": "deepseek-chat",
+    "messages": [{ "role": "user", "content": "Say hi" }]
+  }'
+```
+
+### Responses API
+
+```bash
+curl -X POST "https://opencode.ai/inference/custom/conn_.../responses" \
+  -H "Authorization: Bearer <token>" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "model": "gpt-5.4",
+    "input": "Say hi"
+  }'
+```
+
+### Anthropic Compatible
+
+Pole `max_tokens` jest wymagane.
+
+```bash
+curl -X POST "https://opencode.ai/inference/custom/conn_.../messages" \
+  -H "Authorization: Bearer <token>" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "model": "claude-sonnet-4-6",
+    "max_tokens": 1024,
+    "messages": [{ "role": "user", "content": "Say hi" }]
+  }'
+```
+
+### Google Generative AI
+
+Model i metoda są częścią ścieżki. Aby strumieniować odpowiedź, zastąp `:generateContent` przez
+`:streamGenerateContent`.
+
+```bash
+curl -X POST "https://opencode.ai/inference/custom/conn_.../models/gemini-3.1-pro:generateContent" \
+  -H "Authorization: Bearer <token>" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "contents": [{ "parts": [{ "text": "Say hi" }] }]
+  }'
+```
+
+## Użycie
+
+Żądania są wliczane do [budżetów](/console/budgets) według cennika ustawionego dla każdego modelu. Za tokeny obciąża Cię
+dostawca.

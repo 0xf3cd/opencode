@@ -1,0 +1,95 @@
+---
+title: "Nettsøk"
+---
+
+Spør OpenCode om oppdatert informasjon, så kan den søke på nettet, lese resultatene og ta med kildelenker i svaret.
+
+```text
+Find the latest Bun release and summarize the changes.
+```
+
+Første gang du søker, blir du bedt om å tillate nettsøk og velge en leverandør. OpenCode husker valget ditt i senere økter.
+
+## Leverandører
+
+OpenCode har fem innebygde søkeleverandører:
+
+| Leverandør | ID | Miljøvariabel |
+| --- | --- | --- |
+| Exa | `exa` | `EXA_API_KEY` |
+| Firecrawl | `firecrawl` | `FIRECRAWL_API_KEY` |
+| Parallel | `parallel` | `PARALLEL_API_KEY` |
+| Tavily | `tavily` | `TAVILY_API_KEY` |
+| TinyFish | `tinyfish` | `TINYFISH_API_KEY` (valgfri) |
+
+Koble til en konto fra TUI-en med `/connect`, eller sett miljøvariabelen for leverandøren før du starter OpenCode.
+
+```bash
+$ TAVILY_API_KEY=your-key opencode
+```
+
+## Valg
+
+Angi en leverandør i `opencode.jsonc` for å hoppe over spørsmålet om valg av leverandør.
+
+```jsonc title="opencode.jsonc"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "websearch": {
+    "provider": "tavily",
+  },
+}
+```
+
+Bruk `"random"` for å velge en tilgjengelig leverandør automatisk. Hver økt fortsetter å bruke leverandøren den har valgt, helt til leverandøren blir hastighetsbegrenset.
+
+```jsonc title="opencode.jsonc"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "websearch": {
+    "provider": "random",
+  },
+}
+```
+
+## Begrensninger
+
+Når en leverandør returnerer HTTP 429, prøver tilfeldig valg søket på nytt med en annen tilgjengelig leverandør. Den hastighetsbegrensede leverandøren venter i perioden som `Retry-After` angir, eller 60 sekunder hvis svaret ikke inneholder en gyldig periode.
+
+```text
+Exa returns HTTP 429
+→ Exa enters cooldown
+→ OpenCode retries with another provider
+```
+
+Hvis alle leverandørene er i avkjølingsperiode, mislykkes søket umiddelbart. Hvis du flytter en økt eller starter serveren på nytt, glemmes leverandøren økten har husket. Avkjølingsperioder deles mellom økter i samme arbeidsområde.
+
+## Tillatelser
+
+Nettsøk bruker tillatelseshandlingen `websearch`, med søkestrengen som ressurs. Spør før søk som ikke er eksplisitt tillatt:
+
+```jsonc title="opencode.jsonc"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "permissions": [
+    {
+      "action": "websearch",
+      "resource": "*",
+      "effect": "ask",
+    },
+  ],
+}
+```
+
+Se [Tillatelser](/permissions) for regelrekkefølge og matching.
+
+## Deaktiver
+
+Sett `websearch` til `false` for å fjerne nettsøkverktøyet fra modellforespørsler.
+
+```jsonc title="opencode.jsonc"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "websearch": false,
+}
+```

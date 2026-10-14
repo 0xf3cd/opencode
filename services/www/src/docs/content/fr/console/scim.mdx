@@ -1,0 +1,96 @@
+---
+title: "Synchronisation d'annuaire"
+description: "Ajoutez et retirez automatiquement les membres de l'espace de travail depuis Okta, Microsoft Entra ID ou tout fournisseur d'identité SCIM 2.0."
+---
+
+La synchronisation d'annuaire (SCIM 2.0) ajoute des personnes à l'espace de travail lorsque vous les affectez dans votre
+fournisseur d'identité, et révoque leur accès lorsque vous retirez cette affectation. Les rôles restent gérés dans la
+Console.
+
+```text
+https://opencode.ai/console/scim/v2
+```
+
+## Avant de commencer
+
+- Configurez le [SSO](/console/sso) pour l'espace de travail.
+- [Vérifiez](/console/sso#verify-email-domains) chaque domaine de messagerie avec lequel vos utilisateurs se connectent.
+  La synchronisation d'annuaire n'ajoute que les personnes d'un domaine vérifié ; invitez les autres depuis
+  [Membres](/console/members).
+
+## Créer un token
+
+1. Ouvrez **Settings › Security** et cliquez sur **Set up** sous **Directory sync**.
+2. Copiez la **SCIM base URL** et le token. Le token n'est affiché qu'une seule fois : stockez-le dans un gestionnaire
+   de secrets.
+
+Votre fournisseur d'identité envoie le token avec chaque requête.
+
+```text
+Authorization: Bearer <token>
+```
+
+## Connecter votre fournisseur d'identité
+
+### Okta
+
+1. Ajoutez l'application **SCIM 2.0 Test App (Header Auth)**.
+2. Définissez l'URL de base, puis saisissez `Bearer ` suivi du token dans **API Token**.
+3. Activez **Create Users**, **Update User Attributes** et **Deactivate Users**. Laissez **Import Groups** et la
+   synchronisation des mots de passe désactivés.
+
+### Microsoft Entra ID
+
+1. Dans votre application d'entreprise, ouvrez **Provisioning** et définissez le mode sur **Automatic**.
+2. Saisissez l'URL de base dans **Tenant URL** et le token dans **Secret Token**.
+3. Affectez des utilisateurs et des groupes, puis démarrez le provisionnement.
+
+### Autres fournisseurs
+
+Utilisez une application SCIM 2.0 avec authentification par token dans l'en-tête, pointant vers l'URL de base. La
+Console prend en charge les points de terminaison `/Users` et `/Groups`.
+
+Affectez d'abord une personne de test. **Directory sync** affiche **Connected to your identity provider** après la
+première requête.
+
+## Éléments synchronisés
+
+| Dans votre fournisseur d'identité | Dans la Console                                                                                  |
+| --------------------------------- | ------------------------------------------------------------------------------------------------ |
+| Affecter une personne             | Ajoutée avec le rôle **Member**. Les membres existants conservent leur rôle.                     |
+| Modifier un nom                   | Profil mis à jour.                                                                               |
+| Retirer l'affectation ou désactiver | Accès suspendu et affiché comme **Deactivated**. Les clés API créées par la personne sont révoquées. |
+| Réaffecter                        | Accès rétabli. Les clés révoquées le restent.                                                    |
+| Supprimer                         | Retirée de l'espace de travail. Son compte et ses autres espaces de travail ne sont pas affectés. |
+
+- La synchronisation d'annuaire ne modifie ni les rôles ni les adresses e-mail.
+- Le dernier propriétaire ne peut être ni désactivé ni supprimé.
+- Les espaces de travail abonnés à [Go](/console/go) ne peuvent pas ajouter de membres par la synchronisation
+  d'annuaire.
+
+## Groupes
+
+Envoyez des groupes pour étiqueter leurs membres, par exemple avec **Push Groups** dans Okta ou l'affectation de groupes
+dans Entra. Affectez les personnes avant d'envoyer leurs groupes.
+
+```text
+Platform Admins  →  platform-admins
+```
+
+Chaque groupe attribue à ses membres une étiquette portant le nom du groupe. Dans **Settings › Security › Group tags**,
+vous pouvez renommer une étiquette, faire pointer plusieurs groupes vers une même étiquette ou cesser d'étiqueter un
+groupe. Quitter un groupe retire son étiquette.
+
+## Renouveler le token
+
+1. Cliquez sur **New token** et installez-le dans votre fournisseur d'identité.
+2. Attendez que le nouveau token affiche une dernière utilisation.
+3. Révoquez l'ancien token.
+
+Révoquer un token arrête les mises à jour futures, mais ne modifie pas les membres existants. Supprimer la connexion SSO
+révoque tous les tokens.
+
+## SSO et synchronisation d'annuaire
+
+Dès qu'un espace de travail a émis un token, le SSO n'[ajoute plus de membres automatiquement](/console/sso#automatic-membership).
+L'annuaire détermine qui fait partie de l'espace, même si le token est révoqué par la suite.

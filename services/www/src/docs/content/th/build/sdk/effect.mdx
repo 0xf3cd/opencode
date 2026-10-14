@@ -1,0 +1,96 @@
+---
+title: "Effect"
+---
+
+`@opencode/sdk/effect` คือ SDK แบบฝังที่ออกแบบมาสำหรับ Effect โดยเฉพาะ การดำเนินการต่าง ๆ คืนค่าเป็น Effect และ Stream ที่มีชนิดข้อมูลกำกับ และเมื่อปิด Scope ที่เป็นเจ้าของ จะปล่อย router บริการ Location ไฟเบอร์ และการลงทะเบียนปลั๊กอินทั้งหมด
+
+```sh
+bun add @opencode/sdk effect
+```
+
+## สร้างโฮสต์
+
+สร้างโฮสต์ภายใน `Effect.scoped` แล้วใช้กลุ่ม API ที่สร้างขึ้นอัตโนมัติ หรือชื่อย่อ `sessions`
+
+```ts
+import { AbsolutePath, Location, OpenCode } from "@opencode/sdk/effect"
+import { Effect } from "effect"
+
+const program = Effect.scoped(
+  Effect.gen(function* () {
+    const opencode = yield* OpenCode.create()
+    const session = yield* opencode.sessions.create({
+      location: Location.Ref.make({ directory: AbsolutePath.make("/workspace") }),
+    })
+    yield* opencode.sessions.prompt({
+      sessionID: session.id,
+      text: "Review the current changes",
+    })
+    return session
+  }),
+)
+
+const session = await Effect.runPromise(program)
+```
+
+โฮสต์แบบฝังใช้ค่า schema ข้อผิดพลาดที่ประกาศไว้ ตัวเลือกคำขอ และ Stream ชุดเดียวกับ `@opencode/client/effect`
+
+```ts
+const info = yield* opencode.server.info()
+const sessions = yield* opencode.sessions.list()
+```
+
+## สตรีมอีเวนต์
+
+endpoint แบบสตรีมคืนค่าเป็น Effect `Stream` หากต้องการให้ตัวรับข้อมูล (consumer) ทำงานเบื้องหลัง ให้ fork ไว้ใน Scope ของโฮสต์
+
+```ts
+import { Effect, Stream } from "effect"
+
+yield* opencode.events.subscribe().pipe(
+  Stream.runForEach((event) => Effect.logInfo("OpenCode event", { type: event.type })),
+  Effect.forkScoped,
+)
+```
+
+## ปรับแต่ง
+
+ปรับแต่งอินสแตนซ์ OpenCode ของคุณด้วยการลงทะเบียนปลั๊กอิน Effect ใช้โฮสต์แบบฝังเพื่อปรับแต่งเอเจนต์ โมเดล เครื่องมือ และพฤติกรรมอื่น ๆ:
+
+```ts
+import { Plugin } from "@opencode/plugin/effect"
+import { Effect } from "effect"
+
+const plugin = Plugin.define({
+  id: "customize-agent",
+  effect: (ctx) =>
+    Effect.gen(function* () {
+      const agent = ctx.agent
+      yield* agent.transform((agents) => {
+        agents.update("build", (agent) => {
+          agent.description = "Builds features and fixes bugs for our team"
+        })
+      })
+    }),
+})
+
+yield* opencode.plugin(plugin)
+```
+
+ดู hook ของปลั๊กอิน transform เครื่องมือ และบริบทของปลั๊กอินทั้งหมดได้ที่[เอกสารปลั๊กอิน Effect ฉบับเต็ม](/build/plugins/effect)
+
+## Layer
+
+ใช้ `OpenCode.layer()` เมื่อต้องการให้โฮสต์แบบฝังเป็นบริการหนึ่งของแอปพลิเคชัน
+
+```ts
+import { OpenCode } from "@opencode/sdk/effect"
+import { Effect } from "effect"
+
+const program = Effect.gen(function* () {
+  const opencode = yield* OpenCode.Service
+  return yield* opencode.server.info()
+})
+
+const health = await Effect.runPromise(program.pipe(Effect.provide(OpenCode.layer())))
+```

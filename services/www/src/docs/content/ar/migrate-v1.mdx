@@ -1,0 +1,582 @@
+---
+title: "الترحيل من V1"
+---
+
+يستخدم كلٌّ من OpenCode 1 وOpenCode 2 الأمر `opencode`، ولم يعودا يُثبَّتان جنبًا إلى جنب افتراضيًا. أزِل تثبيت V1 الذي
+يديره مدير الحزم قبل تثبيت V2؛ أما مثبّت V2 عبر curl فيستبدل ملف V1 التنفيذي.
+
+## التغييرات الجذرية
+
+يتضمن V2 ثلاثة تغييرات جذرية مقصودة:
+
+- تستخدم [الإضافات](/build/plugins/migrate-v1) واجهة API جديدة للإضافات.
+- لكلٍّ من [واجهة API للخادم والعملاء](#server-api-and-clients) عقود جديدة.
+- تنتقل [تهيئة عميل الطرفية](/cli/config) من ملفات `tui.json(c)` متعددة الطبقات إلى ملف عام واحد هو `cli.json` (يُرحَّل
+  تلقائيًا).
+
+يُفترض أن تظل وظائف V1 المدعومة خارج هذه المجالات متوافقة مع V1. بعض الحقول التي كان مخطط V1 يقبلها لم يكن لها قط مقابل
+في V2، لذا تُتجاهل عمدًا؛ وهي مدرجة في قسم [حقول مقبولة لكنها غير مدعومة](#accepted-but-unsupported-fields).
+
+ينبغي أن تستمر حقول تهيئة الخادم المدعومة الحالية وتعريفات الوكلاء وتعريفات الأوامر والمهارات وسائر الملفات في
+`.opencode/` في العمل دون تغيير. وإذا توقف سلوك مدعوم موصوف في هذا الدليل عن العمل في V2، فاعتبره خطأ في التوافق لا
+متطلبًا متوقعًا للترحيل.
+
+<Callout type="tip">
+  إذا لم تعمل وظيفة مدعومة من V1 في V2، فاتبع إرشادات الإبلاغ عن المشكلات في
+  [استكشاف الأخطاء وإصلاحها](/troubleshooting) وأبلغ عن مشكلة توافق.
+</Callout>
+
+## تثبيت V2
+
+ثبّت عميل الطرفية في V2 باتباع [دليل بدء الطرفية](/cli).
+
+لا تحتاج إلى إعادة كتابة كل شيء قبل بدء استخدام V2. إليك طريقة عملية للترحيل:
+
+1. احتفظ بتهيئتك الحالية وتعريفاتك المكتوبة في ملفات.
+2. شغّل V2 وتحقق من النماذج وبيانات الاعتماد والوكلاء والأذونات وخوادم MCP.
+3. انقل الإضافات، لأن تطبيقات إضافات V1 لا تعمل في V2.
+4. انقل عمليات التكامل التي تستدعي واجهة API للخادم.
+5. حوّل التهيئة إلى بنية V2 الأصلية عندما تكون مستعدًا. هذه الخطوة اختيارية.
+
+احتفظ بنسخة من إعداد V1 أثناء التحقق من الترحيل. يستخدم V1 وV2 مواقع التهيئة نفسها، لذا لا توجّه V1 إلى ملفات بعد
+تحويلها إلى بنى خاصة بـ V2 الأصلي وحده.
+
+## التهيئة
+
+يتناول هذا القسم تهيئة JSON/JSONC والتعريفات المكتوبة في ملفات ضمن `.opencode/` معًا.
+
+### استخدام تهيئتك الحالية
+
+يقرأ V2 تهيئة النظام والتهيئة العامة وتهيئة المشروع الحالية من المواقع نفسها التي يستخدمها V1:
+
+```text
+/Library/Application Support/opencode/opencode.json(c)
+/etc/opencode/opencode.json(c)
+%ProgramData%\opencode\opencode.json(c)
+/Library/Managed Preferences/<user>/ai.opencode.managed.plist
+/Library/Managed Preferences/ai.opencode.managed.plist
+~/.config/opencode/opencode.json(c)
+<project>/opencode.json(c)
+<project>/.opencode/opencode.json(c)
+```
+
+يقرأ V2 هذه المواقع نفسها، ويوحّد حقول V1 المدعومة وحقول V2 الأصلية في الذاكرة دون إعادة كتابة الملف المصدر. والمقصود
+أن تستمر تهيئة V1 المدعومة الحالية في العمل، فلا حاجة إلى تحويلها لتجربة V2 أو اعتماده.
+
+كما في V1، لتهيئة النظام وتفضيلات macOS المُدارة الأولوية القصوى، فتتجاوز إعداداتها الملفات العامة وملفات المشروع.
+وتتقدم [سياساتها](/policies#precedence) أيضًا، بما فيها `enabled_providers` و`disabled_providers` المُرحَّلة، على
+السياسات العامة وسياسات المشروع. ولا يمنع تجاوز إعداد ما المستخدمين من إضافة مزوّدين أو خوادم MCP أو وكلاء أو إضافات،
+لذا عبّر عن القيود التي يفرضها المسؤول في صورة `policies` لا في إعدادات عادية مثل `permissions`.
+
+### اطلب من OpenCode الترحيل
+
+لا تزال صيغة تهيئة V1 مدعومة. أما صيغة V2 الأصلية فاختيارية، وتجعل عدة إعدادات أوضح وأسهل استخدامًا.
+
+الطريقة الموصى بها للترحيل هي أن تطلب من OpenCode تحديث التهيئة نيابةً عنك:
+
+```text
+Migrate my OpenCode configuration, including file-based definitions, from the V1 format to the native V2 format.
+Preserve its behavior and all unrelated settings.
+```
+
+يستطيع OpenCode فحص الملف كاملًا، وتطبيق التغييرات ذات الصلة الواردة أدناه، وتجنّب إعادة كتابة الإعدادات التي لا تحتاج
+إلى تغيير. ولا يلزم أن يتم التحويل دفعة واحدة: يمكن أن تتعايش حقول V1 المدعومة وحقول V2 الأصلية في المستوى الأعلى. وعندما
+تضبط الصيغتان القيمة الأساسية نفسها، تكون الأولوية لقيمة V2 الأصلية الصالحة بغض النظر عن ترتيب مفاتيح JSON.
+
+أما المزج داخل البنى المتداخلة فمحدود عمدًا. يتعرّف OpenCode على أعضاء V1 وV2 الممزوجة داخل `mcp` و`compaction`
+و`experimental`، لكنه لا يستنتج الصيغة تكراريًا داخل كل وكيل أو مزوّد أو أمر أو نموذج على حدة. لذا اكتب كل عنصر متداخل
+من هذه العناصر بصيغة واحدة بالكامل. لا تُصدر صيغة V1 المدعومة وحدها أي تحذير؛ أما القيم المشوّهة والحقول القديمة غير
+المدعومة وقيم V1/V2 المتعارضة فتُصدر تحذيرات، مع استمرار تحميل الإعدادات الصالحة الأخرى.
+
+### المشاركة
+
+تتحول القيمة المنطقية المُهمَلة `autoshare` في V1 إلى السياسة الصريحة `share`:
+
+```jsonc
+// V1
+{ "autoshare": true }
+
+// V2
+{ "share": "auto" }
+```
+
+استخدم `"manual"` أو `"auto"` أو `"disabled"`. وإذا كان ملف V1 يستخدم `share` أصلًا، فلا حاجة إلى أي تغيير.
+
+### الأذونات والأدوات
+
+يجمّع V1 تأثيرات الأذونات حسب الأداة، أما V2 فيستخدم مصفوفة `permissions` مرتبة واحدة، ما يجعل الأولوية والاستثناءات
+صريحة:
+
+```jsonc
+// V1
+{
+  "permission": {
+    "bash": {
+      "git push *": "ask"
+    },
+    "edit": "allow"
+  },
+  "tools": {
+    "websearch": false
+  }
+}
+
+// V2
+{
+  "permissions": [
+    { "action": "shell", "resource": "git push *", "effect": "ask" },
+    { "action": "edit", "resource": "*", "effect": "allow" },
+    { "action": "websearch", "resource": "*", "effect": "deny" }
+  ]
+}
+```
+
+تغيّرت إجراءات الأذونات أيضًا: أصبح `bash` هو `shell`، و`task` هو `subagent`، وأصبح كلٌّ من `write` و`patch` هو `edit`.
+راجع [الأذونات](/permissions) للتعرّف على صيغة القواعد المرتبة في V2.
+
+### الوكلاء والأوضاع
+
+تتحول الخريطة المفردة `agent` والخريطة المُهمَلة `mode` إلى `agents`. وتصبح حقول الوكلاء أكثر اتساقًا مع بقية تهيئة V2:
+
+```jsonc
+// V1
+{
+  "agent": {
+    "reviewer": {
+      "prompt": "Review for correctness and missing tests.",
+      "model": "anthropic/claude-sonnet-4-5",
+      "variant": "high",
+      "disable": false,
+      "permission": {
+        "edit": "deny"
+      }
+    }
+  }
+}
+
+// V2
+{
+  "agents": {
+    "reviewer": {
+      "system": "Review for correctness and missing tests.",
+      "model": "anthropic/claude-sonnet-4-5#high",
+      "disabled": false,
+      "permissions": [
+        { "action": "edit", "resource": "*", "effect": "deny" }
+      ]
+    }
+  }
+}
+```
+
+يصبح `prompt` هو `system`، و`disable` هو `disabled`، وينضم `variant` المنفصل إلى مرجع النموذج بعد `#`. وتنتقل
+`temperature` و`top_p` و`options` الخاصة بالمزوّد إلى `request.body`. ويصبح `maxSteps` هو `steps`. أما عناصر الخريطة
+القديمة `mode` فتصبح وكلاء أساسيين.
+
+### اللقطات
+
+أعد تسمية الحقل المفرد `snapshot` إلى `snapshots`. لا تتغير قيمته المنطقية:
+
+```jsonc
+// V1
+{ "snapshot": false }
+
+// V2
+{ "snapshots": false }
+```
+
+### الوسائط
+
+أعد تسمية الكائن المفرد `attachment` إلى `media`. تحتفظ إعدادات الصور المتداخلة بأسمائها:
+
+```jsonc
+// V1
+{ "attachment": { "image": { "auto_resize": true } } }
+
+// V2
+{ "media": { "image": { "auto_resize": true } } }
+```
+
+### خوادم MCP
+
+يجمّع V2 الخوادم ضمن `mcp.servers`، ويستبدل `enabled` بنقيضه `disabled`، ويفصل بين أغراض المهلات:
+
+```jsonc
+// V1
+{
+  "mcp": {
+    "playwright": {
+      "type": "local",
+      "command": ["npx", "@playwright/mcp"],
+      "enabled": true,
+      "timeout": 30000
+    }
+  }
+}
+
+// V2
+{
+  "mcp": {
+    "servers": {
+      "playwright": {
+        "type": "local",
+        "command": ["npx", "@playwright/mcp"],
+        "disabled": false,
+        "timeout": {
+          "catalog": 30000,
+          "execution": 30000
+        }
+      }
+    }
+  }
+}
+```
+
+تستخدم حقول OAuth البعيدة صيغة snake case: يصبح `clientId` هو `client_id`، و`clientSecret` هو `client_secret`،
+و`callbackPort` هو `callback_port`، و`redirectUri` هو `redirect_uri`. كما تصبح قيمة `experimental.mcp_timeout` في V1
+القيمة الافتراضية لكلٍّ من `mcp.timeout.catalog` و`mcp.timeout.execution`. راجع [خوادم MCP](/mcp-servers).
+
+### ضغط السياق
+
+يجمّع V2 ميزانية tokens للسياق المحتفَظ به ضمن `keep`، ويمنح الاحتياطي اسمًا أوضح:
+
+```jsonc
+// V1
+{
+  "compaction": {
+    "preserve_recent_tokens": 8000,
+    "reserved": 20000
+  }
+}
+
+// V2
+{
+  "compaction": {
+    "keep": {
+      "tokens": 8000
+    },
+    "buffer": 20000
+  }
+}
+```
+
+يحتفظ `auto` باسمه. لا يوجد في V2 حقل أصلي باسم `tail_turns` أو `prune`، ويُتجاهل كلا الحقلين القديمين مع تحذير. وبدلًا
+من ذلك، يُحتفظ بالسياق الحديث وفق ميزانية tokens. راجع [ضغط السياق](/compaction).
+
+### المهارات
+
+يفصل V1 بين مسارات المهارات الإضافية وعناوين URL الخاصة بها، أما V2 فيجمعهما في مصفوفة مرتبة واحدة:
+
+```jsonc
+// V1
+{
+  "skills": {
+    "paths": ["./team-skills"],
+    "urls": ["https://example.com/skills/"]
+  }
+}
+
+// V2
+{
+  "skills": ["./team-skills", "https://example.com/skills/"]
+}
+```
+
+لا تتغير ملفات المهارات الحالية ولا الاكتشاف التلقائي في `.opencode/skills/`. راجع [المهارات](/skills).
+
+### الأوامر
+
+أعد تسمية الخريطة المفردة `command` إلى `commands`، و`subtask` إلى `subagent`. وادمج `variant` المنفصل للنموذج في مرجع
+النموذج:
+
+```jsonc
+// V1
+{
+  "command": {
+    "review": {
+      "template": "Review the current changes.",
+      "model": "anthropic/claude-sonnet-4-5",
+      "variant": "high",
+      "subtask": true
+    }
+  }
+}
+
+// V2
+{
+  "commands": {
+    "review": {
+      "template": "Review the current changes.",
+      "model": "anthropic/claude-sonnet-4-5#high",
+      "subagent": true
+    }
+  }
+}
+```
+
+تحتفظ الحقول `template` و`description` و`agent` بأسمائها. ولا يزال الحقل القديم `subtask` مقبولًا؛ وتعمل الأوامر المفوَّضة
+الآن تلقائيًا في الخلفية وترسل نتائجها إلى الجلسة الأم. ولا تزال تعريفات الأوامر المكتوبة بـ Markdown مدعومة. راجع
+[الأوامر](/commands).
+
+### المراجع
+
+أعد تسمية الخريطة المفردة المُهمَلة `reference` إلى `references`:
+
+```jsonc
+// V1
+{ "reference": { "docs": "../docs" } }
+
+// V2
+{ "references": { "docs": "../docs" } }
+```
+
+يقبل V1 الحقل `references` أصلًا، فلا حاجة إلى أي تغيير إذا كان الملف يستخدمه. وتحتفظ عناصر المراجع ببنيتها نفسها. راجع
+[المراجع](/references).
+
+### المزوّدون
+
+أعد تسمية الخريطة المفردة `provider` إلى `providers`. يفصل V2 بين حزمة بيئة التشغيل ونقطة النهاية وإعدادات الطلب:
+
+```jsonc
+// V1
+{
+  "provider": {
+    "acme": {
+      "npm": "@ai-sdk/openai-compatible",
+      "api": "https://llm.example.com/v1",
+      "options": {
+        "apiKey": "{env:ACME_API_KEY}"
+      }
+    }
+  }
+}
+
+// V2
+{
+  "providers": {
+    "acme": {
+      "package": "aisdk:@ai-sdk/openai-compatible",
+      "settings": {
+        "baseURL": "https://llm.example.com/v1",
+        "apiKey": "{env:ACME_API_KEY}"
+      }
+    }
+  }
+}
+```
+
+يصبح `npm` في V1 هو `package`، وتحصل حزم AI SDK على البادئة `aisdk:`. ويصبح `api` هو `settings.baseURL`. وتُوزَّع
+`options` الخاصة بالمزوّد على `settings` و`headers` و`body` حسب دورها في الطلب. ويصبح `options.setCacheKey` هو
+`compatibility.supportsPromptCacheKey` على مستوى المزوّد. راجع [المزوّدون](/providers).
+
+دمج V2 نطاقَي أسماء قديمين للمزوّدين:
+
+| معرّف المزوّد في V1             | معرّف المزوّد الأساسي في V2 |
+| -------------------------- | ------------------------ |
+| `azure-cognitive-services` | `azure`                  |
+| `google-vertex-anthropic`  | `google-vertex`          |
+
+يستخدم ترحيل حقول V1 غير الملتبسة الخاصة بالمزوّدين والوكلاء والأوامر ومرشّحات المزوّدين هذه المعرّفات الأساسية. أما الحقل
+المشترك `model` في المستوى الأعلى فيحتفظ بمعرّف المزوّد كما هو تمامًا، لأن الصيغة نفسها صالحة في تهيئة V2 الأصلية؛ لذا حدّث
+هذا الحقل إلى المعرّف الأساسي عند ترحيل مزوّد مدمج قديم.
+
+### النماذج والمتغيرات
+
+تظل النماذج متداخلة تحت مزوّدها، لكن عدة حقول للنماذج تصبح أكثر وضوحًا:
+
+- يصبح `id` هو `modelID`.
+- يصبح `tool_call` و`modalities` هما `capabilities.tools` و`capabilities.input` و`capabilities.output`.
+- تصبح قيمة `status` المساوية لـ `"deprecated"` هي `disabled: true`.
+- تنتقل تكاليف التخزين المؤقت من `cache_read` و`cache_write` إلى `cache.read` و`cache.write`.
+- تصبح `options` الخاصة بالمزوّد هي `settings`.
+- يصبح كائن المتغيرات في V1 مصفوفة في V2، ولكل عنصر فيها `id`.
+
+```jsonc
+// V1
+{
+  "variants": {
+    "high": {
+      "reasoningEffort": "high"
+    }
+  }
+}
+
+// V2
+{
+  "variants": [
+    {
+      "id": "high",
+      "settings": {
+        "reasoningEffort": "high"
+      }
+    }
+  ]
+}
+```
+
+راجع [النماذج](/models) للاطلاع على البنية الأصلية الكاملة للنموذج.
+
+### حقول مدعومة بلا مقابل أصلي مباشر
+
+لا تحتاج معظم الحقول التي تحتفظ بالبنية نفسها إلى أي ترحيل، ومنها `shell` و`model` و`default_agent` و`watcher`
+و`formatter` و`instructions` و`enterprise` و`tool_output`.
+
+يقبل V2 تهيئة `lsp` ويحتفظ بها، لكنه لا يشغّل خوادم اللغة ولا يوفّر أدوات LSP ولا يُنتج تشخيصات LSP. لذا استبدل سير العمل
+المعتمد على هذه الإمكانات بأوامر الفحص (lint) أو التحقق من الأنواع أو المترجم الخاصة بالمشروع.
+
+ليس لمرشّحات المزوّدين في V1 حقول مقابلة واحدًا لواحد في تهيئة V2 الأصلية، لكن سلوكها لا يزال مدعومًا عبر
+[السياسات](/policies):
+
+- يصبح `enabled_providers` سياسة مزوّدين داخلية تمنع افتراضيًا، تليها قواعد سماح للمزوّدين المدرجين.
+- يصبح `disabled_providers` سياسات منع داخلية للمزوّدين المدرجين.
+- يصبح `autoupdate` هو `update`: تقابل `false` القيمة `"disable"`، وتقابل `"notify"` القيمة `"notify"`، وتقابل `true`
+  القيمة `"auto"`.
+- يصبح `small_model` اختيار `model` للوكيل المدمج `title`. أما في تهيئة V2 الأصلية فاستخدم `agents.title.model`
+  بدلًا منه.
+
+يمكنك إبقاء هذه الحقول بصيغة V1، إذ يوحّدها OpenCode دون أي تحذير.
+
+### حقول مقبولة لكنها غير مدعومة
+
+كان مخطط V1 يقبل أيضًا حقولًا ليس لها سلوك مدعوم في V2. يتجاهل V2 هذه القيم ويُصدر تحذيرًا حتى لا يُظن أنها تهيئة فعّالة:
+
+- الحقل `logLevel`: استخدم `OPENCODE_LOG_LEVEL` عند تشغيل OpenCode.
+- الحقل `server`: استخدم خدمة V2 وخيارات الخادم الصريحة؛ فواجهة API للخادم تغيير جذري مقصود.
+- الحقل `subagent_depth` في المستوى الأعلى: استخدم `experimental.subagent_depth` بدلًا منه.
+- الحقلان `compaction.tail_turns` و`compaction.prune`: يستخدم V2 بدلًا منهما `compaction.keep.tokens` وضغط السياق القائم
+  على نقاط الحفظ.
+- الحقل `name` للوكيل داخل تهيئة JSON في V1.
+- عنصر MCP في V1 يحتوي على `enabled` فقط دون `type`.
+- الحقول التجريبية في V1: `batch_tool` و`openTelemetry` و`primary_tools` و`continue_loop_on_deny`.
+- حقول المزوّد في V1: `id` و`whitelist` و`blacklist`.
+- حقول نماذج المزوّد في V1: `release_date` و`attachment` و`reasoning` و`temperature` و`experimental`، و`status` بقيمة
+  غير `deprecated`، و`interleaved` بقيمة منطقية.
+
+تجاهل هذه الحقول مقصود، وليس تراجعًا في التوافق. وإذا لم يحافظ V2 على سلوك مذكور في موضع آخر من هذا الدليل على أنه مدعوم،
+فاتبع إرشادات الإبلاغ عن المشكلات في [استكشاف الأخطاء وإصلاحها](/troubleshooting).
+
+### ملفات الوكلاء
+
+قد تستخدم ملفات الوكلاء في V1 الدلائل `agent/` أو `agents/` أو `mode/` أو `modes/`. ولا يزال V2 يكتشف الدلائل الأربعة كلها.
+والموقع المفضّل في V2 هو:
+
+```text
+.opencode/agents/<name>.md
+```
+
+تمثّل الملفات الموجودة في الدليل `mode/` أو `modes/` في V1 وكلاء أساسيين. وعند نقل أحدها إلى `agents/`، أضف
+`mode: primary` إلى ترويسة frontmatter الخاصة به. أما الملفات الموجودة في `agent/` فيمكن نقلها إلى `agents/`
+دون تغيير المعرّف المشتق من مسارها.
+
+عند تحويل ترويسة frontmatter إلى حقول V2 الأصلية:
+
+- أبقِ متن Markdown بوصفه تعليمات النظام الخاصة بالوكيل.
+- أعد تسمية `prompt` إلى `system` إذا ظهر في تهيئة JSON؛ أما متون الملفات فلا تحتاج إلى الحقل `system`.
+- أعد تسمية `disable` إلى `disabled`، و`permission` إلى `permissions`.
+- ادمج `model` و`variant` بالصيغة `provider/model#variant`.
+- انقل `temperature` و`top_p` والخيارات الخاصة بالمزوّد إلى `request.body`.
+
+يترجم V2 ترويسات frontmatter القديمة للوكلاء تلقائيًا، لذا فهذه التعديلات اختيارية. راجع [الوكلاء](/agents).
+
+### ملفات الأوامر
+
+قد تستخدم ملفات الأوامر في V1 الدليل `command/` أو `commands/`، ويكتشف V2 كليهما. والموقع المفضّل هو:
+
+```text
+.opencode/commands/<name>.md
+```
+
+انقل الملفات من `command/` إلى المسار النسبي نفسه ضمن `commands/` للحفاظ على أسماء الأوامر. يظل متن Markdown قالبَ الأمر،
+ويحتفظ الحقلان `description` و`agent` في ترويسة frontmatter باسميهما. أعد تسمية `subtask` إلى `subagent` لاستخدام الاسم الأصلي
+للتفويض في الخلفية. وإذا احتوت ترويسة frontmatter على حقلين منفصلين `model` و`variant`، فألحق المتغير بالنموذج واحذف `variant`:
+
+```yaml
+# V1
+model: anthropic/claude-sonnet-4-5
+variant: high
+subtask: true
+
+# V2
+model: anthropic/claude-sonnet-4-5#high
+subagent: true
+```
+
+راجع [الأوامر](/commands).
+
+### ملفات المهارات
+
+يكتشف V2 المهارات من `.opencode/skill/` و`.opencode/skills/` معًا. والبنية المفضّلة هي:
+
+```text
+.opencode/skills/<skill-id>/SKILL.md
+```
+
+انقل دليل المهارة كاملًا، لا `SKILL.md` وحده، لتبقى السكربتات والمراجع وسائر الملفات الداعمة ذات المسارات النسبية متاحة.
+وأبقِ اسم الدليل ثابتًا للحفاظ على معرّف المهارة. لا تحتاج ترويسات frontmatter الحالية للمهارات ولا متون Markdown إلى إعادة كتابة
+من أجل V2. راجع [المهارات](/skills).
+
+### ملفات التعليمات
+
+تبقى ملفات `AGENTS.md` الحالية في مكانها. يكتشف V2 الملف العام `~/.config/opencode/AGENTS.md` وملفات `AGENTS.md` المحيطة
+بدءًا من الدليل الحالي صعودًا حتى الدليل الرئيسي. أما المشاريع الواقعة خارج الدليل الرئيسي، فيتوقف الاكتشاف عند جذر
+المشروع.
+
+إذا كان إعداد V1 يعتمد على `CLAUDE.md` بديلًا احتياطيًا، فانقل تلك الإرشادات إلى ملف `AGENTS.md` المناسب. لا يكتشف V2
+حاليًا سوى `AGENTS.md`؛ ولأن سلوك V1 غير المتعلق بواجهة API يُفترض أن يظل متوافقًا، أبلغ أيضًا عن مشكلة توافق مع تفاصيل
+المشروع المتأثر. راجع [التعليمات](/instructions).
+
+## تهيئة عميل الطرفية
+
+يستبدل V2 ملفات `tui.json(c)` متعددة الطبقات في V1 بملف تهيئة عام واحد لعميل الطرفية:
+
+```text
+~/.config/opencode/cli.json
+```
+
+يملك عميل الطرفية هذا الملف، ولا تحمّله الخدمة الخلفية. وعند غياب `cli.json`، يرحّل أول تشغيل لعميل الطرفية في V2
+إعدادات `tui.json` العامة المدعومة والتفضيلات المحفوظة، مع ترك ملفات V1 دون تغيير. ولا تُرحَّل تهيئة العميل المحلية على
+مستوى المشروع، لأن تهيئة العميل في V2 عامة. راجع [إعدادات CLI](/cli/config) للاطلاع على مرجع إعدادات العميل الحالية.
+
+## الإضافات
+
+أعد تسمية `plugin` إلى `plugins`. واستبدل الصف (tuple) المكوّن من الحزمة والخيارات بكائن:
+
+```jsonc
+// V1
+{
+  "plugin": ["opencode-example-plugin", ["./plugin/local.ts", { "enabled": true }]]
+}
+
+// V2
+{
+  "plugins": [
+    "opencode-example-plugin",
+    {
+      "package": "./plugin/local.ts",
+      "options": { "enabled": true }
+    }
+  ]
+}
+```
+
+يكتشف V2 الإضافات المحلية من `.opencode/plugin/` و`.opencode/plugins/` معًا؛ استخدم `.opencode/plugins/` لملفات V2.
+
+<Callout type="warning">
+  لا تعمل تطبيقات إضافات V1 في V2. ولا يكفي نقل الملف أو إعادة تسمية عنصره في التهيئة.
+</Callout>
+
+انقل نقاط الدخول والخطّافات (hooks) والأدوات والأحداث وصادرات الحزم باتباع
+[دليل ترحيل الإضافات](/build/plugins/migrate-v1) المخصص لذلك.
+
+## واجهة API للخادم والعملاء
+
+يقدّم OpenCode 2 واجهة API منقّحة وأسهل استخدامًا للخادم، ومجموعة جديدة من العملاء. يجب ترحيل عمليات التكامل التي تستدعي
+واجهة API للخادم في V1 إلى واجهة API في V2.
+
+استخدم الحزمة `@opencode/client` للوصول إلى واجهة API المنشورة في V2. وراجع [مرجع API](/api) المولَّد للاطلاع على نقاط
+النهاية وأنواع الطلبات والاستجابات.
+
+## التحقق من إعدادك
+
+تحقّق من النموذج وبيانات اعتماد المزوّد والوكلاء والأذونات وخوادم MCP والإضافات في مشروع ما قبل الاعتماد على V2 في عملك
+المعتاد. واحتفظ بإعداد V1 إلى أن تتأكد من سلوك V2 الذي تحتاجه، ولا توجّه V1 إلى تهيئة حوّلتها إلى بنية V2 الأصلية.

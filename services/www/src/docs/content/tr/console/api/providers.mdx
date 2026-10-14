@@ -1,0 +1,112 @@
+---
+title: "Sağlayıcı API'si"
+description: "Çalışma alanınıza bağlı sağlayıcıları bir Console anahtarıyla Console ağ geçidi üzerinden çağırın."
+---
+
+Çalışma alanınıza bağlı her [sağlayıcı](/console/providers), Console ağ geçidi üzerinden kendi URL'sinde sunulur.
+OpenCode bu ağ geçidini `/connect` komutundan sonra otomatik olarak kullanır; aynı sağlayıcıları kendi araçlarınızdan
+kullanmak için ağ geçidini doğrudan çağırın. Console, isteği iletmeden önce sağlayıcının kimlik bilgisini ekler; böylece
+sağlayıcı gizli anahtarı çalışma alanının dışına hiç çıkmaz.
+
+```bash
+curl -X POST "https://opencode.ai/inference/custom/conn_.../chat/completions" \
+  -H "Authorization: Bearer <token>" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "model": "deepseek-chat",
+    "messages": [{ "role": "user", "content": "Say hi" }]
+  }'
+```
+
+## Sağlayıcı URL'si
+
+**Console API URL** değerini **Providers** altındaki sağlayıcı sayfasından kopyalayın.
+
+```text
+https://opencode.ai/inference/custom/<connection_id>
+```
+
+## Kimlik doğrulama
+
+`<token>` yer tutucusunu, Console'da oluşturulmuş bir [hizmet hesabı anahtarıyla](/console/api#service-accounts)
+değiştirin. Console, isteği iletmeden önce bu anahtarı bağlantının kimlik bilgisiyle değiştirir.
+
+```text
+Authorization: Bearer <token>
+```
+
+Console anahtarı `x-api-key`, `api-key` veya `x-goog-api-key` başlıklarından da okur; bu sayede sağlayıcı SDK'ları
+Console API URL'sine yönlendirildiğinde çalışır.
+
+## Uç noktalar
+
+Sağlayıcının API yolunu Console API URL'sinin sonuna ekleyin. Console isteği bağlantının temel URL'sine iletir ve
+sağlayıcının yanıtını değiştirmeden döndürür.
+
+| Biçim | Yol |
+| -------------------- | -------------------- |
+| Chat Completions | `/chat/completions` |
+| Responses API | `/responses` |
+| Anthropic Compatible | `/messages` |
+| Google Generative AI | `/models/<model>:generateContent` |
+
+Model ID'sini sağlayıcı sayfasında göründüğü şekilde gönderin. Bir modelin yukarı akıştaki (upstream) API ID'si
+farklıysa Console bunu yeniden yazar. Bağlantıda etkinleştirilmemiş modeller için yapılan istekler reddedilir.
+
+### Chat Completions
+
+```bash
+curl -X POST "https://opencode.ai/inference/custom/conn_.../chat/completions" \
+  -H "Authorization: Bearer <token>" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "model": "deepseek-chat",
+    "messages": [{ "role": "user", "content": "Say hi" }]
+  }'
+```
+
+### Responses API
+
+```bash
+curl -X POST "https://opencode.ai/inference/custom/conn_.../responses" \
+  -H "Authorization: Bearer <token>" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "model": "gpt-5.4",
+    "input": "Say hi"
+  }'
+```
+
+### Anthropic Compatible
+
+`max_tokens` alanı zorunludur.
+
+```bash
+curl -X POST "https://opencode.ai/inference/custom/conn_.../messages" \
+  -H "Authorization: Bearer <token>" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "model": "claude-sonnet-4-6",
+    "max_tokens": 1024,
+    "messages": [{ "role": "user", "content": "Say hi" }]
+  }'
+```
+
+### Google Generative AI
+
+Model ve yöntem yolun bir parçasıdır. Yanıtı akış olarak almak için `:generateContent` yerine
+`:streamGenerateContent` kullanın.
+
+```bash
+curl -X POST "https://opencode.ai/inference/custom/conn_.../models/gemini-3.1-pro:generateContent" \
+  -H "Authorization: Bearer <token>" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "contents": [{ "parts": [{ "text": "Say hi" }] }]
+  }'
+```
+
+## Kullanım
+
+İstekler, her modelde ayarlanan fiyatlandırma kullanılarak [bütçelere](/console/budgets) sayılır. Token'lar için sizi
+sağlayıcı faturalandırır.

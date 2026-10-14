@@ -1,0 +1,240 @@
+---
+title: "技能"
+---
+
+建立技能，就能為代理提供針對特定任務、可重複使用的指示。將 `SKILL.md` 檔案放在 `.opencode/skills/<skill-id>` 中，並在 `description` 中說明何時該使用它。
+
+```markdown title=".opencode/skills/git-release/SKILL.md"
+---
+name: Git Release
+description: Prepare release notes, version bumps, and GitHub releases
+---
+
+## Workflow
+
+1. Read `references/release-policy.md`.
+2. Summarize merged changes since the previous tag.
+3. Propose the version bump before changing files.
+4. Run `scripts/changelog.ts` only after the user approves the version.
+```
+
+當這個技能與目前工作相關時，OpenCode 會向代理提示它的存在。代理接著可以使用 `skill` 工具載入其中的指示，而不必把每個技能都加進每一則提示詞。
+
+## 建立技能
+
+將相關的指令碼、參考資料和範本放在 `SKILL.md` 旁邊：
+
+```text
+.opencode/skills/
+└── git-release/
+    ├── SKILL.md
+    ├── scripts/
+    │   └── changelog.ts
+    └── references/
+        └── release-policy.md
+```
+
+技能中寫的路徑都是相對於 `SKILL.md` 所在的目錄。建議使用目錄形式，因為這樣可以為輔助檔案提供專屬的基準目錄。
+
+## 探索
+
+OpenCode 會自動搜尋下列位置：
+
+| 範圍                 | 來源                                |
+| --------------------- | -------------------------------------- |
+| 全域                | `~/.config/opencode/skills`            |
+| 全域（相容）  | `~/.claude/skills`、`~/.agents/skills` |
+| 專案               | `.opencode/skills`                     |
+| 專案（相容） | `.claude/skills`、`.agents/skills`     |
+
+對於專案來源，OpenCode 會從目前目錄一路往上搜尋到專案根目錄，並納入每一層中符合的目錄。
+
+每個來源都可以包含下列任一種形式：
+
+```text
+skills/
+├── review.md
+└── git-release/
+    └── SKILL.md
+```
+
+- Markdown 檔案必須位於來源的根目錄，例如 `skills/review.md`。
+- 檔名剛好是 `SKILL.md` 的檔案可以位於任何深度，例如 `skills/git-release/SKILL.md`。
+
+## 來源
+
+在任一 `opencode.json` 或 `opencode.jsonc` 中，透過 `skills` 陣列加入更多本機目錄或 HTTP 清單：
+
+```jsonc title="opencode.jsonc"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "skills": [
+    "./team-skills",
+    "~/shared/opencode-skills",
+    "/opt/company-skills",
+    "https://example.com/opencode/skills/",
+  ],
+}
+```
+
+| 值 | 解析方式 |
+| ----- | ---------- |
+| 相對路徑 | 以 OpenCode 目前的工作目錄為基準，而不是設定檔所在位置 |
+| `~/` 路徑 | 以目前使用者的家目錄為基準 |
+| 絕對路徑 | 直接使用 |
+| `http://` 或 `https://` URL | 當作 HTTP 清單載入 |
+
+找到的每個設定檔都會提供各自的項目。`skills` 陣列會合併，而不是互相取代。
+
+## HTTP 清單
+
+HTTP 清單是一個包含 `index.json` 檔案的基準 URL：
+
+```json title="index.json"
+{
+  "skills": [
+    {
+      "name": "git-release",
+      "version": "3",
+      "files": ["git-release.md", "references/release-policy.md"]
+    }
+  ]
+}
+```
+
+以這個項目為例，OpenCode 會從 `<base-url>/git-release/<file>` 下載每個檔案。
+
+| 規則 | 要求 |
+| ---- | ----------- |
+| 路徑 | 必須安全、為相對路徑，且與清單同源 |
+| 進入檔案 | 必須包含 `SKILL.md` 或 `<name>.md`，例如 `git-release.md` |
+| 更新 | 檔案變更時請遞增 `version`，讓 OpenCode 重新整理快取 |
+
+在 HTTP 清單中，建議使用具名的 Markdown 形式。每個下載的技能目錄都會成為一個來源根目錄，因此 `git-release.md` 的 ID 是 `git-release`。在 V2 中，位於根層級的 `SKILL.md` 目前的 ID 就是字面上的 `SKILL`。
+
+## Frontmatter
+
+使用 frontmatter 為技能命名，並控制它出現的位置：
+
+```markdown title="SKILL.md"
+---
+name: Git Release
+description: Prepare a repository release
+metadata:
+  opencode/autoinvoke: false
+---
+
+Prepare the changelog, version bump, tag, and release notes.
+```
+
+| 欄位                          | 行為                                                          |
+| ------------------------------ | ----------------------------------------------------------------- |
+| `name`                         | 顯示名稱；預設為由路徑推導出的 ID                     |
+| `description`                  | 向模型介紹技能時使用的摘要                       |
+| `metadata.opencode/autoinvoke` | 設為 `false` 可將技能從模型的可用清單中略去  |
+| `disable-model-invocation`     | 設為 `true` 的效果與 `opencode/autoinvoke: false` 相同 |
+
+在執行時，所有 frontmatter 欄位都是選擇性的。如果希望模型找到這個技能，請加上清楚的 `description`；沒有說明的技能不會提示給模型。
+
+`opencode/autoinvoke: false` 只會將技能從模型的可用清單中隱藏。技能仍然已註冊，也仍可依 ID 明確載入。同時設定 `disable-model-invocation` 和 `opencode/autoinvoke` 時，以 `opencode/autoinvoke` 為準。V2 會接受 `license` 和 `compatibility` 等可攜性欄位，但不會解讀這些欄位。
+
+## ID
+
+技能 ID 由檔案路徑決定。frontmatter 中的 `name` 只是顯示用的標籤。
+
+| 檔案                              | ID            |
+| --------------------------------- | ------------- |
+| `<source>/git-release.md`         | `git-release` |
+| `<source>/git-release/SKILL.md`   | `git-release` |
+| `<source>/teams/release/SKILL.md` | `release`     |
+
+ID 必須完全相符，且區分大小寫。若要讓技能具備可攜性，請使用唯一、全小寫、長度 1–64 個字元的 kebab-case ID，並與目錄名稱保持一致：
+
+```text
+^[a-z0-9]+(-[a-z0-9]+)*$
+```
+
+V2 目前不會強制要求這個格式、1–64 個字元的建議長度、`name` 與目錄名稱一致，也不會限制說明的最大長度。
+
+## 優先順序
+
+技能是依 ID 選取的。如果兩個來源都定義了 `git-release`，OpenCode 會載入較晚註冊的來源所提供的技能：
+
+```text
+~/.config/opencode/skills/git-release/SKILL.md  ← lower precedence
+.opencode/skills/git-release/SKILL.md           ← loaded
+```
+
+來源會依照優先順序由低到高註冊：
+
+1. 內建技能
+2. `.claude/skills`：先註冊全域來源，再從最遠的上層目錄往目前目錄註冊
+3. `.agents/skills`：先註冊全域來源，再從最遠的上層目錄往目前目錄註冊
+4. `~/.config/opencode/skills`
+5. 專案的 `.opencode/skills`：從專案根目錄往目前目錄註冊
+6. 明確設定的 `skills` 項目：依照設定的優先順序和陣列順序註冊
+
+除非你打算覆寫先前的技能，否則請避免使用重複的 ID。
+
+## 載入
+
+在每個模型步驟中，OpenCode 會列出有說明、未將 `opencode/autoinvoke` 設為 `false`，且權限允許的技能。這份清單只包含 ID、名稱和說明，不包含完整的 Markdown 內文。
+
+模型會以確切的 ID 呼叫 `skill` 工具來載入技能：
+
+```json title="skill tool input"
+{
+  "id": "git-release"
+}
+```
+
+接著 OpenCode 會：
+
+1. 選取該 ID 目前的定義。
+2. 檢查所選代理的 `skill` 權限。
+3. 將 Markdown 內文（不含 frontmatter）加入對話。
+4. 提供技能的基準目錄，以及最多 10 個輔助檔案路徑的範例。
+
+若要自行載入技能，請在提示詞中以 `@skill-id` 提及它。
+
+輔助檔案的內容不會自動載入，代理會在技能指示它這麼做時才讀取。檔案範例只提供給以目錄形式存放的 `SKILL.md` 技能；單一 Markdown 檔案形式的技能不會收到相鄰檔案的清單。
+
+## 權限
+
+使用 `skill` 動作，並以技能 ID 作為資源。規則會依序執行，最後一條符合的規則生效：
+
+```jsonc title="opencode.jsonc"
+{
+  "permissions": [
+    { "action": "skill", "resource": "*", "effect": "allow" },
+    { "action": "skill", "resource": "internal-*", "effect": "deny" },
+    { "action": "skill", "resource": "experimental-*", "effect": "ask" },
+  ],
+}
+```
+
+| 效果 | 行為 |
+| ------ | -------- |
+| `allow` | 提示並載入符合的技能，不需要核准 |
+| `ask` | 提示符合的技能，載入前先詢問 |
+| `deny` | 對模型隱藏符合的技能，並拒絕載入 |
+
+將相同的規則放在 `agents.<id>.permissions` 底下，即可只套用到單一代理。
+
+## 疑難排解
+
+例如，下面這個技能的 ID 是 `release`，而不是 frontmatter 中的名稱 `Git Release`：
+
+```text
+.opencode/skills/release/SKILL.md
+                      └─ ID: release
+```
+
+如果找不到技能，或載入的內容不正確：
+
+1. 確認檔案是根層級的 `*.md`，或是檔名剛好為 `SKILL.md` 的巢狀檔案。
+2. 檢查由路徑推導出、區分大小寫的 ID，而不是 frontmatter 中的 `name`。
+3. 如果希望模型找到這個技能，請加上 `description`。
+4. 檢查 `opencode/autoinvoke` 和所選代理的 `skill` 權限。
+5. 檢查是否有較晚註冊的來源定義了相同的 ID。
+6. 對於 HTTP 清單，請確認 `index.json`、同源的檔案路徑，以及 `version` 是否已變更。

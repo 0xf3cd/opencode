@@ -1,0 +1,133 @@
+---
+title: "Effect"
+---
+
+`@opencode/client/effect` 是 OpenCode HTTP API 的 Effect 原生用戶端。它回傳具型別的 Effect 與 Stream，並將回應解碼為 OpenCode 的 schema 值。
+
+```sh
+bun add @opencode/client effect
+```
+
+## 建立用戶端
+
+使用伺服器 URL 建立用戶端，然後呼叫依 API 資源分組的方法。
+
+```ts
+import { AbsolutePath, Location, OpenCode } from "@opencode/client/effect"
+import { Effect } from "effect"
+import { FetchHttpClient } from "effect/http"
+
+const program = Effect.gen(function* () {
+  const client = yield* OpenCode.make({ baseUrl: "http://localhost:4096" })
+  const session = yield* client.session.create({
+    location: Location.Ref.make({ directory: AbsolutePath.make("/workspace") }),
+  })
+  yield* client.session.prompt({
+    sessionID: session.id,
+    text: "Review the current changes",
+  })
+  return session
+})
+
+const session = await Effect.runPromise(program.pipe(Effect.provide(FetchHttpClient.layer)))
+```
+
+## 標頭與請求
+
+在提供的 `HttpClient` 上設定預設標頭。原生操作使用一般的 Effect 中斷機制來取消。RPC 方法另外接受每次呼叫的 location、標頭和 signal 選項。
+
+```ts
+import { HttpClient, HttpClientRequest } from "effect/http"
+
+const httpClient = yield * HttpClient.HttpClient
+const client =
+  yield *
+  OpenCode.make({ baseUrl: "https://opencode.example.com" }).pipe(
+    Effect.provideService(
+      HttpClient.HttpClient,
+      HttpClient.mapRequest(httpClient, (request) =>
+        HttpClientRequest.setHeaders(request, { authorization: `Bearer ${process.env.OPENCODE_TOKEN}` }),
+      ),
+    ),
+  )
+
+const sessions = yield * client.session.list()
+```
+
+## 串流事件
+
+`event.subscribe()`、`session.log()` 等串流操作會回傳 Effect Stream。
+
+```ts
+import { Effect, Stream } from "effect"
+
+yield *
+  client.event.subscribe().pipe(Stream.runForEach((event) => Effect.logInfo("OpenCode event", { type: event.type })))
+```
+
+每個用戶端的原生事件 Stream 與 RPC 事件 Stream 共用一條延遲建立的連線。建立 Stream 時不會連線，開始消費時才會連線。停止其中一個消費端不影響其他消費端，最後一個消費端離開時才會關閉來源。來源 EOF 或失敗會結束目前所有訂閱，不會自動重試或重播。較晚加入的原生消費端會先收到目前的連線標記，再收到即時事件。
+
+## 外掛 RPC
+
+使用與 Promise 用戶端及伺服器外掛相同的共用合約：
+
+```ts
+import { Acme } from "opencode-acme-plugin/rpc"
+
+const acme = client.rpc(Acme)
+const result = yield * acme.search({ query: "hello" }, { location: { directory: "/workspace" } })
+
+yield *
+  acme.events
+    .subscribe("updated")
+    .pipe(
+      Stream.runForEach((event) =>
+        Effect.logInfo("Plugin event", { type: event.type, location: event.location, text: event.data.text }),
+      ),
+    )
+```
+
+方法的引數與結果型別會從合約推斷。第二個選用引數用來放 `location`、`signal` 和 `headers`；省略 location 時會使用一般的請求預設值。呼叫會隨著消費它的 Effect 一起被中斷。方法的錯誤對應會推斷到 Effect 的錯誤通道中，宣告的錯誤會透過各自的資料 schema 解碼。具型別的子用戶端會移除通用的 HTTP RPC 錯誤包裝；保留的 `rpc.*` 型別代表框架錯誤。
+
+RPC 事件是具型別的 Stream，而不是回呼式的 `on` 監聽器。它們會接收該 RPC 在所有 location 的事件，每個事件都帶有必有的 `location`，以及加上前綴的一般型別，例如 `rpc.acme.updated`。這點與伺服器外掛的 handle 不同，後者固定在自己的 location。定義、schema、註冊與即時訂閱的語意，請參閱 [Effect 外掛 RPC](/build/plugins/effect/rpc)。
+
+## 本機背景服務
+
+僅限 Node 的 `@opencode/client/effect/service` 進入點以 Effect 的形式探索、啟動、驗證和停止本機背景服務。
+
+```sh
+bun add @effect/platform-node
+```
+
+為確保已啟動的服務建立通過驗證的用戶端。
+
+```ts
+import { NodeFileSystem } from "@effect/platform-node"
+import { OpenCode } from "@opencode/client/effect"
+import { Service } from "@opencode/client/effect/service"
+import { Effect } from "effect"
+import { FetchHttpClient, HttpClient, HttpClientRequest } from "effect/http"
+
+const program = Effect.gen(function* () {
+  const endpoint = yield* Service.ensure()
+  const httpClient = yield* HttpClient.HttpClient
+  const client = yield* OpenCode.make({ baseUrl: endpoint.url }).pipe(
+    Effect.provideService(
+      HttpClient.HttpClient,
+      HttpClient.mapRequest(httpClient, (request) => HttpClientRequest.setHeaders(request, Service.headers(endpoint))),
+    ),
+  )
+  return yield* client.server.info()
+})
+
+const health = await Effect.runPromise(
+  program.pipe(Effect.provide(FetchHttpClient.layer), Effect.provide(NodeFileSystem.layer)),
+)
+```
+
+只探索而不啟動，或停止確切的那個已註冊服務。
+
+```ts
+const endpoint = yield * Service.discover()
+yield * Service.stop()
+```

@@ -1,0 +1,88 @@
+---
+title: "Presupuestos"
+description: "Limita el gasto mensual de un espacio de trabajo, sus miembros y sus cuentas de servicio."
+---
+
+Los presupuestos limitan cuánto gasta un espacio de trabajo cada mes. Los propietarios y administradores los definen
+desde el panel **Budget limits** de las páginas **Members** y **Keys**.
+
+## Niveles de presupuesto
+
+| Presupuesto                          | Se aplica a                                           | Dónde se define                                    |
+| ------------------------------------ | ----------------------------------------------------- | -------------------------------------------------- |
+| Espacio de trabajo                   | Gasto combinado de todos en el espacio de trabajo     | **Members** o **Keys › Monthly workspace budget**  |
+| Usuario predeterminado               | Cada miembro sin un límite personalizado              | **Members › Monthly default user budget**          |
+| Usuario personalizado                | Un miembro                                            | Tabla de **Members** o página del miembro          |
+| Cuenta de servicio predeterminada    | Cada cuenta de servicio sin un límite personalizado   | **Keys › Monthly default service account budget**  |
+| Cuenta de servicio personalizada     | Una cuenta de servicio                                | Página de la cuenta de servicio                    |
+
+Una solicitud debe caber tanto en el presupuesto del espacio de trabajo como en el presupuesto propio de la persona. Si
+no hay ningún presupuesto, el gasto es ilimitado.
+
+## Presupuesto del espacio de trabajo
+
+El presupuesto del espacio de trabajo bloquea las solicitudes de todos cuando el espacio de trabajo lo alcanza.
+
+1. Abre **Members** o **Keys**.
+2. En **Budget limits**, haz clic en **Monthly workspace budget**.
+3. Introduce un **Workspace limit** en USD y haz clic en **Save**.
+
+## Presupuestos de los miembros
+
+El presupuesto de usuario predeterminado se aplica a todos los miembros que no tienen un límite personalizado. Defínelo
+en **Monthly default user budget**.
+
+Puedes dar a un miembro un límite personalizado desde cualquiera de estos dos sitios:
+
+- Haz clic en la celda **Limit** de su fila en **Members** e introduce un importe.
+- Abre el miembro y haz clic en **Set User Budget** en **Monthly Budget**.
+
+Los límites personalizados aparecen resaltados en la tabla de miembros. Borra un límite personalizado para que el
+miembro vuelva al predeterminado; entonces la página del miembro muestra **Using Default**.
+
+## Presupuestos de las cuentas de servicio
+
+Las cuentas de servicio funcionan igual. Define **Monthly default service account budget** en la página **Keys**, o
+abre una cuenta de servicio y haz clic en **Set Service Account Budget**.
+
+## Importes y reinicios
+
+- Los importes se expresan en dólares estadounidenses con hasta dos decimales.
+- Los presupuestos se reinician el día 1 de cada mes a las 00:00 UTC.
+- Un presupuesto de `$0` bloquea todo el gasto que cuenta para los presupuestos.
+
+## Qué cuenta
+
+| Gasto                                                                         | Cuenta para los presupuestos  |
+| ----------------------------------------------------------------------------- | ----------------------------- |
+| Modelos de pago de Console                                                    | Sí                            |
+| Modelos de [tus propios proveedores](/console/providers) con un precio definido | Sí, al precio configurado     |
+| [Búsqueda web](/console/websearch)                                            | Sí                            |
+| Modelos gratuitos                                                             | No                            |
+| Uso de [Go](/console/go) dentro del plan                                      | No                            |
+| Uso adicional de Go pagado con créditos                                       | Sí                            |
+
+## Cuando se alcanza un presupuesto
+
+Las nuevas solicitudes fallan con HTTP `429` hasta que el presupuesto se reinicia o un administrador lo aumenta. La
+respuesta no indica qué presupuesto se ha alcanzado.
+
+```text
+Upstream request failed: Account budget exceeded
+```
+
+Los presupuestos se comprueban al iniciar una solicitud. Las solicitudes que ya están en curso terminan, por lo que el
+gasto puede acabar ligeramente por encima del límite.
+
+## Seguimiento del gasto
+
+Cada miembro ve su propio presupuesto en **Overview**: el importe restante, el importe gastado y la fecha de reinicio.
+
+Los propietarios y administradores de espacios de trabajo con más de un miembro también ven **Usage**, que desglosa el
+coste por día, modelo y persona. El botón **Export usage** descarga en CSV los totales diarios de los últimos 7, 30 o
+90 días.
+
+## Automatizar los presupuestos
+
+Usa la [API de presupuestos](/console/api/budgets) para leer el presupuesto de cada miembro y definir límites
+personalizados desde tus propias herramientas.

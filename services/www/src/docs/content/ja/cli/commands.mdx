@@ -1,0 +1,581 @@
+---
+title: "コマンド"
+description: "opencode コマンドラインのリファレンスです。"
+---
+
+どのコマンドも `--help` を指定するとすべてのフラグを確認できます（たとえば `opencode run --help`）。サーバーを使用する一部のコマンドでは、`--standalone` で専用サーバーを実行したり、`--server <url>` で特定のサーバーを指定したりできます。対応しているフラグは、各コマンドのヘルプで確認してください。
+
+## run
+
+対話型インターフェイスを開かずにメッセージを送信し、応答を出力します。
+
+```bash
+$ opencode run "Explain this repository"
+```
+
+### CI
+
+CI では、プロバイダーの API キーをシークレットとして渡し、専用サーバーがそのキーを受け取れるようにスタンドアロンモードを使用します。たとえば、次の GitHub Actions ジョブは、チェックアウトしたリポジトリをレビューします。
+
+```yaml
+name: OpenCode review
+on: [pull_request]
+
+jobs:
+  review:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - run: npm install --global @opencode/cli
+      - run: opencode run --standalone --model anthropic/claude-sonnet-4-5 "Review this repository for correctness and summarize any issues."
+        env:
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+```
+
+モデルを選択します。
+
+```bash
+$ opencode run --model anthropic/claude-sonnet-4-5 "Refactor parseToken"
+```
+
+前回のセッションを続行します。
+
+```bash
+$ opencode run --continue "Now handle the expired case"
+```
+
+スクリプト向けに、改行区切りの JSON を出力します。
+
+```bash
+$ opencode run --format json "List the TODO comments"
+```
+
+メッセージにファイルを添付します。
+
+```bash
+$ opencode run --file src/server.ts --file src/client.ts "Review these for bugs"
+```
+
+特定のエージェントで実行します。
+
+```bash
+$ opencode run --agent build "Fix the failing test"
+```
+
+すべてのサブコマンドとフラグを表示します。
+
+```bash
+$ opencode run --help
+```
+
+## mini
+
+フルスクリーンの TUI の代わりに、最小構成の対話型インターフェイスを起動します。
+
+```bash
+$ opencode mini
+```
+
+前回のセッションを続行します。
+
+```bash
+$ opencode mini --continue
+```
+
+モデルと最初のプロンプトを指定して起動します。
+
+```bash
+$ opencode mini --model anthropic/claude-sonnet-4-5 --prompt "Summarize this repository"
+```
+
+すべてのサブコマンドとフラグを表示します。
+
+```bash
+$ opencode mini --help
+```
+
+## session
+
+セッションを管理します。
+
+```bash
+$ opencode session list
+```
+
+一覧の件数を制限し、JSON で出力します。
+
+```bash
+$ opencode session list --max-count 20 --format json
+```
+
+セッションとその子セッションを削除します。
+
+```bash
+$ opencode session delete ses_9c1b08
+```
+
+セッションデータを JSON としてエクスポートします。
+
+```bash
+$ opencode session export ses_4f2a1c
+```
+
+エクスポート時に、トランスクリプトとファイルデータの機密情報を伏せ字にします。
+
+```bash
+$ opencode session export ses_4f2a1c --sanitize
+```
+
+JSON ファイルまたは URL からセッションデータをインポートします。
+
+```bash
+$ opencode session import session.json
+```
+
+特定のディレクトリにインポートします。
+
+```bash
+$ opencode session import session.json --directory ~/code/project
+```
+
+すべてのサブコマンドとフラグを表示します。
+
+```bash
+$ opencode session --help
+```
+
+## auth
+
+AI プロバイダーと認証情報を管理します。
+
+```bash
+$ opencode auth list
+```
+
+JSON で一覧表示します。
+
+```bash
+$ opencode auth list --format json
+```
+
+プロバイダーにログインします。
+
+```bash
+$ opencode auth login anthropic
+```
+
+特定の認証方法でログインします。
+
+```bash
+$ opencode auth login anthropic --method key
+```
+
+保存済みのアカウントからログアウトします。
+
+```bash
+$ opencode auth logout anthropic work
+```
+
+連携先の有効なアカウントを切り替えます。
+
+```bash
+$ opencode auth switch anthropic work
+```
+
+すべてのサブコマンドとフラグを表示します。
+
+```bash
+$ opencode auth --help
+```
+
+## models
+
+利用可能なすべてのモデルを一覧表示します。
+
+```bash
+$ opencode models
+```
+
+すべてのサブコマンドとフラグを表示します。
+
+```bash
+$ opencode models --help
+```
+
+## mcp
+
+MCP (Model Context Protocol) サーバーを管理します。
+
+```bash
+$ opencode mcp list
+```
+
+リモートサーバーを追加します。
+
+```bash
+$ opencode mcp add context7 --url https://mcp.context7.com/mcp
+```
+
+ローカルサーバーをグローバル設定に追加します。
+
+```bash
+$ opencode mcp add everything --global -- npx -y @modelcontextprotocol/server-everything
+```
+
+環境変数を指定してローカルサーバーを追加します。
+
+```bash
+$ opencode mcp add everything --env LOG_LEVEL=debug -- npx -y @modelcontextprotocol/server-everything
+```
+
+ヘッダーを指定してリモートサーバーを追加します。
+
+```bash
+$ opencode mcp add context7 --url https://mcp.context7.com/mcp --header CONTEXT7_API_KEY=secret
+```
+
+OAuth に対応したリモートサーバーで認証します。
+
+```bash
+$ opencode mcp auth sentry
+```
+
+サーバー用に保存されている OAuth の認証情報を削除します。
+
+```bash
+$ opencode mcp logout sentry
+```
+
+すべてのサブコマンドとフラグを表示します。
+
+```bash
+$ opencode mcp --help
+```
+
+## plugin
+
+プラグインを管理します。
+
+```bash
+$ opencode plugin list
+```
+
+組み込みのサーバープラグインも含めます。
+
+```bash
+$ opencode plugin list --builtin
+```
+
+プラグインをインストールし、グローバル設定に追加します。
+
+```bash
+$ opencode plugin add @example/opencode-tui
+```
+
+パッケージプラグインの更新を確認します。
+
+```bash
+$ opencode plugin check
+```
+
+パッケージプラグインを更新します。
+
+```bash
+$ opencode plugin update
+```
+
+グローバル設定からプラグインを削除します。
+
+```bash
+$ opencode plugin remove @example/opencode-tui
+```
+
+すべてのサブコマンドとフラグを表示します。
+
+```bash
+$ opencode plugin --help
+```
+
+## stats
+
+共有可能な使用状況の統計を表示します。
+
+```bash
+$ opencode stats
+```
+
+過去 7 日間を表示します。
+
+```bash
+$ opencode stats --days 7
+```
+
+モデルの使用状況を表示します。
+
+```bash
+$ opencode stats --models
+```
+
+コストとトークンの詳細を表示します。
+
+```bash
+$ opencode stats --cost
+```
+
+レポートの代わりに JSON を出力します。
+
+```bash
+$ opencode stats --json
+```
+
+すべてのサブコマンドとフラグを表示します。
+
+```bash
+$ opencode stats --help
+```
+
+## serve
+
+API サーバーと Web サーバーを起動します。[Web](/cli/web) を参照してください。
+
+```bash
+$ opencode serve
+```
+
+固定ポートで、すべてのインターフェイスにバインドします。
+
+```bash
+$ opencode serve --hostname 0.0.0.0 --port 4096
+```
+
+別のオリジンのブラウザークライアントを許可します。
+
+```bash
+$ opencode serve --cors https://app.example.com
+```
+
+すべてのサブコマンドとフラグを表示します。
+
+```bash
+$ opencode serve --help
+```
+
+## pair
+
+ブラウザーやアプリをサーバーにサインインさせるための使い捨てリンクと、最初のリンクの QR コードを出力します。リンクは 5 分で期限切れになり、1 回だけ使用できます。
+
+```bash
+$ opencode pair
+```
+
+リンクに外部 URL を使用します。
+
+```bash
+$ opencode pair --url https://dev.example.com
+```
+
+OpenTunnel のリモートアドレスを使って、どこからでもペアリングします。サーバーがインターネットに公開されるため、初めてリモートアクセスを有効にするときは、その旨が説明され、承認を求められます。[リモートアクセス](/cli/web#remote-access)を参照してください。
+
+```bash
+$ opencode pair --remote
+```
+
+確認なしで承認します。ターミナルのないスクリプトなどで使用します。
+
+```bash
+$ opencode pair --remote --yes
+```
+
+すべてのサブコマンドとフラグを表示します。
+
+```bash
+$ opencode pair --help
+```
+
+## service
+
+バックグラウンドサーバーを管理します。[Web](/cli/web) を参照してください。
+
+```bash
+$ opencode service start
+```
+
+再起動します。
+
+```bash
+$ opencode service restart
+```
+
+状態を表示します。
+
+```bash
+$ opencode service status
+```
+
+停止します。
+
+```bash
+$ opencode service stop
+```
+
+設定を読み取ります。
+
+```bash
+$ opencode service get hostname
+```
+
+設定を変更します。
+
+```bash
+$ opencode service set hostname 0.0.0.0
+```
+
+CORS のオリジンを追加で許可します。
+
+```bash
+$ opencode service set cors https://app.example.com
+```
+
+サーバープロセスに環境変数を渡します。
+
+```bash
+$ opencode service set env OPENCODE_LOG_LEVEL DEBUG
+```
+
+設定をデフォルトに戻します。
+
+```bash
+$ opencode service unset hostname
+```
+
+すべてのサブコマンドとフラグを表示します。
+
+```bash
+$ opencode service --help
+```
+
+## reload
+
+サーバーを再起動せずに設定を再読み込みします。実行中のセッションは、次のステップの区切りから新しいサービスで続行されます。
+
+```bash
+$ opencode reload
+```
+
+## api
+
+実行中のサーバーにリクエストを送信します。
+
+```bash
+$ opencode api GET /api/session
+```
+
+クエリパラメーターを指定して、オペレーション ID を呼び出します。
+
+```bash
+$ opencode api session.list --param limit=10
+```
+
+JSON のボディを送信します。
+
+```bash
+$ opencode api session.create --data '{"title": "New session"}'
+```
+
+リクエストヘッダーを追加します。
+
+```bash
+$ opencode api GET /api/session -H "accept: application/json"
+```
+
+すべてのサブコマンドとフラグを表示します。
+
+```bash
+$ opencode api --help
+```
+
+## acp
+
+エディターとの連携用に、stdin と stdout を介した Agent Client Protocol サーバーを起動します。クライアントが接続を閉じるまで実行されます。
+
+```bash
+$ opencode acp
+```
+
+すべてのサブコマンドとフラグを表示します。
+
+```bash
+$ opencode acp --help
+```
+
+## debug
+
+デバッグとトラブルシューティング用のツールを提供します。
+
+```bash
+$ opencode debug agents
+```
+
+設定のソースを一覧表示します。
+
+```bash
+$ opencode debug config
+```
+
+グローバルのパスを表示します。
+
+```bash
+$ opencode debug paths
+```
+
+1 つのパスを出力します。
+
+```bash
+$ opencode debug paths db
+```
+
+すべてのサブコマンドとフラグを表示します。
+
+```bash
+$ opencode debug --help
+```
+
+## upgrade
+
+OpenCode を最新バージョンまたは特定のバージョンにアップグレードします。エイリアス：`update`。
+
+```bash
+$ opencode upgrade
+```
+
+特定のパッケージマネージャーを使って、特定のバージョンにアップグレードします。
+
+```bash
+$ opencode upgrade 2.0.21 --method bun
+```
+
+すべてのサブコマンドとフラグを表示します。
+
+```bash
+$ opencode upgrade --help
+```
+
+## uninstall
+
+OpenCode と関連するすべてのファイルを削除します。
+
+```bash
+$ opencode uninstall
+```
+
+削除される内容を事前に確認します。
+
+```bash
+$ opencode uninstall --dry-run
+```
+
+すべてのサブコマンドとフラグを表示します。
+
+```bash
+$ opencode uninstall --help
+```

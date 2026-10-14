@@ -1,0 +1,268 @@
+---
+title: "參考目錄"
+---
+
+參考目錄讓 OpenCode 可以透過名稱存取目前專案以外的目錄。在 `opencode.json` 或 `opencode.jsonc` 中新增參考目錄，需要時再於用戶端附加它的別名。
+
+```jsonc title="opencode.jsonc"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "references": {
+    "docs": {
+      "path": "../product-docs",
+      "description": "Use for product behavior and terminology",
+    },
+  },
+}
+```
+
+附加 `docs` 之後，請代理檢查相關路徑：
+
+```text
+Read the attached docs reference and summarize api/authentication.md.
+```
+
+參考目錄適合用於文件、共用函式庫、範例，或其他儲存庫的原始碼。
+
+## 本機
+
+本機目錄請使用 `path`：
+
+```jsonc
+{
+  "references": {
+    "design-system": {
+      "path": "../design-system",
+      "description": "Use when working with components or design tokens",
+    },
+  },
+}
+```
+
+路徑的行為如下：
+
+- 相對路徑會以設定檔所在的目錄為基準解析。
+- 支援絕對路徑。
+- 支援 `~/docs` 這類相對於家目錄的路徑。
+
+如果不需要其他欄位，可以使用字串簡寫：
+
+```jsonc
+{
+  "references": {
+    "docs": "../docs",
+    "shared": "~/work/shared",
+  },
+}
+```
+
+<Callout type="note">
+  只有以 `.`、`/` 或 `~` 開頭的簡寫字串才會被視為本機路徑。請寫成 `./docs`，而不是 `docs`；單純的 `docs` 會被解讀為 Git 儲存庫。
+</Callout>
+
+## Git
+
+遠端 Git 儲存庫請使用 `repository`：
+
+```jsonc
+{
+  "references": {
+    "effect": {
+      "repository": "Effect-TS/effect",
+      "branch": "main",
+    },
+    "internal-sdk": {
+      "repository": "git@gitlab.example.com:platform/sdk.git",
+      "branch": "release/v2",
+    },
+  },
+}
+```
+
+支援的遠端格式包括：
+
+- GitHub 的 `owner/repo` 簡寫
+- Git URL
+- 主機／路徑格式
+- SCP 風格的遠端位址
+
+不支援本機的 `file:` 儲存庫。
+
+使用字串簡寫時，會追蹤遠端的預設分支：
+
+```jsonc
+{
+  "references": {
+    "effect": "Effect-TS/effect",
+    "sdk": "gitlab.com/platform/sdk",
+  },
+}
+```
+
+未指定 `branch` 時，OpenCode 會 checkout 並更新遠端的預設分支。分支名稱可以包含字母、數字、`/`、`_`、`.` 和 `-`，但不能以 `-` 開頭，也不能包含 `..`。
+
+```jsonc
+{
+  "references": {
+    "sdk": {
+      "repository": "example/sdk",
+      "branch": "release/v2.1",
+    },
+  },
+}
+```
+
+## 儲存
+
+OpenCode 會將每個遠端位址正規化，並在其全域資料目錄下，為每個遠端與分支的組合各保存一份 checkout。未明確指定分支時，路徑格式如下：
+
+```text
+opencode/repos/<host>/<repository-path>
+```
+
+在一般的 Linux 安裝環境中，`Effect-TS/effect` 會儲存在：
+
+```text
+~/.local/share/opencode/repos/github.com/Effect-TS/effect
+```
+
+明確指定分支時，會加上經過編碼的 `@<branch>` 後綴：
+
+```text
+~/.local/share/opencode/repos/github.com/Effect-TS/effect@main
+```
+
+## 更新
+
+缺少的儲存庫會以非同步方式複製。對於已存在的 checkout，OpenCode 會在參考目錄載入或重新載入時，以及其所在的 Location 接受新的使用者提示詞之後，在背景檢查是否需要更新。
+
+```text
+Prompt admitted → refresh check starts in background → agent continues
+```
+
+如果某個 checkout 上次嘗試更新已是至少 24 小時前，或從未記錄過任何嘗試，就符合更新條件。更新時會 fetch 並重設到設定的分支或遠端的預設分支。
+
+```text
+Last attempt: 25 hours ago → eligible
+Last attempt: 2 hours ago  → skipped
+```
+
+更新行為遵循以下規則：
+
+- 時間戳記在服務重新啟動後仍會保留。
+- 使用同一個 checkout 的多個 Location 共用其時間戳記。
+- 失敗的嘗試會記錄在日誌中，並同樣受 24 小時限制約束。
+- Location 未被使用時，不會定期輪詢。
+- 複製或更新失敗，不會阻止其他參考目錄載入。
+
+提示詞不會等待複製或更新完成。即使之後的工具讀取已看到更新後的 checkout，附件中仍可能是較舊的內容；新的參考目錄也可能在其 checkout 準備好之前就出現。
+
+```text
+Attachment created → cached content
+Background refresh completes → later tool read sees newer content
+```
+
+<Callout type="warning">
+  快取的 checkout 是共用的，而且可能在代理使用期間被更新。請避免編輯快取的 checkout，因為更新時會將其重設。
+</Callout>
+
+## 指引
+
+`description` 會告訴代理何時該使用某個參考目錄。有描述的參考目錄會連同別名和解析後的路徑，一起出現在代理的指示中。
+
+```jsonc
+{
+  "references": {
+    "docs": {
+      "path": "../docs",
+      "description": "Use for product behavior and terminology",
+    },
+  },
+}
+```
+
+沒有描述的參考目錄仍可供用戶端使用，但不會自動告知代理。
+
+```jsonc
+{
+  "references": {
+    "archive": {
+      "path": "../archive",
+    },
+  },
+}
+```
+
+## 可見性
+
+將 `hidden` 設為 `true`，即可將參考目錄從互動式用戶端的選擇器中移除：
+
+```jsonc
+{
+  "references": {
+    "internal": {
+      "path": "../internal",
+      "description": "Use for internal service behavior",
+      "hidden": true,
+    },
+  },
+}
+```
+
+`hidden` 只影響互動介面中的可見性。該參考目錄仍會出現在參考目錄 API 中；如果有描述，也仍會出現在代理的指示中。
+
+## 使用方式
+
+用戶端會以根別名附加參考目錄。附件內容是根目錄下直接子檔案和子目錄的非遞迴清單。
+
+```text
+Attached alias: docs
+Ask: Inspect docs/guides/deployment.md and explain the deployment steps.
+```
+
+如果需要根目錄以下的內容，請要求代理檢查特定路徑。
+
+## 權限
+
+參考目錄不會授予額外的工具權限。存取目前 Location 以外的內容，仍須遵循一般的工具規則和 `external_directory` 權限；編輯還需要相應的編輯權限。
+
+```text
+Read ../product-docs/api.md
+```
+
+只有在目前的權限允許該外部讀取時，請求才會成功。
+
+## 欄位
+
+| 欄位 | 本機 | Git | 說明 |
+| --- | --- | --- | --- |
+| `path` | 必填 | 否 | 本機目錄路徑 |
+| `repository` | 否 | 必填 | 遠端 Git 儲存庫 |
+| `branch` | 否 | 選用 | 要 fetch 和 checkout 的分支 |
+| `description` | 選用 | 選用 | 說明代理應在何時使用它的指引 |
+| `hidden` | 選用 | 選用 | 在互動式用戶端的選擇器中隱藏 |
+
+完整的 Git 項目可以使用所有與 Git 相容的欄位：
+
+```jsonc
+{
+  "references": {
+    "sdk": {
+      "repository": "example/sdk",
+      "branch": "main",
+      "description": "Use for SDK implementation details",
+      "hidden": false,
+    },
+  },
+}
+```
+
+## 別名
+
+別名不能為空，也不能包含 `/`、`\`、空白字元、反引號或逗號。
+
+```text
+Valid:   docs
+Invalid: product docs
+Invalid: docs/api
+```

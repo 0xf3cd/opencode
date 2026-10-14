@@ -1,0 +1,422 @@
+---
+title: "الإعدادات"
+description: "اضبط كل إعدادات CLI وواجهة TUI في OpenCode."
+---
+
+تتحكم إعدادات CLI في عملاء الطرفية فقط، وهي منفصلة عن إعدادات الخادم والمشروع الموجودة في `opencode.json(c)`.
+
+اضغط `Ctrl+P` ثم اختر **Open settings** لتغيير الإعدادات الشائعة من واجهة TUI.
+
+<img src={`${import.meta.env.BASE_URL}assets/docs/cli/settings.png`} alt="مربع حوار الإعدادات في واجهة OpenCode TUI" />
+
+## ملف التهيئة
+
+يخزّن OpenCode إعدادات CLI في ملف عام واحد:
+
+```text
+~/.config/opencode/cli.json
+```
+
+عند ضبط `$XDG_CONFIG_HOME`، يستخدم OpenCode المسار:
+
+```text
+$XDG_CONFIG_HOME/opencode/cli.json
+```
+
+لا يوجد ملف إعدادات CLI على مستوى المشروع. أضف مخطط JSON Schema المنشور للتحقق من صحة الإعدادات والإكمال التلقائي:
+
+```json title="cli.json"
+{
+  "$schema": "https://opencode.ai/v2/cli.json"
+}
+```
+
+يضيف OpenCode الحقل `$schema` عند إنشاء هذا الملف أو ترحيله. تُرفض الإعدادات غير المعروفة، وتُعاد قراءة التعديلات الصالحة
+أثناء تشغيل واجهة TUI.
+
+## التهيئة المضمّنة
+
+اضبط `OPENCODE_CLI_CONFIG_CONTENT` لتطبيق إعدادات CLI من JSON مضمّن:
+
+```sh
+OPENCODE_CLI_CONFIG_CONTENT='{"tabs":{"mode":"off"}}' opencode
+```
+
+يدمج OpenCode الإعدادات المضمّنة فوق الملف العام `cli.json`. تُدمج الكائنات المتداخلة، بينما تحل المصفوفات والقيم
+المفردة القادمة من البيئة محل القيم العامة. وتظل الإعدادات المضمّنة هي المرجع ما دام المتغير مضبوطًا.
+
+## المظهر
+اختر سمة، وتحكّم في حركة الواجهة، وتجاوز مؤشر الطرفية:
+
+```json title="cli.json"
+{
+  "theme": {
+    "name": "tokyonight",
+    "mode": "system"
+  },
+  "animations": true,
+  "cursor": {
+    "style": "block",
+    "blinking": true
+  }
+}
+```
+
+<div class="docs-table-scroll" role="region" aria-label="إعدادات المظهر" tabIndex={0}>
+
+| الإعداد | القيم | الوصف |
+| --- | --- | --- |
+| `theme.name` | سلسلة نصية | يختار سمة مدمجة أو مخصصة أو مستمدة من الطرفية. |
+| `theme.mode` | `system` أو `dark` أو `light` | يتبع مظهر الطرفية أو يثبّت السمة على وضع ألوان واحد. |
+| `animations` | قيمة منطقية | يفعّل حركات الواجهة. |
+| `cursor.style` | `block`, `underline`, `line`, `default` | يحدد شكل المؤشر. تحافظ القيمة `default` على شكل مؤشر الطرفية. |
+| `cursor.blinking` | قيمة منطقية | يتحكم في وميض المؤشر. لا تأثير له عندما يكون النمط `default`. |
+
+</div>
+
+راجع [السمة](/cli/theme) لاختيار السمات وإنشائها.
+
+## الإدخال
+
+اضبط التقاط الفأرة والتمرير وسياق المحرر واللصق ومعاينات الصور في الموجّه:
+
+```json title="cli.json"
+{
+  "mouse": true,
+  "scroll": {
+    "speed": 3,
+    "acceleration": false
+  },
+  "prompt": {
+    "editor": true,
+    "paste": "compact",
+    "image_preview": false
+  }
+}
+```
+
+<div class="docs-table-scroll" role="region" aria-label="إعدادات الإدخال" tabIndex={0}>
+
+| الإعداد | القيم | الوصف |
+| --- | --- | --- |
+| `mouse` | قيمة منطقية | يفعّل التقاط الفأرة في الطرفية. |
+| `scroll.speed` | رقم، `0.001` على الأقل | يحدد مسافة ثابتة لكل خطوة تمرير. |
+| `scroll.acceleration` | قيمة منطقية | يسرّع التمرير المتكرر. وعند تفعيله تكون له الأولوية على السرعة. |
+| `prompt.editor` | قيمة منطقية | يضمّن ملف المحرر النشط أو التحديد فيه في سياق الموجّه. |
+| `prompt.paste` | `compact` أو `full` | يعرض النصوص الكبيرة الملصقة كعناصر نائبة مختصرة أو كنص كامل. |
+| `prompt.image_preview` | قيمة منطقية | يعرض معاينات الصور المرفقة فوق حقل إدخال الموجّه. |
+
+</div>
+
+## الجلسات
+
+اضبط طريقة عرض الجلسات في واجهة TUI بملء الشاشة، والموضع الذي تبدأ منه الجلسات الجديدة:
+
+```json title="cli.json"
+{
+  "session": {
+    "sidebar": "auto",
+    "scrollbar": false,
+    "thinking": "hide",
+    "grouping": "auto",
+    "image_preview": false,
+    "tps": true,
+    "markdown": "rendered",
+    "new_location": "launch",
+    "permissions": "prompt"
+  }
+}
+```
+
+<div class="docs-table-scroll" role="region" aria-label="إعدادات الجلسات" tabIndex={0}>
+
+| الإعداد | القيم | الوصف |
+| --- | --- | --- |
+| `session.sidebar` | `auto` أو `hide` | يعرض الشريط الجانبي عندما تسمح المساحة، أو يخفيه دائمًا. |
+| `session.scrollbar` | قيمة منطقية | يعرض شريط التمرير الخاص بنص المحادثة. |
+| `session.thinking` | `show` أو `hide` | يعرض استدلال النموذج (reasoning) أو يخفيه افتراضيًا. |
+| `session.grouping` | `auto` أو `none` | يجمّع عناصر المحادثة المترابطة أو يعرض كل عنصر على حدة. |
+| `session.image_preview` | قيمة منطقية | يعرض صور مرفقات المستخدم ونتائج الأدوات في نص المحادثة. |
+| `session.tps` | قيمة منطقية | يعرض عدد tokens المخرجات في الثانية في تذييلات ردود المساعد. |
+| `session.markdown` | `source` أو `rendered` | يعرض علامات صياغة Markdown أو يخفيها في المحتوى المعروض. |
+| `session.new_location` | `launch` أو `inherit` | يبدأ من الدليل الذي شُغّلت منه واجهة TUI أو يرث موقع الجلسة النشطة. |
+| `session.permissions` | `prompt` أو `autoaccept` | يطلب موافقتك على طلبات الأذونات أو يقبل كل الطلبات تلقائيًا. |
+
+</div>
+
+## علامات التبويب
+
+اضبط شريط علامات تبويب الجلسات الدائم:
+
+```json title="cli.json"
+{
+  "tabs": {
+    "mode": "auto",
+    "scope": "cwd",
+    "layout": "horizontal",
+    "indicators": "status"
+  }
+}
+```
+
+ما زال الإعداد المنطقي القديم `tabs.enabled` مدعومًا: القيمة `true` تعني `on` والقيمة `false` تعني `off`. يقرأه OpenCode
+دون إعادة كتابة ملف التهيئة.
+
+<div class="docs-table-scroll" role="region" aria-label="إعدادات علامات التبويب" tabIndex={0}>
+
+| الإعداد | القيم | الوصف |
+| --- | --- | --- |
+| `tabs.mode` | `auto` أو `on` أو `off` | يستخدم علامات التبويب تلقائيًا أو دائمًا أو لا يستخدمها أبدًا. يخفيها الوضع التلقائي داخل Herdr. |
+| `tabs.scope` | `cwd` أو `global` | يحتفظ بعلامات تبويب منفصلة لكل دليل عمل أو يشاركها على المستوى العام. |
+| `tabs.layout` | `horizontal` أو `vertical` | يضع علامات التبويب في شريط أفقي أو في شريط جانبي عمودي. |
+| `tabs.indicators` | `status` أو `numbers` | يعرض أيقونات الحالة أو يعرض أرقام علامات التبويب دائمًا. |
+
+</div>
+
+تحتفظ المؤشرات الرقمية بألوان الحالة وحركات الخلفية. وتنتقل اختصارات Ctrl+رقم بين علامات التبويب في كلا وضعي المؤشرات.
+
+## الفروقات
+
+اضبط النطاق المبدئي للفروقات (diff) وطريقة عرضها:
+
+```json title="cli.json"
+{
+  "diffs": {
+    "source": "branch",
+    "wrap": "word",
+    "tree": true,
+    "single": false,
+    "view": "auto"
+  }
+}
+```
+
+<div class="docs-table-scroll" role="region" aria-label="إعدادات الفروقات" tabIndex={0}>
+
+| الإعداد | القيم | الوصف |
+| --- | --- | --- |
+| `diffs.source` | `branch` أو `committed` أو `working` أو `turn` | يحدد نطاق المراجعة المبدئي. |
+| `diffs.wrap` | `word` أو `none` | يلفّ الأسطر الطويلة عند حدود الكلمات أو يتركها دون لف. |
+| `diffs.tree` | قيمة منطقية | يعرض شجرة ملفات الفروقات. |
+| `diffs.single` | قيمة منطقية | يعرض رقعة (patch) الملف المحدد فقط. |
+| `diffs.view` | `auto` أو `split` أو `unified` | يحدد التخطيط. تختار القيمة `auto` التخطيط بحسب العرض المتاح. |
+
+</div>
+
+تعرض القيمة `branch` الخيار **All**، أي تغييرات الفرع والتغييرات المحلية، وتعرض `committed` إيداعات (commits) الفرع فقط،
+وتعرض `working` التغييرات المرحلية وغير المرحلية وغير المتتبَّعة. أما `turn` فتعرض **Last turn**، أي الملفات التي غيّرتها
+الجلسة في آخر جولة لها؛ وتُحدَّث عند انتهاء الجلسة من جولة، وتعود إلى `branch` كبديل احتياطي عندما لا يُفتح `/diff` من
+جلسة.
+
+في `/diff`، اضغط `d` لتغيير النطاق أو اختيار فرع للمقارنة من **Base**. تستمر هذه الاختيارات داخل العرض حتى الخروج من
+واجهة TUI، ولا تغيّر `cli.json`.
+
+## التنبيهات
+
+فعّل إشعارات النظام وأصوات التنبيه كلًّا على حدة:
+
+```json title="cli.json"
+{
+  "attention": {
+    "notifications": true,
+    "sound": true,
+    "volume": 0.4,
+    "sound_pack": "opencode.default",
+    "sounds": {
+      "permission": "/home/me/sounds/permission.wav"
+    }
+  }
+}
+```
+
+<div class="docs-table-scroll" role="region" aria-label="إعدادات التنبيهات" tabIndex={0}>
+
+| الإعداد | القيم | الوصف |
+| --- | --- | --- |
+| `attention.notifications` | قيمة منطقية | يعرض إشعارات النظام، عادةً عندما لا تكون الطرفية في المقدمة. |
+| `attention.sound` | قيمة منطقية | يشغّل أصوات التنبيه. |
+| `attention.volume` | رقم من `0` إلى `1` | يحدد مستوى الصوت. |
+| `attention.sound_pack` | سلسلة نصية | يختار معرّف حزمة الأصوات النشطة. |
+| `attention.sounds` | كائن | يتجاوز ملفات الصوت للأحداث `default` أو `question` أو `permission` أو `error` أو `done` أو `subagent_done`. |
+
+</div>
+
+إذا كان ملف التجاوز غير صالح أو تعذّرت قراءته، يُستخدم الصوت المدمج لذلك الحدث كبديل احتياطي.
+
+بعد كل تحديث، تعرض واجهة TUI أبرز مستجدات الإصدار الجديد مرة واحدة على الشاشة الرئيسية. شغّل `/highlights` لعرضها مجددًا،
+أو أوقف مربع الحوار:
+
+```json title="cli.json"
+{
+  "highlights": false
+}
+```
+
+## الطرفية
+
+اضبط التكامل مع الطرفية:
+
+```json title="cli.json"
+{
+  "terminal": {
+    "title": true,
+    "copy": "select"
+  }
+}
+```
+
+<div class="docs-table-scroll" role="region" aria-label="إعدادات الطرفية" tabIndex={0}>
+
+| الإعداد | القيم | الوصف |
+| --- | --- | --- |
+| `terminal.title` | قيمة منطقية | يحدّث عنوان نافذة الطرفية. |
+| `terminal.copy` | `manual` أو `select` | ينسخ يدويًا أو فور التحديد. القيمة الافتراضية للمنصة هي `manual` على Windows و`select` على غيرها. |
+
+</div>
+
+## الواجهة المصغّرة
+
+تتحكم المجموعة `mini` في [`opencode mini`](/cli#mini)، وهي الواجهة التفاعلية المصغّرة:
+
+```json title="cli.json"
+{
+  "mini": {
+    "thinking": "show",
+    "tools": "hide",
+    "shell_output": "hide",
+    "turn_summary": "show",
+    "footer": "show",
+    "splash": "show",
+    "work_spinner": "block-soft-slide",
+    "mono": false,
+    "replay": true,
+    "replay_limit": 200
+  }
+}
+```
+
+<div class="docs-table-scroll" role="region" aria-label="إعدادات الواجهة المصغّرة" tabIndex={0}>
+
+| الإعداد | القيم | الوصف |
+| --- | --- | --- |
+| `mini.thinking` | `show` أو `hide` | يعرض استدلال النموذج أو يخفيه. |
+| `mini.tools` | `show` أو `hide` | يعرض استدعاءات الأدوات ونص المساعد الذي يسبقها أو يخفيها. |
+| `mini.shell_output` | `show` أو `hide` | يعرض المخرجات الخام لأداة shell أو يخفيها. |
+| `mini.turn_summary` | `show` أو `hide` | يعرض ملخص الوكيل والنموذج والمدة في سجل التمرير أو يخفيه. |
+| `mini.footer` | `show` أو `hide` | يعرض تفاصيل النشاط والنموذج والاستخدام والسياق الدائمة أو يخفيها. |
+| `mini.splash` | `show` أو `hide` | يعرض لافتات الدخول والخروج أو يخفيها. |
+| `mini.work_spinner` | معرّف مؤشر الانتظار | يختار حركة العمل في التذييل. |
+| `mini.mono` | قيمة منطقية | يستخدم مخرجات ASCII أحادية اللون. |
+| `mini.replay` | قيمة منطقية | يستعيد سجل الجلسة عند الاستئناف وعند تغيير حجم الطرفية. |
+| `mini.replay_limit` | عدد صحيح موجب | يقصر إعادة العرض على أحدث الرسائل. الحد الافتراضي هو `200`. |
+
+</div>
+
+معرّفات مؤشرات الانتظار المتاحة هي:
+
+```text
+block-soft-slide  block-soft-sweep  block-low-comet  block-low-duet
+block-shuttle     block-bridge      block-squeeze    small-toggle
+square-toggle     grow-shrink       quadrant-orbit   crosshatch
+density-wave      seed
+```
+
+تتجاوز خيارات إعادة العرض الخاصة بالأمر `mini` في سطر الأوامر هذه الإعدادات لتلك المرة فقط.
+
+## اختصارات المفاتيح
+
+تجاوز اختصار أمر ومهلة مفتاح القائد:
+
+```json title="cli.json"
+{
+  "keybinds": {
+    "leader": "ctrl+x",
+    "app.exit": ["ctrl+c", "ctrl+d", "<leader>q"],
+    "prompt.paste": {
+      "key": "ctrl+v",
+      "event": "press",
+      "preventDefault": false,
+      "fallthrough": false
+    },
+    "help.show": false
+  },
+  "leader": {
+    "timeout": 2000
+  }
+}
+```
+
+<div class="docs-table-scroll" role="region" aria-label="إعدادات اختصارات المفاتيح" tabIndex={0}>
+
+| الإعداد | القيم | الوصف |
+| --- | --- | --- |
+| `keybinds.leader` | قيمة اختصار | يحدد المفتاح الذي يشير إليه `<leader>` في الاختصارات الأخرى. |
+| `keybinds.<command>` | قيمة اختصار | يتجاوز اختصار معرّف أمر واحد. |
+| `keybinds.*.key` | سلسلة مفتاح أو واصف | يختار المفتاح لاختصار بصيغة الكائن. |
+| `keybinds.*.event` | `press` أو `release` | يقصر اختصارًا بصيغة الكائن على حدث مفتاح واحد. |
+| `keybinds.*.preventDefault` | قيمة منطقية | يتحكم في منع السلوك الافتراضي للمفتاح في الطرفية. |
+| `keybinds.*.fallthrough` | قيمة منطقية | يسمح للمعالِجات الأدنى أولوية باستقبال الحدث نفسه. |
+| `leader.timeout` | عدد صحيح موجب | يحدد عدد المللي ثانية للانتظار بعد مفتاح القائد. |
+
+</div>
+
+يمكن أن تكون قيمة الاختصار سلسلة نصية، أو مصفوفة من البدائل، أو كائنًا. استخدم `"none"` أو `false` لتعطيل اختصار.
+راجع [اختصارات المفاتيح](/cli/keybinds) لمعرفة صياغة المفاتيح المقبولة وجميع معرّفات الأوامر وجميع الاختصارات الافتراضية.
+
+## الإضافات
+
+حمّل الإضافات الخاصة بالطرفية وحدها بالترتيب:
+
+```json title="cli.json"
+{
+  "plugins": [
+    "-opencode.notifications",
+    {
+      "package": "./plugins/status",
+      "options": {
+        "compact": true
+      }
+    }
+  ]
+}
+```
+
+<div class="docs-table-scroll" role="region" aria-label="إعدادات الإضافات" tabIndex={0}>
+
+| الإعداد | القيم | الوصف |
+| --- | --- | --- |
+| `plugins` | مصفوفة | يعلن توجيهات التفعيل المرتبة والإضافات الخارجية. |
+| `plugins[].package` | سلسلة نصية | يحدد اسم حزمة أو مسارًا محليًا أو عنوان URL لملف. |
+| `plugins[].options` | كائن | يمرّر خيارات خاصة بالإضافة إلى تلك الإضافة. |
+
+</div>
+
+راجع [الإضافات](/cli/plugins) لمعرفة صيغ الحزم والاكتشاف المحلي وأنماط حرف البدل وتوجيهات التعطيل.
+
+## التصحيح والميزات التجريبية
+
+فعّل أدوات التشخيص أو اشترك في تجربة متاحة حاليًا:
+
+```json title="cli.json"
+{
+  "debug": {
+    "devtools": false,
+    "timing": false,
+    "turn_tokens": "verbose"
+  },
+  "experimental": {}
+}
+```
+
+<div class="docs-table-scroll" role="region" aria-label="إعدادات التصحيح والميزات التجريبية" tabIndex={0}>
+
+| الإعداد | القيم | الوصف |
+| --- | --- | --- |
+| `debug.devtools` | قيمة منطقية | يعرض شريط تصحيح DevTools. |
+| `debug.timing` | قيمة منطقية | يعرض في شريط التصحيح تشخيصات الوقت حتى أول رسم. |
+| `debug.turn_tokens` | قيمة منطقية أو `verbose` | يعرض استخدام tokens لكل جولة؛ وتضيف القيمة `verbose` مدخلات استدعاءات الأدوات أيضًا. |
+| `experimental` | كائن يربط معرّفات الميزات بقيم منطقية | يفعّل أو يعطّل تجارب قد تتغير أو تُزال دون إشعار. |
+
+</div>
+
+استخدم فقط معرّفات الميزات المدرجة حاليًا في مربع الحوار **Experiments** في واجهة TUI. لا تأثير للمعرّفات غير المعروفة.

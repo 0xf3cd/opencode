@@ -1,0 +1,88 @@
+---
+title: "Bütçeler"
+description: "Bir çalışma alanının, üyelerinin ve hizmet hesaplarının aylık harcamasını sınırlayın."
+---
+
+Bütçeler, bir çalışma alanının her ay ne kadar harcayabileceğini sınırlar. Sahipler ve yöneticiler bütçeleri **Members**
+ve **Keys** sayfalarındaki **Budget limits** panelinden ayarlar.
+
+## Bütçe düzeyleri
+
+| Bütçe | Kapsamı | Nereden ayarlanır |
+| ----------------------- | ----------------------- | ----------------------- |
+| Çalışma alanı | Çalışma alanındaki herkesin toplam harcaması | **Members** veya **Keys › Monthly workspace budget** |
+| Varsayılan kullanıcı | Özel limiti olmayan her üye | **Members › Monthly default user budget** |
+| Özel kullanıcı | Tek bir üye | **Members** tablosu veya üye sayfası |
+| Varsayılan hizmet hesabı | Özel limiti olmayan her hizmet hesabı | **Keys › Monthly default service account budget** |
+| Özel hizmet hesabı | Tek bir hizmet hesabı | Hizmet hesabı sayfası |
+
+Bir isteğin hem çalışma alanı bütçesine hem de kişinin kendi bütçesine sığması gerekir. Hiç bütçe tanımlanmamışsa
+harcama sınırsızdır.
+
+## Çalışma alanı bütçesi
+
+Çalışma alanı bütçesine ulaşıldığında herkesin istekleri engellenir.
+
+1. **Members** veya **Keys** sayfasını açın.
+2. **Budget limits** bölümünde **Monthly workspace budget** seçeneğine tıklayın.
+3. **Workspace limit** alanına USD cinsinden bir tutar girin ve **Save** düğmesine tıklayın.
+
+## Üye bütçeleri
+
+Varsayılan kullanıcı bütçesi, özel limiti olmayan her üyeye uygulanır. Bu bütçeyi **Monthly default user budget**
+altında ayarlayın.
+
+Bir üyeye iki yerden özel limit verebilirsiniz:
+
+- Üyenin **Members** satırındaki **Limit** hücresine tıklayın ve bir tutar girin.
+- Üyeyi açın ve **Monthly Budget** altındaki **Set User Budget** düğmesine tıklayın.
+
+Özel limitler Members tablosunda vurgulanır. Üyeyi varsayılana döndürmek için özel limiti temizleyin; bu durumda üye
+sayfasında **Using Default** görünür.
+
+## Hizmet hesabı bütçeleri
+
+Hizmet hesapları da aynı şekilde çalışır. **Keys** sayfasında **Monthly default service account budget** değerini
+ayarlayın veya bir hizmet hesabını açıp **Set Service Account Budget** düğmesine tıklayın.
+
+## Tutarlar ve sıfırlama
+
+- Tutarlar, en fazla iki ondalık basamakla ABD doları cinsindendir.
+- Bütçeler her ayın 1'inde 00:00 UTC'de sıfırlanır.
+- `$0` tutarındaki bir bütçe, bütçelere sayılan tüm harcamaları engeller.
+
+## Neler sayılır
+
+| Harcama | Bütçelere sayılır mı |
+| ------------------- | ------------------- |
+| Ücretli Console modelleri | Evet |
+| Fiyatı ayarlanmış [kendi sağlayıcılarınızdaki](/console/providers) modeller | Evet, yapılandırılan fiyat üzerinden |
+| [Web araması](/console/websearch) | Evet |
+| Ücretsiz modeller | Hayır |
+| Plan dahilindeki [Go](/console/go) kullanımı | Hayır |
+| Krediden ödenen Go ek kullanımı | Evet |
+
+## Bütçeye ulaşıldığında
+
+Bütçe sıfırlanana veya bir yönetici bütçeyi artırana kadar yeni istekler HTTP `429` ile başarısız olur. Yanıt, hangi
+bütçeye ulaşıldığını belirtmez.
+
+```text
+Upstream request failed: Account budget exceeded
+```
+
+Bütçeler bir istek başladığında kontrol edilir. Devam etmekte olan istekler tamamlanır; bu nedenle harcama limiti
+biraz aşabilir.
+
+## Harcamayı izleme
+
+Her üye kendi bütçesini **Overview** sayfasında görür: kalan tutar, harcanan tutar ve sıfırlanma tarihi.
+
+Birden fazla üyesi olan çalışma alanlarının sahipleri ve yöneticileri **Usage** sayfasını da görür. Bu sayfa maliyeti
+güne, modele ve kişiye göre ayrıştırır. **Export usage** düğmesi son 7, 30 veya 90 günün günlük toplamlarını CSV olarak
+indirir.
+
+## Bütçeleri otomatikleştirme
+
+Her üyenin bütçesini okumak ve kendi araçlarınızdan özel limitler ayarlamak için [Bütçe API'sini](/console/api/budgets)
+kullanın.

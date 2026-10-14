@@ -1,0 +1,103 @@
+---
+title: "Recherche web"
+---
+
+Demandez à OpenCode des informations récentes : il peut effectuer une recherche sur le web, lire les résultats et inclure
+les liens vers les sources dans sa réponse.
+
+```text
+Find the latest Bun release and summarize the changes.
+```
+
+Lors de la première recherche, OpenCode vous demande d'autoriser la recherche web et de choisir un fournisseur. Il retient
+votre choix pour les sessions suivantes.
+
+## Fournisseurs
+
+OpenCode intègre cinq fournisseurs de recherche :
+
+| Fournisseur | ID | Variable d'environnement |
+| --- | --- | --- |
+| Exa | `exa` | `EXA_API_KEY` |
+| Firecrawl | `firecrawl` | `FIRECRAWL_API_KEY` |
+| Parallel | `parallel` | `PARALLEL_API_KEY` |
+| Tavily | `tavily` | `TAVILY_API_KEY` |
+| TinyFish | `tinyfish` | `TINYFISH_API_KEY` (facultative) |
+
+Connectez un compte depuis le TUI avec `/connect`, ou définissez la variable d'environnement du fournisseur avant de
+démarrer OpenCode.
+
+```bash
+$ TAVILY_API_KEY=your-key opencode
+```
+
+## Sélection
+
+Définissez un fournisseur dans `opencode.jsonc` pour ne plus avoir à le choisir.
+
+```jsonc title="opencode.jsonc"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "websearch": {
+    "provider": "tavily",
+  },
+}
+```
+
+Utilisez `"random"` pour choisir automatiquement un fournisseur disponible. Chaque session conserve le fournisseur
+sélectionné jusqu'à ce que celui-ci atteigne sa limite de débit.
+
+```jsonc title="opencode.jsonc"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "websearch": {
+    "provider": "random",
+  },
+}
+```
+
+## Limites
+
+Lorsqu'un fournisseur renvoie une erreur HTTP 429, la sélection aléatoire relance la recherche avec un autre fournisseur
+disponible. Le fournisseur limité est mis en pause pendant la durée indiquée par `Retry-After`, ou pendant 60 secondes si
+la réponse ne contient pas de durée valide.
+
+```text
+Exa returns HTTP 429
+→ Exa enters cooldown
+→ OpenCode retries with another provider
+```
+
+Si tous les fournisseurs sont en pause, la recherche échoue immédiatement. Déplacer une session ou redémarrer son serveur
+efface le fournisseur mémorisé ; les pauses sont partagées par les sessions d'un même espace de travail.
+
+## Permissions
+
+Les recherches web utilisent l'action de permission `websearch`, avec la requête de recherche comme ressource. Demandez
+une confirmation avant toute recherche qui n'est pas explicitement autorisée :
+
+```jsonc title="opencode.jsonc"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "permissions": [
+    {
+      "action": "websearch",
+      "resource": "*",
+      "effect": "ask",
+    },
+  ],
+}
+```
+
+Consultez [Permissions](/permissions) pour l'ordre des règles et leur correspondance.
+
+## Désactivation
+
+Définissez `websearch` sur `false` pour retirer l'outil de recherche web des requêtes envoyées au modèle.
+
+```jsonc title="opencode.jsonc"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "websearch": false,
+}
+```

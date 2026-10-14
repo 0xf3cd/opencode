@@ -1,0 +1,92 @@
+---
+title: "預算 API"
+description: "讀取每位工作區成員實際生效的每月預算，並管理每位成員的自訂預算。"
+---
+
+從整合服務讀取每位工作區成員實際生效的每月預算，並管理每位成員的自訂預算。
+
+## 快速入門
+
+在 [Console](https://opencode.ai/console) 中建立具備 **All** 權限的[服務帳戶](/console/api#service-accounts) API 金鑰。僅限推論的金鑰無法存取預算資料，也無法變更上限。
+
+```bash
+export CONSOLE_URL="https://opencode.ai/console"
+export SERVICE_API_KEY="oc_sk_..."
+```
+
+列出成員預算：
+
+```bash
+curl --fail-with-body \
+  "${CONSOLE_URL}/api/v1/budgets/members" \
+  --header "Authorization: Bearer ${SERVICE_API_KEY}" \
+  --header "Accept: application/json"
+```
+
+## 列出成員預算
+
+```text
+GET /api/v1/budgets/members
+```
+
+回應會包含所有目前的成員，並依電子郵件排序。來源為 `custom` 的上限是成員層級的覆寫；來源為 `default` 的上限則繼承自工作區預設值。上限和來源都是 null 時，表示該成員沒有上限。
+
+```json
+[
+  {
+    "user_id": "user_...",
+    "email": "alice@example.com",
+    "limit_micro_cents": "7525000000",
+    "spent_micro_cents": "1250000000",
+    "exceeded": false,
+    "resets_at": "2026-10-01T00:00:00.000Z",
+    "source": "custom",
+    "updated_at": "2026-09-03T12:00:00.000Z"
+  }
+]
+```
+
+回應中的金額欄位都是以微美分為單位的十進位字串，讓整合服務不會損失精確度。1 美元等於 100,000,000 微美分。支出和重設時間戳記涵蓋目前的 UTC 日曆月。沒有自訂的成員覆寫時，`updated_at` 為 null。
+
+## 設定自訂預算
+
+```text
+PUT /api/v1/budgets/members/:user_id
+```
+
+為一位成員設定每月 $75.25 的預算：
+
+```bash
+curl --fail-with-body --request PUT \
+  "${CONSOLE_URL}/api/v1/budgets/members/user_..." \
+  --header "Authorization: Bearer ${SERVICE_API_KEY}" \
+  --header "Content-Type: application/json" \
+  --data '{"budget_dollars":75.25}'
+```
+
+`budget_dollars` 接受最多兩位小數的非負美元金額。此 PUT 請求具有冪等性，並回傳 HTTP 204。請使用列出操作所回傳的成員 ID。
+
+## 恢復為工作區預設值
+
+```text
+DELETE /api/v1/budgets/members/:user_id
+```
+
+移除自訂覆寫：
+
+```bash
+curl --fail-with-body --request DELETE \
+  "${CONSOLE_URL}/api/v1/budgets/members/user_..." \
+  --header "Authorization: Bearer ${SERVICE_API_KEY}"
+```
+
+刪除覆寫並不會刪除成員。之後該成員會繼承工作區的預設預算；如果工作區沒有預設預算，則不受上限限制。重複發出此請求是安全的，並會回傳 HTTP 204。
+
+## 錯誤
+
+| 狀態 | 意義 |
+| ------ | -------------------------------------------------------- |
+| `400` | 成員 ID 或預算金額無效。 |
+| `401` | 服務 API 金鑰遺失、無效、已過期或已撤銷。 |
+| `403` | API 金鑰沒有管理預算的權限。 |
+| `404` | 該成員不在 API 金鑰所綁定的工作區中。 |

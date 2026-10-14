@@ -1,0 +1,110 @@
+---
+title: "供應商"
+description: "將你自己的模型供應商帳號連接到 OpenCode Console 工作區，並選擇成員可以使用的模型。"
+---
+
+連接你已經付費的供應商帳號，例如 Anthropic、OpenAI 或 AWS Bedrock，就能讓工作區裡的每個人共用這些模型。Console 會保管認證資訊，並透過自己的閘道提供各個供應商的服務，因此成員使用模型時完全看不到供應商金鑰。你自己的工具也可以透過 [Providers API](/console/api/providers) 使用同一個閘道。
+
+擁有者和管理員在 **Providers** 分頁管理供應商。成員執行 `/connect` 後，就能在 OpenCode 中使用已啟用的模型。
+
+## 連接供應商
+
+1. 開啟 **Providers**，然後按一下 **Connect Provider**。
+2. 從清單中選擇供應商，並輸入它的 API 金鑰。
+3. 視需要按一下 **Test connection**，然後按一下 **Save**。
+
+清單中包含 Anthropic、OpenAI、Google、xAI、DeepSeek、Mistral、Groq、OpenRouter 等眾多供應商。清單中的供應商都已預先設定好模型。
+
+### 雲端供應商
+
+雲端供應商需要提供一些額外資訊。
+
+| 供應商 | 所需資訊 |
+| --------------------- | ------------------------------------- |
+| Azure | 資源名稱和 API 金鑰 |
+| AWS Bedrock | 區域和 API 金鑰 |
+| Google Vertex AI | 區域和服務帳戶 JSON |
+| Cloudflare AI Gateway | 帳戶 ID、Gateway ID 和 API token |
+| Databricks | 工作區 URL 和 token |
+
+### 自訂供應商
+
+按一下 **Add Custom Provider** 連接其他任何端點，然後使用 **Add Model** 加入它的模型。
+
+| 欄位 | 說明 |
+| ---------- | ------------------------------------------------------------------------------- |
+| Base URL | Console 轉送請求的目的地，例如 `https://api.deepseek.com/v1`。 |
+| Format | Chat Completions、Responses API、Anthropic Compatible 或 Google Generative AI。 |
+| Auth mode | Bearer、API key header 或 Custom header。 |
+| Credential | Console 傳送給供應商的金鑰。 |
+
+## 選擇模型
+
+開啟供應商即可查看它的模型。只有已啟用的模型才能供成員使用。
+
+- 使用 **Enabled** 切換開關啟用或停用模型。
+- 開啟 **New models**，即可自動啟用供應商日後新增的模型。
+
+## 編輯模型
+
+按一下模型即可編輯。關閉面板時會儲存變更。
+
+| 區段 | 可變更的項目 |
+| ------------- | --------------------------------------------------------------- |
+| General | 顯示名稱、API ID、工具支援、輸入與輸出類型 |
+| Variants | 擁有各自標頭或主體的變體 |
+| Configuration | 預設變體、請求標頭與主體、token 上限 |
+| Cost Tiers | 每 1M token 的輸入、輸出、快取讀取和快取寫入價格 |
+
+### 自訂價格
+
+清單中的模型一開始使用供應商的牌價。如果你有議定的價格，例如 OpenAI 合約中的折扣，請在 **Cost Tiers** 中覆寫價格，讓用量報告和[預算](/console/budgets)與你實際支付的金額一致。
+
+| 欄位 | 牌價 | 你的價格 |
+| ---------------- | ---------- | ---------- |
+| Input price | $2.50 | $2.00 |
+| Output price | $15.00 | $12.00 |
+| Cache read price | $0.25 | $0.20 |
+
+你變更過的價格會在供應商頁面上醒目標示。在欄位上使用 **Restore default value**，或在模型上使用 **⋯ › Restore...**，即可恢復為牌價。
+
+如果模型在超過某個上下文大小後會收取較高費用，例如提示詞超過 200K token 時，請加入 **Context** 級距。
+
+### 自訂模型
+
+按一下 **Add Model**，輸入 **Display name** 和 **Model ID**，即可加入清單中沒有的模型。在現有模型上使用 **⋯ › Duplicate...**，可以沿用它的設定作為起點。
+
+## OpenCode 模型
+
+**Models** 分頁管理由 Console 提供的[模型](/console/models)，這些模型的費用從工作區額度支付。它的操作方式和供應商頁面相同：
+
+- 個別啟用或停用模型。
+- 關閉 **Free models**，即可為工作區封鎖免費模型。
+- 開啟 **New models**，即可自動啟用新的 Console 模型。
+
+從 **⋯ › Disable** 停用整個供應商，就能只使用你自己的供應商。
+
+## 在 OpenCode 中使用
+
+成員執行 `/connect` 並選擇工作區。每個已啟用的供應商會以「工作區名稱 / 供應商名稱」的形式顯示，`/models` 會列出它已啟用的模型。
+
+```text
+Acme Inc. / Anthropic
+```
+
+在 **Settings › General** 中開啟 **Managed providers only**，即可限制所有人的 OpenCode 只能使用工作區的供應商。
+
+## 停用或移除
+
+開啟供應商的 **⋯** 選單：
+
+- **Disable** 會對成員隱藏該供應商和它的模型，但保留其設定。
+- **Remove...** 會刪除該供應商和它的模型。對話方塊會顯示最近有誰使用過它，並提供 **Disable instead** 選項。
+
+若要輪替金鑰，請在供應商頁面上按一下認證資訊，然後輸入新的金鑰。
+
+## 計費
+
+token 費用由供應商向你收取，Console 不會為此扣除額度。不過 Console 仍會依照模型的價格記錄每個請求和它的費用，因此用量報告和[預算](/console/budgets)都會納入這些用量。
+
+若要從你自己的工具而不是 OpenCode 呼叫供應商，請使用 [Providers API](/console/api/providers)。

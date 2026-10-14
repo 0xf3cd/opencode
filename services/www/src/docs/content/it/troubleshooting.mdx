@@ -1,0 +1,191 @@
+---
+title: "Risoluzione dei problemi"
+---
+
+<Callout type="tip">
+  Puoi chiedere a OpenCode di diagnosticare i propri problemi. Descrivi il problema e chiedigli di usare questa pagina:
+  può leggere i passaggi riportati di seguito, esaminare il proprio servizio e i log e aiutarti a individuare la causa.
+</Callout>
+
+OpenCode usa un'architettura client-server. Un server in background gestisce sessioni, plugin, permessi e il resto dello
+stato dell'applicazione. Come primo passo, stabilisci se il problema riguarda un client, il server condiviso o un progetto
+specifico.
+
+## Controllo del servizio in background
+
+Mostra le informazioni sul server corrente:
+
+```bash
+opencode service status
+```
+
+Verifica che la sua API risponda correttamente:
+
+```bash
+opencode api get /api/info
+```
+
+Se il servizio è bloccato o non risponde correttamente, riavvialo:
+
+```bash
+opencode service restart
+```
+
+Puoi anche arrestarlo e avviarlo in modo esplicito:
+
+```bash
+opencode service stop
+opencode service start
+```
+
+<Callout type="note">
+  Di norma OpenCode individua o avvia automaticamente il servizio in background condiviso. I comandi `service` servono
+  solo per diagnosticarne il ciclo di vita.
+</Callout>
+
+## Consentire un'origine del browser
+
+Se un client nel browser su un'altra origine non riesce a connettersi a causa di CORS, aggiungi l'origine del client alla
+configurazione del servizio:
+
+```bash
+opencode service set cors http://192.168.1.10:3001
+opencode service get cors
+```
+
+Usa un'origine HTTP o HTTPS esatta, includendo la porta se necessario, senza percorso né barra finale. Per consentire più
+origini, passa un elenco separato da virgole come unico argomento; gli spazi attorno a ciascuna origine vengono rimossi:
+
+```bash
+opencode service set cors "http://192.168.1.10:3001, https://app.example.com"
+```
+
+`service get cors` stampa un array JSON. Per rimuovere l'elenco configurato:
+
+```bash
+opencode service unset cors
+```
+
+L'impostazione o la rimozione di una configurazione del servizio arresta il servizio in background. All'avvio successivo
+il servizio usa la nuova configurazione; per avviarlo in modo esplicito usa `opencode service start`.
+
+Per un server in primo piano, ripeti `--cors` per ogni origine consentita aggiuntiva:
+
+```bash
+opencode serve --cors http://192.168.1.10:3001 --cors https://app.example.com
+```
+
+Con `serve --service`, i flag `--cors` passati sostituiscono l'elenco salvato per quel processo. Senza questi flag, la
+modalità servizio usa l'elenco salvato. CORS non cambia l'indirizzo di ascolto e non aggira l'autenticazione del server.
+
+## Ispezione dell'API
+
+Il comando `api` usa lo stesso meccanismo locale di individuazione e autenticazione del servizio. Accetta un metodo HTTP e
+un percorso oppure l'ID di un'operazione OpenAPI.
+
+Consulta il [riferimento API](/api) per tutti gli endpoint e gli ID delle operazioni.
+
+Passa il corpo JSON della richiesta con `--data` o `-d` e aggiungi header con `--header` o `-H`.
+
+<Callout type="warning">
+  L'esecuzione di `opencode api` può avviare il servizio in background se non è disponibile un servizio compatibile e
+  funzionante.
+</Callout>
+
+## Lettura dei log
+
+Le build installate scrivono i log in:
+
+```text
+~/.local/share/opencode/log/opencode.log
+```
+
+Segui il log mentre riproduci il problema:
+
+```bash
+tail -f ~/.local/share/opencode/log/opencode.log
+```
+
+Ogni riga include l'ID `run` del processo e un campo `role`. Usa `role=server` per l'attività relativa a sessioni,
+provider, plugin, permessi e strumenti.
+
+```bash
+grep 'role=server' ~/.local/share/opencode/log/opencode.log
+grep 'run=8fc3b1d5' ~/.local/share/opencode/log/opencode.log
+```
+
+## Acquisizione di profili CPU e memoria
+
+Su macOS e Linux puoi inviare un segnale a un processo OpenCode in esecuzione per acquisire dati diagnostici. Ottieni il
+PID del server in background dall'endpoint di controllo dello stato:
+
+```bash
+opencode api get /api/info
+```
+
+Usa il `pid` della risposta con uno di questi segnali:
+
+- `SIGPROF` acquisisce un profilo CPU di dieci secondi:
+
+  ```bash
+  kill -SIGPROF <pid>
+  ```
+
+  Il risultato viene scritto nella directory dei log come `cpu-<pid>-<timestamp>.cpuprofile`.
+
+- `SIGUSR1` acquisisce uno snapshot della memoria (heap):
+
+  ```bash
+  kill -SIGUSR1 <pid>
+  ```
+
+  Il risultato viene scritto nella directory dei log come `heap-<pid>-<timestamp>.heapsnapshot`.
+
+Prima di aprire il file, attendi che in `opencode.log` compaia `CPU profile written` o `heap snapshot written`. La voce di
+log corrispondente riporta il percorso completo. Puoi esaminare entrambi i tipi di file in Chrome DevTools.
+
+<Callout type="note">
+  I profili attivati tramite segnale non sono disponibili su Windows. La scrittura di uno snapshot dell'heap può mettere in
+  pausa il processo e aumentarne temporaneamente l'uso di memoria.
+</Callout>
+
+## File del servizio
+
+Il server condiviso si registra in:
+
+```text
+~/.local/state/opencode/service.json
+```
+
+La sua configurazione privata del servizio è salvata separatamente in:
+
+```text
+~/.config/opencode/service.json
+```
+
+Il database si trova di norma in:
+
+```text
+~/.local/share/opencode/opencode.db
+```
+
+`OPENCODE_DB` permette di cambiare la posizione del database.
+
+<Callout type="warning">
+  Durante la risoluzione dei problemi non eliminare né modificare i file del servizio o il database. Usa i comandi
+  `service` per gestire il daemon e crea un backup prima di esaminare i dati persistenti con strumenti esterni.
+</Callout>
+
+## Segnalazione di un problema
+
+Quando segnali un problema riproducibile, includi:
+
+- L'output di `opencode --version`
+- L'output di `opencode service status`
+- La sequenza minima di passaggi che riproduce il problema
+- Se il problema riguarda il servizio condiviso, un client specifico o un singolo progetto
+- Le righe di log pertinenti, compresi i campi `run` e `role`
+
+Prima di condividere i log, rimuovi chiavi API, header di autorizzazione, prompt, contenuti dei file e altri dati sensibili.
+
+Segnala i problemi riproducibili su [GitHub Issues](https://github.com/anomalyco/opencode/issues).

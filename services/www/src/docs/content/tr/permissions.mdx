@@ -1,0 +1,285 @@
+---
+title: "İzinler"
+---
+
+İzinler, bir ajanın bir kaynak üzerinde bir eylem gerçekleştirip gerçekleştiremeyeceğini denetler.
+
+## Yapılandırma
+
+Yaygın bir kurulum; shell komutlarını çalıştırmadan önce onay istemek, rutin Git incelemelerine izin vermek ve push
+işlemlerini her zaman engellemektir. Bu sıralı kuralları `opencode.jsonc` dosyasına ekleyin:
+
+```jsonc
+{
+  "$schema": "https://opencode.ai/config.json",
+  "permissions": [
+    { "action": "shell", "resource": "*", "effect": "ask" },
+    { "action": "shell", "resource": "git status *", "effect": "allow" },
+    { "action": "shell", "resource": "git diff *", "effect": "allow" },
+    { "action": "shell", "resource": "git push *", "effect": "deny" },
+  ],
+}
+```
+
+Son eşleşen kural geçerli olur; bu yüzden özel istisnalar genel kuralın ardından gelir.
+
+<Callout type="warning">
+  V1 farklı alan ve eylem adları kullanır. V2'de `permission`, `bash` ve `task` yerine `permissions`, `shell` ve
+  `subagent` kullanın.
+</Callout>
+
+## Kurallar
+
+Her kural üç dize alanı gerektirir:
+
+| Alan       | Anlam                                                                      |
+| ---------- | -------------------------------------------------------------------------- |
+| `action`   | Aracın izin eylemi                                                         |
+| `resource` | Kullanılan değer; örneğin bir yol, komut, URL, sorgu, beceri ID'si veya ajan ID'si |
+| `effect`   | `allow`, `deny` veya `ask`                                                 |
+
+```jsonc
+{
+  "permissions": [
+    { "action": "read", "resource": "*", "effect": "allow" },
+    { "action": "read", "resource": "*.env", "effect": "deny" },
+  ],
+}
+```
+
+| Etki    | Sonuç                                   |
+| ------- | --------------------------------------- |
+| `allow` | Onay istemeden devam eder               |
+| `deny`  | İşlemi engeller                         |
+| `ask`   | İstemciden bir karar gelmesini bekler   |
+
+Hiçbir kural eşleşmezse OpenCode `ask` kullanır.
+
+## Eşleştirme
+
+Eylemler ve kaynaklar, değerin tamamına uygulanan basit joker karakterler kullanır:
+
+| Kalıp   | Eşleşen                                    |
+| ------- | ------------------------------------------ |
+| `*`     | `/` dahil sıfır veya daha fazla karakter   |
+| `?`     | Tam olarak bir karakter                    |
+| Diğer   | Karakterin kendisi                         |
+
+```jsonc
+{
+  "permissions": [
+    { "action": "edit", "resource": "packages/docs/*.mdx", "effect": "allow" },
+  ],
+}
+```
+
+Bu kalıp, normalleştirilmiş yolun tamamıyla eşleşir. Ters eğik çizgiler eğik çizgiye dönüştürülür ve Windows'ta eşleştirme
+büyük/küçük harfe duyarsızdır.
+
+` *` ile biten bir shell kalıbı, komutun argümansız hâliyle de eşleşir:
+
+```jsonc
+{ "action": "shell", "resource": "git status *", "effect": "allow" }
+```
+
+Bu kalıp hem `git status` hem de `git status --short` ile eşleşir.
+
+OpenCode kuralları sırayla birleştirir ve son eşleşmeyi kullanır. Önce düşük öncelikli yapılandırma yüklenir, ardından
+genel kurallar, en son da ajan kuralları eklenir.
+
+```jsonc
+{
+  "permissions": [
+    { "action": "read", "resource": "*", "effect": "allow" },
+    { "action": "read", "resource": "secrets/*", "effect": "deny" },
+  ],
+}
+```
+
+İşlemler birden fazla kaynağı denetleyebilir; örneğin birden çok dosyaya dokunan bir yama. Herhangi bir `deny` işlemi
+reddeder; yoksa herhangi bir `ask` onay ister; o da yoksa işleme izin verilir.
+
+## Eylemler
+
+V2 eylem adları dize olduğundan eklentiler başka eylemler de tanımlayabilir. Yerleşik araçlar şu anda şu eylemleri ve
+kaynakları kullanır:
+
+| Eylem                | Kaynak                                                                      |
+| -------------------- | --------------------------------------------------------------------------- |
+| `read`               | Location'a göreli dahili yol veya kanonik mutlak harici yol                 |
+| `edit`               | `edit`, `write` ve `patch` için hedef yol                                   |
+| `glob`               | İstenen glob kalıbı                                                         |
+| `grep`               | Arama yolu değil, istenen düzenli ifade                                     |
+| `shell`              | Tarayıcının (scanner) ürettiği komut dizesi; bileşik komutlar birden fazla dize üretebilir |
+| `subagent`           | Hedef ajan ID'si                                                            |
+| `skill`              | Beceri ID'si                                                                |
+| `question`           | `*`                                                                         |
+| `webfetch`           | İstenen URL                                                                 |
+| `websearch`          | Arama sorgusu                                                               |
+| `external_directory` | Kanonik harici dizin sınırı; genellikle `/*` ile biter                      |
+| `<server>_<tool>`    | MCP aracı için `*`; her iki addaki desteklenmeyen karakterler `_` olur      |
+| `execute`            | `*`; Code Mode'un kullanılabilirliğini denetler, iç içe araçlar ise kendi kurallarını uygular |
+
+Örneğin bir beceriye izin verip diğer tüm becerileri reddetmek için:
+
+```jsonc
+{
+  "permissions": [
+    { "action": "skill", "resource": "*", "effect": "deny" },
+    { "action": "skill", "resource": "effect", "effect": "allow" },
+  ],
+}
+```
+
+`doom_loop` ve `lsp`, güncel V2 Core izin eylemleri arasında değildir.
+
+## Dizinler
+
+Hem etkin Location'ın hem de onun kök olmayan proje worktree'sinin dışındaki bir yol, `read` veya `edit` onayından önce
+`external_directory` onayı gerektirir.
+
+```jsonc
+{
+  "$schema": "https://opencode.ai/config.json",
+  "permissions": [
+    { "action": "external_directory", "resource": "~/projects/reference/*", "effect": "allow" },
+    { "action": "read", "resource": "~/projects/reference/*", "effect": "allow" },
+    { "action": "edit", "resource": "~/projects/reference/*", "effect": "deny" },
+  ],
+}
+```
+
+Bu kural `read`, `edit`, `write` ve `patch` araçlarının kullandığı harici yollar için geçerlidir. Shell, `shell`
+kaynaklarını denetlemeden önce harici çalışma dizinini ve tarayıcısının çıkardığı dizinleri denetler.
+
+`external_directory`, `read` ve `edit` için baştaki `~`, `~/`, `$HOME` veya `$HOME/` yapılandırma yüklenirken
+genişletilir:
+
+```jsonc
+{ "action": "read", "resource": "$HOME/reference/*", "effect": "allow" }
+```
+
+Shell kaynakları ham komut metni olarak kalır ve ana dizin genişletmesi uygulanmaz.
+
+<Callout type="warning">
+  `shell`, ana bilgisayardaki kullanıcının dosya sistemi, süreç ve ağ yetkileriyle çalışır. Komut metninden dizin
+  çıkarımı en iyi çaba esasına dayanır; bu yüzden her tehlikeli komutu tanımaya çalışan kalıplar yerine dar kapsamlı bir
+  shell izin listesini tercih edin.
+</Callout>
+
+Göreli değişiklik yolları, proje worktree'sinin içinde kalırken etkin Location'ın dışına çıkabilir. Açıkça belirtilen
+harici yollar eşleştirmeden önce kanonik hâle getirilir; bu yüzden yalnızca güvenilir dizin sınırlarını yetkilendirin.
+
+## Tarayıcı
+
+Deneysel taşınabilir shell tarayıcısını şu şekilde etkinleştirin:
+
+```jsonc
+{
+  "$schema": "https://opencode.ai/config.json",
+  "experimental": {
+    "portable_shell_scanner": true,
+  },
+}
+```
+
+Taşınabilir tarayıcı, varsayılan tree-sitter tarayıcısının yerini alır; tree-sitter bir yedek veya ikinci görüş olarak
+kullanılmaz. Taşınabilir tarayıcının analiz edemediği bir komut izin reddi değil, tarayıcı hatası döndürür.
+
+Bu bayrak yalnızca ayrıştırıcı seçimini değiştirir. Mevcut izin kuralları, kaydedilmiş onay kalıpları ve en iyi çaba
+esasına dayanan dizin çıkarımı geçerliliğini korur. Bilinmeyen dizinler için ek bir onay modu veya genel bir kısıtlama
+yoktur.
+
+## Varsayılanlar
+
+Özel ajanlar dahil her ajan şu sıralı temel politikayla başlar:
+
+```jsonc
+[
+  { "action": "*", "resource": "*", "effect": "allow" },
+  { "action": "external_directory", "resource": "*", "effect": "ask" },
+  { "action": "read", "resource": "*.env", "effect": "ask" },
+  { "action": "read", "resource": "*.env.*", "effect": "ask" },
+  { "action": "read", "resource": "*.env.example", "effect": "allow" },
+]
+```
+
+OpenCode ile gelen ajanlar şu politikaları ekler:
+
+| Ajan         | Ek politika                                                                    |
+| ------------ | ------------------------------------------------------------------------------ |
+| `build`      | Sorulara izin verir                                                            |
+| `plan`       | Sorulara izin verir; `~/.opencode/plan` altındaki dosyalar dışında düzenlemeleri reddeder |
+| `general`    | Soruları ve alt ajan başlatmayı reddeder                                       |
+| `explore`    | Okuma, glob, grep, web getirme ve web araması dışındaki her şeyi reddeder; harici dizinler ve `.env` okumaları için onay ister |
+| `title`      | Tüm eylemleri reddeder                                                         |
+| `summary`    | Tüm eylemleri reddeder                                                         |
+| `compaction` | Temel politikayı korur                                                         |
+
+OpenCode ayrıca kendi yönettiği araç çıktısı, shell çıktısı, geçici ve genel yapılandırma dizinlerine harici dizin
+erişimine izin verir. Alttaki `read`, `edit` veya diğer eylem yine kendi kurallarını kullanır. Sonraki genel kurallar ve
+ajan kuralları bu varsayılanları geçersiz kılabilir.
+
+## Ajanlar
+
+Paylaşılan kuralları en üst düzeye, daha dar kuralları ise `agents.<id>.permissions` altına yazın:
+
+```jsonc
+{
+  "$schema": "https://opencode.ai/config.json",
+  "permissions": [
+    { "action": "shell", "resource": "*", "effect": "ask" },
+    { "action": "shell", "resource": "git status *", "effect": "allow" },
+  ],
+  "agents": {
+    "reviewer": {
+      "description": "Review code without changing it",
+      "mode": "subagent",
+      "permissions": [
+        { "action": "edit", "resource": "*", "effect": "deny" },
+      ],
+    },
+  },
+}
+```
+
+Ajan kuralları genel kuralların ardına eklenir; genel diziyi değiştirmez. Özel bir alt ajan, üst ajanının izinlerinin bir
+alt kümesini değil, kendi izinlerini kullanır.
+
+## Onaylar
+
+Bir kural `ask` sonucunu verdiğinde istemciler şu yanıtları verebilir:
+
+| Seçenek      | Yanıt      | Sonuç                                                                |
+| ------------ | ---------- | -------------------------------------------------------------------- |
+| Allow once   | `once`     | Yalnızca bekleyen isteği onaylar                                     |
+| Allow always | `always`   | İsteği onaylar ve aracın önerdiği kalıpları proje için kaydeder      |
+| Reject       | `reject`   | İsteği ve o oturumdaki bekleyen diğer tüm izin isteklerini reddeder  |
+
+Örneğin `git status --short` için **Allow always** seçildiğinde, sonraki `git status` komutlarını da kapsayan bir shell
+öneki kaydedilebilir:
+
+```text
+shell: git status * → allow
+```
+
+Kaydedilmiş onaylar, kalıcı ve proje kapsamlı `allow` kurallarıdır. Yapılandırılmış bir `deny` kuralını asla geçersiz
+kılmaz. Kaydedilecek kalıbı araçlar önerir: bazıları `*` önerir, shell komut öneklerini önerir, beceriler ve alt ajanlar
+ise kendi ID'lerini önerir. Geniş kapsamlı onayları gözden geçirin ve artık gerekmeyenleri kaldırın.
+
+İstemciler reddederken geri bildirim ekleyebilir. Etkileşimli olmayan istemciler onay isteklerinin nasıl ele alınacağına
+kendileri karar vermelidir; yapılandırılmış `deny` kuralları her zaman uygulanmaya devam eder.
+
+## Politikalar
+
+Bir [politika](/policies), bu kurallar ve kaydedilmiş onaylar çalıştıktan sonra bir izin denetimini kesin olarak
+reddedebilir. `allow` veya `ask` sonucunu `deny` hâline getirir ve hiçbir zaman erişim vermez.
+
+```jsonc
+{
+  "policies": [{ "action": "tool.use", "resource": "shell:sudo *", "effect": "deny" }],
+}
+```
+
+Genel ve Console tarafından yönetilen politikalar proje yapılandırmasını geçersiz kılar. Bir kuruluş, bir deponun izin
+vereceği bir komutu bu şekilde engeller.

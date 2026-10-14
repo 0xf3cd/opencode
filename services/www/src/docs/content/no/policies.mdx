@@ -1,0 +1,227 @@
+---
+title: "Policyer"
+description: "Tillat eller avslå handlinger i OpenCode på navngitte ressurser, der organisasjonens policy har siste ord."
+---
+
+Policyer avgjør om OpenCode får utføre en handling på en navngitt ressurs. De skrives under `policies` og kan også leveres
+av et tilkoblet arbeidsområde i [OpenCode Console](/console).
+
+Policyer er noe annet enn [tillatelser](/permissions). Tillatelser er verktøyregler per agent som kan gi `allow`, `deny`
+eller `ask`. Policyer er binære, spør aldri og strammer bare inn det tillatelser og leverandører ellers ville tillatt.
+
+## Konfigurer
+
+Avslå én leverandør overalt ved å legge til en setning i `opencode.jsonc`:
+
+```jsonc
+{
+  "$schema": "https://opencode.ai/config.json",
+  "policies": [{ "action": "provider.use", "resource": "openai", "effect": "deny" }],
+}
+```
+
+En avslått leverandør forsvinner fra katalogen og modellvalget, selv om den har gyldig legitimasjon.
+
+Tidligere versjoner leste policyer fra `experimental.policies`. Den nøkkelen fungerer fortsatt og slås sammen med
+`policies`:
+
+```jsonc
+{
+  "experimental": {
+    "policies": [{ "action": "provider.use", "resource": "openai", "effect": "deny" }],
+  },
+}
+```
+
+## Setninger
+
+Hver setning har tre felt:
+
+| Felt       | Verdier                                       | Betydning                                            |
+| ---------- | --------------------------------------------- | ---------------------------------------------------- |
+| `action`   | `provider.use`, `tool.use`, `integration.use` | Operasjonen som styres                               |
+| `resource` | streng eller mønster med jokertegn            | Hva setningen gjelder for. Avhenger av handlingen    |
+| `effect`   | `allow`, `deny`                               | Avgjørelsen når setningen matcher                    |
+
+Setninger som ikke består valideringen, forkastes med en advarsel i serverloggen, og resten av listen gjelder fortsatt.
+Sjekk loggen etter at du har redigert en `deny`.
+
+## Matching
+
+Ressurser bruker de samme jokertegnene for hele verdien som tillatelser: `*` matcher null eller flere tegn, og `?`
+matcher ett.
+
+```jsonc
+{
+  "policies": [{ "action": "provider.use", "resource": "company-*", "effect": "deny" }],
+}
+```
+
+Dette avslår `company-us` og `company-eu`. Et mønster som slutter på ` *`, matcher også verdien uten argumenter, så
+`shell:git push *` dekker også `git push` alene.
+
+## Rekkefølge
+
+Når flere setninger matcher, vinner den siste. Det finnes ingen regel om at den mest spesifikke vinner, så legg brede
+setninger først og unntak etter dem. Hvis ingenting matcher, er handlingen tillatt.
+
+```jsonc
+{
+  "policies": [
+    { "action": "provider.use", "resource": "*", "effect": "deny" },
+    { "action": "provider.use", "resource": "anthropic", "effect": "allow" },
+  ],
+}
+```
+
+Bare Anthropic er fortsatt tilgjengelig.
+
+## Leverandører
+
+`provider.use` styrer om en leverandør i det hele tatt kan brukes. Ressursen er leverandør-ID-en: `anthropic`, `openai`,
+`opencode` eller en egendefinert ID fra [`providers`](/providers).
+
+```jsonc
+{
+  "providers": {
+    "company-ai": {
+      "package": "@opencode/ai/providers/openai-compatible",
+      "settings": { "baseURL": "https://ai.company.example/v1" },
+    },
+  },
+  "policies": [
+    { "action": "provider.use", "resource": "*", "effect": "deny" },
+    { "action": "provider.use", "resource": "company-ai", "effect": "allow" },
+  ],
+}
+```
+
+Oppføringen i `providers` konfigurerer endepunktet, og setningene gjør den til den eneste leverandøren OpenCode vil
+bruke. Policyen gjelder uansett hvordan OpenCode ble kjent med leverandøren: katalogdata, miljøvariabler, lagrede
+kontoer, innebygde plugins eller konfigurasjon.
+
+Bruk `provider.use` i stedet for listene `enabled_providers` og `disabled_providers` fra V1. V1-filer lastes fortsatt
+inn. Se [Migrer fra V1](/migrate-v1#supported-fields-without-direct-native-equivalents).
+
+## Verktøy
+
+`tool.use`-setninger avslår en [tillatelseskontroll](/permissions) ufravikelig. Ressursen er `<action>:<value>`, og den
+matches mot hver ressurs verktøyet kontrollerer.
+
+```jsonc
+{
+  "policies": [
+    { "action": "tool.use", "resource": "shell:git push *", "effect": "deny" },
+    { "action": "tool.use", "resource": "edit:*.env", "effect": "deny" },
+    { "action": "tool.use", "resource": "webfetch:*", "effect": "deny" },
+  ],
+}
+```
+
+En avslått kontroll mislykkes med `Blocked by configuration policy` i stedet for å spørre. Den gjelder etter agentregler
+og lagrede godkjenninger, så den overstyrer både en `ask` og en «Allow always»-godkjenning.
+
+| Mønster                      | Blokkerer                                   |
+| ---------------------------- | ------------------------------------------- |
+| `shell:*`                    | Alle skallkommandoer                        |
+| `read:*/.ssh/*`              | Lesing av SSH-materiale                     |
+| `external_directory:*`       | All tilgang utenfor Location eller worktree |
+| `subagent:general`           | Oppstart av én bestemt subagent             |
+| `github_delete_repository:*` | Ett bestemt MCP-verktøy                     |
+| `*`                          | Alt som ikke allerede er avslått            |
+
+En `tool.use`-setning med `allow` gir aldri tilgang. Den opphever bare en tidligere, bredere `deny`, og deretter er det
+agentens egne regler som avgjør.
+
+```jsonc
+{
+  "policies": [
+    { "action": "tool.use", "resource": "shell:*", "effect": "deny" },
+    { "action": "tool.use", "resource": "shell:git status *", "effect": "allow" },
+  ],
+}
+```
+
+For `git status` faller avgjørelsen tilbake på agentens `shell`-regel. Alle andre kommandoer blokkeres.
+
+## Integrasjoner
+
+`integration.use` styrer om en MCP-server, skill eller plugin lastes inn. Ressursen er typen integrasjon og ID-en:
+
+| Ressurs           | Gjelder for                                                       |
+| ----------------- | ----------------------------------------------------------------- |
+| `mcp:<server>`    | En [MCP-server](/mcp-servers) etter det konfigurerte navnet       |
+| `skill:<id>`      | En [skill](/skills) etter ID-en                                   |
+| `plugin:<target>` | En [plugin](/plugins) etter pakkenavn uten versjon eller absolutt filbane |
+
+```jsonc
+{
+  "policies": [
+    { "action": "integration.use", "resource": "mcp:*", "effect": "deny" },
+    { "action": "integration.use", "resource": "mcp:github", "effect": "allow" },
+    { "action": "integration.use", "resource": "plugin:opencode-acme-cli", "effect": "deny" },
+  ],
+}
+```
+
+En avslått MCP-server eller skill fjernes, og en avslått plugin lastes ikke inn, uansett hvordan den ble konfigurert.
+
+## Prioritet
+
+For vanlige innstillinger vinner den nærmeste konfigurasjonen. Policyer snur dette: Setninger fra bredere konfigurasjon
+evalueres senere, så de overstyrer smalere. Administrert konfigurasjon og den tilkoblede Console har alltid siste ord.
+
+| Autoritet   | Kilde                                                                                                          |
+| ----------- | -------------------------------------------------------------------------------------------------------------- |
+| 1 (høyest)  | Tilkoblet arbeidsområde i OpenCode Console                                                                     |
+| 2           | Administrerte innstillinger i macOS (`/Library/Managed Preferences/ai.opencode.managed.plist`)                 |
+| 3           | `opencode.json(c)` for systemet (`/Library/Application Support/opencode`, `/etc/opencode`, `%ProgramData%\opencode`) |
+| 4           | Global `~/.config/opencode/opencode.json(c)`                                                                   |
+| 5           | `opencode.json(c)` direkte i en katalog. Ytre kataloger går foran indre                                        |
+| 6 (lavest)  | `.opencode/opencode.json(c)`. Ytre kataloger går foran indre                                                   |
+
+Et repositorium kan ikke aktivere en leverandør du har avslått globalt, på nytt:
+
+```jsonc title="~/.config/opencode/opencode.jsonc"
+{
+  "policies": [{ "action": "provider.use", "resource": "openai", "effect": "deny" }],
+}
+```
+
+```jsonc title="project/opencode.jsonc"
+{
+  "policies": [{ "action": "provider.use", "resource": "openai", "effect": "allow" }],
+}
+```
+
+`openai` forblir avslått. Innenfor én fil beholder setningene rekkefølgen de er skrevet i.
+
+## Console
+
+Et arbeidsområde i [OpenCode Console](/console) kompilerer policyene under Providers og Tools til setninger og returnerer
+dem sammen med konfigurasjonen for arbeidsområdet. OpenCode legger dem til etter alle setninger du har skrevet selv, så
+de har siste ord: En `deny` fra organisasjonen kan ikke oppheves av en `allow` fra et repositorium eller en bruker, og en
+`allow` fra organisasjonen opphever en `deny` med lavere autoritet.
+
+Avslag fra disse setningene oppgir navnet på arbeidsområdet:
+
+```text
+Blocked by Acme's policy
+```
+
+Setningene følger den tilkoblede kontoen.
+
+| Hendelse                       | Resultat                                                |
+| ------------------------------ | ------------------------------------------------------- |
+| Policy endres i Console        | Tas i bruk ved neste henting, omtrent én gang i minuttet |
+| Bytte til et annet arbeidsområde | Setningene erstattes med setningene til det arbeidsområdet |
+| Frakobling                     | Setningene fjernes                                      |
+| Console kan ikke nås           | De siste setningene for den tilkoblingen gjelder fortsatt |
+
+Console-pluginen og policy-pluginen kan ikke deaktiveres fra `plugins`. Se [styring av plugins](/plugins#control).
+
+<Callout type="note">
+  Policyer konfigurerer ikke endepunkter eller legitimasjon, og de kan ikke gjøre en leverandør som ikke kan brukes,
+  brukbar. De isolerer heller ikke plugin-kode i en sandkasse: En avslått leverandør blokkeres på den vanlige veien via
+  leverandør og modell.
+</Callout>

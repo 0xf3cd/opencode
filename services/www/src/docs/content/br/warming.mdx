@@ -1,0 +1,134 @@
+---
+title: "Pré-aquecimento"
+---
+
+O pré-aquecimento de sessões envia requisições periódicas ao modelo para preservar o cache de prompts do provedor ou
+outros estados de curta duração enquanto você faz uma pausa entre prompts. Ele vem desativado por padrão.
+
+Ative o pré-aquecimento em qualquer [arquivo de configuração do OpenCode](/config):
+
+```jsonc title="opencode.jsonc"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "warming": true,
+}
+```
+
+Com essa configuração, o OpenCode pré-aquece uma sessão ativa recentemente depois de quatro minutos sem nenhuma
+requisição ao modelo. Ele repete o processo a cada quatro minutos até que se passem 30 minutos desde a última requisição
+que não seja de pré-aquecimento.
+
+## Opções
+
+Use a forma de objeto para alterar o prompt de pré-aquecimento, o intervalo de inatividade ou a janela ativa:
+
+```jsonc title="opencode.jsonc"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "warming": {
+    "prompt": "Do not perform any work. Reply with exactly: OK",
+    "interval": "5 minutes",
+    "duration": "1 hour",
+  },
+}
+```
+
+| Campo | Padrão | Finalidade |
+| --- | --- | --- |
+| `prompt` | Instrução de keep-alive | Anexada como mensagem de usuário temporária em cada requisição de pré-aquecimento. O padrão pede que o modelo não faça nenhum trabalho, não use ferramentas e responda com `OK`. |
+| `interval` | `"4 minutes"` | Tempo de inatividade antes da próxima requisição de pré-aquecimento. |
+| `duration` | `"30 minutes"` | Janela de pré-aquecimento, contada a partir da última requisição ao modelo que não seja de pré-aquecimento. |
+
+Os campos omitidos no objeto mantêm o valor padrão. Por exemplo, esta configuração altera apenas o intervalo:
+
+```jsonc title="opencode.jsonc"
+{
+  "warming": {
+    "interval": "2 minutes",
+  },
+}
+```
+
+## Durações
+
+`interval` e `duration` aceitam strings de duração. Os dois precisam resultar em valores finitos maiores que zero; caso
+contrário, o OpenCode não faz o pré-aquecimento e registra um aviso no log.
+
+```jsonc title="opencode.jsonc"
+{
+  "warming": {
+    "interval": "30 seconds",
+    "duration": "1 hour",
+  },
+}
+```
+
+## Temporização
+
+O pré-aquecimento começa depois de uma requisição ao modelo que não seja de pré-aquecimento. Quando uma requisição de
+pré-aquecimento termina, o próximo intervalo de inatividade começa, mas a janela ativa não é estendida.
+
+```text
+00:00  normal model request
+00:04  warming request
+00:08  warming request
+00:30  warming stops
+```
+
+Qualquer nova atividade do modelo que não seja de pré-aquecimento reinicia os dois temporizadores. Se o intervalo for
+igual ou maior que a duração, a janela ativa expira antes que qualquer requisição de pré-aquecimento seja enviada.
+
+```text
+00:00  normal model request
+00:20  normal model request; window restarts
+00:24  warming request
+00:50  warming stops
+```
+
+## Requisições
+
+Uma requisição de pré-aquecimento usa o modelo, o agente, as instruções e o contexto de conversa atuais da sessão. O
+OpenCode anexa temporariamente o prompt configurado, faz uma chamada ao modelo e descarta a resposta.
+
+```text
+[current session context]
+[transient user message: keep-alive prompt]
+→ one model response, discarded
+```
+
+A requisição não admite entrada, não adiciona mensagens ao histórico e não altera o estado durável da sessão. O
+OpenCode não despacha chamadas de ferramentas locais nem continua um loop de ferramentas; o prompt padrão também instrui
+o modelo a não usar ferramentas.
+
+## Falhas
+
+Falhas de pré-aquecimento são registradas no log sem fazer a sessão falhar nem alterá-la. O OpenCode espera o próximo
+intervalo para tentar de novo, enquanto a janela ativa original continua em contagem regressiva.
+
+```text
+00:04  warming request fails; session is unchanged
+00:08  next warming attempt
+```
+
+## Custos
+
+As requisições de pré-aquecimento são requisições reais ao provedor. Elas podem consumir tokens, gerar custos, contar
+para os limites de requisições e falhar como qualquer outra requisição ao modelo.
+
+- Intervalos menores aumentam o volume de requisições.
+- Durações maiores permitem mais requisições de pré-aquecimento.
+- Ative o pré-aquecimento apenas quando o benefício do lado do provedor compensar o uso adicional.
+
+Por exemplo, com os valores padrão, são feitas até sete tentativas de pré-aquecimento em uma janela ininterrupta de 30
+minutos: nos minutos 4, 8, 12, 16, 20, 24 e 28.
+
+## Desativação
+
+Defina `warming` como `false` para desativá-lo explicitamente. Omitir o campo também mantém o pré-aquecimento
+desativado.
+
+```jsonc title="opencode.jsonc"
+{
+  "warming": false,
+}
+```

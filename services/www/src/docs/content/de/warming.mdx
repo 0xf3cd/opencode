@@ -1,0 +1,146 @@
+---
+title: "Vorwärmen"
+---
+
+Beim Vorwärmen von Sitzungen sendet OpenCode regelmäßig Modellanfragen, um
+Prompt-Caches oder anderen kurzlebigen Zustand beim Anbieter zu erhalten, während du
+zwischen zwei Prompts pausierst. Es ist standardmäßig deaktiviert.
+
+Aktiviere das Vorwärmen in einer beliebigen [OpenCode-Konfigurationsdatei](/config):
+
+```jsonc title="opencode.jsonc"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "warming": true,
+}
+```
+
+Mit dieser Konfiguration wärmt OpenCode eine kürzlich aktive Sitzung vor, wenn vier
+Minuten lang keine Modellanfrage erfolgt ist. Danach wiederholt es das alle vier
+Minuten, bis seit der letzten regulären Anfrage 30 Minuten vergangen sind.
+
+## Optionen
+
+Mit der Objektform änderst du den Prompt zum Vorwärmen, das Leerlaufintervall oder
+das aktive Zeitfenster:
+
+```jsonc title="opencode.jsonc"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "warming": {
+    "prompt": "Do not perform any work. Reply with exactly: OK",
+    "interval": "5 minutes",
+    "duration": "1 hour",
+  },
+}
+```
+
+| Feld | Standard | Zweck |
+| --- | --- | --- |
+| `prompt` | Keep-alive-Anweisung | Wird bei jeder Vorwärmanfrage als vorübergehende Benutzernachricht angehängt. Der Standard weist das Modell an, nichts zu tun, keine Tools zu verwenden und mit `OK` zu antworten. |
+| `interval` | `"4 minutes"` | Leerlaufzeit bis zur nächsten Vorwärmanfrage. |
+| `duration` | `"30 minutes"` | Zeitfenster für das Vorwärmen, gemessen ab der letzten regulären Modellanfrage. |
+
+Weggelassene Felder des Objekts behalten ihren Standardwert. Diese Konfiguration
+ändert zum Beispiel nur das Intervall:
+
+```jsonc title="opencode.jsonc"
+{
+  "warming": {
+    "interval": "2 minutes",
+  },
+}
+```
+
+## Zeitangaben
+
+`interval` und `duration` akzeptieren Zeitangaben als Strings. Beide müssen endliche
+Werte größer als null ergeben. Andernfalls überspringt OpenCode das Vorwärmen und
+protokolliert eine Warnung.
+
+```jsonc title="opencode.jsonc"
+{
+  "warming": {
+    "interval": "30 seconds",
+    "duration": "1 hour",
+  },
+}
+```
+
+## Zeitablauf
+
+Das Vorwärmen beginnt nach einer regulären Modellanfrage. Ist eine Vorwärmanfrage
+abgeschlossen, beginnt das nächste Leerlaufintervall, das aktive Zeitfenster wird
+jedoch nicht verlängert.
+
+```text
+00:00  normal model request
+00:04  warming request
+00:08  warming request
+00:30  warming stops
+```
+
+Jede neue reguläre Modellaktivität setzt beide Timer zurück. Ist das Intervall
+genauso lang wie die Dauer oder länger, läuft das aktive Zeitfenster ab, bevor eine
+Vorwärmanfrage gesendet wird.
+
+```text
+00:00  normal model request
+00:20  normal model request; window restarts
+00:24  warming request
+00:50  warming stops
+```
+
+## Anfragen
+
+Eine Vorwärmanfrage verwendet das aktuelle Modell, den Agenten, die Anweisungen und
+den Gesprächskontext der Sitzung. OpenCode hängt den konfigurierten Prompt
+vorübergehend an, führt einen Modellaufruf aus und verwirft die Antwort.
+
+```text
+[current session context]
+[transient user message: keep-alive prompt]
+→ one model response, discarded
+```
+
+Die Anfrage nimmt keine Eingaben an, fügt dem Verlauf keine Nachrichten hinzu und
+verändert keinen dauerhaft gespeicherten Sitzungszustand. OpenCode führt keine lokalen
+Tool-Aufrufe aus und setzt keine Tool-Schleife fort; der Standard-Prompt weist das
+Modell außerdem an, keine Tools zu verwenden.
+
+## Fehler
+
+Fehler beim Vorwärmen werden protokolliert, ohne dass die Sitzung fehlschlägt oder
+sich verändert. OpenCode wartet bis zum nächsten Intervall, bevor es einen
+neuen Versuch startet. Das ursprüngliche aktive Zeitfenster läuft dabei weiter ab.
+
+```text
+00:04  warming request fails; session is unchanged
+00:08  next warming attempt
+```
+
+## Kosten
+
+Vorwärmanfragen sind echte Anfragen an den Anbieter. Sie können Tokens verbrauchen,
+Kosten verursachen, auf Rate-Limits angerechnet werden und wie andere
+Modellanfragen fehlschlagen.
+
+- Kürzere Intervalle erhöhen die Anzahl der Anfragen.
+- Längere Zeitfenster erlauben mehr Vorwärmanfragen.
+- Aktiviere das Vorwärmen nur, wenn der Nutzen beim Anbieter den zusätzlichen
+  Verbrauch rechtfertigt.
+
+Mit den Standardwerten sind zum Beispiel bis zu sieben Vorwärmversuche in einem
+ununterbrochenen 30-Minuten-Fenster möglich: in den Minuten 4, 8, 12, 16, 20, 24
+und 28.
+
+## Deaktivieren
+
+Setze `warming` auf `false`, um es ausdrücklich zu deaktivieren. Lässt du das Feld
+weg, bleibt das Vorwärmen ebenfalls deaktiviert.
+
+```jsonc title="opencode.jsonc"
+{
+  "warming": false,
+}
+```

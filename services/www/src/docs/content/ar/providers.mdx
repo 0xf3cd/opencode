@@ -1,0 +1,644 @@
+---
+title: "المزوّدون"
+---
+
+يتضمن OpenCode كتالوجًا للمزوّدين والنماذج من [models.dev](https://models.dev). مع معظم المزوّدين، اربط حسابًا أولًا ثم
+اختر نموذجًا.
+
+## الإعداد
+
+شغّل `/connect` واختر مزوّدًا وأدخل بيانات اعتماده. ثم شغّل `/models` لاختيار أحد نماذجه.
+
+```text
+/connect
+/models
+```
+
+## Go
+
+[OpenCode Go](/console/go) اشتراك اختياري يمنحك نماذج برمجة اختبرها فريق OpenCode. اشترك عبر
+[Console](https://opencode.ai/console)، وانسخ مفتاح API، ثم اربطه باسم **OpenCode Go**.
+
+```text
+/connect
+# Select OpenCode Go, then paste your API key.
+/models
+```
+
+راجع [دليل Go](/console/go) لمعرفة حدود الاستخدام ونقاط النهاية وتفاصيل الخصوصية.
+
+## المزوّدون المخصصون
+
+أضف مزوّدًا عندما لا تكون واجهة API الخاصة به موجودة في الكتالوج. يعرّف هذا المثال المتوافق مع OpenAI بيانات الاعتماد وحزمة
+بيئة التشغيل ونقطة النهاية والنموذج الأول معًا.
+
+```jsonc title="opencode.jsonc"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "providers": {
+    "acme": {
+      "name": "Acme",
+      "env": ["ACME_API_KEY"],
+      "package": "@opencode/ai/providers/openai-compatible",
+      "settings": {
+        "baseURL": "https://llm.acme.example/v1",
+      },
+      "models": {
+        "qwen3-coder": {
+          "name": "Qwen 3 Coder",
+        },
+      },
+    },
+  },
+}
+```
+
+مفاتيح الكائن `providers` هي معرّفات المزوّدين المستخدمة في الإشارة إلى النماذج، مثل `acme/qwen3-coder`.
+
+| الحقل | الغرض |
+| --- | --- |
+| `name` | الاسم المعروض. |
+| `env` | أسماء متغيرات البيئة التي يمكن أن توفر بيانات الاعتماد، بالترتيب. |
+| `package` | حزمة المزوّد في بيئة التشغيل. |
+| `canonical` | معرّف مزوّد مدمج يرث هذا المزوّد القيم الافتراضية لكتالوجه. |
+| `compatibility` | تجاوزات توافق الطلبات والاستجابات لكل نماذج هذا المزوّد. ويتجاوز `compatibility` الخاص بالنموذج الحقول الفردية. أما `supportsThinkingBlockBinding` و`supportsEffortUpdates` فخاصان بالنموذج فقط. |
+| `settings` | عناصر تحكم OpenCode ذات الأنواع المحددة، وخيارات JSON التي تُمرَّر إلى حزمة بيئة التشغيل. |
+| `headers` | ترويسات HTTP نصية تُضاف إلى الطلبات. |
+| `body` | حقول JSON تُدمج في متون الطلبات. |
+| `models` | النماذج المراد إضافتها أو تجاوز إعداداتها، ومفاتيحها معرّفات النماذج في OpenCode. |
+
+## نقطة النهاية
+
+تجاوز `settings.baseURL` لتوجيه مزوّد من الكتالوج عبر خادم وسيط (proxy) أو نقطة نهاية متوافقة. وتظل حزمته ونماذجه واتصاله
+الحالية سارية.
+
+```jsonc title="opencode.jsonc"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "providers": {
+    "anthropic": {
+      "settings": {
+        "baseURL": "https://llm-proxy.example.com/anthropic",
+      },
+    },
+  },
+}
+```
+
+يختلف `settings` باختلاف الحزمة. ولا يكون لأي حقل تأثير إلا إذا كانت الحزمة المحددة تدعمه.
+
+## الطلبات
+
+استخدم `headers` لترويسات HTTP الإضافية، و`body` لحقول JSON التي ينبغي دمجها في متن كل طلب.
+
+```jsonc title="opencode.jsonc"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "providers": {
+    "openai": {
+      "headers": {
+        "X-Gateway-Tenant": "engineering",
+      },
+      "body": {
+        "metadata": {
+          "application": "opencode",
+        },
+      },
+    },
+  },
+}
+```
+
+يمكن أيضًا ضبط كلا الحقلين على نموذج أو متغير (variant) عندما لا يحتاج إلى التجاوز إلا جزء من حركة المزوّد.
+
+```jsonc title="opencode.jsonc"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "providers": {
+    "openai": {
+      "models": {
+        "gpt-5.2": {
+          "headers": { "X-Model-Tier": "coding" },
+          "variants": [
+            {
+              "id": "batch",
+              "body": { "service_tier": "flex" },
+            },
+          ],
+        },
+      },
+    },
+  },
+}
+```
+
+## المهلات
+
+تنتظر طلبات HTTP ما يصل إلى خمس دقائق لوصول ترويسات الاستجابة، وما يصل إلى خمس دقائق بين أجزاء الاستجابة المتدفقة. اضبط
+`settings.headerTimeout` أو `settings.chunkTimeout` للمزوّد على عدد من المللي ثانية لتغيير الحد، أو على `false` لتعطيله.
+ويحدّ `settings.timeout` إضافةً إلى ذلك مدة الطلب كاملًا من إرساله حتى اكتمال الاستجابة، ولا قيمة افتراضية له. تنطبق
+إعدادات التهيئة هذه على مستوى المزوّد كله، لا على كل نموذج أو متغير. وعلى ناقل WebSocket، يحدّ `chunkTimeout` الفجوة بين
+الإطارات بدلًا من ذلك، وقيمته الافتراضية ثلاثون دقيقة.
+
+```jsonc title="opencode.jsonc"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "providers": {
+    "anthropic": {
+      "settings": {
+        "headerTimeout": 600000,
+        "chunkTimeout": false,
+      },
+    },
+  },
+}
+```
+
+يفشل الطلب الذي يتجاوز أيًّا من الحدين بخطأ في النقل. ويعيد OpenCode محاولة الطلب الذي انتهت مهلته حتى ثلاث مرات قبل أن
+يتوقف.
+
+## ترميز الطلبات
+
+يضغط `settings.encoding` متون طلبات HTTP باستخدام `"zstd"` أو `"gzip"`، أو يرسل JSON عاديًا مع `"none"`. اضبطه على مزوّد أو
+نموذج أو متغير، وتكون الغلبة للقيمة الأكثر تحديدًا. لا تفعّل إلا ترميزًا تستطيع نقطة النهاية فكّه، فمعظم المزوّدين
+والبوابات يرفضون المتون المضغوطة. يستخدم OpenAI افتراضيًا `"zstd"` عند تسجيل الدخول عبر ChatGPT دون تهيئة
+`baseURL` مخصص، أما مع مفاتيح API فيُرسل JSON عادي. ولا تتأثر رسائل WebSocket.
+
+```jsonc title="opencode.jsonc"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "providers": {
+    "openai": {
+      "settings": { "encoding": "none" },
+    },
+  },
+}
+```
+
+## الحزم
+
+يحدد الحقل `package` بيئة التشغيل التي تتواصل مع المزوّد. استخدم بيئة التشغيل المتوافقة مع واجهات API التي تطبّق صيغة
+طلبات OpenAI.
+
+```jsonc title="opencode.jsonc"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "providers": {
+    "acme": {
+      "package": "@opencode/ai/providers/openai-compatible",
+      "settings": {
+        "baseURL": "https://llm.acme.example/v1",
+      },
+      "models": {
+        "qwen3-coder": {},
+      },
+    },
+  },
+}
+```
+
+تشمل خيارات الحزم الأصلية:
+
+- `@opencode/ai/providers/openai`
+- `@opencode/ai/providers/openai/chat`
+- `@opencode/ai/providers/openai/responses`
+- `@opencode/ai/providers/openai-compatible`
+- `@opencode/ai/providers/openai-compatible/responses`
+- `@opencode/ai/providers/anthropic`
+- `@opencode/ai/providers/anthropic-compatible`
+- `@opencode/ai/providers/google`
+- `@opencode/ai/providers/google-vertex`
+- `@opencode/ai/providers/google-vertex/gemini`
+- `@opencode/ai/providers/google-vertex/chat`
+- `@opencode/ai/providers/google-vertex/responses`
+- `@opencode/ai/providers/google-vertex/messages`
+- `@opencode/ai/providers/azure`
+- `@opencode/ai/providers/azure/chat`
+- `@opencode/ai/providers/azure/responses`
+- `@opencode/ai/providers/amazon-bedrock`
+- `@opencode/ai/providers/amazon-bedrock/mantle`
+- `@opencode/ai/providers/amazon-bedrock/mantle/chat`
+- `@opencode/ai/providers/amazon-bedrock/mantle/responses`
+- `@opencode/ai/providers/openrouter`
+- `@opencode/ai/providers/xai`
+
+يمكنك أيضًا استخدام حزمة npm مثل `@acme/opencode-provider`، أو عنوان URL مطلق بالمخطط `file://` لحزمة محلية.
+
+```jsonc title="opencode.jsonc"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "providers": {
+    "acme": {
+      "package": "@acme/opencode-provider",
+      "models": { "acme-coder": {} },
+    },
+  },
+}
+```
+
+## النماذج
+
+أضف النماذج أو تجاوز إعداداتها في الكائن `models` الخاص بالمزوّد. والمفتاح هو معرّف النموذج الذي يستخدمه OpenCode، بينما
+يغيّر `modelID` المعرّف المُرسل إلى المزوّد.
+
+```jsonc title="opencode.jsonc"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "model": "openai/coding",
+  "providers": {
+    "openai": {
+      "models": {
+        "coding": {
+          "modelID": "gpt-5.2",
+          "name": "GPT-5.2 Coding",
+        },
+      },
+    },
+  },
+}
+```
+
+| الحقل | الغرض |
+| --- | --- |
+| `modelID` | معرّف النموذج أو النشر (deployment) المُرسل إلى المزوّد. |
+| `name` | الاسم المعروض. |
+| `family` | عائلة النموذج المستخدمة لتجميع النماذج المترابطة. |
+| `package` | تجاوز بيئة التشغيل لهذا النموذج. |
+| `settings` | عناصر تحكم OpenCode على مستوى النموذج، وإعدادات JSON الخاصة بالحزمة. |
+| `headers` | ترويسات طلب إضافية بقيم نصية. |
+| `body` | حقول إضافية في متن طلب JSON. |
+| `capabilities` | دعم الأدوات، وأنواع الوسائط المقبولة في المدخلات والمخرجات. |
+| `compatibility` | تجاوزات توافق الطلبات والاستجابات. |
+| `variants` | متغيرات مسمّاة لكل منها `settings` و`headers` و`body` خاصة بها. |
+| `cost` | تسعير المدخلات والمخرجات، والتخزين المؤقت اختياريًا، لكل مليون token. |
+| `limit` | حدود tokens للسياق والمدخلات والمخرجات. |
+| `disabled` | يزيل النموذج من قائمة الاختيار عندما تكون قيمته `true`. |
+
+راجع [النماذج](/models) لمعرفة الاختيار والقيم الافتراضية والإمكانات والحدود والتكاليف والمتغيرات.
+
+## Azure
+
+تحتاج نقطة نهاية الكتالوج القياسية في Azure إلى اسم المورد إضافةً إلى بيانات الاعتماد. اضبط `settings.resourceName` مرة
+واحدة، ثم اربط مفتاح API أو استخدم جلسة Microsoft Entra ID من Azure CLI كما هو موضح في [حسابات المزوّدين](/cli/providers).
+
+```jsonc title="opencode.jsonc"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "providers": {
+    "azure": {
+      "settings": {
+        "resourceName": "my-models",
+      },
+    },
+  },
+}
+```
+
+تجد **Resource name** (اسم المورد) في [بوابة Azure](https://portal.azure.com/) أو في
+[Microsoft Foundry](https://ai.azure.com/). وهو أيضًا الجزء الأول من نقاط النهاية مثل
+`https://my-models.openai.azure.com/` و`https://my-models.services.ai.azure.com/`.
+
+```bash
+az cognitiveservices account list \
+  --query "[].{name:name,resourceGroup:resourceGroup}" \
+  --output table
+```
+
+لاستخدام Entra ID، ثبّت [Azure CLI](https://learn.microsoft.com/en-us/cli/azure/install-azure-cli) وسجّل الدخول، ثم اختر
+**Microsoft Entra ID (Azure CLI)** عند ربط Azure.
+
+```bash
+az login
+```
+
+أدخل اسم المورد عند الربط إذا لم يكن متوفرًا مسبقًا من التهيئة أو البيئة. ويحظى اسم المورد المحفوظ مع الاتصال بالأولوية
+على التهيئة؛ ولتغييره، اربط الحساب مجددًا.
+
+تستخدم اتصالات Azure CLI الحساب المحدد في Azure CLI. وللوصول إلى مورد في مستأجر (tenant) أو اشتراك آخر، حدّد كليهما صراحةً.
+
+```bash
+az login --tenant TENANT_ID
+az account set --subscription NAME_OR_ID
+```
+
+بدلًا من التهيئة، يوفر المتغير `AZURE_RESOURCE_NAME` اسم المورد لخادم OpenCode. ويعمل أيضًا المتغير القديم
+`AZURE_COGNITIVE_SERVICES_RESOURCE_NAME`.
+
+### عمليات النشر
+
+لا يقدّم Azure أي نموذج إلا عبر عملية نشر (deployment)، لذا يسرد OpenCode عمليات النشر في موردك ويعرضها بدلًا من كتالوج Azure
+كاملًا. تُحمَّل القائمة في الخلفية بعد بدء التشغيل، وبعد الربط، وبعد تبديل الحسابات. ولإظهار عملية نشر أُضيفت لاحقًا، أعد
+تشغيل OpenCode أو اربط الحساب مجددًا.
+
+- إلى أن تُحمَّل القائمة لاتصال ما، أو إذا فشل تحميلها، يبقى الكتالوج كاملًا متاحًا.
+- إذا فشلت إعادة التحميل للاتصال نفسه، يحتفظ الاتصال بآخر قائمة كاملة لديه.
+- لا يعرض تبديل الحسابات أبدًا قائمة الحساب السابق؛ إذ يبدأ الحساب الجديد من الكتالوج كاملًا.
+- ترث عمليات النشر الحدود والتكاليف والإمكانات من نماذج الكتالوج المقابلة لها.
+
+أسماء عمليات النشر هي معرّفات نماذجها، بأحرف صغيرة لأن Azure يتجاهل حالة الأحرف في الأسماء، مثل `azure/gpt-production`.
+وتحتفظ عملية النشر المسمّاة باسم نموذجها، مثل `gpt-5-mini`، بمعرّف الكتالوج. وتبقى هذه المعرّفات ثابتة عند إضافة عمليات نشر
+أخرى أو إزالتها.
+
+يطابق OpenCode عملية النشر مع الكتالوج حسب النموذج الذي تنشره، أو حسب اسمها عندما يكتب Azure اسم النموذج بشكل مختلف، كما في
+`gpt-4` لنموذج GPT-4 Turbo. أما عملية النشر المسمّاة باسم نموذج آخر، مثل `gpt-5` التي تنشر `gpt-5-mini`، فتعرض اسم ذلك
+النموذج وحدوده وتكاليفه.
+
+مع Azure CLI، يسرد OpenCode عمليات النشر عبر واجهة إدارة Azure (management API)، وهذا يتطلب صلاحية قراءة على المورد. وإذا فشل
+ذلك، ودائمًا عند استخدام مفتاح API، يستخدم قائمة عمليات النشر القديمة الخاصة بالمورد. ويقرأ الاكتشاف كل الصفحات قبل نشر
+القائمة. أما عند ضبط `settings.baseURL` مخصص، فيُحتفظ بالكتالوج.
+
+هيّئ عملية نشر صراحةً عندما لا يكون نموذجها في الكتالوج، كالنماذج المضبوطة بدقة (fine-tuned)، أو عندما تريد ربط معرّف نموذج
+بعملية نشر بنفسك. ويسجّل OpenCode تحذيرًا يذكر أسماء عمليات النشر هذه. وتُحفظ النماذج المهيّأة صراحةً دائمًا.
+
+```jsonc title="opencode.jsonc"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "providers": {
+    "azure": {
+      "models": {
+        "gpt-5-mini": {
+          "modelID": "gpt-production",
+        },
+      },
+    },
+  },
+}
+```
+
+تحتاج هويتك إلى أحد الدورين التاليين:
+
+- **Cognitive Services OpenAI User** لنماذج Azure OpenAI.
+- **Cognitive Services User** لنماذج Foundry الأخرى.
+
+إذا استخدم الطلب token من مستأجر خاطئ، فسجّل الدخول مجددًا مع تحديد المستأجر المطلوب.
+
+```bash
+az login --tenant TENANT_ID
+```
+
+## Bedrock
+
+يستخدم Amazon Bedrock سلسلة بيانات الاعتماد الافتراضية في AWS. وأبسط إعداد دائم هو ملف تعريف (profile) مسمّى في AWS، كما
+يتعرّف OpenCode على بيئات مفاتيح الوصول، وهوية الويب (web identity)، وبيانات اعتماد الحاويات.
+
+```bash
+aws configure sso --profile work
+aws sso login --profile work
+```
+
+حدّد ملف التعريف والمنطقة في إعدادات المزوّد. ويُفعِّل المزوّدَ أيٌّ من: `profile` مهيّأ، أو `AWS_PROFILE`، أو
+`AWS_ACCESS_KEY_ID`، أو ملف token لهوية الويب، أو عنوان URI لبيانات اعتماد الحاوية؛ أما المنطقة وحدها فلا تكفي.
+
+```jsonc title="opencode.jsonc"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "providers": {
+    "amazon-bedrock": {
+      "settings": {
+        "profile": "work",
+        "region": "us-west-2",
+      },
+    },
+  },
+}
+```
+
+بدون منطقة صريحة، يستخدم OpenCode `AWS_REGION`، ثم `AWS_DEFAULT_REGION`، ثم `us-east-1`. ولنقطة نهاية خاصة أو نقطة نهاية
+VPC، اضبط `baseURL` مع الإبقاء على ملف التعريف والمنطقة نفسيهما.
+
+```jsonc title="opencode.jsonc"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "providers": {
+    "amazon-bedrock": {
+      "settings": {
+        "profile": "work",
+        "region": "us-west-2",
+        "baseURL": "https://bedrock-runtime.vpce.example.com",
+      },
+    },
+  },
+}
+```
+
+تستخدم مفاتيح Bedrock API المتغير `AWS_BEARER_TOKEN_BEDROCK`. أما متغيرات AWS الأخرى فتغذّي توقيع SigV4، ولا
+تُخزَّن على أنها حسابات بمفاتيح API في OpenCode.
+
+## Vertex
+
+يستخدم Google Vertex بيانات الاعتماد الافتراضية للتطبيق (ADC)، ويحتاج إلى مشروع قبل أن تصبح نماذجه متاحة. أنشئ ADC محليًا،
+ثم اضبط المشروع والموقع في إعدادات المزوّد.
+
+```bash
+gcloud auth application-default login
+```
+
+```jsonc title="opencode.jsonc"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "providers": {
+    "google-vertex": {
+      "settings": {
+        "project": "my-project",
+        "location": "us-central1",
+      },
+    },
+  },
+}
+```
+
+يستخرج OpenCode المشروع أيضًا من `GOOGLE_VERTEX_PROJECT` أو `GOOGLE_CLOUD_PROJECT` أو `GCP_PROJECT` أو `GCLOUD_PROJECT`،
+بهذا الترتيب. ويستخرج الموقع من `GOOGLE_VERTEX_LOCATION` أو `GOOGLE_CLOUD_LOCATION` أو `VERTEX_LOCATION`، والقيمة
+الافتراضية `us-central1`.
+
+```bash
+GOOGLE_CLOUD_PROJECT=my-project GOOGLE_VERTEX_LOCATION=europe-west4 opencode --standalone
+```
+
+تعمل حسابات الخدمة عبر مسار ADC نفسه. وجّه `GOOGLE_APPLICATION_CREDENTIALS` إلى ملف JSON الخاص بحساب الخدمة، مع توفير مشروع
+عبر الإعدادات أو أحد متغيرات المشروع المذكورة أعلاه.
+
+```bash
+GOOGLE_APPLICATION_CREDENTIALS=/secure/vertex.json \
+GOOGLE_CLOUD_PROJECT=my-project \
+opencode --standalone
+```
+
+استخدم معرّف المزوّد الموحّد `google-vertex` لنماذج كتالوج Vertex من Gemini وAnthropic والنماذج المتوافقة مع OpenAI. أما
+معرّف المزوّد القديم `google-vertex-anthropic` فغير متاح في V2.
+
+## Copilot
+
+يدعم GitHub Copilot مصادقة OAuth عبر الجهاز بدلًا من إدخال مفتاح API يدويًا. اربط **GitHub Copilot**، واختر GitHub.com أو
+GitHub Enterprise، وأكمل خطوات المصادقة عبر الجهاز، ثم افتح `/models`.
+
+```text
+/connect
+# Select GitHub Copilot, then Login with GitHub Copilot.
+/models
+```
+
+مع GitHub Enterprise، أدخل عنوان URL للنشر أو النطاق عند الطلب. يستخدم OpenCode نقطة نهاية Copilot API التي يُرجعها GitHub
+عند توفرها؛ وإلا فإنه يستنتج نقطة النهاية من نطاق المؤسسة.
+
+```text
+company.ghe.com
+```
+
+يحتاج الحساب المرتبط إلى صلاحية الوصول إلى Copilot Chat. وإذا أفاد GitHub بعدم وجود استحقاق، فاشترك في Copilot Free أو اطلب
+من المؤسسة تخصيص مقعد Copilot لك، ثم اربط الحساب مجددًا. ويجلب OpenCode قائمة النماذج الحالية للحساب بعد تسجيل الدخول، وكلما
+تغيّر حساب Copilot النشط.
+
+## Ollama
+
+شغّل Ollama واسحب نموذجًا. يتحقق OpenCode من `http://127.0.0.1:11434`، ويكتشف نماذج الإكمال (completion)، ويضيفها إلى
+`/models` دون الحاجة إلى ربط حساب.
+
+```bash
+ollama serve
+ollama pull qwen3:8b
+```
+
+وجّه OpenCode إلى خادم Ollama بعيد أو خلف خادم وسيط باستخدام `settings.baseURL`. ضمّن `/v1`؛ إذ يستنتج OpenCode منه مساري
+الاكتشاف الأصليين `/api/tags` و`/api/show`. والحقل `apiKey` اختياري، ويُرسل على أنه bearer token إلى طلبات الاكتشاف وطلبات
+النموذج.
+
+```jsonc title="opencode.jsonc"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "providers": {
+    "ollama": {
+      "settings": {
+        "baseURL": "https://ollama.example.com/v1",
+        "apiKey": "{env:OLLAMA_API_KEY}",
+      },
+    },
+  },
+}
+```
+
+يتحدّث الاكتشاف دوريًا، ويحتفظ بآخر قائمة ناجحة أثناء الانقطاع المؤقت. ولا تظهر النماذج المخصصة للتضمين (embedding) فقط،
+لأن OpenCode لا يضيف إلا النماذج التي تتضمن بياناتها الوصفية في Ollama الإمكانية `completion`.
+
+## بيئات التشغيل
+
+يتوفر لكل من LM Studio وvLLM أيضًا اكتشاف محلي مدمج. ونقطتا النهاية الافتراضيتان لهما هما `http://127.0.0.1:1234/v1`
+و`http://127.0.0.1:8000/v1`.
+
+```jsonc title="opencode.jsonc"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "providers": {
+    "lmstudio": {
+      "settings": { "baseURL": "http://gpu-host:1234/v1" },
+    },
+    "vllm": {
+      "settings": { "baseURL": "http://gpu-host:8000/v1" },
+    },
+  },
+}
+```
+
+يكتشف LM Studio نماذج اللغة من `/api/v1/models`. ويفحص vLLM المسار `/health` قبل قراءة `/v1/models`؛ ولا يستطيع اكتشافه
+استنتاج دعم الأدوات، لذا تبدأ نماذج vLLM المكتشفة وأدواتها معطّلة. ولأي بيئة تشغيل أخرى متوافقة مع OpenAI، استخدم وصفة
+[المزوّد المخصص](#custom) واسرد نماذجها صراحةً.
+
+## البوابات
+
+يستخدم OpenRouter بيئة التشغيل والكتالوج الأصليين الخاصين به. وفّر `OPENROUTER_API_KEY` لخادم OpenCode أو اربط حساب
+OpenRouter، ثم أشر إلى النماذج بمعرّف نموذج OpenRouter الكامل بعد بادئة المزوّد.
+
+```jsonc title="opencode.jsonc"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "model": "openrouter/anthropic/claude-sonnet-4",
+}
+```
+
+أبقِ على حزمة OpenRouter الأصلية عند تجاوز نقطة النهاية الخاصة به أو عند التوجيه عبر بوابة متوافقة مع OpenRouter. فهذا يحافظ
+على سلوك OpenRouter في الطلبات والتفكير (reasoning).
+
+```jsonc title="opencode.jsonc"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "providers": {
+    "openrouter": {
+      "settings": {
+        "baseURL": "https://openrouter-gateway.example.com/api/v1",
+      },
+      "headers": {
+        "X-Gateway-Tenant": "engineering",
+      },
+    },
+  },
+}
+```
+
+أما البوابة التي توفر واجهة API متوافقة مع OpenAI لكن لديها قائمة نماذج خاصة بها، فعرّف لها مزوّدًا مخصصًا بدلًا من ذلك.
+يصبح مفتاح التهيئة بادئة المزوّد، ويصبح كل مفتاح في `models` معرّف نموذج قابلًا للاختيار.
+
+```jsonc title="opencode.jsonc"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "model": "company/coder",
+  "providers": {
+    "company": {
+      "env": ["COMPANY_GATEWAY_KEY"],
+      "package": "@opencode/ai/providers/openai-compatible",
+      "settings": {
+        "baseURL": "https://gateway.example.com/v1",
+      },
+      "models": {
+        "coder": { "modelID": "upstream/coder-v2" },
+      },
+    },
+  },
+}
+```
+
+## الأخطاء
+
+تحدد أخطاء المزوّد والنموذج عادةً المرحلة التي فشلت. تحقّق من بيئة عملية الخادم ومن معرّف النموذج الدقيق قبل تغيير الحزم.
+
+| الخطأ أو العَرَض | ما يجب التحقق منه |
+| --- | --- |
+| `No model is available for session ...` | لا يوجد حاليًا نموذج مفعّل قابل للاختيار. أكمل الإعداد الخاص بالمزوّد، ثم اختر نموذجًا في `/models`. |
+| `Model unavailable: provider/model` | المزوّد غير نشط، أو معرّف النموذج غير موجود أو معطّل، أو لم يعد الاكتشاف الديناميكي يُرجعه. وللأسماء المستعارة المخصصة، تحقّق من مفتاح الكائن `models` لا من `modelID`. |
+| `Cannot initialize provider/model: NAME is required to resolve the provider endpoint` | لا يزال العنصر النائب `${NAME}` موجودًا في `baseURL`. اضبط ذلك المتغير على خادم OpenCode أو استبدل القالب بنقطة نهاية كاملة. |
+| `Azure resource name is missing` | اضبط `providers.azure.settings.resourceName` أو `AZURE_RESOURCE_NAME` أو قيمة `settings.baseURL` كاملة. |
+| لا يظهر Vertex | اضبط مشروعًا قابلًا للاستخراج في إعدادات المزوّد أو في أحد متغيرات المشروع المدعومة. فـ ADC وحده لا يفعّل المزوّد. |
+| لا يظهر Bedrock | وفّر ملف تعريف أو مُدخلًا آخر مدعومًا من سلسلة بيانات اعتماد AWS. فـ `AWS_REGION` وحده لا يفعل سوى تحديد المنطقة. |
+| لا توجد نماذج في Ollama | تأكد من أن الخادم يتيح `/api/tags` و`/api/show` على المسار المستنتج من `baseURL`، وأن `/api/show` يُبلغ عن الإمكانية `completion`. |
+| لا توجد نماذج في Copilot | تأكد من أن حساب OAuth النشط يملك صلاحية الوصول إلى Copilot Chat. ويُسجَّل فشل مزامنة النماذج بالرسالة `failed to sync GitHub Copilot models`. |
+
+يرفض V2 معرّفات المزوّدين المُستبعدة التي لها بديل مباشر. استخدم `azure/<model>` بدلًا من
+`azure-cognitive-services/<model>`، و`google-vertex/<model>` بدلًا من `google-vertex-anthropic/<model>`.
+
+## WebSockets
+
+يمكن لنماذج OpenAI وxAI ونماذج Azure Responses المدعومة إبقاء اتصال WebSocket واحد مفتوحًا لكل جلسة. فتعيد الخطوات المتتالية
+استخدام بادئة الطلب التي لم تتغير، ولا ترسل إلا المحتوى المضاف منذ الاستجابة السابقة، مما يقلل حجم البيانات المرفوعة في
+الجلسات الطويلة.
+
+```jsonc title="opencode.jsonc"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "providers": {
+    "openai": {
+      "settings": { "transport": "http" },
+    },
+  },
+}
+```
+
+يخضع سلوك WebSocket للقواعد التالية:
+
+- يفعّل المزوّدون المدمجون المسارات المدعومة وفق سياستهم الخاصة.
+- يفعّله ضبط `settings.transport: "websocket"` على المزوّد، ويعطّله `"http"`.
+- يؤدي ضبط `"websocket"` على مسار لا يملك قناة WebSocket إلى تسجيل تحذير والرجوع إلى HTTP.
+- يستخدم ضغط السياق لدى مزوّد OpenAI الاتصال نفسه.
+- لا يتابع xAI إلا من الاستجابات المخزنة. ومع قيمته الافتراضية `store: false`، تُرسل كل خطوة كاملةً عبر الاتصال المُعاد
+  استخدامه.
+- إذا أُغلق المقبس، يُعاد الاتصال في الخطوة التالية. وإذا تعذّر فتح الاتصال، تستمر الجلسة عبر HTTP.
+- تبقى إضافات المزوّدين التي تحتوي على الخطّافين (hooks) `http.request` أو `http.response` على HTTP، ليظل كل طلب قابلًا
+  للمراقبة.

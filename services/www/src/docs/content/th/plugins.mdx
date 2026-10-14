@@ -1,0 +1,125 @@
+---
+title: "ปลั๊กอิน"
+---
+
+เพิ่มแพ็กเกจที่เผยแพร่แล้ว แพ็กเกจที่ระบุเวอร์ชัน แพ็กเกจแบบมี scope หรือไดเรกทอรีปลั๊กอินภายในเครื่องลงใน `opencode.json(c)`
+
+## กำหนดค่า
+
+```jsonc title="opencode.jsonc"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "plugins": [
+    "opencode-acme-plugin",
+    "opencode-acme-plugin@1.2.0",
+    "@acme/opencode-plugin",
+    "./plugins/local",
+    "../shared/plugin.ts",
+    "/absolute/path/plugin.ts",
+    "file:///home/me/plugins/local",
+    {
+      "package": "@acme/opencode-plugin",
+      "options": {
+        "agent": "reviewer",
+        "strict": true,
+      },
+    },
+  ],
+}
+```
+
+พาธสัมพัทธ์จะอ้างอิงจากไฟล์กำหนดค่าที่มีรายการนั้น อาร์เรย์ปลั๊กอินจากไฟล์กำหนดค่าที่เกี่ยวข้องจะนำมาใช้เรียงจากลำดับความสำคัญต่ำไปสูง โดยไม่แทนที่กัน
+
+```text
+~/.config/opencode/opencode.jsonc
+./opencode.jsonc
+./.opencode/opencode.jsonc
+```
+
+## การค้นพบ
+
+OpenCode ยังโหลดไฟล์ `.ts` และ `.js` ที่อยู่ในไดเรกทอรีโดยตรง และไดเรกทอรีแพ็กเกจปลั๊กอินที่อยู่ชั้นถัดไปทันที จากทุกไดเรกทอรี `.opencode/plugins/` ที่ค้นพบ
+
+```text
+.opencode/
+└── plugins/
+    ├── concise.ts
+    ├── reviewer.js
+    └── acme-package/
+```
+
+ปลั๊กอินส่วนกลางใช้โครงสร้างการค้นพบแบบเดียวกันภายใต้ไดเรกทอรีกำหนดค่าของ OpenCode
+
+```text
+~/.config/opencode/plugins/
+```
+
+ไดเรกทอรี `plugins/` ที่อยู่ข้าง `opencode.json(c)` ที่รากของโปรเจกต์จะไม่ถูกค้นพบโดยอัตโนมัติ ให้กำหนดค่าไฟล์ในไดเรกทอรีนั้นอย่างชัดเจน หรือย้ายไปไว้ใต้ `.opencode/`
+
+```jsonc title="opencode.jsonc"
+{
+  "plugins": ["./plugins/local"]
+}
+```
+
+## การควบคุม
+
+รายการปลั๊กอินจะประมวลผลตามลำดับ ใส่ `-` นำหน้า ID หรือไวลด์การ์ดเพื่อปิดใช้งาน ใช้ `*` แทนปลั๊กอินทั้งหมด และใช้ `.*` เพื่อจับคู่ prefix ของ ID ส่วน ID ที่มาทีหลังจะเปิดใช้งานปลั๊กอินอีกครั้ง
+
+```jsonc title="opencode.jsonc"
+{
+  "plugins": ["*", "-opencode.provider.*", "opencode.provider.openai", "-acme.reviewer"]
+}
+```
+
+ปลั๊กอินในตัว 2 ตัวจะไม่สนใจการนำออก เพื่อไม่ให้ repository ปิดการบังคับใช้[นโยบาย](/policies)ได้ ได้แก่ `opencode.config.policy` และ `opencode.provider.opencode` ซึ่งเป็นการเชื่อมต่อกับ Console ที่ส่งนโยบายขององค์กรมาให้
+
+## การจัดการ
+
+ติดตั้ง แสดงรายการ ตรวจสอบ อัปเดต หรือนำปลั๊กอินแบบแพ็กเกจส่วนกลางออกได้ด้วย CLI
+
+```sh
+opencode plugin add opencode-acme-plugin@1.2.0
+opencode plugin list
+opencode plugin list --builtin
+opencode plugin check
+opencode plugin update
+opencode plugin update opencode-acme-plugin
+opencode plugin remove opencode-acme-plugin@1.2.0
+```
+
+`plugin check` ตรวจหาอัปเดตของปลั๊กอินแบบแพ็กเกจทั้งของเซิร์ฟเวอร์และที่ใช้เฉพาะ TUI ส่วน `plugin update` จะอัปเดตทุกแพ็กเกจที่ล้าสมัย ระบุแพ็กเกจที่กำหนดค่าไว้เพื่อตรวจสอบหรืออัปเดตเฉพาะแพ็กเกจนั้น ปลั๊กอินภายในเครื่องและแพ็กเกจที่ระบุ revision ตรงตัวจะถูกข้าม
+
+การติดตั้งแพ็กเกจรับชื่อ npm พร้อมเวอร์ชัน แท็ก หรือช่วงเวอร์ชัน รวมถึงการระบุแพ็กเกจ Git ที่เข้ากันได้กับ npm repository ของ Git ใช้ได้ทั้งชื่อย่อของบริการโฮสต์ HTTPS หรือ SSH รวมถึง repository ส่วนตัวที่เข้าถึงได้ด้วยข้อมูลรับรอง Git ที่มีอยู่
+
+```sh
+opencode plugin add @acme/opencode-plugin@latest
+opencode plugin add github:acme/opencode-plugin
+opencode plugin add git+ssh://git@github.com/acme/opencode-plugin.git#main
+opencode plugin add 'github:acme/plugins#main::path:packages/opencode-plugin'
+```
+
+รองรับ branch แท็ก commit hash แบบเต็ม และตัวเลือกไดเรกทอรีย่อยของ repository แบบ `::path:` ของ npm ให้กำหนดค่าพาธภายในเครื่องโดยตรง `plugin add` ไม่รับ tarball และ alias ของ npm
+
+## การโหลดใหม่
+
+การเปลี่ยนแปลงในไดเรกทอรีกำหนดค่าที่เฝ้าดูอยู่จะโหลดใหม่โดยอัตโนมัติ เมื่อเซิร์ฟเวอร์เริ่มทำงาน จะโหลดปลั๊กอินแบบแพ็กเกจที่แคชไว้ทันที ติดตั้งแพ็กเกจที่ขาดหายในเบื้องหลัง และตรวจหาอัปเดตของปลั๊กอิน npm และ Git ที่ไม่ได้ตรึงเวอร์ชันไว้ โดยไม่เปลี่ยนแพ็กเกจที่ติดตั้งอยู่ เวอร์ชัน npm ที่ระบุตรงตัวและ commit hash ของ Git แบบเต็มจะถูกตรึงไว้ การเปลี่ยนแปลง dependency ภายในเครื่องที่ไม่ได้เฝ้าดูอาจยังต้องรีสตาร์ต OpenCode
+
+```sh
+touch .opencode/plugins/concise/index.ts
+opencode service restart
+```
+
+## เทอร์มินัล
+
+ปลั๊กอินที่ใช้เฉพาะ CLI กำหนดค่าแยกต่างหาก และยังทำงานอยู่เมื่อเชื่อมต่อกับเซิร์ฟเวอร์ระยะไกล
+
+```json title="cli.json"
+{
+  "plugins": ["opencode-acme-cli"]
+}
+```
+
+<Card title="สร้างปลั๊กอิน" href="/build/plugins">
+  สร้างปลั๊กอินที่เพิ่มเครื่องมือ hook อินทิเกรชัน คำสั่ง เอเจนต์ และพฤติกรรมอื่น ๆ
+</Card>

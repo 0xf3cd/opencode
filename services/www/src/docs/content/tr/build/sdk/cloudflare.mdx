@@ -1,0 +1,88 @@
+---
+title: "Cloudflare"
+---
+
+`@opencode/sdk/workerd` paketini bir Cloudflare Durable Object içinde kullanın. Bu profil, nesnenin SQLite depolamasını
+kullanır, tahliye (eviction) sonrasında kurtarma için kalıcı olayları saklar ve kullanılamayan yerel dosya sistemi ve
+süreç hizmetlerinin yerine alternatiflerini koyar.
+
+```sh
+bun add @opencode/sdk
+```
+
+Her istek için yeni bir host oluşturmak yerine, Durable Object örneğinin ömrü boyunca tek bir host tutun.
+
+```ts
+import { OpenCodeWorkerd } from "@opencode/sdk/workerd"
+import myPlugin from "./my-plugin"
+
+export class OpenCodeDO {
+  private readonly opencode: Promise<OpenCodeWorkerd.Interface>
+
+  constructor(state: DurableObjectState) {
+    this.opencode = state.blockConcurrencyWhile(() =>
+      OpenCodeWorkerd.create({
+        storage: state.storage,
+        config: { default_agent: "build" },
+        plugins: [myPlugin],
+      }),
+    )
+  }
+
+  async fetch() {
+    const opencode = await this.opencode
+    return Response.json(await opencode.server.info())
+  }
+}
+```
+
+`blockConcurrencyWhile`, host hazır olana kadar tüm Durable Object olaylarını bekletir ve başlatma başarısız olursa nesneyi
+sıfırlar. Saklanan Promise, başlangıçtan sonra istek işleyicilerinin aynı host'a doğrudan erişmesini sağlar.
+
+```ts
+constructor(state: DurableObjectState) {
+  this.opencode = state.blockConcurrencyWhile(() =>
+    OpenCodeWorkerd.create({ storage: state.storage }),
+  )
+}
+```
+
+Wrangler, OpenCode'un Workerd için güvenli uygulamalarını `workerd` paket koşulu (package condition) aracılığıyla seçer.
+Cloudflare bir Durable Object'i temizlik yapmadan tahliye edebilir; bu nedenle doğru çalışma, `close()` çağrılmasına bağlı
+değildir.
+
+```jsonc title="wrangler.jsonc"
+{
+  "compatibility_flags": ["nodejs_compat"]
+}
+```
+
+## Özelleştirme
+
+OpenCode örneğinizi, Worker'ınızla birlikte paketlenen eklentileri kaydederek özelleştirin. Ajanları, modelleri, araçları
+ve diğer davranışları özelleştirmek için eklentileri `OpenCodeWorkerd.create()` fonksiyonuna iletin:
+
+```ts
+import { Plugin } from "@opencode/plugin"
+import { OpenCodeWorkerd } from "@opencode/sdk/workerd"
+
+const plugin = Plugin.define({
+  id: "customize-agent",
+  async setup(ctx) {
+    await ctx.agent.transform((agents) => {
+      agents.update("build", (agent) => {
+        agent.description = "Builds features and fixes bugs for our team"
+      })
+    })
+  },
+})
+
+await OpenCodeWorkerd.create({
+  storage: state.storage,
+  config: { default_agent: "build" },
+  plugins: [plugin],
+})
+```
+
+Eklenti hook'ları, dönüşümler, araçlar ve eklenti bağlamının tamamı için
+[eklenti dokümantasyonunun tamamına](/build/plugins) bakın.

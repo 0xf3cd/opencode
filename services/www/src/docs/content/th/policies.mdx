@@ -1,0 +1,207 @@
+---
+title: "นโยบาย"
+description: "อนุญาตหรือปฏิเสธ action ของ OpenCode กับ resource ที่ระบุชื่อ โดยนโยบายขององค์กรเป็นผู้ตัดสินขั้นสุดท้าย"
+---
+
+นโยบาย (policy) เป็นตัวตัดสินว่า OpenCode จะดำเนินการ (action) กับ resource ที่ระบุชื่อได้หรือไม่ นโยบายเขียนไว้ใต้ `policies` และยังส่งมาจาก Workspace ใน [OpenCode Console](/console) ที่เชื่อมต่ออยู่ได้ด้วย
+
+นโยบายแยกจาก[สิทธิ์](/permissions) สิทธิ์คือกฎของเครื่องมือรายเอเจนต์ที่ให้ผลเป็น `allow`, `deny` หรือ `ask` ได้ ส่วนนโยบายมีผลแค่สองแบบ ไม่เคยถาม และมีแต่จะเข้มงวดกว่าสิ่งที่สิทธิ์และผู้ให้บริการอนุญาตไว้เท่านั้น
+
+## กำหนดค่า
+
+ปฏิเสธผู้ให้บริการหนึ่งรายในทุกที่ด้วยการเพิ่ม statement ลงใน `opencode.jsonc`:
+
+```jsonc
+{
+  "$schema": "https://opencode.ai/config.json",
+  "policies": [{ "action": "provider.use", "resource": "openai", "effect": "deny" }],
+}
+```
+
+ผู้ให้บริการที่ถูกปฏิเสธจะหายไปจากแคตตาล็อกและการเลือกโมเดล แม้จะมีข้อมูลรับรองที่ถูกต้องก็ตาม
+
+รุ่นก่อนหน้าอ่านนโยบายจาก `experimental.policies` คีย์นี้ยังใช้งานได้และจะถูกรวมเข้ากับ `policies`:
+
+```jsonc
+{
+  "experimental": {
+    "policies": [{ "action": "provider.use", "resource": "openai", "effect": "deny" }],
+  },
+}
+```
+
+## Statement
+
+แต่ละ statement มีสามฟิลด์:
+
+| ฟิลด์ | ค่า | ความหมาย |
+| --- | --- | --- |
+| `action` | `provider.use`, `tool.use`, `integration.use` | การดำเนินการที่ควบคุม |
+| `resource` | สตริงหรือรูปแบบ wildcard | สิ่งที่ statement มีผล ขึ้นอยู่กับ action |
+| `effect` | `allow`, `deny` | ผลการตัดสินเมื่อ statement นี้ตรงกัน |
+
+statement ที่ตรวจสอบความถูกต้องไม่ผ่านจะถูกตัดทิ้งพร้อมคำเตือนในล็อกของเซิร์ฟเวอร์ ส่วนรายการที่เหลือยังคงมีผล ให้ตรวจสอบล็อกหลังแก้ไข `deny`
+
+## การจับคู่
+
+resource ใช้ wildcard แบบจับคู่ทั้งค่าเหมือนกับสิทธิ์ `*` ตรงกับอักขระศูนย์ตัวขึ้นไป และ `?` ตรงกับอักขระหนึ่งตัว
+
+```jsonc
+{
+  "policies": [{ "action": "provider.use", "resource": "company-*", "effect": "deny" }],
+}
+```
+
+ตัวอย่างนี้ปฏิเสธ `company-us` และ `company-eu` รูปแบบที่ลงท้ายด้วย ` *` จะตรงกับค่าที่ไม่มีอาร์กิวเมนต์ด้วย ดังนั้น `shell:git push *` จึงครอบคลุม `git push` เปล่า ๆ ด้วย
+
+## ลำดับ
+
+เมื่อมีหลาย statement ที่ตรงกัน statement สุดท้ายจะมีผล ไม่มีกฎเรื่องความเฉพาะเจาะจง จึงควรวาง statement ที่ครอบคลุมกว้างไว้ก่อนและข้อยกเว้นไว้หลัง หากไม่มี statement ใดตรงกัน action นั้นจะได้รับอนุญาต
+
+```jsonc
+{
+  "policies": [
+    { "action": "provider.use", "resource": "*", "effect": "deny" },
+    { "action": "provider.use", "resource": "anthropic", "effect": "allow" },
+  ],
+}
+```
+
+เหลือเพียง Anthropic ที่ใช้งานได้
+
+## ผู้ให้บริการ
+
+`provider.use` ควบคุมว่าผู้ให้บริการจะใช้งานได้หรือไม่ resource คือ ID ของผู้ให้บริการ ได้แก่ `anthropic`, `openai`, `opencode` หรือ ID แบบกำหนดเองจาก [`providers`](/providers)
+
+```jsonc
+{
+  "providers": {
+    "company-ai": {
+      "package": "@opencode/ai/providers/openai-compatible",
+      "settings": { "baseURL": "https://ai.company.example/v1" },
+    },
+  },
+  "policies": [
+    { "action": "provider.use", "resource": "*", "effect": "deny" },
+    { "action": "provider.use", "resource": "company-ai", "effect": "allow" },
+  ],
+}
+```
+
+รายการ `providers` กำหนดค่า endpoint ส่วน statement ทำให้ผู้ให้บริการนี้เป็นรายเดียวที่ OpenCode จะใช้ นโยบายมีผลไม่ว่า OpenCode จะรู้จักผู้ให้บริการนั้นจากที่ใด ไม่ว่าจะเป็นข้อมูลแคตตาล็อก ตัวแปรสภาพแวดล้อม บัญชีที่บันทึกไว้ ปลั๊กอินในตัว หรือการกำหนดค่า
+
+ใช้ `provider.use` แทนรายการ `enabled_providers` และ `disabled_providers` ของ V1 ไฟล์ของ V1 ยังโหลดได้ ดู[ย้ายจาก V1](/migrate-v1#supported-fields-without-direct-native-equivalents)
+
+## เครื่องมือ
+
+statement `tool.use` ปฏิเสธการตรวจสอบ[สิทธิ์](/permissions)แบบเด็ดขาด resource คือ `<action>:<value>` ซึ่งจะจับคู่กับทุก resource ที่เครื่องมือตรวจสอบ
+
+```jsonc
+{
+  "policies": [
+    { "action": "tool.use", "resource": "shell:git push *", "effect": "deny" },
+    { "action": "tool.use", "resource": "edit:*.env", "effect": "deny" },
+    { "action": "tool.use", "resource": "webfetch:*", "effect": "deny" },
+  ],
+}
+```
+
+การตรวจสอบที่ถูกปฏิเสธจะล้มเหลวด้วย `Blocked by configuration policy` แทนที่จะถาม เนื่องจากมีผลหลังกฎของเอเจนต์และการอนุมัติที่บันทึกไว้ จึงแทนที่ได้ทั้ง `ask` และการอนุมัติแบบ “Allow always”
+
+| รูปแบบ | สิ่งที่บล็อก |
+| --- | --- |
+| `shell:*` | คำสั่ง shell ทุกคำสั่ง |
+| `read:*/.ssh/*` | การอ่านข้อมูล SSH |
+| `external_directory:*` | การเข้าถึงใด ๆ นอก Location หรือ worktree |
+| `subagent:general` | การเริ่มเอเจนต์ย่อยหนึ่งตัว |
+| `github_delete_repository:*` | เครื่องมือ MCP หนึ่งตัว |
+| `*` | ทุกอย่างที่ยังไม่ถูกปฏิเสธ |
+
+statement `tool.use` ที่เป็น `allow` ไม่เคยให้สิทธิ์เข้าถึง แต่เพียงยกเลิก `deny` ที่ครอบคลุมกว้างกว่าซึ่งอยู่ก่อนหน้า จากนั้นกฎของเอเจนต์เองจะเป็นตัวตัดสิน
+
+```jsonc
+{
+  "policies": [
+    { "action": "tool.use", "resource": "shell:*", "effect": "deny" },
+    { "action": "tool.use", "resource": "shell:git status *", "effect": "allow" },
+  ],
+}
+```
+
+`git status` จะกลับไปใช้กฎ `shell` ของเอเจนต์ ส่วนคำสั่งอื่นทั้งหมดจะถูกบล็อก
+
+## การผสานรวม
+
+`integration.use` ควบคุมว่าจะโหลดเซิร์ฟเวอร์ MCP สกิล หรือปลั๊กอินหรือไม่ resource คือประเภทของการผสานรวมและ ID ของมัน:
+
+| Resource | มีผลกับ |
+| --- | --- |
+| `mcp:<server>` | [เซิร์ฟเวอร์ MCP](/mcp-servers)ตามชื่อที่กำหนดค่าไว้ |
+| `skill:<id>` | [สกิล](/skills)ตาม ID |
+| `plugin:<target>` | [ปลั๊กอิน](/plugins)ตามชื่อแพ็กเกจที่ไม่มีเวอร์ชันหรือพาธสัมบูรณ์ |
+
+```jsonc
+{
+  "policies": [
+    { "action": "integration.use", "resource": "mcp:*", "effect": "deny" },
+    { "action": "integration.use", "resource": "mcp:github", "effect": "allow" },
+    { "action": "integration.use", "resource": "plugin:opencode-acme-cli", "effect": "deny" },
+  ],
+}
+```
+
+เซิร์ฟเวอร์ MCP หรือสกิลที่ถูกปฏิเสธจะถูกนำออก และปลั๊กอินที่ถูกปฏิเสธจะไม่ถูกโหลด ไม่ว่าจะกำหนดค่าไว้ด้วยวิธีใด
+
+## ลำดับความสำคัญ
+
+สำหรับการตั้งค่าทั่วไป การกำหนดค่าที่อยู่ใกล้ที่สุดจะมีผล แต่นโยบายกลับกัน statement จากการกำหนดค่าที่ครอบคลุมกว้างกว่าจะถูกประเมินทีหลัง จึงแทนที่ statement ที่แคบกว่า การกำหนดค่าแบบ managed และ Console ที่เชื่อมต่ออยู่จะเป็นผู้ตัดสินขั้นสุดท้ายเสมอ
+
+| ระดับอำนาจ | แหล่งที่มา |
+| --- | --- |
+| 1 (สูงสุด) | Workspace ใน OpenCode Console ที่เชื่อมต่ออยู่ |
+| 2 | managed preferences ของ macOS (`/Library/Managed Preferences/ai.opencode.managed.plist`) |
+| 3 | `opencode.json(c)` ระดับระบบ (`/Library/Application Support/opencode`, `/etc/opencode`, `%ProgramData%\opencode`) |
+| 4 | `~/.config/opencode/opencode.json(c)` ระดับ global |
+| 5 | `opencode.json(c)` โดยตรง ไดเรกทอรีชั้นนอกมีอำนาจเหนือไดเรกทอรีชั้นใน |
+| 6 (ต่ำสุด) | `.opencode/opencode.json(c)` ไดเรกทอรีชั้นนอกมีอำนาจเหนือไดเรกทอรีชั้นใน |
+
+repository ไม่สามารถเปิดใช้งานผู้ให้บริการที่คุณปฏิเสธไว้ในระดับ global ได้อีก:
+
+```jsonc title="~/.config/opencode/opencode.jsonc"
+{
+  "policies": [{ "action": "provider.use", "resource": "openai", "effect": "deny" }],
+}
+```
+
+```jsonc title="project/opencode.jsonc"
+{
+  "policies": [{ "action": "provider.use", "resource": "openai", "effect": "allow" }],
+}
+```
+
+`openai` ยังคงถูกปฏิเสธ ภายในไฟล์เดียวกัน statement จะคงลำดับตามที่เขียนไว้
+
+## Console
+
+Workspace บน [OpenCode Console](/console) จะคอมไพล์นโยบาย Providers และ Tools เป็น statement แล้วส่งกลับมาพร้อมการกำหนดค่าของ Workspace OpenCode จะต่อท้าย statement เหล่านี้หลัง statement ทั้งหมดที่เขียนไว้ จึงเป็นผู้ตัดสินขั้นสุดท้าย `deny` ขององค์กรไม่สามารถถูกยกเลิกด้วย `allow` ของ repository หรือผู้ใช้ได้ และ `allow` ขององค์กรจะยกเลิก `deny` ที่มีระดับอำนาจต่ำกว่าได้
+
+การปฏิเสธจาก statement เหล่านี้จะระบุชื่อ Workspace:
+
+```text
+Blocked by Acme's policy
+```
+
+statement จะเป็นไปตามบัญชีที่เชื่อมต่ออยู่
+
+| อีเวนต์ | ผลลัพธ์ |
+| --- | --- |
+| นโยบายใน Console เปลี่ยนแปลง | มีผลในการดึงข้อมูลครั้งถัดไป ประมาณนาทีละครั้ง |
+| สลับไปยัง Workspace อื่น | statement ถูกแทนที่ด้วยของ Workspace นั้น |
+| ยกเลิกการเชื่อมต่อ | statement ถูกล้าง |
+| ติดต่อ Console ไม่ได้ | statement ล่าสุดของการเชื่อมต่อนั้นยังคงมีผล |
+
+ปลั๊กอิน Console และปลั๊กอินนโยบายไม่สามารถปิดใช้งานจาก `plugins` ได้ ดู[การควบคุมปลั๊กอิน](/plugins#control)
+
+<Callout type="note">
+  นโยบายไม่ได้กำหนดค่า endpoint หรือข้อมูลรับรอง และไม่สามารถทำให้ผู้ให้บริการที่ใช้งานไม่ได้กลับมาใช้งานได้ นอกจากนี้ยังไม่ได้ sandbox โค้ดของปลั๊กอิน ผู้ให้บริการที่ถูกปฏิเสธจะถูกบล็อกบนเส้นทางปกติของผู้ให้บริการและโมเดลเท่านั้น
+</Callout>

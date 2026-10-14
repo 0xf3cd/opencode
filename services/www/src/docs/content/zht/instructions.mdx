@@ -1,0 +1,112 @@
+---
+title: "指示"
+---
+
+新增 `AGENTS.md` 檔案，為 OpenCode 提供持續有效的專案指引。你可以在裡面寫建置指令、架構說明、程式碼慣例和驗證要求。
+
+```md title="AGENTS.md"
+# Project instructions
+
+- Run `bun typecheck` after changing TypeScript.
+- Keep database queries in `src/database`.
+- Do not edit generated files directly.
+```
+
+請將專案的指示檔案提交到儲存庫，讓所有在該儲存庫中工作的人都取得相同的指引。
+
+## 範圍
+
+將 `AGENTS.md` 放在其指引應套用的目錄中。OpenCode 會先載入全域檔案，再從目前的工作區目錄往家目錄方向，載入沿途的每個 `AGENTS.md`。如果工作區不在家目錄底下，則會在專案根目錄停止。
+
+```text
+~/.config/opencode/AGENTS.md
+~/code/my-project/AGENTS.md
+~/code/my-project/packages/AGENTS.md
+~/code/my-project/packages/web/AGENTS.md  ← current workspace
+```
+
+在這個範例中，四個檔案都會載入，並依照以下順序合併：
+
+```text
+~/.config/opencode/AGENTS.md
+packages/web/AGENTS.md
+packages/AGENTS.md
+AGENTS.md
+```
+
+適用於所有地方的指引請寫在全域檔案中。整個儲存庫通用的指引放在專案根目錄，較具體的指引則放在靠近相關程式碼的位置。OpenCode 會合併這些檔案，但不會處理檔案之間的衝突。
+
+如果工作區位於專案根目錄之外，就只會載入全域檔案。設定 `OPENCODE_DISABLE_PROJECT_CONFIG=1` 可略過專案 `AGENTS.md` 的探索，但不會停用全域檔案。
+
+<Callout type="note">
+  OpenCode V2 只會辨識 `AGENTS.md`，不會改用 `CLAUDE.md` 作為備援。
+</Callout>
+
+## 探索
+
+工作區底下的指示檔案，會在代理探索專案時被發現。讀取檔案或列出目錄時，會載入該目標與工作區之間的所有 `AGENTS.md` 檔案。
+
+```text
+my-project/                         ← current workspace
+├── AGENTS.md                       loaded initially
+└── packages/
+    └── web/
+        ├── AGENTS.md               loaded when this area is read
+        └── src/
+            └── app.ts              read target
+```
+
+巢狀檔案會依照由近到遠的順序載入；只要其指示項目仍在模型可見的對話記錄中，就不會重複載入。再次讀取同一個區域，通常不會再次注入這些檔案。如果上下文壓縮或回復移除了該項目，之後的讀取就可能再次載入該檔案。
+
+巢狀檔案載入後，對它的編輯不會被自動偵測。如果需要立即套用更新後的內容，請開啟新的工作階段。
+
+## 順序
+
+最先傳送的是所選代理或供應商的系統提示詞。接著 OpenCode 會依照以下順序組合初始指示：
+
+```text
+1. Agent or provider system prompt
+2. Built-in environment and date context
+3. Code Mode tool guidance, when enabled
+4. Global and project AGENTS.md files
+5. Available skill, reference, and MCP guidance
+6. Session-specific instruction entries supplied through the API
+```
+
+這些來源會合併使用，而不是互相覆寫。之後才探索到的巢狀 `AGENTS.md` 檔案，會依照探索順序加入工作階段的對話記錄。
+
+## 更新
+
+在工作階段執行期間，編輯全域或向上探索到的 `AGENTS.md`，即可更新其指引。
+
+```bash
+$ printf '\n- Run the integration suite before committing.\n' >> AGENTS.md
+```
+
+在下一次模型請求之前，OpenCode 會偵測到變更，並在傳遞待處理的輸入之前加入一則指示更新：
+
+```text
+AGENTS.md changes
+→ instruction update
+→ next prompt
+```
+
+- 移除所有常駐的 `AGENTS.md`（全域或向上探索到的檔案）時，會告知工作階段先前的常駐指示已不再適用。
+- 暫時性的讀取失敗會保留最後已知的指示，而不會將其視為已刪除。
+- 移動工作階段時會保留其指示狀態，因此目的地的指引會以更新的形式加入。
+- 確認回復工作階段時，會清除其指示狀態，並在下一個提示詞之前重新載入指示。
+
+指示內容仍屬於特權內容。用戶端可以看到哪些來源有變更，但看不到其內容。
+
+## 設定
+
+V2 的設定結構描述接受 `instructions` 陣列，但 V2 目前不會解析其中的檔案、glob 模式或 URL。以下設定目前還不會為模型加入任何指示：
+
+```jsonc title="opencode.jsonc"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "instructions": ["CONTRIBUTING.md", "docs/guidelines/*.md", "https://example.com/instructions.md"],
+}
+```
+
+在 V2 中，請使用 `AGENTS.md` 提供實際生效的指示。設定檔的位置和優先順序請參閱[設定](/config)。

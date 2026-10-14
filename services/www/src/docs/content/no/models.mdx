@@ -1,0 +1,464 @@
+---
+title: "Modeller"
+---
+
+Velg en modell for den gjeldende økten med `/models`:
+
+```text
+/models
+```
+
+OpenCode lister opp modeller fra [models.dev](https://models.dev), leverandørintegrasjoner og konfigurasjonen din.
+Velgeren viser bare aktiverte modeller der leverandøren er tilgjengelig i det gjeldende prosjektet. Koble til
+leverandører under [Leverandører](/providers).
+
+## Velg
+
+Velg en oppføring fra `/models` i stedet for å gjette leverandøren eller modell-ID-en. Valget gjelder for den gjeldende
+økten og endrer ikke konfigurasjonen din.
+
+```text
+anthropic/claude-sonnet-4-5
+```
+
+Tilgjengeligheten avhenger av prosjektet:
+
+- Modellen må være aktivert.
+- Leverandøren må være tilgjengelig i det gjeldende prosjektet.
+- Legitimasjon og konfigurasjon fra et annet prosjekt overføres ikke automatisk.
+
+## Kjøringer
+
+Bruk `--model` for å velge en modell for én kjøring på kommandolinjen uten å endre den konfigurerte standarden:
+
+```bash
+opencode run --model anthropic/claude-sonnet-4-5 "Refactor parseToken"
+```
+
+Agenter og kommandoer kan også velge sin egen modell. Se [Agenter](/agents) og [Kommandoer](/commands).
+
+## Standarder
+
+Sett `model` i `opencode.json` eller `opencode.jsonc` for å velge standardmodellen for nytt arbeid:
+
+```jsonc title="opencode.jsonc"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "model": "anthropic/claude-sonnet-4-5",
+}
+```
+
+Den konfigurerte modellen blir standard i katalogen når den er aktivert og leverandøren er tilgjengelig. Ellers faller
+OpenCode tilbake på den nyeste tilgjengelige støttede modellen.
+
+- En modell som allerede er valgt for en økt, har forrang foran den konfigurerte standarden.
+- Å bytte modell i en økt skriver ikke om konfigurasjonsfilen.
+- `model` på rotnivå beholder foreløpig bare standardleverandøren og -modellen, ikke en variant.
+
+Se [Konfigurasjon](/config) for konfigurasjonsplasseringer og prioritet.
+
+## Varianter
+
+Varianter er navngitte alternativer for én modell, ofte brukt for resonneringsinnsats eller tokenbudsjetter. Legg til
+`#variant` når du velger en variant for en kjøring, en økt, en agent eller en kommando:
+
+```bash
+opencode run --model openai/gpt-5.2#high "Review this migration plan"
+```
+
+Variantnavnene kommer fra den gjeldende katalogmetadataen for den valgte modellen. Navn som `low`, `high` og `max` er
+ikke tilgjengelige for alle modeller, og en ukjent variant gir en feil ved oppløsning av modellen.
+
+Definer nye varianter, eller erstatt katalogvarianter med samme ID, i modellens `variants`-matrise:
+
+```jsonc title="opencode.jsonc"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "providers": {
+    "openai": {
+      "models": {
+        "gpt-5.2": {
+          "settings": {
+            "reasoningEffort": "medium",
+          },
+          "variants": [
+            {
+              "id": "fast",
+              "settings": {
+                "reasoningEffort": "low",
+              },
+            },
+            {
+              "id": "deep",
+              "settings": {
+                "reasoningEffort": "high",
+                "reasoningSummary": "auto",
+              },
+            },
+          ],
+        },
+      },
+    },
+  },
+}
+```
+
+Hver variant kan inneholde `settings`, `headers` og `body`. Verdiene brukes etter verdiene for leverandøren og modellen.
+
+## Alternativer
+
+Oppføringer for leverandører og modeller kan tilpasse forespørsler med `settings`, `headers` og `body`:
+
+```jsonc title="opencode.jsonc"
+{
+  "providers": {
+    "openai": {
+      "settings": {
+        "baseURL": "https://api.example.com/v1",
+      },
+      "headers": {
+        "X-Team": "platform",
+      },
+      "models": {
+        "gpt-5.2": {
+          "settings": {
+            "reasoningEffort": "high",
+          },
+          "body": {
+            "store": false,
+          },
+        },
+      },
+    },
+  },
+}
+```
+
+| Felt       | Formål                                                                 |
+| ---------- | ---------------------------------------------------------------------- |
+| `settings` | Alternativer for leverandørpakken, for eksempel `baseURL` eller `reasoningEffort`. |
+| `headers`  | Ekstra headere i HTTP-forespørselen.                                   |
+| `body`     | Leverandørspesifikke felt i forespørselskroppen.                       |
+
+OpenCode bruker leverandørverdiene først, deretter modellverdiene og til slutt den valgte varianten.
+
+- Nestede `settings`- og `body`-objekter slås sammen.
+- Senere matriser og skalarverdier erstatter tidligere verdier.
+- Headernavn matches uten å skille mellom store og små bokstaver.
+- Alternativene er leverandørspesifikke og kan bli ignorert eller avvist av en annen leverandørpakke.
+
+## Aliaser
+
+Bruk `modelID` for å gi en API-modell en mer brukervennlig katalog-ID:
+
+```jsonc title="opencode.jsonc"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "model": "openai/coding-default",
+  "providers": {
+    "openai": {
+      "models": {
+        "coding-default": {
+          "modelID": "gpt-5.2",
+          "name": "Coding default",
+          "capabilities": {
+            "tools": true,
+            "input": ["text", "image"],
+            "output": ["text"],
+          },
+          "limit": {
+            "context": 200000,
+            "output": 32000,
+          },
+        },
+      },
+    },
+  },
+}
+```
+
+Her er `openai/coding-default` referansen du kan velge, og `gpt-5.2` er det som sendes til leverandøren. For en modell som
+ikke allerede finnes i katalogen, antar OpenCode:
+
+- Støtte for verktøy, tekst- og bildeinndata og tekstutdata.
+- En kontekstgrense på 200 000 tokens og en utdatagrense på 32 000 tokens.
+- En uspesifisert inndatagrense.
+
+Dette er fallback-antakelser, ikke oppdagede egenskaper. Sett nøyaktige verdier for `capabilities` og `limit` når du
+kjenner dem; eksplisitte verdier erstatter fallback-verdiene. Legg til `disabled: true` for å skjule en modell fra den
+tilgjengelige katalogen:
+
+```jsonc title="opencode.jsonc"
+{
+  "providers": {
+    "openai": {
+      "models": {
+        "legacy-model": {
+          "disabled": true,
+        },
+      },
+    },
+  },
+}
+```
+
+## Resonnering
+
+For en OpenAI-kompatibel modell som strømmer resonnering i et egendefinert felt i assistentmeldingen, setter du
+`compatibility.reasoningField`:
+
+```jsonc title="opencode.jsonc"
+{
+  "providers": {
+    "local": {
+      "models": {
+        "reasoner": {
+          "compatibility": {
+            "reasoningField": "reasoning_content",
+          },
+        },
+      },
+    },
+  },
+}
+```
+
+OpenCode gjenkjenner `reasoning`, `reasoning_content` og `reasoning_text`, og godtar også en annen leverandørspesifikk
+streng. Den leser strømmet resonnering fra dette feltet og gjenoppretter feltet når tidligere assistentmeldinger sendes
+tilbake til modellen.
+
+## Prompt-hurtigbuffer
+
+OpenCode plasserer bruddpunkter for prompt-hurtigbufferen automatisk på ruter der det er kjent at de trengs, for eksempel
+Anthropic. Når Claude-modeller leveres gjennom en OpenAI-kompatibel proxy som LiteLLM, kan ikke OpenCode vite at de trenger
+`cache_control`-bruddpunkter i Anthropic-stil. Sett `compatibility.cacheFormat` på disse Claude-modellene:
+
+```jsonc title="opencode.jsonc"
+{
+  "providers": {
+    "litellm": {
+      "package": "@opencode/ai/providers/openai-compatible",
+      "settings": { "baseURL": "https://litellm.example.com/v1" },
+      "models": {
+        "claude-sonnet-5": {
+          "compatibility": { "cacheFormat": "anthropic" },
+        },
+        "claude-opus-5-5": {
+          "compatibility": { "cacheFormat": "anthropic" },
+        },
+        // Other models on the same proxy cache automatically and need no setting.
+        "gpt-6.1": {},
+      },
+    },
+  },
+}
+```
+
+OpenCode merker da den siste verktøydefinisjonen, systemprompten og den nyeste meldingen med
+`cache_control: { "type": "ephemeral" }`, som bruker endepunktets standard levetid for hurtigbufferen på fem minutter.
+Bruk `"alibaba"` for modeller i Alibaba Model Studio, som godtar de samme markørene, men ignorerer dem på
+verktøydefinisjoner. Sett heller `compatibility.cacheFormat` på leverandøren når alle modellene den leverer, godtar samme
+format.
+
+## Lokalt
+
+OpenCode oppdager automatisk modeller fra Ollama, LM Studio og vLLM på standardadressene deres lokalt. Du kan også
+konfigurere en hvilken som helst OpenAI-kompatibel server manuelt.
+
+```text
+ollama/gemma3:4b
+lmstudio/google/gemma-4-26b-a4b
+vllm/Qwen/Qwen3-Coder-30B-A3B-Instruct
+```
+
+### Ollama
+
+Når Ollama lytter på `http://127.0.0.1:11434`, velger du en oppdaget modell med leverandør-ID-en `ollama`:
+
+```jsonc title="opencode.jsonc"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "model": "ollama/gemma3:4b",
+}
+```
+
+OpenCode oppdaterer oversikten i bakgrunnen og leser egenskaper for kontekst, bildeforståelse og verktøybruk fra Ollama.
+Modeller som bare lager embeddinger, utelates.
+
+For en annen vert eller port setter du den OpenAI-kompatible URL-en til Ollama. Oppdagelsen bruker fortsatt det native
+Ollama-API-et med samme baneprefiks:
+
+```jsonc title="opencode.jsonc"
+{
+  "providers": {
+    "ollama": {
+      "settings": {
+        "baseURL": "http://127.0.0.1:5678/v1",
+        "apiKey": "{env:OLLAMA_API_KEY}",
+      },
+    },
+  },
+}
+```
+
+- Utelat `apiKey` når endepunktet ikke krever bearer-autentisering.
+- Slå av oppdagelse med `"plugins": ["-opencode.provider.ollama"]`.
+
+### LMStudio
+
+Med en LM Studio-server uten autentisering på `http://127.0.0.1:1234` velger du en oppdaget modell med leverandør-ID-en
+`lmstudio`:
+
+```jsonc title="opencode.jsonc"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "model": "lmstudio/google/gemma-4-26b-a4b",
+}
+```
+
+OpenCode oppdaterer oversikten i bakgrunnen og leser egenskaper for kontekst, bildeforståelse og verktøybruk fra LM
+Studio. Embedding-modeller utelates.
+
+For en annen vert eller port setter du den OpenAI-kompatible URL-en. Modellene oppdages fortsatt automatisk:
+
+```jsonc title="opencode.jsonc"
+{
+  "providers": {
+    "lmstudio": {
+      "settings": {
+        "baseURL": "http://127.0.0.1:5678/v1",
+        "apiKey": "{env:LMSTUDIO_API_KEY}",
+      },
+    },
+  },
+}
+```
+
+- Utelat `apiKey` når autentisering i LM Studio er slått av.
+- Slå av oppdagelse med `"plugins": ["-opencode.provider.lmstudio"]`.
+
+### vLLM
+
+Når vLLM lytter på `http://127.0.0.1:8000`, velger du en oppdaget modell med leverandør-ID-en `vllm`:
+
+```jsonc title="opencode.jsonc"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "model": "vllm/Qwen/Qwen3-Coder-30B-A3B-Instruct",
+}
+```
+
+OpenCode sjekker `/health`, oppdaterer `/v1/models` i bakgrunnen, bruker den rapporterte `max_model_len` som
+kontekstgrense og tar bare med modellkort som eies av `vllm`.
+
+Oppdagede modeller oppgir tekstinndata og tekstutdata, men ikke bildeforståelse eller verktøy. vLLM slår på verktøykall
+med serverflagg som `--enable-auto-tool-choice` og `--tool-call-parser`, og disse rapporteres ikke ved oppdagelse.
+
+For et annet endepunkt eller en server med autentisering setter du den OpenAI-kompatible URL-en:
+
+```jsonc title="opencode.jsonc"
+{
+  "providers": {
+    "vllm": {
+      "settings": {
+        "baseURL": "http://127.0.0.1:9000/v1",
+        "apiKey": "{env:VLLM_API_KEY}",
+      },
+    },
+  },
+}
+```
+
+- Utelat `apiKey` når autentisering er slått av.
+- Slå av oppdagelse med `"plugins": ["-opencode.provider.vllm"]`.
+- Proxyer med baneprefiks støttes. `https://example.com/vllm/v1` sjekker for eksempel `/vllm/health` og oppdager
+  `/vllm/v1/models`.
+
+### Kompatible
+
+For en annen OpenAI-kompatibel server definerer du leverandørpakken, endepunktet og minst én modell:
+
+```jsonc title="opencode.jsonc"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "model": "local/coder",
+  "providers": {
+    "local": {
+      "name": "Local server",
+      "package": "@opencode/ai/providers/openai-compatible",
+      "settings": {
+        "baseURL": "http://127.0.0.1:1234/v1",
+      },
+      "models": {
+        "coder": {
+          "modelID": "model-name-on-server",
+          "capabilities": {
+            "tools": true,
+            "input": ["text"],
+            "output": ["text"],
+          },
+          "limit": {
+            "context": 32768,
+            "output": 8192,
+          },
+        },
+      },
+    },
+  },
+}
+```
+
+Bruk serverens faktiske modellnavn, grenser, inndata- og utdatatyper og verktøystøtte. OpenCode kan ikke oppdage om
+fallback-verdiene for egendefinerte modeller er riktige. Hvis endepunktet krever en nøkkel, legger du til `apiKey` i
+`settings` med en miljøvariabel, for eksempel `"apiKey": "{env:LOCAL_API_KEY}"`. Ikke sjekk inn hemmeligheter.
+
+## Referanser
+
+Modellvelgere bruker `provider/model` med en valgfri `#variant`:
+
+```text
+openai/gpt-5.2
+openai/gpt-5.2#high
+openrouter/anthropic/claude-sonnet-4.5#high
+```
+
+| Del         | Regel                                                         |
+| ----------- | ------------------------------------------------------------- |
+| Leverandør  | Slutter ved første `/`; kan ikke inneholde `/` eller `#`.     |
+| Modell      | Kan inneholde flere `/`-tegn; kan ikke inneholde `#`.         |
+| Variant     | Kommer etter `#` når den finnes.                              |
+| Store og små bokstaver | Leverandør- og modell-ID-er skiller mellom store og små bokstaver. |
+
+Bruk katalog-ID-er i stedet for leverandørenes visningsnavn. `model`-feltene på rotnivå, i agenter og i kommandoer godtar
+strengformen ovenfor eller et utvidet objekt:
+
+```jsonc
+{
+  "model": {
+    "providerID": "openrouter",
+    "model": "anthropic/claude-sonnet-4.5",
+  },
+}
+```
+
+Den utvidede formen er nyttig for generert eller programmatisk konfigurasjon.
+
+## Forbehold
+
+Ha disse reglene i bakhodet når du konfigurerer modeller:
+
+```jsonc
+{
+  "model": "openai/gpt-5.2"
+}
+```
+
+- Et velgerobjekt bruker `model`; en oppføring i leverandørkatalogen bruker `modelID` for ID-en som sendes til
+  leverandøren.
+- Selv om valgformen på rotnivå godtar en variant, beholder ikke V2-katalogstandarden den. Velg heller varianter for en
+  økt, en kjøring, en agent eller en kommando.
+- Modellalternativer er leverandørspesifikke. En annen leverandørpakke kan ignorere eller avvise dem.
+- Katalogdata, legitimasjon og konfigurasjon er knyttet til plasseringen. En modell som er tilgjengelig i ett prosjekt,
+  kan være utilgjengelig i et annet.
+- Konfigurasjonsfiler lastes vanligvis inn på nytt automatisk. En modellforespørsel som allerede pågår, beholder
+  innstillingene den startet med.

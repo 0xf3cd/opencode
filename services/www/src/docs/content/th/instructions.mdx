@@ -1,0 +1,112 @@
+---
+title: "คำแนะนำ"
+---
+
+เพิ่มไฟล์ `AGENTS.md` เพื่อให้คำแนะนำ (instructions) ประจำโปรเจกต์แก่ OpenCode อย่างต่อเนื่อง ใช้ไฟล์นี้สำหรับคำสั่ง build บันทึกด้านสถาปัตยกรรม ข้อตกลงในการเขียนโค้ด และข้อกำหนดในการตรวจสอบ
+
+```md title="AGENTS.md"
+# Project instructions
+
+- Run `bun typecheck` after changing TypeScript.
+- Keep database queries in `src/database`.
+- Do not edit generated files directly.
+```
+
+ให้ commit ไฟล์คำแนะนำของโปรเจกต์ไว้ เพื่อให้ทุกคนที่ทำงานใน repository ได้รับคำแนะนำชุดเดียวกัน
+
+## ขอบเขต
+
+วาง `AGENTS.md` ไว้ในไดเรกทอรีที่ต้องการให้คำแนะนำมีผล OpenCode จะโหลดไฟล์ระดับ global ก่อน ตามด้วย `AGENTS.md` ทุกไฟล์ตั้งแต่ไดเรกทอรี workspace ปัจจุบันไล่ขึ้นไปจนถึงโฮมไดเรกทอรี สำหรับ workspace ที่อยู่นอกโฮมไดเรกทอรี จะหยุดที่รากของโปรเจกต์
+
+```text
+~/.config/opencode/AGENTS.md
+~/code/my-project/AGENTS.md
+~/code/my-project/packages/AGENTS.md
+~/code/my-project/packages/web/AGENTS.md  ← current workspace
+```
+
+ในตัวอย่างนี้ ไฟล์ทั้งสี่จะถูกโหลด และรวมกันตามลำดับนี้:
+
+```text
+~/.config/opencode/AGENTS.md
+packages/web/AGENTS.md
+packages/AGENTS.md
+AGENTS.md
+```
+
+เก็บคำแนะนำที่ใช้กับทุกที่ไว้ในไฟล์ระดับ global วางคำแนะนำที่ใช้ทั้ง repository ไว้ที่รากของโปรเจกต์ และวางคำแนะนำที่เฉพาะเจาะจงกว่าไว้ใกล้กับโค้ดที่เกี่ยวข้อง OpenCode จะรวมไฟล์ทั้งหมดเข้าด้วยกันและไม่แก้ไขความขัดแย้งระหว่างไฟล์
+
+หาก workspace อยู่นอกรากของโปรเจกต์ จะโหลดเฉพาะไฟล์ระดับ global ตั้งค่า `OPENCODE_DISABLE_PROJECT_CONFIG=1` เพื่อข้ามการค้นหา `AGENTS.md` ของโปรเจกต์โดยไม่ปิดไฟล์ระดับ global
+
+<Callout type="note">
+  OpenCode V2 รู้จักเฉพาะ `AGENTS.md` เท่านั้น และไม่ใช้ `CLAUDE.md` เป็นค่าสำรอง
+</Callout>
+
+## การค้นหาไฟล์
+
+ไฟล์คำแนะนำที่อยู่ใต้ workspace จะถูกค้นพบระหว่างที่เอเจนต์สำรวจโปรเจกต์ การอ่านไฟล์หรือแสดงรายการไดเรกทอรีจะโหลด `AGENTS.md` ทุกไฟล์ที่อยู่ระหว่างเป้าหมายนั้นกับ workspace
+
+```text
+my-project/                         ← current workspace
+├── AGENTS.md                       loaded initially
+└── packages/
+    └── web/
+        ├── AGENTS.md               loaded when this area is read
+        └── src/
+            └── app.ts              read target
+```
+
+ไฟล์ที่ซ้อนอยู่ด้านในจะโหลดโดยเริ่มจากไฟล์ที่ใกล้ที่สุดก่อน และจะไม่โหลดซ้ำตราบใดที่รายการคำแนะนำของไฟล์นั้นยังอยู่ในประวัติที่โมเดลมองเห็น การอ่านพื้นที่เดิมอีกครั้งตามปกติจะไม่แทรกไฟล์เหล่านั้นซ้ำ หากการบีบอัดบริบทหรือการย้อนกลับนำรายการนั้นออกไป การอ่านครั้งถัดไปก็อาจโหลดไฟล์นั้นอีกครั้งได้
+
+หลังจากโหลดไฟล์ที่ซ้อนอยู่ด้านในแล้ว ระบบจะไม่ตรวจพบการแก้ไขไฟล์นั้นโดยอัตโนมัติ ให้เริ่มเซสชันใหม่หากต้องการให้ข้อความที่อัปเดตมีผลทันที
+
+## ลำดับ
+
+system prompt ของเอเจนต์หรือผู้ให้บริการที่เลือกจะถูกส่งก่อน จากนั้น OpenCode จะประกอบคำแนะนำเริ่มต้นตามลำดับนี้:
+
+```text
+1. Agent or provider system prompt
+2. Built-in environment and date context
+3. Code Mode tool guidance, when enabled
+4. Global and project AGENTS.md files
+5. Available skill, reference, and MCP guidance
+6. Session-specific instruction entries supplied through the API
+```
+
+แหล่งที่มาเหล่านี้จะถูกนำมารวมกัน ไม่ได้แทนที่กัน ไฟล์ `AGENTS.md` ที่ซ้อนอยู่ด้านในซึ่งค้นพบภายหลังจะถูกเพิ่มเข้าไปในประวัติเซสชันตามลำดับที่ค้นพบ
+
+## การอัปเดต
+
+แก้ไข `AGENTS.md` ระดับ global หรือไฟล์ที่ค้นพบในไดเรกทอรีระดับบนได้ระหว่างที่เซสชันทำงานอยู่ เพื่ออัปเดตคำแนะนำของเซสชัน
+
+```bash
+$ printf '\n- Run the integration suite before committing.\n' >> AGENTS.md
+```
+
+ก่อนส่งคำขอถัดไปไปยังโมเดล OpenCode จะตรวจพบการเปลี่ยนแปลงและเพิ่มการอัปเดตคำแนะนำก่อนส่งอินพุตที่รออยู่:
+
+```text
+AGENTS.md changes
+→ instruction update
+→ next prompt
+```
+
+- การนำ `AGENTS.md` แวดล้อม (ambient) ออกทั้งหมดจะแจ้งเซสชันว่าคำแนะนำแวดล้อมก่อนหน้าไม่มีผลอีกต่อไป
+- ความล้มเหลวในการอ่านชั่วคราวจะคงคำแนะนำล่าสุดที่ทราบไว้ แทนที่จะถือว่าถูกลบไปแล้ว
+- การย้ายเซสชันจะคงสถานะคำแนะนำไว้ ดังนั้นคำแนะนำที่ปลายทางจะถูกนำเข้ามาในรูปแบบการอัปเดต
+- การยืนยันการย้อนกลับเซสชันจะล้างสถานะคำแนะนำ และโหลดคำแนะนำใหม่ก่อนพรอมต์ถัดไป
+
+ค่าของคำแนะนำยังคงเป็นข้อมูลที่มีสิทธิ์พิเศษ (privileged) ไคลเอนต์จะเห็นว่าแหล่งใดเปลี่ยนแปลง แต่ไม่เห็นเนื้อหา
+
+## การกำหนดค่า
+
+schema การกำหนดค่าของ V2 รับอาร์เรย์ `instructions` ได้ แต่ปัจจุบัน V2 ยังไม่ resolve ไฟล์ glob pattern หรือ URL ในอาร์เรย์นี้ การกำหนดค่าต่อไปนี้จึงยังไม่เพิ่มคำแนะนำให้โมเดล:
+
+```jsonc title="opencode.jsonc"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "instructions": ["CONTRIBUTING.md", "docs/guidelines/*.md", "https://example.com/instructions.md"],
+}
+```
+
+ใช้ `AGENTS.md` สำหรับคำแนะนำที่ใช้งานได้จริงใน V2 ดูตำแหน่งไฟล์กำหนดค่าและลำดับความสำคัญได้ที่[การกำหนดค่า](/config)

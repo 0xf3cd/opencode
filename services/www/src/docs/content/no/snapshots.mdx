@@ -1,0 +1,130 @@
+---
+title: "Snapshots"
+---
+
+Med snapshots kan du angre nylige endringer i samtalen og i filer samtidig. Bruk dem til å revidere nylig arbeid, men ta
+Git-commits eller sikkerhetskopier av alt som er viktig.
+
+## Arbeidsflyt
+
+Kjør `/undo` etter et svar du vil revidere. OpenCode klargjør tilbakerullingen, gjenoppretter de berørte filene og legger
+den fjernede prompten tilbake i redigeringsfeltet, slik at du kan endre den.
+
+```text
+/undo
+
+# Edit the restored prompt, then submit it again.
+Add validation without changing the public API.
+```
+
+Når du sender den redigerte prompten, blir den klargjorte tilbakerullingen fullført. Før du sender, kan du kjøre `/redo`
+for å avbryte den og gjenopprette samtalen og filene slik de var før `/undo`.
+
+```text
+/redo
+```
+
+Terminalen har også standard hurtigtaster:
+
+| Handling | Kommando | Hurtigtast |
+| --- | --- | --- |
+| Klargjør tilbakerulling av forrige melding | `/undo` | `<leader>u` |
+| Avbryt den klargjorte tilbakerullingen | `/redo` | `<leader>r` |
+
+Du kan også velge en tidligere melding og velge **Revert** for å klargjøre en tilbakerulling til det punktet.
+
+## Opptak
+
+For hvert modelltrinn prøver OpenCode å ta et snapshot rett før modellkallet, og et nytt når trinnet ender med registrert
+suksess eller feil. Assistentmeldingen registrerer hvilke filbaner som ble endret mellom disse snapshotene.
+
+```text
+before model step ── snapshot A
+model edits src/api.ts
+step finishes ────── snapshot B ── changed: src/api.ts
+```
+
+Snapshots tas etter beste evne. Hvis ett av snapshotene mangler, fortsetter samtalen, men det kan hende at filendringene i
+det trinnet ikke kan gjenopprettes.
+
+## Omfang
+
+Snapshots dekker den aktive katalogen til økten i et Git-worktree. En økt som er åpnet i `packages/app`, tar for eksempel
+med aktuelle filer under `packages/app`, men ikke endringer andre steder i repositoriet.
+
+| Innhold | Med i snapshot | Eksempel |
+| --- | --- | --- |
+| Sporede filer i den aktive katalogen | Ja | `packages/app/src/app.tsx` |
+| Usporede filer som ikke er ignorert, opptil 2 MiB hver | Ja | `packages/app/notes.txt` |
+| Filer som Git ignorerer | Nei | `packages/app/dist/app.js` |
+| Enkeltstående usporede filer større enn 2 MiB | Nei | `packages/app/debug.log` |
+| Filer utenfor den aktive katalogen | Nei | `packages/server/src/index.ts` |
+| Git-metadata og andre sideeffekter | Nei | commits, grener, databaser eller prosesser |
+
+Snapshots av filsystemet krever et Git-repositorium. Utenfor et repositorium kan `/undo` fortsatt rulle tilbake
+samtalehistorikken, men ikke gjenopprette filer.
+
+## Gjenoppretting
+
+En tilbakerulling gjenoppretter bare filbaner som tilskrives assistenttrinn etter den valgte samtalegrensen. Hver filbane
+får tilbake tilstanden den hadde før det første tilbakerullede trinnet. En fil som ble opprettet av disse trinnene,
+fjernes hvis den ikke fantes da.
+
+| Tidslinje | `src/api.ts` | `src/new.ts` |
+| --- | --- | --- |
+| Valgt grense | versjon A | finnes ikke |
+| Senere assistenttrinn | versjon B | opprettet |
+| Etter tilbakerulling | versjon A | fjernet |
+
+Filbaner som ikke tilskrives disse trinnene, blir ikke rørt. Nåværende endringer i en berørt filbane kan bli overskrevet,
+så se gjennom sammendraget av det som ble gjenopprettet og `git diff` før du fortsetter.
+
+```sh
+git diff --stat
+git diff
+```
+
+## Lagring
+
+OpenCode lagrer snapshots lokalt i en egen, intern Git-objektdatabase i datakatalogen sin. Når snapshots tas, opprettes
+ingen commits, ingen grener flyttes, og indeksen i repositoriet ditt endres ikke med vilje.
+
+```sh
+# Your repository remains an ordinary dirty worktree after capture.
+git status --short
+```
+
+Snapshot-objekter kan inneholde hele innholdet i sporede filer og aktuelle usporede filer. Behandle datakatalogen til
+OpenCode som sensitive lokale data.
+
+## Innstillinger
+
+Snapshots er aktivert som standard. Sett `snapshots` til `false` i [konfigurasjonen](/config#snapshots) for å slutte å ta
+snapshots av filsystemet fremover.
+
+```jsonc title="opencode.jsonc"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "snapshots": false,
+}
+```
+
+Når du deaktiverer snapshots, slettes ikke snapshots som allerede er lagret. Du kan fortsatt rulle tilbake samtalen, men
+uten en lagret filsystemtilstand kan ikke tilhørende filendringer gjenopprettes.
+
+## Sikkerhet
+
+Snapshots er en bekvemmelighet, ikke en transaksjon eller sikkerhetskopi:
+
+- Skallkommandoer kan endre tjenester, prosesser, nettverksressurser, databaser, Git-tilstand, ignorert utdata eller filer
+  utenfor den aktive katalogen. Å gjenopprette et snapshot reverserer ikke disse effektene.
+- Arbeid som blir avbrutt eller mislykkes, kan etterlate endringer når et snapshot ikke kan tas eller det ikke finnes et
+  brukbart snapshot-par.
+- Når berørte filbaner gjenopprettes, overskrives det nåværende innholdet. Hvis du avbryter en klargjort tilbakerulling,
+  kan også senere endringer bli overskrevet.
+- OpenCode avviser tilbakerulling mens økten kjører, men eksterne redigeringsprogrammer og kommandoer kan fortsatt endre
+  worktreet mellom snapshot og gjenoppretting.
+- Når en tilbakerulling fullføres, fjernes meldinger fra den aktive samtalevisningen, men ikke fra den varige
+  økthistorikken eller eksisterende snapshot-lagring. Det er ikke sikker sletting.
+
+Ta en commit eller sikkerhetskopi av viktig arbeid før du bruker `/undo` i et worktree med ulagrede endringer.

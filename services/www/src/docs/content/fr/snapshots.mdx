@@ -1,0 +1,138 @@
+---
+title: "Instantanés"
+---
+
+Les instantanés permettent d'annuler en une seule opération les modifications récentes de la conversation et des
+fichiers. Utilisez-les pour retravailler un travail récent, mais conservez des commits Git ou des sauvegardes pour tout
+ce qui est important.
+
+## Fonctionnement
+
+Exécutez `/undo` après une réponse que vous souhaitez retravailler. OpenCode prépare le retour en arrière, restaure les
+fichiers concernés et replace le prompt supprimé dans la zone de saisie pour que vous puissiez le modifier.
+
+```text
+/undo
+
+# Edit the restored prompt, then submit it again.
+Add validation without changing the public API.
+```
+
+L'envoi du prompt modifié valide le retour en arrière préparé. Avant l'envoi, exécutez `/redo` pour l'annuler et
+retrouver la conversation et les fichiers tels qu'ils étaient avant `/undo`.
+
+```text
+/redo
+```
+
+Le terminal propose aussi des raccourcis par défaut :
+
+| Action | Commande | Raccourci |
+| --- | --- | --- |
+| Préparer le retour en arrière du message précédent | `/undo` | `<leader>u` |
+| Annuler le retour en arrière préparé | `/redo` | `<leader>r` |
+
+Vous pouvez aussi sélectionner un message antérieur et choisir **Revert** pour préparer un retour en arrière jusqu'à ce
+point.
+
+## Capture
+
+Pour chaque étape du modèle, OpenCode tente de prendre un instantané juste avant l'appel au modèle, puis un autre lorsque
+l'étape aboutit à un succès ou à un échec enregistré. Le message de l'assistant indique quels chemins ont changé entre ces
+deux instantanés.
+
+```text
+before model step ── snapshot A
+model edits src/api.ts
+step finishes ────── snapshot B ── changed: src/api.ts
+```
+
+La capture est faite au mieux. Si l'un des instantanés n'est pas disponible, la conversation continue, mais les
+modifications de fichiers de cette étape risquent de ne pas pouvoir être restaurées.
+
+## Portée
+
+Les instantanés couvrent le répertoire actif de la session à l'intérieur d'un worktree Git. Par exemple, une session
+ouverte dans `packages/app` capture les fichiers éligibles sous `packages/app`, mais pas les modifications ailleurs dans
+le dépôt.
+
+| Contenu | Capturé | Exemple |
+| --- | --- | --- |
+| Fichiers suivis dans le répertoire actif | Oui | `packages/app/src/app.tsx` |
+| Fichiers non suivis et non ignorés, jusqu'à 2 MiB chacun | Oui | `packages/app/notes.txt` |
+| Fichiers ignorés par Git | Non | `packages/app/dist/app.js` |
+| Fichiers non suivis de plus de 2 MiB | Non | `packages/app/debug.log` |
+| Fichiers hors du répertoire actif | Non | `packages/server/src/index.ts` |
+| Métadonnées Git et autres effets de bord | Non | commits, branches, bases de données ou processus |
+
+Les instantanés du système de fichiers nécessitent un dépôt Git. En dehors d'un dépôt, `/undo` peut toujours annuler
+l'historique de la conversation, mais ne peut pas restaurer les fichiers.
+
+## Restauration
+
+Un retour en arrière restaure uniquement les chemins attribués aux étapes de l'assistant postérieures au point de la
+conversation sélectionné. Chaque chemin retrouve son état d'avant la première étape annulée ; un fichier créé par ces
+étapes est supprimé s'il n'existait pas à ce moment-là.
+
+| Chronologie | `src/api.ts` | `src/new.ts` |
+| --- | --- | --- |
+| Point sélectionné | version A | absent |
+| Étapes suivantes de l'assistant | version B | créé |
+| Après le retour en arrière | version A | supprimé |
+
+Les chemins non attribués à ces étapes ne sont pas modifiés. Les modifications actuelles d'un chemin concerné peuvent être
+écrasées : vérifiez donc le récapitulatif de restauration et `git diff` avant de continuer.
+
+```sh
+git diff --stat
+git diff
+```
+
+## Stockage
+
+OpenCode stocke les instantanés localement, dans une base d'objets Git interne distincte située dans son répertoire de
+données. La capture d'instantanés ne crée pas de commits, ne déplace pas de branches et ne modifie pas volontairement
+l'index de votre dépôt.
+
+```sh
+# Your repository remains an ordinary dirty worktree after capture.
+git status --short
+```
+
+Les objets d'instantané peuvent contenir l'intégralité du contenu des fichiers suivis et des fichiers non suivis
+éligibles. Traitez le répertoire de données d'OpenCode comme des données locales sensibles.
+
+## Paramètres
+
+Les instantanés sont activés par défaut. Définissez `snapshots` sur `false` dans votre
+[configuration](/config#snapshots) pour arrêter les futures captures du système de fichiers.
+
+```jsonc title="opencode.jsonc"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "snapshots": false,
+}
+```
+
+La désactivation des instantanés ne supprime pas ceux déjà stockés. Le retour en arrière de la conversation reste
+disponible, mais sans état du système de fichiers capturé, il ne peut pas restaurer les modifications de fichiers
+associées.
+
+## Sécurité
+
+Les instantanés sont une commodité, pas une transaction ni une sauvegarde :
+
+- Les commandes shell peuvent modifier des services, des processus, des ressources réseau, des bases de données, l'état
+  Git, des sorties ignorées ou des fichiers hors du répertoire actif. La restauration d'un instantané n'annule pas ces
+  effets.
+- Un travail interrompu ou en échec peut laisser des modifications lorsque la capture échoue ou qu'il n'existe aucune
+  paire d'instantanés exploitable.
+- La restauration des chemins concernés écrase leur contenu actuel. L'annulation d'un retour en arrière préparé peut
+  aussi écraser des modifications ultérieures.
+- OpenCode refuse les opérations de retour en arrière pendant l'exécution de la session, mais des éditeurs et des
+  commandes externes peuvent toujours modifier le worktree entre la capture et la restauration.
+- La validation d'un retour en arrière retire des messages de la vue active de la conversation, mais pas de l'historique
+  durable de la session ni du stockage des instantanés existants. Il ne s'agit pas d'un effacement sécurisé.
+
+Committez ou sauvegardez tout travail important avant d'utiliser `/undo` sur un worktree contenant des modifications non
+committées.

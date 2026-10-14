@@ -1,0 +1,230 @@
+---
+title: "Zasady"
+description: "Zezwalanie na akcje OpenCode na nazwanych zasobach lub ich blokowanie, przy czym ostatnie słowo należy do zasad organizacji."
+---
+
+Zasady decydują, czy OpenCode może wykonać daną akcję na nazwanym zasobie. Definiuje się je w `policies`, mogą też
+pochodzić z połączonego obszaru roboczego [OpenCode Console](/console).
+
+Zasady to coś innego niż [uprawnienia](/permissions). Uprawnienia to reguły narzędzi przypisane do agentów, które mogą
+mieć efekt `allow`, `deny` lub `ask`. Zasady są binarne, nigdy nie wyświetlają pytań i wyłącznie zaostrzają to, na co
+w przeciwnym razie zezwalałyby uprawnienia i dostawcy.
+
+## Konfiguracja
+
+Aby zablokować jednego dostawcę wszędzie, dodaj wpis do `opencode.jsonc`:
+
+```jsonc
+{
+  "$schema": "https://opencode.ai/config.json",
+  "policies": [{ "action": "provider.use", "resource": "openai", "effect": "deny" }],
+}
+```
+
+Zablokowany dostawca znika z katalogu i z wyboru modeli, nawet jeśli ma prawidłowe dane uwierzytelniające.
+
+Wcześniejsze wersje odczytywały zasady z `experimental.policies`. Ten klucz nadal działa i jest scalany z `policies`:
+
+```jsonc
+{
+  "experimental": {
+    "policies": [{ "action": "provider.use", "resource": "openai", "effect": "deny" }],
+  },
+}
+```
+
+## Wpisy
+
+Każdy wpis ma trzy pola:
+
+| Pole       | Wartości                                      | Znaczenie                                             |
+| ---------- | --------------------------------------------- | ----------------------------------------------------- |
+| `action`   | `provider.use`, `tool.use`, `integration.use` | Kontrolowana operacja                                 |
+| `resource` | ciąg znaków lub wzorzec z symbolami wieloznacznymi | Czego dotyczy wpis; zależy od akcji              |
+| `effect`   | `allow`, `deny`                               | Decyzja, gdy wpis pasuje                              |
+
+Wpisy, które nie przejdą walidacji, są pomijane z ostrzeżeniem w logu serwera, a pozostała część listy nadal obowiązuje.
+Po edycji wpisu `deny` sprawdź log.
+
+## Dopasowywanie
+
+Zasoby korzystają z tych samych symboli wieloznacznych dopasowywanych do całej wartości co uprawnienia: `*` pasuje do
+zera lub więcej znaków, a `?` do dokładnie jednego.
+
+```jsonc
+{
+  "policies": [{ "action": "provider.use", "resource": "company-*", "effect": "deny" }],
+}
+```
+
+Ten wpis blokuje `company-us` i `company-eu`. Wzorzec zakończony na ` *` pasuje także do wartości bez argumentów, więc
+`shell:git push *` obejmuje również samo `git push`.
+
+## Kolejność
+
+Gdy pasuje kilka wpisów, wygrywa ostatni. Nie ma reguły szczegółowości, więc najpierw umieszczaj wpisy ogólne, a po nich
+wyjątki. Jeśli nic nie pasuje, akcja jest dozwolona.
+
+```jsonc
+{
+  "policies": [
+    { "action": "provider.use", "resource": "*", "effect": "deny" },
+    { "action": "provider.use", "resource": "anthropic", "effect": "allow" },
+  ],
+}
+```
+
+Dostępny pozostaje tylko Anthropic.
+
+## Dostawcy
+
+`provider.use` określa, czy dostawcy w ogóle można używać. Zasobem jest ID dostawcy: `anthropic`, `openai`, `opencode`
+lub własne ID z [`providers`](/providers).
+
+```jsonc
+{
+  "providers": {
+    "company-ai": {
+      "package": "@opencode/ai/providers/openai-compatible",
+      "settings": { "baseURL": "https://ai.company.example/v1" },
+    },
+  },
+  "policies": [
+    { "action": "provider.use", "resource": "*", "effect": "deny" },
+    { "action": "provider.use", "resource": "company-ai", "effect": "allow" },
+  ],
+}
+```
+
+Wpis w `providers` konfiguruje endpoint, a wpisy zasad sprawiają, że jest to jedyny dostawca, z którego OpenCode
+skorzysta. Zasady obowiązują niezależnie od tego, skąd OpenCode dowiedział się o dostawcy: z danych katalogu, zmiennych
+środowiskowych, zapisanych kont, wbudowanych wtyczek czy konfiguracji.
+
+Zamiast list `enabled_providers` i `disabled_providers` z V1 używaj `provider.use`. Pliki z V1 nadal się wczytują; zobacz
+[Migracja z V1](/migrate-v1#supported-fields-without-direct-native-equivalents).
+
+## Narzędzia
+
+Wpisy `tool.use` bezwzględnie blokują sprawdzenie [uprawnienia](/permissions). Zasób ma postać `<action>:<value>` i jest
+dopasowywany do każdego zasobu sprawdzanego przez narzędzie.
+
+```jsonc
+{
+  "policies": [
+    { "action": "tool.use", "resource": "shell:git push *", "effect": "deny" },
+    { "action": "tool.use", "resource": "edit:*.env", "effect": "deny" },
+    { "action": "tool.use", "resource": "webfetch:*", "effect": "deny" },
+  ],
+}
+```
+
+Zablokowane sprawdzenie kończy się błędem `Blocked by configuration policy` zamiast pytania. Wpis jest stosowany po
+regułach agenta i zapisanych zatwierdzeniach, więc nadpisuje zarówno `ask`, jak i zatwierdzenie „Allow always”.
+
+| Wzorzec                      | Blokuje                                             |
+| ---------------------------- | --------------------------------------------------- |
+| `shell:*`                    | Wszystkie polecenia powłoki                         |
+| `read:*/.ssh/*`              | Odczyt kluczy i plików SSH                          |
+| `external_directory:*`       | Wszelki dostęp poza lokalizacją (Location) lub worktree |
+| `subagent:general`           | Uruchamianie jednego subagenta                      |
+| `github_delete_repository:*` | Jedno narzędzie MCP                                 |
+| `*`                          | Wszystko, co nie jest już zablokowane               |
+
+Wpis `tool.use` z `allow` nigdy nie przyznaje dostępu. Jedynie znosi wcześniejsze, szersze `deny`, po czym decydują
+własne reguły agenta.
+
+```jsonc
+{
+  "policies": [
+    { "action": "tool.use", "resource": "shell:*", "effect": "deny" },
+    { "action": "tool.use", "resource": "shell:git status *", "effect": "allow" },
+  ],
+}
+```
+
+O `git status` decyduje reguła `shell` agenta; wszystkie inne polecenia są blokowane.
+
+## Integracje
+
+`integration.use` określa, czy wczytywany jest serwer MCP, umiejętność lub wtyczka. Zasobem jest rodzaj integracji i jej
+ID:
+
+| Zasób             | Dotyczy                                                                       |
+| ----------------- | ----------------------------------------------------------------------------- |
+| `mcp:<server>`    | [Serwera MCP](/mcp-servers) o danej skonfigurowanej nazwie                    |
+| `skill:<id>`      | [Umiejętności](/skills) o danym ID                                            |
+| `plugin:<target>` | [Wtyczki](/plugins) wskazanej nazwą pakietu bez wersji lub ścieżką bezwzględną |
+
+```jsonc
+{
+  "policies": [
+    { "action": "integration.use", "resource": "mcp:*", "effect": "deny" },
+    { "action": "integration.use", "resource": "mcp:github", "effect": "allow" },
+    { "action": "integration.use", "resource": "plugin:opencode-acme-cli", "effect": "deny" },
+  ],
+}
+```
+
+Zablokowany serwer MCP lub umiejętność są usuwane, a zablokowana wtyczka nie jest wczytywana – niezależnie od tego, jak
+zostały skonfigurowane.
+
+## Pierwszeństwo
+
+W przypadku zwykłych ustawień wygrywa najbliższa konfiguracja. Zasady działają odwrotnie: wpisy z szerszej konfiguracji
+są oceniane później, więc nadpisują węższe. Ostatnie słowo zawsze należy do konfiguracji zarządzanej i połączonego
+Console.
+
+| Priorytet       | Źródło                                                                                                          |
+| --------------- | --------------------------------------------------------------------------------------------------------------- |
+| 1 (najwyższy)   | Połączony obszar roboczy OpenCode Console                                                                       |
+| 2               | Zarządzane preferencje macOS (`/Library/Managed Preferences/ai.opencode.managed.plist`)                         |
+| 3               | Systemowy `opencode.json(c)` (`/Library/Application Support/opencode`, `/etc/opencode`, `%ProgramData%\opencode`) |
+| 4               | Globalny `~/.config/opencode/opencode.json(c)`                                                                  |
+| 5               | Bezpośredni `opencode.json(c)`; katalogi zewnętrzne mają przewagę nad wewnętrznymi                              |
+| 6 (najniższy)   | `.opencode/opencode.json(c)`; katalogi zewnętrzne mają przewagę nad wewnętrznymi                                |
+
+Repozytorium nie może ponownie włączyć dostawcy zablokowanego globalnie:
+
+```jsonc title="~/.config/opencode/opencode.jsonc"
+{
+  "policies": [{ "action": "provider.use", "resource": "openai", "effect": "deny" }],
+}
+```
+
+```jsonc title="project/opencode.jsonc"
+{
+  "policies": [{ "action": "provider.use", "resource": "openai", "effect": "allow" }],
+}
+```
+
+`openai` pozostaje zablokowany. W obrębie jednego pliku wpisy zachowują kolejność, w jakiej zostały zapisane.
+
+## Console
+
+Obszar roboczy w [OpenCode Console](/console) kompiluje swoje zasady Providers i Tools do wpisów i zwraca je razem z
+konfiguracją obszaru roboczego. OpenCode dołącza je po wszystkich wpisach zdefiniowanych lokalnie, więc mają ostatnie
+słowo: organizacyjnego `deny` nie może znieść `allow` z repozytorium ani od użytkownika, a organizacyjne `allow` znosi
+`deny` z niższego poziomu.
+
+Blokady wynikające z tych wpisów podają nazwę obszaru roboczego:
+
+```text
+Blocked by Acme's policy
+```
+
+Wpisy podążają za połączonym kontem.
+
+| Zdarzenie                              | Skutek                                                    |
+| -------------------------------------- | --------------------------------------------------------- |
+| Zmiana zasad w Console                 | Stosowana przy następnym pobraniu, mniej więcej co minutę |
+| Przełączenie na inny obszar roboczy    | Wpisy zastępowane wpisami tego obszaru roboczego          |
+| Rozłączenie                            | Wpisy są usuwane                                          |
+| Console nieosiągalne                   | Ostatnie wpisy dla tego połączenia pozostają w mocy       |
+
+Wtyczki Console i wtyczki zasad nie można wyłączyć w `plugins`; zobacz [kontrola wtyczek](/plugins#control).
+
+<Callout type="note">
+  Zasady nie konfigurują endpointów ani danych uwierzytelniających i nie mogą sprawić, że niedostępny dostawca stanie się
+  dostępny. Nie izolują też kodu wtyczek (sandbox): zablokowany dostawca jest blokowany na standardowej ścieżce dostawców i
+  modeli.
+</Callout>

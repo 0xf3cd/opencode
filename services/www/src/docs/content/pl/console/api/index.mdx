@@ -1,0 +1,169 @@
+---
+title: "Przegląd API"
+description: "Uwierzytelnianie w API OpenCode Console za pomocą kluczy kont usługi lub tokenów użytkowników."
+---
+
+API Console pozwala integracjom odczytywać konfigurację obszaru roboczego i zarządzać budżetami. Ścieżki są podawane
+względem bazowego URL-a Console.
+
+```bash
+export CONSOLE_URL="https://opencode.ai/console"
+export SERVICE_API_KEY="oc_sk_..."
+
+curl --fail-with-body "${CONSOLE_URL}/api/v2/config" \
+  --header "Authorization: Bearer ${SERVICE_API_KEY}"
+```
+
+| API                                         | Endpointy                                  |
+| ------------------------------------------- | ------------------------------------------ |
+| [Inferencja](/console/api/inference)        | `https://opencode.ai/inference/...`        |
+| [Dostawcy](/console/api/providers)          | `https://opencode.ai/inference/custom/...` |
+| [Budżety](/console/api/budgets)             | `/api/v1/budgets/members`                  |
+| [Konfiguracja](#workspace-config)           | `GET /api/v2/config`                       |
+
+## Konta usługi
+
+Integracje uwierzytelniają się za pomocą konta usługi (service account): członka obszaru roboczego, który nie jest
+człowiekiem i ma własne klucze API, użycie oraz [budżet](/console/budgets#service-account-budgets). Właściciele i
+administratorzy zarządzają nimi na stronie **Keys**.
+
+1. Otwórz **Keys** i kliknij **Add Service Account**, a następnie nadaj kontu nazwę, np. `CI Pipeline`.
+2. Otwórz konto usługi i kliknij **Add API Key**.
+3. Wybierz **Key name**, **Permissions** i opcjonalnie **Expiry date**, a następnie kliknij **Create key**.
+4. Skopiuj klucz. Jest wyświetlany tylko raz.
+
+```text
+oc_sk_1a2b3c4d5e6f_...
+```
+
+Wysyłaj klucz jako token typu bearer. Jest powiązany z jednym obszarem roboczym, więc nagłówek obszaru roboczego nie
+jest potrzebny.
+
+```text
+Authorization: Bearer oc_sk_...
+```
+
+### Uprawnienia
+
+| Uprawnienie    | Zezwala na                                                                                                          |
+| -------------- | ------------------------------------------------------------------------------------------------------------------- |
+| Inference only | Żądania do API [inferencji](/console/api/inference) i [dostawców](/console/api/providers) oraz `GET /api/v2/config`. |
+| All            | Wszystko powyżej, a także API Console z dostępem administratora, z wyjątkiem zarządzania modelami.                  |
+
+Niektóre działania zawsze wymagają osoby zalogowanej do Console, nawet przy kluczu **All**: zapraszanie członków,
+zmiana ról, usuwanie członków oraz tworzenie i unieważnianie kluczy.
+
+### Unieważnianie kluczy
+
+Otwórz konto usługi i unieważnij klucz w sekcji **API Keys**. Usunięcie konta usługi unieważnia wszystkie jego klucze.
+Automatyzacje korzystające z unieważnionego lub wygasłego klucza natychmiast otrzymują HTTP `401`.
+
+## Tokeny użytkowników
+
+Tokeny użytkowników działają w imieniu zalogowanej osoby, z jej rolą w obszarze roboczym. Wysyłaj token razem z
+nagłówkiem `x-org-id`, który wskazuje obszar roboczy.
+
+```bash
+curl --fail-with-body "${CONSOLE_URL}/api/v2/config" \
+  --header "Authorization: Bearer ${USER_TOKEN}" \
+  --header "x-org-id: org_..."
+```
+
+Tokeny uzyskane w [przepływie urządzenia](#device-flow) są powiązane z obszarem roboczym wybranym podczas logowania i
+nie wymagają tego nagłówka. Inna wartość `x-org-id` zwraca `403`.
+
+## Przepływ urządzenia
+
+OpenCode loguje się za pomocą OAuth Device Authorization Grant (RFC 8628). Inne narzędzia CLI mogą korzystać z tego
+samego przepływu.
+
+1. Poproś o kod urządzenia. Wyślij `supports_org_scope=true`, aby powiązać token z obszarem roboczym.
+
+   ```bash
+   curl --fail-with-body "${CONSOLE_URL}/auth/device/code" \
+     --data "client_id=my-cli" \
+     --data "supports_org_scope=true"
+   ```
+
+   Odpowiedź zawiera `device_code`, `user_code`, `verification_uri_complete`, `expires_in` (600 sekund) i
+   `interval` (5 sekund).
+
+2. Otwórz `verification_uri_complete` w przeglądarce. Jest to ścieżka w rodzaju `/console/device?user_code=...`,
+   względna wobec `https://opencode.ai`. Użytkownik loguje się, wybiera obszar roboczy i zatwierdza dostęp.
+
+3. Odpytuj o token co `interval` sekund, używając tego samego `client_id`.
+
+   ```bash
+   curl --fail-with-body "${CONSOLE_URL}/auth/device/token" \
+     --data "grant_type=urn:ietf:params:oauth:grant-type:device_code" \
+     --data "device_code=..." \
+     --data "client_id=my-cli"
+   ```
+
+   Do momentu zatwierdzenia odpowiedź ma status `400` z `authorization_pending`. Po powodzeniu zwraca `access_token`,
+   `refresh_token`, `expires_in` i `org_id`.
+
+4. Odśwież token dostępu, zanim wygaśnie. Powiązanie z obszarem roboczym zostaje zachowane.
+
+   ```bash
+   curl --fail-with-body "${CONSOLE_URL}/auth/device/token" \
+     --data "grant_type=refresh_token" \
+     --data "refresh_token=..." \
+     --data "client_id=my-cli"
+   ```
+
+Każdego tokenu odświeżania można użyć tylko raz. Ponowne użycie starego tokenu odświeżania unieważnia całą sesję.
+
+## Konfiguracja obszaru roboczego
+
+`GET /api/v2/config` zwraca dostawców i modele dostępne w obszarze roboczym w formacie [konfiguracji](/config)
+OpenCode V2. OpenCode wczytuje ją po `/connect`.
+
+```bash
+curl --fail-with-body "${CONSOLE_URL}/api/v2/config" \
+  --header "Authorization: Bearer ${SERVICE_API_KEY}"
+```
+
+```json
+{
+  "providers": {
+    "opencode": {
+      "name": "OpenCode",
+      "env": ["OPENCODE_CONSOLE_TOKEN"],
+      "package": "aisdk:@ai-sdk/openai-compatible",
+      "settings": {
+        "baseURL": "https://opencode.ai/inference/openai/v1",
+        "apiKey": "{env:OPENCODE_CONSOLE_TOKEN}"
+      },
+      "headers": { "x-opencode-org-id": "org_..." },
+      "models": {
+        "kimi-k2.6": { "name": "Kimi K2.6" }
+      }
+    }
+  }
+}
+```
+
+| Pole                    | Opis                                                                                        |
+| ----------------------- | ------------------------------------------------------------------------------------------- |
+| `providers`             | Console, Go i podłączeni dostawcy, każdy z ustawieniami bramki i modelami.                  |
+| `websearch`             | Hostowane [wyszukiwanie w sieci](/console/websearch) dla członków, jeśli jest włączone.     |
+| `mcp`                   | Serwer MCP Console dla członków.                                                            |
+| `experimental.policies` | Reguły [zasad](/policies#console) obszaru roboczego.                                        |
+
+Konfigurację może odczytać klucz z każdym poziomem uprawnień i członek z każdą rolą.
+
+## Błędy
+
+Błędy są zwracane w formacie JSON z polem `_tag`, które określa rodzaj błędu.
+
+```json
+{ "_tag": "Forbidden" }
+```
+
+| Status | Znaczenie                                                                                          |
+| ------ | -------------------------------------------------------------------------------------------------- |
+| `400`  | `OrgRequired`: token użytkownika wysłano bez `x-org-id`.                                           |
+| `401`  | Brakujące, nieprawidłowe, wygasłe lub unieważnione dane uwierzytelniające.                         |
+| `403`  | Niewłaściwy obszar roboczy, brak uprawnień lub klucz **Inference only** użyty z endpointem Console. |
+| `404`  | Obszar roboczy nie istnieje lub został usunięty.                                                   |

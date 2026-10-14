@@ -1,0 +1,195 @@
+---
+title: "Sorun giderme"
+---
+
+<Callout type="tip">
+  OpenCode'dan kendi sorununu ayıklamasını isteyebilirsiniz. Sorunu anlatın ve bu sorun giderme sayfasını kullanmasını
+  isteyin; aşağıdaki adımları okuyabilir, hizmetini ve günlüklerini inceleyebilir ve sorunu belirlemenize yardımcı
+  olabilir.
+</Callout>
+
+OpenCode istemci-sunucu mimarisi kullanır. Oturumlar, eklentiler, izinler ve diğer uygulama durumu bir arka plan
+sunucusuna aittir. İşe, sorunun bir istemcide mi, paylaşılan sunucuda mı yoksa belirli bir projede mi olduğunu
+belirleyerek başlayın.
+
+## Arka plan hizmetini kontrol edin
+
+Geçerli sunucu bilgilerini görüntüleyin:
+
+```bash
+opencode service status
+```
+
+API'sinin sağlıklı çalıştığını doğrulayın:
+
+```bash
+opencode api get /api/info
+```
+
+Hizmet takıldıysa veya sağlıklı değilse yeniden başlatın:
+
+```bash
+opencode service restart
+```
+
+Hizmeti açıkça durdurup başlatabilirsiniz de:
+
+```bash
+opencode service stop
+opencode service start
+```
+
+<Callout type="note">
+  OpenCode, paylaşılan arka plan hizmetini normalde otomatik olarak bulur veya başlatır. Hizmet komutları yalnızca
+  hizmetin yaşam döngüsünü teşhis ederken gerekir.
+</Callout>
+
+## Bir tarayıcı kaynağına izin verin
+
+Başka bir kaynaktaki (origin) tarayıcı istemcisi CORS nedeniyle bağlanamıyorsa istemcinin kaynağını hizmet
+yapılandırmasına ekleyin:
+
+```bash
+opencode service set cors http://192.168.1.10:3001
+opencode service get cors
+```
+
+Gerekiyorsa bağlantı noktası dahil, yol veya sondaki eğik çizgi olmadan tam bir HTTP ya da HTTPS kaynağı kullanın. Birden
+fazla kaynağa izin vermek için virgülle ayrılmış bir listeyi tek bir argüman olarak verin; her kaynağın etrafındaki
+boşluklar kırpılır:
+
+```bash
+opencode service set cors "http://192.168.1.10:3001, https://app.example.com"
+```
+
+`service get cors` komutu bir JSON dizisi yazdırır. Yapılandırılmış listeyi şu komutla kaldırın:
+
+```bash
+opencode service unset cors
+```
+
+Hizmet yapılandırmasını ayarlamak veya kaldırmak arka plan hizmetini durdurur. Hizmet bir sonraki başlatılışında yeni
+yapılandırmayı kullanır; hizmeti açıkça başlatmak için `opencode service start` komutunu kullanın.
+
+Ön planda çalışan bir sunucu için izin verilen her ek kaynakta `--cors` bayrağını tekrarlayın:
+
+```bash
+opencode serve --cors http://192.168.1.10:3001 --cors https://app.example.com
+```
+
+`serve --service` ile verilen `--cors` bayrakları, o süreç için kalıcı olarak kaydedilmiş listeyi geçersiz kılar. Bu
+bayraklar olmadan hizmet modu kaydedilmiş listeyi kullanır. CORS, dinlenen adresi değiştirmez ve sunucu kimlik
+doğrulamasını atlamaz.
+
+## API'yi inceleyin
+
+`api` komutu, yerel hizmet bulma ve kimlik doğrulama akışını kullanır. Bir HTTP yöntemi ve yol ya da bir OpenAPI işlem
+ID'si kabul eder.
+
+Tüm uç noktalar ve işlem ID'leri için [API başvurusuna](/api) bakın.
+
+JSON istek gövdesini `--data` veya `-d` ile iletin, başlıkları ise `--header` veya `-H` ile ekleyin.
+
+<Callout type="warning">
+  Uyumlu ve sağlıklı bir hizmet yoksa `opencode api` komutunu çalıştırmak arka plan hizmetini başlatabilir.
+</Callout>
+
+## Günlükleri okuyun
+
+Kurulu sürümler günlükleri şu dosyaya yazar:
+
+```text
+~/.local/share/opencode/log/opencode.log
+```
+
+Sorunu yeniden oluştururken günlüğü takip edin:
+
+```bash
+tail -f ~/.local/share/opencode/log/opencode.log
+```
+
+Her satır bir süreç `run` ID'si ve bir `role` alanı içerir. Oturum, sağlayıcı, eklenti, izin ve araç etkinliği için
+`role=server` değerini kullanın.
+
+```bash
+grep 'role=server' ~/.local/share/opencode/log/opencode.log
+grep 'run=8fc3b1d5' ~/.local/share/opencode/log/opencode.log
+```
+
+## CPU ve bellek profilleri alın
+
+macOS ve Linux'ta, tanılama verisi toplamak için çalışan bir OpenCode sürecine sinyal gönderebilirsiniz. Arka plan
+sunucusunun PID'sini sağlık denetimi uç noktasından alın:
+
+```bash
+opencode api get /api/info
+```
+
+Yanıttaki `pid` değerini şu sinyallerden biriyle kullanın:
+
+- `SIGPROF` on saniyelik bir CPU profili alır:
+
+  ```bash
+  kill -SIGPROF <pid>
+  ```
+
+  Sonuç, günlük dizinine `cpu-<pid>-<timestamp>.cpuprofile` olarak yazılır.
+
+- `SIGUSR1` bir bellek (heap) anlık görüntüsü alır:
+
+  ```bash
+  kill -SIGUSR1 <pid>
+  ```
+
+  Sonuç, günlük dizinine `heap-<pid>-<timestamp>.heapsnapshot` olarak yazılır.
+
+Dosyayı açmadan önce `opencode.log` içinde `CPU profile written` veya `heap snapshot written` satırının görünmesini
+bekleyin. İlgili günlük girdisi dosyanın tam yolunu içerir. Her iki dosya türünü de Chrome DevTools'ta
+inceleyebilirsiniz.
+
+<Callout type="note">
+  Sinyalle tetiklenen profiller Windows'ta kullanılamaz. Heap anlık görüntüsü yazmak süreci duraklatabilir ve bellek
+  kullanımını geçici olarak artırabilir.
+</Callout>
+
+## Hizmet dosyaları
+
+Paylaşılan sunucu kendini şu dosyaya kaydeder:
+
+```text
+~/.local/state/opencode/service.json
+```
+
+Özel hizmet yapılandırması ayrı olarak şurada saklanır:
+
+```text
+~/.config/opencode/service.json
+```
+
+Veritabanı normalde şurada bulunur:
+
+```text
+~/.local/share/opencode/opencode.db
+```
+
+`OPENCODE_DB` değişkeni veritabanı konumunu geçersiz kılabilir.
+
+<Callout type="warning">
+  Sorun giderirken hizmet dosyalarını veya veritabanını silmeyin ya da düzenlemeyin. Arka plan sürecini (daemon)
+  yönetmek için hizmet komutlarını kullanın ve kalıcı verileri harici araçlarla incelemeden önce yedek alın.
+</Callout>
+
+## Sorun bildirin
+
+Yeniden oluşturulabilir bir sorunu bildirirken şunları ekleyin:
+
+- `opencode --version` komutunun çıktısı
+- `opencode service status` komutunun çıktısı
+- Sorunu yeniden oluşturan en kısa adım dizisi
+- Sorunun paylaşılan hizmeti mi, belirli bir istemciyi mi yoksa tek bir projeyi mi etkilediği
+- `run` ve `role` alanları dahil ilgili günlük satırları
+
+Günlükleri paylaşmadan önce API anahtarlarını, yetkilendirme başlıklarını, istemleri, dosya içeriklerini ve diğer hassas
+verileri kaldırın.
+
+Yeniden oluşturulabilir sorunları [GitHub Issues](https://github.com/anomalyco/opencode/issues) üzerinden bildirin.

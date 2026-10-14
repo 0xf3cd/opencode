@@ -1,0 +1,246 @@
+---
+title: "テーマ"
+---
+
+OpenCode には、ライトモードとダークモード向けの組み込みテーマが多数用意されています。設定で選択することも、独自の色を組み合わせることもできます。
+
+## テーマの選択
+
+`Ctrl+P` を押して **Open settings** を選択し、**Theme** を開きます。デフォルトのテーマは `opencode` です。
+
+グローバルの [CLI 設定](/cli/config)で設定することもできます。
+
+```json title="~/.config/opencode/cli.json"
+{
+  "$schema": "https://opencode.ai/v2/cli.json",
+  "theme": {
+    "name": "tokyonight",
+    "mode": "dark"
+  }
+}
+```
+
+設定を開かずにテーマを変更するには、`/themes` を実行します。
+
+## システムカラー
+
+OpenCode がターミナルのパレットを読み取れる場合、テーマの選択画面に `system` テーマが表示されます。このテーマは、ターミナルの前景色、背景色、ANSI パレットから色を導き出します。
+
+テーマ名の `system` は、ターミナルから導き出した色を選択します。モードの `system` は、ターミナルのライトまたはダークの外観に従います。
+
+## モード
+
+ターミナルの外観に従うには `system` を使用します。テーマをライトモードまたはダークモードに固定することもできます。
+
+| モード | 動作 |
+| --- | --- |
+| `system` | 検出されたターミナルのライトまたはダークの外観に従います。 |
+| `dark` | 常にテーマのダークカラーを使用します。 |
+| `light` | 常にテーマのライトカラーを使用します。 |
+
+これは CLI 設定の `theme` 内にある `mode` フィールドに対応します。カスタムテーマが一方のモードしか提供していない場合、もう一方のモードが要求されても、OpenCode は提供されているモードを使用します。
+
+## テーマの追加
+
+ダウンロードしたテーマや他の人から受け取ったテーマを追加するには、その JSON ファイルをグローバルのテーマディレクトリにコピーします。
+
+```bash
+cp theme.json ~/.config/opencode/themes/
+```
+
+プロジェクトの `.opencode/themes` ディレクトリにテーマを置くと、そのプロジェクトでのみ使用できるようになります。
+
+ファイル名がテーマ名になります。たとえば、`my-theme.json` は `my-theme` として表示されます。ファイルを追加したら OpenCode を再起動し、`/themes` を実行して選択します。
+
+OpenCode が読み込むのは `.json` ファイルのみです。現在のディレクトリに近い場所にあるテーマは、同じ名前のグローバルテーマや親ディレクトリのテーマを置き換えます。
+
+## プラグインでのテーマの使用
+
+[CLI プラグイン](/build/plugins/cli)は、解決済みの色を `context.theme` から、現在のモードを `context.themeMode` から読み取ります。プラグインが選択されたテーマに従うように、セマンティックトークンを使用してください。
+
+```tsx title="Inside a CLI plugin component"
+import { usePlugin } from "@opencode/plugin/tui"
+
+function Status() {
+  const context = usePlugin()
+  return <text fg={context.theme.text.base}>Ready</text>
+}
+```
+
+公開されている CLI プラグイン API では、テーマを登録できません。カスタムテーマの定義は、上記のディレクトリに JSON ファイルとして追加してください。
+
+## テーマの作成
+
+テーマの作成や編集には、[Theme Tool](https://opencode.ai/theme/) を使用してください。このツールを使うと、構造の把握や変更、カスタムカラーの定義を簡単に行えます。以下の説明は参考情報です。
+
+テーマでは、共通のセマンティックトークンと、モードごとのパレットを分けて定義します。
+
+| セクション | 用途 |
+| --- | --- |
+| `base` | すべてのモードで共有される完全なトークンツリー。 |
+| `light`、`dark` | そのモード用の完全な色相パレットと、省略可能なトークンのオーバーライド。 |
+
+すべてのテーマは完全な `base` を提供し、`light` または `dark` の少なくとも一方を定義します。各モードはファイル内の `base` を継承します。組み込みの OpenCode テーマや他のモードからは継承しません。
+
+以下の例では、各概念に関係するセクションのみを示しています。カスタマイズする前に、テーマエディターで完全なファイルを生成してください。
+
+### 構造
+
+両方のモードで使う色は `base` に定義し、必要に応じて `light` または `dark` 内で上書きします。
+
+```json title="theme.json (excerpt)"
+{
+  "$schema": "https://opencode.ai/theme.json",
+  "base": {
+    "text": {
+      "base": "$hue.neutral.200",
+      "muted": "$hue.neutral.400"
+    }
+  },
+  "light": {
+    "hue": {}
+  },
+  "dark": {
+    "hue": {},
+    "text": {
+      "muted": "$hue.neutral.300"
+    }
+  }
+}
+```
+
+完全な `base` がすべてのセマンティックトークンを提供します。各モードは必要なすべての色相を提供し、base のトークンツリーの任意の部分を上書きできます。
+
+### 色と参照
+
+色には、16 進数の値、`"transparent"`、またはテーマ内の別の色への参照を指定できます。
+
+```json title="Inside base or a mode"
+{
+  "text": {
+    "base": "#eeeeee",
+    "muted": "$hue.neutral.400"
+  },
+  "border": {
+    "base": "$text.muted"
+  }
+}
+```
+
+### 色相
+
+色相は 9 段階のカラースケールです。各モードでは、8 つの基本色相と 3 つのエイリアスを定義します。
+
+| 種類 | 値 |
+| --- | --- |
+| 基本色相 | `gray`, `red`, `orange`, `yellow`, `green`, `cyan`, `blue`, `purple` |
+| エイリアス | `accent`, `interactive`, `neutral` |
+| 段階 | `100`, `200`, `300`, `400`, `500`, `600`, `700`, `800`, `900` |
+
+基本色相には 9 段階すべてを定義するか、ある色相を別の色相のエイリアスにします。
+
+```json title="Inside light or dark"
+{
+  "hue": {
+    "purple": {
+      "100": "#b38ff4",
+      "200": "#9d7cd8",
+      "300": "#8869bd",
+      "400": "#7357a2",
+      "500": "#5f4688",
+      "600": "#4b356f",
+      "700": "#392557",
+      "800": "#271640",
+      "900": "#17072b"
+    },
+    "accent": "$hue.purple"
+  }
+}
+```
+
+色相の段階は、モードのコントラストの方向に従います。ライトテーマでは `100` が暗く `900` が明るくなり、ダークテーマでは `100` が明るく `900` が暗くなります。
+
+`base` 内の `categorical` 配列では、エージェントなど繰り返し表示される項目を区別するために使う色相を順番に指定します。
+
+```json title="Inside base"
+{
+  "categorical": ["accent", "purple", "green", "blue"]
+}
+```
+
+### セマンティックトークン
+
+セマンティックトークンは、UI の役割に色を割り当てます。コンポーネントは色を直接選ぶのではなく、これらの役割を使用します。
+
+| グループ | 用途 |
+| --- | --- |
+| `text` | 基本、控えめ、アクション、フォームフィールド、ステータス、フィードバックのテキスト。 |
+| `background` | 基本、浮き上がったサーフェス、アクション、フォームフィールド、フィードバックの塗りつぶし。 |
+| `border`、`scrollbar` | 枠線とスクロールバーの色。 |
+| `diff` | 追加、削除、コンテキスト、ハイライト、行番号の色。 |
+| `syntax` | ソースコードのハイライト。 |
+| `markdown` | Markdown の要素。 |
+
+たとえば、`text.muted` は補助的なテキストの色を制御し、`background.raised` は段階的に浮き上がったサーフェスを定義します。
+
+```json title="Inside base"
+{
+  "text": {
+    "base": "$hue.neutral.200",
+    "muted": "$hue.neutral.400"
+  },
+  "background": {
+    "base": "$hue.neutral.800",
+    "raised": {
+      "base": "$hue.neutral.700",
+      "high": "$hue.neutral.600",
+      "max": "$hue.neutral.500"
+    }
+  }
+}
+```
+
+構文のキーは、`comment`、`keyword`、`function`、`variable`、`string`、`number`、`type`、`operator`、`punctuation` です。
+
+Markdown のキーは、`text`、`heading`、`link`、`linkText`、`code`、`blockQuote`、`emphasis`、`strong`、`horizontalRule`、`listItem`、`listEnumeration`、`image`、`imageText`、`codeBlock` です。
+
+### アクションと状態
+
+アクションには `primary`、`secondary`、`destructive` のバリアントがあります。アクションとフォームフィールドでは、`base` に加えて、省略可能な操作状態を使用します。
+
+```json title="Inside base or a mode"
+{
+  "text": {
+    "action": {
+      "primary": {
+        "base": "$hue.interactive.400",
+        "$hovered": "$hue.interactive.300",
+        "$disabled": "$hue.neutral.600"
+      }
+    }
+  }
+}
+```
+
+状態のキーは、`$hovered`、`$focused`、`$pressed`、`$selected`、`$disabled` です。指定されていない状態には、そのアクションまたはフォームフィールドの `base` の色が使われます。
+
+### ダイアログのサーフェス
+
+パネル、ダイアログ、メニュー、トースト通知は、`background.raised` から深さを選択します。ダイアログでは、さらに `@dialog` でセマンティックトークンを上書きできます。
+
+```json title="Inside base or a mode"
+{
+  "@dialog": {
+    "background": {
+      "base": "$background.raised.base",
+      "action": {
+        "primary": {
+          "$hovered": "$background.raised.high"
+        }
+      }
+    }
+  }
+}
+```
+
+TUI は `@dialog` を適用した後に参照を再度解決するため、`$background.base` を参照するトークンはダイアログの背景色に従います。コンテキスト内のアクションの `base` は、指定されていない状態のフォールバックになります。明示的に指定した状態の上書きは、引き続きそちらが優先されます。

@@ -1,0 +1,104 @@
+---
+title: 네트워크
+description: 프록시와 사용자 지정 인증 기관을 구성합니다.
+---
+
+표준 프록시 환경 변수를 설정하고, 루프백 주소는 프록시 대상에서 제외하세요. OpenCode는 CLI와 백그라운드 서비스 사이에
+로컬 HTTP 연결을 사용하므로, CLI 환경에 프록시를 구성했다면 루프백 주소를 반드시 제외해야 합니다.
+
+```bash
+export HTTP_PROXY=http://proxy.example.com:8080
+export HTTPS_PROXY=http://proxy.example.com:8080
+export NO_PROXY=localhost,127.0.0.1,::1
+
+opencode
+```
+
+`HTTP_PROXY`는 HTTP 대상을, `HTTPS_PROXY`는 HTTPS 대상을 처리합니다. 프록시 URL 자체는 두 변수 모두 `http://`를
+사용할 수 있습니다. `NO_PROXY`는 프록시를 거치지 않고 직접 연결할 호스트와 주소를 쉼표로 구분한 목록입니다.
+
+## 백그라운드 서비스
+
+셸에서 내보낸(export) 변수는 백그라운드 서비스가 그 셸에서 시작될 때만 적용됩니다. 이후에 서비스를 시작할 때도 같은
+네트워크 설정이 사용되도록 관리형 서비스 구성에 변수를 저장하세요.
+
+```bash
+opencode service set env HTTP_PROXY http://proxy.example.com:8080
+opencode service set env HTTPS_PROXY http://proxy.example.com:8080
+opencode service set env NO_PROXY localhost,127.0.0.1,::1
+opencode service start
+```
+
+관리형 환경 변수를 변경하면 실행 중인 서비스가 중지됩니다. `service start`를 실행하면 새 환경으로 서비스가 다시
+시작됩니다. 관리형 서비스 변수는 CLI 프로세스가 아니라 서버 프로세스에 적용되므로, CLI를 실행하는 셸에서 프록시를
+설정한다면 그 셸에도 `NO_PROXY`를 유지하세요.
+
+저장된 변수는 `service unset env`로 제거합니다.
+
+```bash
+opencode service unset env HTTPS_PROXY
+```
+
+## 인증
+
+URL에 자격 증명을 포함하는 방식을 지원하는 프록시라면, 인증이 필요한 각 프록시 URL에 사용자 이름과 비밀번호를
+포함하세요. 사용자 이름이나 비밀번호에 `@`, `:`, `/` 같은 문자가 있으면 퍼센트 인코딩해야 합니다.
+
+```bash
+export HTTPS_PROXY='http://user:p%40ssword@proxy.example.com:8080'
+```
+
+백그라운드 서비스에는 전체 URL을 저장하세요. 이 값은 비공개 서비스 구성에 저장되고 `opencode service get env` 출력에
+그대로 표시되므로, 해당 출력을 다른 사람과 공유하지 마세요.
+
+```bash
+opencode service set env HTTPS_PROXY 'http://user:p%40ssword@proxy.example.com:8080'
+```
+
+## 인증서
+
+프록시나 대상 서버가 사설 인증 기관에서 서명한 인증서를 사용한다면 `NODE_EXTRA_CA_CERTS`를 PEM 파일 경로로
+설정하세요. 지정한 인증 기관은 프로세스가 시작될 때 런타임 신뢰 저장소에 추가됩니다.
+
+```bash
+export NODE_EXTRA_CA_CERTS=/etc/company/ca.pem
+opencode --standalone
+```
+
+백그라운드 서비스에는 파일 경로를 저장한 다음 서비스를 다시 시작하세요.
+
+```bash
+opencode service set env NODE_EXTRA_CA_CERTS /etc/company/ca.pem
+opencode service start
+```
+
+## 포그라운드 프로세스
+
+`--standalone`과 `serve`는 각자 실행된 프로세스의 환경을 사용합니다. `opencode service set env`는 이 프로세스에
+적용되지 않습니다.
+
+```bash
+HTTP_PROXY=http://proxy.example.com:8080 \
+HTTPS_PROXY=http://proxy.example.com:8080 \
+NO_PROXY=localhost,127.0.0.1,::1 \
+opencode --standalone
+```
+
+포그라운드 서버에도 같은 방식을 적용합니다.
+
+```bash
+HTTPS_PROXY=http://proxy.example.com:8080 \
+NO_PROXY=localhost,127.0.0.1,::1 \
+opencode serve
+```
+
+## 확인
+
+설정을 적용한 후 CLI가 백그라운드 서비스에 연결할 수 있는지 확인하세요.
+
+```bash
+opencode api get /api/info
+```
+
+상태 확인 응답이 정상적으로 반환되면 로컬 클라이언트와 서비스 간 연결이 확인된 것입니다. 서비스의 아웃바운드 프록시와
+인증서 경로까지 확인하려면 제공자에 일반 요청을 보내 보세요.

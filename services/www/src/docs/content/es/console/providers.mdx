@@ -1,0 +1,127 @@
+---
+title: "Proveedores"
+description: "Conecta tus propias cuentas de proveedores de modelos a un espacio de trabajo de OpenCode Console y elige qué modelos pueden usar los miembros."
+---
+
+Conecta las cuentas de proveedor que ya pagas, como Anthropic, OpenAI o AWS Bedrock, y comparte sus modelos con todo el
+espacio de trabajo. Console almacena la credencial y sirve cada proveedor a través de su gateway, así que los miembros
+usan los modelos sin ver nunca la clave del proveedor. El mismo gateway está disponible para tus propias herramientas a
+través de la [API de proveedores](/console/api/providers).
+
+Los propietarios y administradores gestionan los proveedores desde la pestaña **Providers**. Los miembros obtienen los
+modelos activados en OpenCode después de ejecutar `/connect`.
+
+## Conectar un proveedor
+
+1. Abre **Providers** y haz clic en **Connect Provider**.
+2. Elige un proveedor del catálogo e introduce su clave de API.
+3. Si quieres, haz clic en **Test connection** y, después, en **Save**.
+
+El catálogo incluye Anthropic, OpenAI, Google, xAI, DeepSeek, Mistral, Groq, OpenRouter y muchos más. Los proveedores
+del catálogo incluyen sus modelos ya configurados.
+
+### Proveedores en la nube
+
+Los proveedores en la nube necesitan algunos datos adicionales.
+
+| Proveedor             | Datos                                    |
+| --------------------- | ---------------------------------------- |
+| Azure                 | Nombre del recurso y clave de API        |
+| AWS Bedrock           | Región y clave de API                    |
+| Google Vertex AI      | Región y JSON de la cuenta de servicio   |
+| Cloudflare AI Gateway | ID de cuenta, ID del gateway y token de API |
+| Databricks            | URL del espacio de trabajo y token       |
+
+### Proveedores personalizados
+
+Haz clic en **Add Custom Provider** para conectar cualquier otro endpoint y, después, añade sus modelos con
+**Add Model**.
+
+| Campo      | Descripción                                                                         |
+| ---------- | ----------------------------------------------------------------------------------- |
+| Base URL   | Adónde reenvía Console las solicitudes, por ejemplo `https://api.deepseek.com/v1`. |
+| Format     | Chat Completions, Responses API, Anthropic Compatible o Google Generative AI.       |
+| Auth mode  | Bearer, API key header o Custom header.                                             |
+| Credential | La clave que Console envía al proveedor.                                            |
+
+## Elegir modelos
+
+Abre un proveedor para ver sus modelos. Solo los modelos activados están disponibles para los miembros.
+
+- Usa el interruptor **Enabled** para activar o desactivar un modelo.
+- Activa **New models** para habilitar los modelos que el proveedor añada en el futuro.
+
+## Editar modelos
+
+Haz clic en un modelo para editarlo. Los cambios se guardan al cerrar el panel.
+
+| Sección       | Qué puedes cambiar                                                          |
+| ------------- | --------------------------------------------------------------------------- |
+| General       | Nombre visible, ID de la API, compatibilidad con herramientas, tipos de entrada y salida |
+| Variants      | Variantes con sus propias cabeceras o cuerpo                                |
+| Configuration | Variante predeterminada, cabeceras y cuerpo de la solicitud, límites de tokens |
+| Cost Tiers    | Precios de entrada, salida, lectura de caché y escritura en caché por 1M tokens |
+
+### Precios personalizados
+
+Los modelos del catálogo parten del precio de lista del proveedor. Si has negociado precios, por ejemplo un descuento en
+tu contrato con OpenAI, sobrescribe los precios en **Cost Tiers** para que los informes de uso y los
+[presupuestos](/console/budgets) reflejen lo que pagas realmente.
+
+| Campo            | Precio de lista | Tu precio |
+| ---------------- | --------------- | --------- |
+| Input price      | $2.50           | $2.00     |
+| Output price     | $15.00          | $12.00    |
+| Cache read price | $0.25           | $0.20     |
+
+Los precios que cambias aparecen resaltados en la página del proveedor. Usa **Restore default value** en un campo, o
+**⋯ › Restore...** en el modelo, para volver al precio de lista.
+
+Añade un tramo **Context** cuando un modelo cobre más a partir de cierto tamaño de contexto, por ejemplo para prompts de
+más de 200K tokens.
+
+### Modelos personalizados
+
+Haz clic en **Add Model** para añadir un modelo que no está en el catálogo, con su **Display name** y su **Model ID**.
+Usa **⋯ › Duplicate...** en un modelo existente para partir de su configuración.
+
+## Modelos de OpenCode
+
+La pestaña **Models** gestiona los [modelos](/console/models) que ofrece Console, que se pagan con los créditos del
+espacio de trabajo. Funciona como la página de un proveedor:
+
+- Activa o desactiva modelos concretos.
+- Desactiva **Free models** para bloquear los modelos gratuitos en el espacio de trabajo.
+- Activa **New models** para habilitar automáticamente los nuevos modelos de Console.
+
+Desactiva el proveedor completo desde **⋯ › Disable** para usar solo tus propios proveedores.
+
+## Uso en OpenCode
+
+Los miembros ejecutan `/connect` y eligen el espacio de trabajo. Cada proveedor activado aparece con el nombre del
+espacio de trabajo seguido del nombre del proveedor, y `/models` muestra sus modelos activados.
+
+```text
+Acme Inc. / Anthropic
+```
+
+Activa **Managed providers only** en **Settings › General** para que OpenCode use solo los proveedores del espacio de
+trabajo para todos.
+
+## Desactivar o quitar
+
+Abre el menú **⋯** del proveedor:
+
+- **Disable** oculta el proveedor y sus modelos a los miembros, pero conserva su configuración.
+- **Remove...** elimina el proveedor y sus modelos. El cuadro de diálogo muestra quién lo ha usado recientemente y
+  ofrece **Disable instead** (desactivar en su lugar).
+
+Para rotar una clave, haz clic en la credencial en la página del proveedor e introduce la nueva.
+
+## Facturación
+
+El proveedor te factura los tokens; Console no cobra créditos por ellos. Aun así, Console registra cada solicitud y su
+coste según el precio del modelo, de modo que los informes de uso y los [presupuestos](/console/budgets) lo incluyen.
+
+Para llamar a un proveedor desde tus propias herramientas en lugar de OpenCode, usa la
+[API de proveedores](/console/api/providers).

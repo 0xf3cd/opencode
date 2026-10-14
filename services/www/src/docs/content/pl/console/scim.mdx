@@ -1,0 +1,92 @@
+---
+title: "Synchronizacja katalogu"
+description: "Automatycznie dodawaj i usuwaj członków obszaru roboczego z Okta, Microsoft Entra ID lub dowolnego dostawcy tożsamości obsługującego SCIM 2.0."
+---
+
+Synchronizacja katalogu (SCIM 2.0) dodaje osoby do obszaru roboczego, gdy przypiszesz je u swojego dostawcy tożsamości,
+i odbiera im dostęp, gdy cofniesz przypisanie. Rolami nadal zarządzasz w Console.
+
+```text
+https://opencode.ai/console/scim/v2
+```
+
+## Zanim zaczniesz
+
+- Skonfiguruj [SSO](/console/sso) dla obszaru roboczego.
+- [Zweryfikuj](/console/sso#verify-email-domains) każdą domenę e-mail, której członkowie używają do logowania.
+  Synchronizacja katalogu dodaje tylko osoby ze zweryfikowanych domen; pozostałe osoby zaproś na stronie
+  [Members](/console/members).
+
+## Tworzenie tokenu
+
+1. Otwórz **Settings › Security** i kliknij **Set up** w sekcji **Directory sync**.
+2. Skopiuj **SCIM base URL** i token. Token jest wyświetlany tylko raz, więc zapisz go w menedżerze sekretów.
+
+Dostawca tożsamości wysyła token w każdym żądaniu.
+
+```text
+Authorization: Bearer <token>
+```
+
+## Podłączanie dostawcy tożsamości
+
+### Okta
+
+1. Dodaj aplikację **SCIM 2.0 Test App (Header Auth)**.
+2. Ustaw bazowy URL i w polu **API Token** wpisz `Bearer `, a po nim token.
+3. Włącz **Create Users**, **Update User Attributes** i **Deactivate Users**. Pozostaw wyłączone **Import Groups** i
+   synchronizację haseł.
+
+### Microsoft Entra ID
+
+1. W swojej aplikacji firmowej (enterprise app) otwórz **Provisioning** i ustaw tryb na **Automatic**.
+2. Wpisz bazowy URL jako **Tenant URL**, a token jako **Secret Token**.
+3. Przypisz użytkowników i grupy, a następnie rozpocznij aprowizację.
+
+### Inni dostawcy
+
+Użyj aplikacji SCIM 2.0 z uwierzytelnianiem tokenem w nagłówku, skierowanej na bazowy URL. Console obsługuje endpointy
+`/Users` i `/Groups`.
+
+Najpierw przypisz jedną osobę testową. Po pierwszym żądaniu sekcja **Directory sync** pokaże
+**Connected to your identity provider**.
+
+## Co jest synchronizowane
+
+| U dostawcy tożsamości       | W Console                                                                                         |
+| --------------------------- | ------------------------------------------------------------------------------------------------- |
+| Przypisanie osoby           | Dodanie z rolą **Member**. Istniejący członkowie zachowują swoją rolę.                            |
+| Zmiana imienia i nazwiska   | Aktualizacja profilu.                                                                             |
+| Cofnięcie przypisania lub dezaktywacja | Zawieszenie dostępu i oznaczenie jako **Deactivated**. Klucze API utworzone przez tę osobę są unieważniane. |
+| Ponowne przypisanie         | Przywrócenie dostępu. Unieważnione klucze pozostają unieważnione.                                 |
+| Usunięcie                   | Usunięcie z obszaru roboczego. Konto osoby i inne obszary robocze pozostają bez zmian.            |
+
+- Synchronizacja katalogu nie zmienia ról ani adresów e-mail.
+- Ostatniego właściciela nie można dezaktywować ani usunąć.
+- W obszarach roboczych z subskrypcją [Go](/console/go) nie można dodawać członków przez synchronizację katalogu.
+
+## Grupy
+
+Wypychaj grupy, aby oznaczać tagami ich członków, np. przez **Push Groups** w Okta lub przypisanie grup w Entra.
+Przypisz osoby, zanim wypchniesz ich grupy.
+
+```text
+Platform Admins  →  platform-admins
+```
+
+Każda grupa oznacza swoich członków tagiem nazwanym tak jak grupa. W **Settings › Security › Group tags** możesz
+zmienić nazwę tagu, skierować kilka grup na jeden tag lub przestać tagować daną grupę. Opuszczenie grupy usuwa jej tag.
+
+## Rotacja tokenu
+
+1. Kliknij **New token** i zainstaluj go u swojego dostawcy tożsamości.
+2. Poczekaj, aż przy nowym tokenie pojawi się informacja o ostatnim użyciu.
+3. Unieważnij stary token.
+
+Unieważnienie tokenu zatrzymuje przyszłe aktualizacje, ale nie zmienia istniejących członków. Usunięcie połączenia SSO
+unieważnia wszystkie tokeny.
+
+## SSO a synchronizacja katalogu
+
+Gdy obszar roboczy wystawi token, SSO przestaje [automatycznie dodawać członków](/console/sso#automatic-membership).
+O członkostwie decyduje katalog, nawet jeśli token zostanie później unieważniony.

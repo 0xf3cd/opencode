@@ -1,0 +1,284 @@
+---
+title: "Referencias"
+---
+
+Las referencias dan a OpenCode acceso con nombre a directorios fuera del proyecto actual. Añade una en `opencode.json` o
+`opencode.jsonc` y adjunta su alias en tu cliente cuando la necesites.
+
+```jsonc title="opencode.jsonc"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "references": {
+    "docs": {
+      "path": "../product-docs",
+      "description": "Use for product behavior and terminology",
+    },
+  },
+}
+```
+
+Después de adjuntar `docs`, pide al agente que examine la ruta que te interese:
+
+```text
+Read the attached docs reference and summarize api/authentication.md.
+```
+
+Usa referencias para documentación, bibliotecas compartidas, ejemplos o código fuente de otro repositorio.
+
+## Local
+
+Usa `path` para un directorio local:
+
+```jsonc
+{
+  "references": {
+    "design-system": {
+      "path": "../design-system",
+      "description": "Use when working with components or design tokens",
+    },
+  },
+}
+```
+
+Las rutas funcionan así:
+
+- Las rutas relativas se resuelven desde el directorio que contiene el archivo de configuración.
+- Se admiten rutas absolutas.
+- Se admiten rutas relativas al directorio personal, como `~/docs`.
+
+Usa la forma abreviada de cadena cuando no necesites otros campos:
+
+```jsonc
+{
+  "references": {
+    "docs": "../docs",
+    "shared": "~/work/shared",
+  },
+}
+```
+
+<Callout type="note">
+  Una cadena abreviada solo es una ruta local si empieza por `.`, `/` o `~`. Usa `./docs`, no `docs`; un valor `docs` sin
+  prefijo se interpreta como un repositorio Git.
+</Callout>
+
+## Git
+
+Usa `repository` para un repositorio Git remoto:
+
+```jsonc
+{
+  "references": {
+    "effect": {
+      "repository": "Effect-TS/effect",
+      "branch": "main",
+    },
+    "internal-sdk": {
+      "repository": "git@gitlab.example.com:platform/sdk.git",
+      "branch": "release/v2",
+    },
+  },
+}
+```
+
+Formatos de remoto admitidos:
+
+- Forma abreviada `owner/repo` de GitHub
+- URL de Git
+- Formas host/ruta
+- Remotos de estilo SCP
+
+No se admiten repositorios locales `file:`.
+
+Usa la forma abreviada de cadena para seguir la rama predeterminada del remoto:
+
+```jsonc
+{
+  "references": {
+    "effect": "Effect-TS/effect",
+    "sdk": "gitlab.com/platform/sdk",
+  },
+}
+```
+
+Sin `branch`, OpenCode extrae y actualiza la rama predeterminada del remoto. Los nombres de rama pueden contener letras,
+números, `/`, `_`, `.` y `-`, pero no pueden empezar por `-` ni contener `..`.
+
+```jsonc
+{
+  "references": {
+    "sdk": {
+      "repository": "example/sdk",
+      "branch": "release/v2.1",
+    },
+  },
+}
+```
+
+## Almacenamiento
+
+OpenCode normaliza cada remoto y guarda una copia local por remoto y rama en su directorio de datos global. Sin una rama
+explícita, la ruta tiene esta forma:
+
+```text
+opencode/repos/<host>/<repository-path>
+```
+
+En una instalación típica de Linux, `Effect-TS/effect` se guarda en:
+
+```text
+~/.local/share/opencode/repos/github.com/Effect-TS/effect
+```
+
+Una rama explícita añade el sufijo codificado `@<branch>`:
+
+```text
+~/.local/share/opencode/repos/github.com/Effect-TS/effect@main
+```
+
+## Actualización
+
+Los repositorios que faltan se clonan de forma asíncrona. Las copias locales existentes se comprueban en segundo plano
+cuando las referencias se cargan o se recargan, y después de que se admita un nuevo prompt del usuario en su ubicación
+(Location).
+
+```text
+Prompt admitted → refresh check starts in background → agent continues
+```
+
+Una copia local es apta cuando su último intento de actualización fue hace al menos 24 horas o cuando no hay ningún
+intento registrado. Una actualización hace fetch y restablece la copia a la rama configurada o a la rama predeterminada
+del remoto.
+
+```text
+Last attempt: 25 hours ago → eligible
+Last attempt: 2 hours ago  → skipped
+```
+
+La actualización sigue estas reglas:
+
+- Las marcas de tiempo se conservan aunque se reinicie el servicio.
+- Las ubicaciones que usan la misma copia local comparten su marca de tiempo.
+- Los intentos fallidos se registran y siguen sujetos al límite de 24 horas.
+- No hay sondeo periódico mientras una ubicación no está en uso.
+- Los fallos de clonado o actualización no impiden que se carguen las demás referencias.
+
+Los prompts no esperan a que termine el clonado o la actualización. Un adjunto puede contener contenido antiguo aunque
+una lectura posterior con una herramienta vea la copia actualizada, y una referencia nueva puede aparecer antes de que su
+copia local esté lista.
+
+```text
+Attachment created → cached content
+Background refresh completes → later tool read sees newer content
+```
+
+<Callout type="warning">
+  Las copias locales en caché son compartidas y pueden actualizarse mientras un agente las usa. No las edites, porque
+  una actualización las restablece.
+</Callout>
+
+## Indicaciones
+
+`description` indica a los agentes cuándo es relevante una referencia. Las referencias con descripción aparecen en las
+instrucciones del agente con su alias y su ruta resuelta.
+
+```jsonc
+{
+  "references": {
+    "docs": {
+      "path": "../docs",
+      "description": "Use for product behavior and terminology",
+    },
+  },
+}
+```
+
+Las referencias sin descripción siguen disponibles para los clientes, pero no se anuncian automáticamente.
+
+```jsonc
+{
+  "references": {
+    "archive": {
+      "path": "../archive",
+    },
+  },
+}
+```
+
+## Visibilidad
+
+Asigna `true` a `hidden` para quitar una referencia de los selectores interactivos de los clientes:
+
+```jsonc
+{
+  "references": {
+    "internal": {
+      "path": "../internal",
+      "description": "Use for internal service behavior",
+      "hidden": true,
+    },
+  },
+}
+```
+
+`hidden` solo afecta a la visibilidad interactiva. La referencia sigue en la API de referencias y, si tiene descripción,
+en las instrucciones del agente.
+
+## Uso
+
+Los clientes adjuntan una referencia por su alias raíz. El adjunto contiene un listado no recursivo de los archivos y
+directorios inmediatos de la raíz.
+
+```text
+Attached alias: docs
+Ask: Inspect docs/guides/deployment.md and explain the deployment steps.
+```
+
+Pide al agente que examine una ruta concreta cuando necesites contenido por debajo de la raíz.
+
+## Permisos
+
+Las referencias no conceden permisos de herramientas adicionales. El acceso fuera de la ubicación activa sigue las reglas
+normales de las herramientas y el permiso `external_directory`; para editar también se necesita el permiso de edición
+correspondiente.
+
+```text
+Read ../product-docs/api.md
+```
+
+La solicitud solo tiene éxito si los permisos activos permiten esa lectura externa.
+
+## Campos
+
+| Campo | Local | Git | Descripción |
+| --- | --- | --- | --- |
+| `path` | Obligatorio | No | Ruta del directorio local |
+| `repository` | No | Obligatorio | Repositorio Git remoto |
+| `branch` | No | Opcional | Rama que se obtiene y se extrae |
+| `description` | Opcional | Opcional | Indicaciones sobre cuándo deben usarla los agentes |
+| `hidden` | Opcional | Opcional | La oculta de los selectores interactivos de los clientes |
+
+Una entrada Git completa puede usar todos los campos compatibles con Git:
+
+```jsonc
+{
+  "references": {
+    "sdk": {
+      "repository": "example/sdk",
+      "branch": "main",
+      "description": "Use for SDK implementation details",
+      "hidden": false,
+    },
+  },
+}
+```
+
+## Alias
+
+Un alias no puede estar vacío ni contener `/`, `\`, espacios en blanco, comillas invertidas ni comas.
+
+```text
+Valid:   docs
+Invalid: product docs
+Invalid: docs/api
+```

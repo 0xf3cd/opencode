@@ -1,0 +1,92 @@
+---
+title: "予算 API"
+description: "ワークスペースの全メンバーに適用される月間予算を取得し、メンバーごとのカスタム予算を管理します。"
+---
+
+インテグレーションから、ワークスペースの全メンバーに適用される月間予算を取得し、メンバーごとのカスタム予算を管理できます。
+
+## クイックスタート
+
+[Console](https://opencode.ai/console) で、**All** 権限を持つ[サービスアカウント](/console/api#service-accounts)の API キーを作成します。推論専用のキーでは、予算データへのアクセスや上限の変更はできません。
+
+```bash
+export CONSOLE_URL="https://opencode.ai/console"
+export SERVICE_API_KEY="oc_sk_..."
+```
+
+メンバーの予算を一覧表示します。
+
+```bash
+curl --fail-with-body \
+  "${CONSOLE_URL}/api/v1/budgets/members" \
+  --header "Authorization: Bearer ${SERVICE_API_KEY}" \
+  --header "Accept: application/json"
+```
+
+## メンバーの予算の一覧表示
+
+```text
+GET /api/v1/budgets/members
+```
+
+レスポンスには、現在のすべてのメンバーがメールアドレス順に含まれます。source が `custom` の上限はメンバーごとのオーバーライドで、`default` はワークスペースのデフォルトを継承したものです。上限と source が null の場合、そのメンバーの予算は無制限です。
+
+```json
+[
+  {
+    "user_id": "user_...",
+    "email": "alice@example.com",
+    "limit_micro_cents": "7525000000",
+    "spent_micro_cents": "1250000000",
+    "exceeded": false,
+    "resets_at": "2026-10-01T00:00:00.000Z",
+    "source": "custom",
+    "updated_at": "2026-09-03T12:00:00.000Z"
+  }
+]
+```
+
+精度が失われないように、金額を表すレスポンスのフィールドはマイクロセント単位の 10 進数文字列です。1 米ドルは 100,000,000 マイクロセントです。支出額とリセット日時は、現在の UTC の暦月を対象とします。メンバーごとのカスタムオーバーライドがない場合、`updated_at` は null です。
+
+## カスタム予算の設定
+
+```text
+PUT /api/v1/budgets/members/:user_id
+```
+
+1 人のメンバーに月額 $75.25 の予算を設定します。
+
+```bash
+curl --fail-with-body --request PUT \
+  "${CONSOLE_URL}/api/v1/budgets/members/user_..." \
+  --header "Authorization: Bearer ${SERVICE_API_KEY}" \
+  --header "Content-Type: application/json" \
+  --data '{"budget_dollars":75.25}'
+```
+
+`budget_dollars` には、小数点以下 2 桁までの 0 以上の米ドル金額を指定します。この PUT はべき等で、HTTP 204 を返します。メンバー ID には、一覧取得の操作で返された ID を使用します。
+
+## ワークスペースのデフォルトへの復帰
+
+```text
+DELETE /api/v1/budgets/members/:user_id
+```
+
+カスタムオーバーライドを削除します。
+
+```bash
+curl --fail-with-body --request DELETE \
+  "${CONSOLE_URL}/api/v1/budgets/members/user_..." \
+  --header "Authorization: Bearer ${SERVICE_API_KEY}"
+```
+
+オーバーライドを削除しても、メンバーは削除されません。以降、メンバーにはワークスペースのデフォルト予算が適用されます。ワークスペースにデフォルトがない場合は無制限になります。このリクエストは繰り返しても安全で、HTTP 204 を返します。
+
+## エラー
+
+| ステータス | 意味 |
+| ------ | -------------------------------------------------------- |
+| `400`  | メンバー ID または予算の金額が無効です。 |
+| `401`  | サービスの API キーがない、無効、期限切れ、または取り消されています。 |
+| `403`  | API キーに予算を管理する権限がありません。 |
+| `404`  | API キーに紐付いたワークスペースに、そのメンバーが存在しません。 |

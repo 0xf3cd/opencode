@@ -1,0 +1,370 @@
+---
+title: "ACP"
+description: "استخدم OpenCode مع عميل يدعم Agent Client Protocol."
+---
+
+يشغّل الأمر `opencode acp` برنامج OpenCode كوكيل يعمل وفق [Agent Client Protocol](https://agentclientprotocol.com)،
+لتتمكن من استخدامه من عميل ACP مثل Zed. يضيف هذا المثال OpenCode إلى Zed:
+
+```json title="~/.config/zed/settings.json"
+{
+  "agent_servers": {
+    "OpenCode": {
+      "command": "opencode",
+      "args": ["acp"]
+    }
+  }
+}
+```
+
+تستخدم عملاء ACP الأخرى الأمر نفسه والوسيط `acp`، لكن ملف التهيئة وأسماء الحقول قد تختلف. إذا لم يعثر عميل رسومي على
+`opencode`، فاضبط `command` على المسار المطلق الذي يطبعه `which opencode`.
+
+## المصادقة
+
+يستخدم OpenCode بيانات اعتماد المزوّدين المتوفرة لديه مسبقًا. سجّل الدخول من الطرفية قبل تشغيل عميل ACP:
+
+```bash
+opencode auth login
+```
+
+يوفّر OpenCode طريقة مصادقة واحدة هي `opencode-login`، وهي افتراضيًا طريقة مصادقة من نوع agent. لا يقبل الطلب
+`authenticate` سوى هذه الطريقة، ولا يجمع أي بيانات اعتماد. وإذا فشل موجّه لأن مزوّدًا يتطلب المصادقة، يعيد OpenCode خطأ
+`auth_required` المعرّف في ACP.
+
+إذا ضبط العميل `clientCapabilities.auth.terminal` على `true`، تصبح طريقة المصادقة من نوع terminal:
+
+```json
+{
+  "id": "opencode-login",
+  "name": "Login with opencode",
+  "description": "Run `opencode auth login` in the terminal",
+  "type": "terminal",
+  "args": ["--login"]
+}
+```
+
+يجب ألا يرسل العميل هذه الطريقة إلى `authenticate`، بل يضيف `--login` إلى الأمر الذي يشغّل OpenCode، مثل
+`opencode acp --login`، ويشغّله في طرفية. عندها ينفّذ OpenCode مسار `opencode auth login` ثم ينتهي. تعني حالة الخروج 0
+نجاح تسجيل الدخول، وبعدها يعيد العميل الاتصال ويرسل `initialize` مجددًا.
+
+إذا ضبط العميل `clientCapabilities._meta["terminal-auth"]` على `true`، تتضمن طريقة المصادقة أمر تسجيل الدخول:
+
+```json
+{
+  "id": "opencode-login",
+  "name": "Login with opencode",
+  "description": "Run `opencode auth login` in the terminal",
+  "_meta": { "terminal-auth": { "command": "opencode", "args": ["auth", "login"], "label": "OpenCode Login" } }
+}
+```
+
+## استكشاف الأخطاء وإصلاحها
+
+ينتظر `opencode acp` رسائل ACP على stdin، لذا يبدو متوقفًا عند تشغيله مباشرةً في الطرفية. شغّله من عميل ACP بدلًا من ذلك.
+
+إذا أبلغ العميل بأن العملية انتهت أو كتبت مخرجات غير صالحة وفق البروتوكول، فأضف `--print-logs` قبل `acp` في وسائط العميل.
+عندها يكتب OpenCode سجلات ACP وسجلات الخادم الخاص إلى stderr، ولا يحمل stdout سوى رسائل ACP.
+
+```bash
+opencode --print-logs acp
+```
+
+## مرجع البروتوكول
+
+هذا القسم موجّه لمطوري عملاء ACP. يسرد أجزاء ACP التي يدعمها OpenCode، ومفاتيح `_meta` التي يضيفها. ويمكن للعملاء التي
+لا تتعرف على هذه المفاتيح تجاهلها. تعرّف [وثائق ACP](https://agentclientprotocol.com) الرسائل.
+
+### النقل
+
+يشغّل العميل `opencode acp` كعملية فرعية. ويتبادل الطرفان رسائل JSON-RPC مفصولة بأسطر جديدة عبر stdin وstdout،
+باستخدام الإصدار 1 من بروتوكول ACP.
+
+يشغّل `opencode acp` خادم OpenCode خاصًا لاستخدامه وحده. لا يتصل بالخدمة الخلفية المشتركة، ولا يفتح منفذ شبكة لـ ACP.
+ويمكن لعملية واحدة خدمة جلسات ACP كثيرة، وتنتهي العملية عندما يغلق العميل stdin.
+
+### القدرات
+
+تتضمن استجابة OpenCode للطلب `initialize` قدرات الوكيل التالية:
+
+```json
+{
+  "loadSession": true,
+  "mcpCapabilities": { "http": true, "sse": false },
+  "promptCapabilities": { "embeddedContext": true, "image": true },
+  "sessionCapabilities": {
+    "additionalDirectories": {},
+    "close": {},
+    "delete": {},
+    "fork": {},
+    "list": {},
+    "resume": {}
+  }
+}
+```
+
+يقرأ OpenCode قدرات العميل التالية:
+
+| القدرة | الأثر |
+| --- | --- |
+| `auth.terminal` مضبوطة على `true` | تصبح طريقة المصادقة [من نوع terminal](#authentication). |
+| `elicitation.form` | يطرح OpenCode [الأسئلة](#questions) في صورة نماذج. |
+| `session.compaction` | يبلّغ OpenCode عن [ضغط السياق](#compaction) عبر تحديثات ACP. |
+| `_meta["terminal-auth"]` مضبوطة على `true` | تتضمن طريقة المصادقة [أمر تسجيل الدخول](#authentication). |
+
+### الجلسات
+
+يحدد العميل دليل العمل عند إنشاء جلسة. ويستخدم OpenCode تهيئة ذلك الدليل، بما فيها النماذج والوكلاء والأوامر والمهارات
+والتعليمات والإضافات وخوادم MCP.
+
+- يجب أن يكون `cwd` مسارًا مطلقًا. يرفض OpenCode القيمة النسبية لـ `cwd` بخطأ معاملات غير صالحة (invalid params).
+- يعيد `session/load` عرض الرسائل المحفوظة، بينما لا يعيد `session/resume` و`session/fork` عرضها.
+- لتحميل جلسة أو استئنافها أو تفريعها، يجب أن يمرّر العميل دليل تلك الجلسة في `cwd`. يرفض OpenCode أي قيمة `cwd` مختلفة
+  بخطأ معاملات غير صالحة.
+- يعيد `session/list` حتى 100 جلسة في كل صفحة، ويقبل عامل تصفية `cwd` والمؤشر `cursor`.
+- يقاطع `session/close` العمل النشط ويفصل الجلسة عن عملية ACP، مع احتفاظ OpenCode بالجلسة المحفوظة.
+- ينهي `session/delete` الموجّه النشط كما يفعل `session/cancel`، ثم يزيل الجلسة. وينجح حذف جلسة غير موجودة.
+- تشغّل الجلسة موجّهًا واحدًا في كل مرة. ويعيد OpenCode خطأ عند استلام `session/prompt` ثانٍ بينما الأول لا يزال نشطًا.
+
+### الإلغاء
+
+ينهي `session/cancel` الموجّه النشط بالقيمة `stopReason: "cancelled"`، وكذلك يفعل `$/cancel_request` الموجّه لطلب
+الموجّه. يرفض OpenCode طلبات الأذونات المعلّقة، ويبلّغ عن استدعاءات الأدوات التي لم تكتمل بعد الإلغاء بالحالة `failed`.
+
+### الأدلة الإضافية
+
+يمكن للعميل تمرير `additionalDirectories` في `session/new` و`session/load` و`session/resume` و`session/fork`:
+
+```json
+{ "cwd": "/work/app", "additionalDirectories": ["/work/shared"], "mcpServers": [] }
+```
+
+- يجب أن يكون كل إدخال مسارًا مطلقًا لا يحتوي على `*` أو `?`.
+- يسمح OpenCode بالوصول إلى الأدلة الخارجية داخل كل جذر، مع استمرار تطبيق قواعد أذونات القراءة والتعديل وshell.
+- تحل القائمة في كل طلب محل القائمة السابقة للجلسة، كما تنص
+  [وثيقة RFD الخاصة بالأدلة الإضافية](https://agentclientprotocol.com/rfds/additional-directories).
+- يخزّن OpenCode أذونات الوصول الممنوحة هذه في الجلسة، لذا تنطبق أيضًا عندما يستخدم عميل OpenCode آخر الجلسة. وتنسخ
+  الجلسات الفرعية هذه الأذونات عند إنشاء OpenCode لها.
+
+يعيد `session/list` القائمة المخزّنة لكل جلسة في `additionalDirectories`.
+
+### خيارات التهيئة
+
+تستخدم الجلسات الجديدة النموذج الافتراضي والوكيل الأساسي الافتراضي للدليل. وتتضمن الاستجابات لـ `session/new`
+و`session/load` و`session/resume` و`session/fork` خيارات التهيئة التالية:
+
+| المعرّف | الفئة | القيم |
+| --- | --- | --- |
+| `model` | `model` | النماذج المفعّلة بصيغة `provider/model`. وتحدد اللاحقة `/variant` مستوى الجهد (effort) أيضًا. |
+| `effort` | `thought_level` | متغيرات النموذج و`default`. لا يظهر إلا للنماذج التي لها متغيرات. |
+| `mode` | `mode` | الوكلاء الأساسيون الظاهرون. |
+
+يقبل `session/set_config_option` قيمًا نصية:
+
+```json
+{ "sessionId": "ses_123", "configId": "model", "value": "anthropic/claude-sonnet-4" }
+```
+
+يحدد `session/set_mode` الوكيل أيضًا. ويرسل OpenCode التحديث `config_option_update` عند تغيّر النماذج أو الوكلاء
+المتاحين، وكذلك عندما يغيّر عميل آخر نموذج الجلسة أو وكيلها.
+
+### محتوى الموجّه
+
+يمكن أن تحتوي الموجّهات على نص وصور وموارد مضمّنة وروابط موارد. يتجاهل OpenCode الكتل الصوتية، ويعالج الكتل الأخرى على
+النحو التالي:
+
+| الكتلة | ما يفعله OpenCode |
+| --- | --- |
+| `text` | يرسلها إلى النموذج. |
+| `text` بجمهور `assistant` فقط | يرسلها إلى النموذج كسياق منفصل خارج رسالة المستخدم. |
+| `text` بجمهور `user` فقط | يستبعدها من مدخلات النموذج. |
+| `image` مع `data` | يرفقها بالموجّه. |
+| `image` مع `uri` فقط | يعاملها كرابط مورد. |
+| `resource` مع `text` | يدرج النص مباشرةً بعد مسار المورد أو URI الخاص به. |
+| `resource` مع `blob` | يرفقها إن كان لها `mimeType`، وإلا يتجاهلها. |
+| `resource_link` إلى URI بصيغة `file://` | يرفق الملف. وإذا كان الملف مفقودًا أو تعذّرت قراءته، يرسل رابط Markdown بدلًا منه. |
+| `resource_link` إلى URI بصيغة `zed://` مع استعلام `path` | يرفق الملف الموجود في `path`. |
+| `resource_link` إلى URI آخر | يرسل رابط Markdown مثل `[spec](https://example.com/spec.md)`. |
+
+يأتي الجمهور من `annotations` الخاصة بالكتلة. ويرفض OpenCode كتلة `image` لا تحتوي على `data` ولا `uri`. الكتلة التالية
+سياق موجّه للنموذج فقط:
+
+```json
+{ "type": "text", "text": "Open file: src/app.ts", "annotations": { "audience": ["assistant"] } }
+```
+
+### الأوامر
+
+بعد `session/new` أو `session/load` أو `session/resume` أو `session/fork`، يرسل OpenCode التحديث
+`available_commands_update` متضمنًا أوامر الدليل والأمر المدمج `compact`، ويرسل تحديثًا آخر عند تغيّر الأوامر.
+
+```json
+{
+  "sessionUpdate": "available_commands_update",
+  "availableCommands": [{ "name": "compact", "description": "Compact the session" }]
+}
+```
+
+إذا بدأ الموجّه بـ `/` متبوعًا باسم أمر متاح، يشغّل OpenCode ذلك الأمر ويمرّر بقية النص كوسائط. أما أي نص آخر يبدأ بـ `/`
+فيرسله OpenCode كموجّه عادي. ويشغّل `/compact` [ضغط السياق](/compaction).
+
+### خوادم MCP
+
+يمكن للعميل تمرير خوادم MCP من نوعي stdio وHTTP في `session/new` و`session/load` و`session/resume` و`session/fork`.
+يضيفها OpenCode إلى دليل الجلسة طوال عمر عملية `opencode acp`، لذا يمكن للجلسات الأخرى في ذلك الدليل استخدامها. يمرّر
+OpenCode ترويسات HTTP كما هي، ولا يستخدم OAuth مع هذه الخوادم. ولا يعلن دعم MCP عبر SSE، ولا يدعم MCP عبر ACP.
+
+```json
+{ "type": "http", "name": "docs", "url": "https://mcp.example.com", "headers": [] }
+```
+
+### الأذونات
+
+توفّر طلبات الأذونات ثلاثة خيارات:
+
+```json
+[
+  { "optionId": "once", "kind": "allow_once", "name": "Allow once" },
+  { "optionId": "always", "kind": "allow_always", "name": "Always allow" },
+  { "optionId": "reject", "kind": "reject_once", "name": "Reject" }
+]
+```
+
+عندما يغيّر الطلب ملفات، يضمّن OpenCode محتوى `diff` إن استطاع إنشاء معاينة للتغيير.
+
+### الأسئلة
+
+إذا أعلن العميل دعم `elicitation.form`، يطرح OpenCode الأسئلة عبر `elicitation/create` في وضع النموذج (form). ويتضمن
+الطلب `toolCallId` إذا كان OpenCode قد أرسل استدعاء الأداة ذاك كتحديث `session/update` لهذه الجلسة.
+
+```json
+{
+  "mode": "form",
+  "sessionId": "ses_123",
+  "toolCallId": "call_1",
+  "message": "Which package manager?",
+  "requestedSchema": {
+    "type": "object",
+    "properties": { "pm": { "type": "string", "oneOf": [{ "const": "bun", "title": "Bun" }] } },
+    "required": ["pm"]
+  }
+}
+```
+
+- لا يرسل OpenCode أبدًا نماذج قد تجمع قيمًا سرية.
+- إذا كان الحقل يقبل إجابة مكتوبة إلى جانب خياراته، يضيف المخطط خاصية نصية اختيارية باسم `<key>_custom`. في الاختيار
+  المفرد، تحل الإجابة المخصصة غير الفارغة محل الخيار المحدد. وفي الاختيار المتعدد، يضيفها OpenCode إلى الخيارات المحددة.
+- إذا رفض المستخدم النموذج أو ألغاه، يلغي OpenCode السؤال.
+
+إذا تعذّر على OpenCode عرض سؤال، فإنه يلغيه ويطلب من النموذج المتابعة دون إجابة.
+
+### ضغط السياق
+
+إذا أعلن العميل دعم `session.compaction`، يبلّغ OpenCode عن ضغط السياق عبر التحديثين `compaction_update`
+و`compaction_summary_chunk` الواردين في وثيقة RFD الخاصة بـ [ضغط سياق الجلسة](https://agentclientprotocol.com/rfds/session-compaction)
+في ACP، وهي في مرحلة المعاينة (Preview). وعندما يحمّل العميل جلسة، يعيد OpenCode عرض كل عملية ضغط مكتملة أو فاشلة كتحديث
+واحد.
+
+```json
+{
+  "sessionUpdate": "compaction_update",
+  "compactionId": "msg_123",
+  "status": "completed",
+  "summary": [{ "type": "text", "text": "..." }]
+}
+```
+
+أما العملاء الأخرى فتتلقى [علامة ضغط السياق](#compaction-marker) بدلًا من ذلك، وكذلك الحال مع عمليات ضغط سياق الجلسات
+الفرعية.
+
+### الاستخدام
+
+تتضمن استجابة الموجّه الحقل `usage` الوارد في وثيقة RFD الخاصة بـ
+[استخدام نهاية الدور](https://agentclientprotocol.com/rfds/end-turn-token-usage)، وهي مسودة. يجمع `usage` استدعاءات
+النموذج التي أجراها الموجّه في هذه الجلسة، ولا يشمل الجلسات الفرعية.
+
+```json
+{ "stopReason": "end_turn", "usage": { "inputTokens": 1200, "outputTokens": 340, "totalTokens": 1540 }, "_meta": {} }
+```
+
+قبل الاستجابة، يرسل OpenCode التحديث `usage_update` الوارد في وثيقة RFD الخاصة بـ
+[استخدام الجلسة](https://agentclientprotocol.com/rfds/session-usage). ولا يرسله إلا إذا استهلك الموجّه tokens وكان
+OpenCode يعرف حجم سياق النموذج. ويمثّل `cost` التكلفة الإجمالية للجلسة بالدولار الأمريكي (USD).
+
+```json
+{ "sessionUpdate": "usage_update", "used": 1540, "size": 200000, "cost": { "amount": 0.012, "currency": "USD" } }
+```
+
+### الجلسات الفرعية
+
+أثناء تشغيل موجّه، يرسل OpenCode التحديثات الواردة من جلساته الفرعية كإشعارات `session/update` على جلسة الموجّه. ويحمل
+كل تحديث المفتاح `_meta["opencode/child-session"]`. يضيف OpenCode البادئة `<childSessionId>:` إلى معرّفات استدعاءات
+الأدوات، ويضيف عنوان الجلسة الفرعية بادئةً لعناوين استدعاءات الأدوات إن كان للجلسة الفرعية عنوان.
+
+```json
+{
+  "sessionUpdate": "tool_call",
+  "toolCallId": "ses_child:call_1",
+  "title": "Explore the codebase: src/app.ts",
+  "_meta": {
+    "opencode/child-session": { "id": "ses_child", "parentID": "ses_123", "depth": 1, "title": "Explore the codebase" }
+  }
+}
+```
+
+| الحقل | النوع | الوصف |
+| --- | --- | --- |
+| `id` | `string` | معرّف الجلسة الفرعية. |
+| `parentID` | `string` | معرّف الجلسة الأم للجلسة الفرعية. |
+| `depth` | `number` | 1 للجلسة الفرعية التابعة لجلسة الموجّه، و2 للجلسة الفرعية التابعة لتلك الجلسة الفرعية، وهكذا. |
+| `title` | `string` | عنوان الجلسة الفرعية. يحذفه OpenCode إذا لم يكن للجلسة الفرعية عنوان. |
+
+تحمل طلبات الأذونات الصادرة من جلسة فرعية المفتاح نفسه في `toolCall._meta`. بعد انتهاء الموجّه، يتوقف OpenCode عن إرسال
+تحديثات الجلسات الفرعية، لكن طلبات الأذونات والأسئلة الصادرة منها تظل تصل إلى العميل.
+
+### حالة إعادة المحاولة
+
+عندما يفشل استدعاء نموذج ويجدول OpenCode إعادة المحاولة، يرسل `session_info_update` مع `_meta["opencode/retry"]`.
+وعند بدء إعادة المحاولة، يرسل OpenCode القيمة `"opencode/retry": null`. امسح أي حالة إعادة محاولة عند وصول استجابة
+الموجّه.
+
+```json
+{
+  "sessionUpdate": "session_info_update",
+  "_meta": {
+    "opencode/retry": {
+      "attempt": 1,
+      "nextRetryAt": "2026-10-02T12:00:05.000Z",
+      "error": { "type": "provider.rate-limit", "message": "Rate limit exceeded", "status": 429 }
+    }
+  }
+}
+```
+
+| الحقل | النوع | الوصف |
+| --- | --- | --- |
+| `attempt` | `number` | رقم محاولة الإعادة. |
+| `nextRetryAt` | `string` | وقت المحاولة التالية بتنسيق ISO 8601. |
+| `error` | `object` | يحتوي على `type` و`message`، ويحتوي أيضًا على `status` و`response.body` إذا أرسلهما المزوّد. |
+
+### علامة ضغط السياق
+
+إذا لم يعلن العميل دعم `session.compaction`، يبلّغ OpenCode عن تقدّم ضغط السياق عبر `session_info_update` مع
+`_meta["opencode/compaction"]`. ويستخدم OpenCode العلامة دائمًا لعمليات ضغط سياق الجلسات الفرعية.
+
+```json
+{
+  "sessionUpdate": "session_info_update",
+  "_meta": { "opencode/compaction": { "status": "started", "messageId": "msg_123", "reason": "auto" } }
+}
+```
+
+| الحقل | النوع | الوصف |
+| --- | --- | --- |
+| `status` | `string` | `started` أو `completed` أو `failed`. وتُعد عملية الضغط الملغاة `failed`. |
+| `messageId` | `string` | يربط بداية عملية الضغط بنهايتها. تعامل معه كمفتاح معتم (opaque). |
+| `reason` | `string` | `auto` أو `manual`. |
+| `error` | `object` | يظهر عندما تكون قيمة `status` هي `failed`. له بنية `error` نفسها في [إعادة المحاولة](#retry-status). |
+
+لا تتضمن العلامة ملخصًا. وقد تفشل عملية الضغط التلقائية دون علامة `started`. وعندما يحمّل العميل جلسة، يعيد OpenCode عرض
+كل عملية ضغط مكتملة أو فاشلة كعلامة واحدة.

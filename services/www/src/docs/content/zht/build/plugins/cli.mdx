@@ -1,0 +1,622 @@
+---
+title: "CLI"
+---
+
+CLI 外掛可以為終端機加入指令、路由、插槽（slot）、Markdown 渲染器、通知和本機狀態。
+
+```ts title="src/tui.ts"
+import { Plugin } from "@opencode/plugin/tui"
+
+export default Plugin.define({
+  id: "acme.cli",
+  setup(context) {
+    context.ui.toast.show({ message: "CLI plugin loaded", variant: "success" })
+  },
+})
+```
+
+直接匯入 `@opencode/plugin/tui` 即可。OpenCode 會在執行時解析這個匯入，因此本機 CLI 外掛不需要指向 OpenCode checkout 的絕對路徑。
+
+## 上下文
+
+`setup` 會收到設定、應用程式中繼資料、目前位置、OpenCode 用戶端、快取資料、主題 token、OpenTUI 渲染器，以及下文介紹的各種 UI API。
+
+```ts
+setup(context) {
+  const compact = context.options.compact === true
+  const location = context.location ?? context.data.location.default()
+  const version = context.app.version
+  const channel = context.app.channel
+  const client = context.client
+  const renderer = context.renderer
+  const theme = context.theme
+}
+```
+
+針對外掛擁有的資源，回傳一個清理函式。
+
+```ts
+setup(context) {
+  const stop = context.data.on("session.execution.succeeded", () => {})
+  return () => stop()
+}
+```
+
+## 用戶端
+
+`context.client` 是自動產生的 OpenCode 用戶端，可以呼叫已連線的伺服器，包括遠端伺服器。
+
+```ts
+const response = await context.client.plugin.list({
+  location: context.location ?? context.data.location.default(),
+})
+const plugins = response.data
+```
+
+## 事件
+
+使用 `data.on` 監聽單一具型別的事件，或使用 `data.listen` 監聽所有伺服器事件；兩者都會回傳取消訂閱的函式。
+
+```ts
+const stopPermission = context.data.on("permission.asked", (event) => {
+  context.ui.toast.show({ message: `Permission ${event.data.id}` })
+})
+const stopAll = context.data.listen(({ details }) => console.log(details.type))
+
+return () => {
+  stopPermission()
+  stopAll()
+}
+```
+
+## 工作階段
+
+工作階段資料提供列出、查詢、階層、費用、狀態、同步和失效等功能。
+
+```ts
+const sessions = context.data.session.list()
+const session = context.data.session.get(sessionID)
+const rootID = context.data.session.root(sessionID)
+const familyIDs = context.data.session.family(sessionID)
+const cost = context.data.session.cost(sessionID)
+const status = context.data.session.status(sessionID)
+await context.data.session.sync(sessionID)
+context.data.session.invalidate(sessionID)
+```
+
+待處理的收件匣項目和訊息都有列出、查詢、同步和失效 API。
+
+```ts
+await context.data.session.pending.sync(sessionID)
+const pending = context.data.session.pending.list(sessionID)
+context.data.session.pending.invalidate(sessionID)
+
+await context.data.session.message.sync(sessionID)
+const messages = context.data.session.message.list(sessionID)
+const message = context.data.session.message.get(sessionID, messageID)
+context.data.session.message.invalidate(sessionID)
+```
+
+可以讀取並重新整理工作階段的權限請求。
+
+```ts
+await context.data.session.permission.sync(sessionID)
+const requests = context.data.session.permission.list(sessionID) ?? []
+context.data.session.permission.invalidate(sessionID)
+```
+
+表單可以在某個位置列出、重新整理、回覆或取消。
+
+```ts
+import type { FormCancelInput, FormReplyInput } from "@opencode/client"
+
+async function handleForm(reply: FormReplyInput, cancel: FormCancelInput) {
+  const location = context.location
+  await context.data.session.form.sync(sessionID, location)
+  const forms = context.data.session.form.list(sessionID, location) ?? []
+  await context.data.session.form.reply(reply, location)
+  await context.data.session.form.cancel(cancel, location)
+  context.data.session.form.invalidate(sessionID, location)
+}
+```
+
+## 專案與 shell
+
+專案和已儲存的權限支援列出、查詢、同步和失效操作。
+
+```ts
+await context.data.project.sync()
+const projects = context.data.project.list()
+const project = context.data.project.get(projectID)
+context.data.project.invalidate()
+
+await context.data.project.permission.sync(projectID)
+const saved = context.data.project.permission.list(projectID) ?? []
+context.data.project.permission.invalidate(projectID)
+```
+
+shell 資料支援以位置為範圍的列出、查詢、同步和失效操作。
+
+```ts
+await context.data.shell.sync(context.location)
+const shells = context.data.shell.list(context.location)
+const shell = context.data.shell.get(shellID)
+context.data.shell.invalidate(context.location)
+```
+
+## 位置資料
+
+位置狀態提供預設位置與重新整理控制。
+
+```ts
+const location = context.data.location.default()
+await context.data.location.sync(location)
+context.data.location.invalidate(location)
+```
+
+版本控制狀態提供某個位置的儲存庫資訊。
+
+```ts
+await context.data.location.vcs.sync(context.location)
+const vcs = context.data.location.vcs.info(context.location)
+const branch = vcs?.branch.current
+context.data.location.vcs.invalidate(context.location)
+```
+
+代理、指令、整合、模型、供應商、參考目錄、技能和 MCP 資料都有相同的 `list`、`sync` 和 `invalidate` 方法。
+
+```ts
+const location = context.location
+await Promise.all([
+  context.data.location.agent.sync(location),
+  context.data.location.command.sync(location),
+  context.data.location.integration.sync(location),
+  context.data.location.model.sync(location),
+  context.data.location.provider.sync(location),
+  context.data.location.reference.sync(location),
+  context.data.location.skill.sync(location),
+  context.data.location.mcp.server.sync(location),
+  context.data.location.mcp.resource.sync(location),
+])
+
+const agents = context.data.location.agent.list(location) ?? []
+const commands = context.data.location.command.list(location) ?? []
+const integrations = context.data.location.integration.list(location) ?? []
+const models = context.data.location.model.list(location) ?? []
+const providers = context.data.location.provider.list(location) ?? []
+const references = context.data.location.reference.list(location) ?? []
+const skills = context.data.location.skill.list(location) ?? []
+const servers = context.data.location.mcp.server.list(location) ?? []
+const resources = context.data.location.mcp.resource.list(location) ?? []
+
+context.data.location.model.invalidate(location)
+```
+
+## 提醒
+
+提醒請求可以依照終端機是否處於焦點，顯示系統通知、播放設定好的音效，或兩者都做。
+
+```ts
+const result = await context.attention.notify({
+  title: "OpenCode",
+  message: "Session done",
+  notification: { when: "blurred" },
+  sound: { name: "done", volume: 0.5, when: "always" },
+})
+console.log(result.ok, result.notification, result.sound, result.skipped)
+```
+
+## 主題與渲染器
+
+搭配 OpenTUI 元素使用語意化主題 token，並將 `context.renderer` 傳給需要渲染器的輔助函式。
+
+```tsx
+const Status = () => <text fg={context.theme.text.base}>Ready</text>
+const renderer = context.renderer
+```
+
+## Solid 元件
+
+在路由、對話方塊或插槽所渲染的 JSX 中，使用 `usePlugin` 取得目前的上下文。
+
+```tsx
+import { usePlugin } from "@opencode/plugin/tui"
+
+function Status() {
+  const context = usePlugin()
+  return <text fg={context.theme.text.base}>{context.app.version}</text>
+}
+```
+
+## Markdown
+
+依語言註冊圍欄程式碼區塊的渲染器；回傳的函式可以取消註冊。
+
+```ts
+const unregister = context.markdown.registerCodeBlockRenderer("acme", (_token, render) => render.defaultRender())
+return unregister
+```
+
+## 指令與按鍵對應
+
+在響應式的按鍵對應層中註冊指令面板指令、斜線指令和鍵盤指令。
+
+```ts
+context.keymap.layer(() => ({
+  mode: "global",
+  priority: 10,
+  commands: [
+    {
+      id: "acme.status",
+      title: "Show Acme status",
+      group: "Acme",
+      bind: "ctrl+g",
+      palette: true,
+      slash: { name: "acme", aliases: ["status"], arguments: true },
+      enabled: () => true,
+      suggested: true,
+      run: async (input) => context.ui.toast.show({ message: input ?? "Ready" }),
+    },
+  ],
+  bindings: ["acme.status"],
+}))
+```
+
+從 `setup`（包括在 `await` 之後）或元件中呼叫 `layer`。每一層會在下列任一情況最先發生時移除：
+
+- 外掛被停用、重新載入，或 setup 失敗。
+- 建立它的元件或響應式運算（例如插槽、路由或對話方塊）被釋放。
+
+層的工廠函式必須是純函式。OpenCode 會先在不追蹤相依性的情況下執行一次，以驗證初始的指令結構，之後再以響應式方式執行。初始指令結構的錯誤（例如沒有 ID 的指令面板指令）會從 `layer()` 擲回。按鍵繫結的解析錯誤由 OpenTUI 處理。之後響應式更新所產生的錯誤，則依照 Solid 的錯誤處理機制。
+
+```ts
+async setup(context) {
+  const settings = await loadSettings()
+  context.keymap.layer(() => ({
+    mode: "global",
+    commands: [{ id: "acme.sync", title: "Sync Acme", palette: true, run: () => sync(settings) }],
+  }))
+}
+```
+
+一個層可以指定單一 OpenTUI 可渲染元素為目標，指令也可以回傳 `false`，讓鍵盤事件繼續分派。
+
+```ts
+context.keymap.layer(() => ({
+  target: () => panel,
+  commands: [{ bind: "escape", run: (_input, event) => (event ? false : undefined) }],
+}))
+```
+
+分派指令、查看快速鍵和指令狀態，或推入暫時的輸入模式。
+
+```ts
+context.keymap.dispatch("acme.status", "verbose")
+const shortcuts = context.keymap.shortcuts("acme.status")
+const commands = context.keymap.commands()
+const pending = context.keymap.pending()
+const active = context.keymap.active()
+const currentMode = context.keymap.mode.current()
+const popMode = context.keymap.mode.push("acme-search")
+popMode()
+```
+
+## 儲存空間
+
+持久儲存空間會以 JSON 保存資料，重新啟動後仍然存在，並在多個 TUI 執行個體之間同步。
+
+```ts
+const [settings, updateSettings] = context.storage.store("settings", {
+  initial: { compact: false },
+})
+await updateSettings((draft) => {
+  draft.compact = true
+})
+```
+
+記憶體儲存空間在外掛重新載入後仍會保留，但 TUI 結束時就會捨棄。
+
+```ts
+const [state, updateState] = context.storage.memory("state", {
+  initial: { count: 0 },
+})
+updateState((draft) => {
+  draft.count++
+})
+```
+
+## 對話方塊與快顯通知
+
+使用以 Promise 為基礎的對話方塊來顯示警示、確認、文字輸入和選擇。
+
+```ts
+await context.ui.dialog.alert({ title: "Acme", message: "Ready" })
+const confirmed = await context.ui.dialog.confirm({
+  title: "Continue?",
+  message: "Run the Acme action?",
+  label: { confirm: "Run", cancel: "Cancel" },
+})
+const name = await context.ui.dialog.prompt({ title: "Name", placeholder: "release" })
+const mode = await context.ui.dialog.select({
+  title: "Mode",
+  current: "safe",
+  options: [
+    { title: "Safe", value: "safe", description: "Ask before changes" },
+    { title: "Fast", value: "fast", disabled: false, category: "Advanced" },
+  ],
+})
+```
+
+### 選擇搜尋
+
+傳入 `search` 即可自行控制比對方式和結果順序。每次查詢（包括空字串查詢）都會執行它，而且只會收到已啟用的選項。結果會依回傳的順序列出，每個分類會直接顯示在項目旁。
+
+```ts
+const project = await context.ui.dialog.select({
+  title: "Projects",
+  options: [
+    { title: "Alpha", value: "alpha", category: "Recent" },
+    { title: "Beta", value: "beta", category: "Pinned" },
+  ],
+  search: (query, options) =>
+    options
+      .filter((option) => option.title.toLowerCase().includes(query.toLowerCase()))
+      .toSorted((left, right) => right.title.localeCompare(left.title)),
+})
+```
+
+### 選擇動作
+
+動作會顯示在頁尾，可以透過對應的按鍵繫結、點選，或用 Tab 移動焦點再按 Enter 來執行。預設情況下，動作會收到目前選取的值，沒有選取項目時無法使用。不需要選取項目的動作，請使用 `selection: "none"`。
+
+```ts
+await context.ui.dialog.select({
+  title: "Projects",
+  options: [{ title: "Alpha", value: "alpha" }],
+  actions: [
+    { bind: "ctrl+o", title: "Inspect", onTrigger: (value) => context.ui.toast.show({ message: value }) },
+    { bind: "ctrl+a", title: "Close", side: "right", selection: "none", onTrigger: () => context.ui.dialog.clear() },
+  ],
+})
+```
+
+- 動作不會關閉對話方塊，也不會讓 Promise 完成。
+- 按 Enter 或點選選項會以選取的值完成 Promise。
+- 按 Escape、呼叫 `clear()` 或顯示其他對話方塊，都會以 `undefined` 完成 Promise。
+- 不要繫結 `ctrl+n` 或 `ctrl+p`。對話方塊會保留這兩個按鍵用於導覽，而且它自己的按鍵繫結優先。
+
+自訂 JSX 對話方塊可以設定自己的大小，也可以自行關閉。
+
+```tsx
+context.ui.dialog.set({ size: "large", centered: true })
+context.ui.dialog.show(
+  () => (
+    <box>
+      <text>Acme</text>
+    </box>
+  ),
+  () => console.log("closed"),
+)
+context.ui.dialog.clear()
+```
+
+快顯通知支援標題、訊息、樣式變體和持續時間。
+
+```ts
+context.ui.toast.show({
+  title: "Acme",
+  message: "Saved",
+  variant: "success",
+  duration: 3000,
+})
+```
+
+## 路由與分頁
+
+註冊 JSX 路由、查看目前的路由，並導覽到首頁、某個工作階段或外掛頁面。
+
+```tsx
+const unregister = context.ui.router.register({
+  name: "dashboard",
+  render: ({ data }) => <text>{String(data?.title ?? "Acme")}</text>,
+})
+const current = context.ui.router.current()
+context.ui.router.navigate({ type: "plugin", name: "dashboard", data: { title: "Status" } })
+context.ui.router.navigate({ type: "session", sessionID })
+context.ui.router.navigate({ type: "home" })
+return unregister
+```
+
+啟用工作階段分頁時，可以列出、開啟、聚焦、移動和關閉分頁。`open` 不會改變焦點；`focus` 則會在需要時開啟分頁。
+
+```ts
+if (context.ui.tabs.enabled()) {
+  context.ui.tabs.open(backgroundSessionID)
+  context.ui.tabs.focus(sessionID)
+  const tabs = context.ui.tabs.list()
+  context.ui.tabs.move(backgroundSessionID, tabs.length - 1)
+  context.ui.tabs.close(sessionID)
+  context.ui.tabs.close()
+}
+```
+
+## 模型
+
+讀取提示詞目前選取的模型並變更其變體。在 Solid 運算中讀取時，`current()` 和 `variant.list()` 是響應式的。`variant` 為 `undefined` 代表使用模型預設值。
+
+```ts
+const selected = context.ui.model.current()
+const variants = context.ui.model.variant.list()
+context.ui.model.variant.set("high")
+context.ui.model.variant.set(undefined)
+```
+
+沒有選取模型或模型沒有該變體時，`variant.set` 會回傳 `false`。將它繫結到指令，就能取代內建的變體循環切換，例如略過模型預設值：
+
+```ts
+context.keymap.layer(() => ({
+  commands: [
+    {
+      id: "acme.variant.cycle",
+      title: "Cycle variants",
+      bind: "tab",
+      run() {
+        const variants = context.ui.model.variant.list()
+        if (variants.length === 0) return
+        const index = variants.indexOf(context.ui.model.current()?.variant ?? "")
+        context.ui.model.variant.set(variants[(index + 1) % variants.length])
+      },
+    },
+  ],
+}))
+```
+
+## 插槽
+
+插槽可以在 `app`、`home.footer`、`home.footer.status`、`prompt.footer`、`prompt.footer.status`、`prompt.footer.file`、`session.composer.top`、`sidebar.content` 或 `sidebar.footer` 插入或取代 JSX。
+
+```tsx
+return context.ui.slot({
+  append: "sidebar.content",
+  render: ({ sessionID }) => <text>{context.data.session.get(sessionID)?.title}</text>,
+})
+```
+
+使用 `prepend`、`append`、`before`、`after` 或 `replace` 指定放置方式。
+
+```tsx
+context.ui.slot({ prepend: "home.footer", render: () => <text>Before footer content</text> })
+context.ui.slot({ append: "home.footer", render: () => <text>After footer content</text> })
+context.ui.slot({ before: "home.footer", render: () => <text>Before footer slot</text> })
+context.ui.slot({ after: "home.footer", render: () => <text>After footer slot</text> })
+context.ui.slot({ replace: "home.footer", render: () => <text>New footer</text> })
+```
+
+使用 `home.footer.status` 可以在內建的頁尾列加入內容，而不必取代整列。狀態內容會顯示在 OpenCode 的健康狀態指示器之後、版本號之前。
+
+```tsx
+context.ui.slot({ append: "home.footer.status", render: () => <text>SYNCED</text> })
+```
+
+### 工作階段面板
+
+在 `session.panel` 註冊內容，再從指令開啟面板。大小、焦點和全螢幕呈現由主程式負責，面板內容則由外掛負責。選取的名稱會以 `panel.name` 傳給每個內容，由各個內容自行決定是否渲染。
+
+```tsx
+import { Show } from "solid-js"
+
+context.ui.slot({
+  append: "session.panel",
+  render: (panel) => (
+    <Show when={panel.name === "acme.review"}>
+      <ReviewPanel panel={panel} />
+    </Show>
+  ),
+})
+
+context.ui.slot({
+  append: "app",
+  render: () => {
+    context.keymap.layer(() => ({
+      mode: "global",
+      commands: [
+        {
+          id: "acme.review",
+          title: "Open review",
+          slash: { name: "review" },
+          run: () => {
+            context.ui.panel.open("acme.review")
+          },
+        },
+      ],
+    }))
+    return null
+  },
+})
+```
+
+- 在工作階段之外開啟會回傳 `false`。
+- 這是一般的插槽：五種放置方式和現有的取代順序規則全都適用。
+- 需要各自獨立選取的內容請使用 `append`，讓它們可以共存。`replace` 仍然會接管整個插槽。
+- 名稱是共用的選取值，不是註冊後獨占的名稱。請使用帶有外掛前綴的名稱（例如 `acme.review`）避免衝突。開啟沒有對應渲染器的名稱時，插槽會保持空白。
+- 變更呈現方式時，已掛載的內容會保留。關閉面板會釋放這些內容；停用外掛時，會透過一般的插槽清理流程移除它的內容。
+- 只有在面板擁有輸入焦點時，面板的鍵盤層和輸入模式才會生效。
+
+插槽會收到響應式的 `name`、`sessionID`、`width`、`presentation` 和 `focused` 屬性，以及 `focus`、`close` 和 `toggleFullscreen` 動作。主程式在較窄的終端機中一律使用全螢幕；在空間足以容納側邊面板之前，`toggleFullscreen` 不會有任何作用。
+
+```tsx
+import type { PanelInput } from "@opencode/plugin/tui/context"
+import { usePlugin } from "@opencode/plugin/tui"
+
+function ReviewPanel(props: { panel: PanelInput }) {
+  const context = usePlugin()
+  context.keymap.layer(() => ({
+    commands: [
+      {
+        id: "acme.review.fullscreen",
+        bind: "f",
+        run: props.panel.toggleFullscreen,
+      },
+    ],
+  }))
+  return <text>Reviewing {props.panel.sessionID}</text>
+}
+```
+
+你可以一開始就要求全螢幕呈現、查看自己目前的面板，或關閉它，而不影響其他外掛的面板。
+
+```ts
+context.ui.panel.open("acme.review", { presentation: "fullscreen" })
+const current = context.ui.panel.current()
+context.ui.panel.close()
+```
+
+## 格式化
+
+格式化檔案系統路徑以供顯示，包括縮寫家目錄。
+
+```ts
+const displayPath = context.ui.format.path(context.location?.directory ?? "/home/me/project")
+```
+
+## 發布與載入
+
+透過 `./tui` 公開 CLI 外掛；如果外掛會渲染 JSX，請加入 OpenTUI 的 peer 相依套件。
+
+```json title="package.json"
+{
+  "name": "opencode-acme-plugin",
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts",
+    "./tui": "./src/tui.tsx"
+  },
+  "dependencies": {
+    "@opencode/plugin": "latest"
+  },
+  "peerDependencies": {
+    "@opentui/core": ">=0.5.8",
+    "@opentui/solid": ">=0.5.8",
+    "solid-js": ">=1.9.0"
+  }
+}
+```
+
+在[主要外掛](/build/plugins)旁邊匯出 `./tui`，就會自動載入。
+
+```ts title="src/index.ts"
+import { Plugin } from "@opencode/plugin"
+
+export default Plugin.define({
+  id: "acme.server",
+  setup() {},
+})
+```
+
+在 [`cli.json`](/cli/plugins) 中設定僅限 CLI 的套件，讓它在連線到遠端伺服器時也保持啟用。
+
+```json title="cli.json"
+{
+  "plugins": ["opencode-acme-plugin"]
+}
+```

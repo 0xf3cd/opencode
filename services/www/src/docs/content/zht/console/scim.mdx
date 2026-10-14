@@ -1,0 +1,82 @@
+---
+title: "目錄同步"
+description: "從 Okta、Microsoft Entra ID 或任何 SCIM 2.0 身分識別提供者自動新增和移除工作區成員。"
+---
+
+目錄同步（SCIM 2.0）會在你於身分識別提供者中指派人員時，將他們加入工作區；取消指派時，則會移除他們的存取權。角色仍然在 Console 中管理。
+
+```text
+https://opencode.ai/console/scim/v2
+```
+
+## 開始之前
+
+- 為工作區設定 [SSO](/console/sso)。
+- [驗證](/console/sso#verify-email-domains)成員登入時使用的每個電子郵件網域。目錄同步只會加入使用已驗證網域的人；其他人請從[成員](/console/members)頁面邀請。
+
+## 建立 token
+
+1. 開啟 **Settings › Security**，然後在 **Directory sync** 底下按一下 **Set up**。
+2. 複製 **SCIM base URL** 和 token。token 只會顯示一次，請將它存放在密碼管理工具中。
+
+你的身分識別提供者會在每個請求中傳送此 token。
+
+```text
+Authorization: Bearer <token>
+```
+
+## 連接身分識別提供者
+
+### Okta
+
+1. 加入 **SCIM 2.0 Test App (Header Auth)** 應用程式。
+2. 設定 base URL，並在 **API Token** 中輸入 `Bearer ` 加上 token。
+3. 啟用 **Create Users**、**Update User Attributes** 和 **Deactivate Users**。**Import Groups** 和密碼同步保持關閉。
+
+### Microsoft Entra ID
+
+1. 在你的企業應用程式中開啟 **Provisioning**，將模式設為 **Automatic**。
+2. 在 **Tenant URL** 中輸入 base URL，在 **Secret Token** 中輸入 token。
+3. 指派使用者和群組，然後開始佈建。
+
+### 其他提供者
+
+使用支援標頭 token 驗證的 SCIM 2.0 應用程式，並將它指向 base URL。Console 支援 `/Users` 和 `/Groups` 端點。
+
+請先指派一位測試人員。收到第一個請求後，**Directory sync** 會顯示 **Connected to your identity provider**。
+
+## 同步的內容
+
+| 在身分識別提供者中 | 在 Console 中 |
+| ------------------------- | --------------------------------------------------------------------------------- |
+| 指派人員 | 以 **Member** 身分加入。現有成員保留原本的角色。 |
+| 更新名稱 | 更新個人資料。 |
+| 取消指派或停用 | 暫停存取權，並顯示為 **Deactivated**。對方建立的 API 金鑰會被撤銷。 |
+| 重新指派 | 恢復存取權。已撤銷的金鑰仍維持撤銷狀態。 |
+| 刪除 | 從工作區移除。對方的帳號和其他工作區不受影響。 |
+
+- 目錄同步不會變更角色和電子郵件地址。
+- 最後一位擁有者無法被停用或刪除。
+- 已訂閱 [Go](/console/go) 的工作區無法透過目錄同步加入成員。
+
+## 群組
+
+推送群組即可為群組成員加上標籤，例如使用 Okta 的 **Push Groups** 或 Entra 的群組指派。請先指派人員，再推送他們所屬的群組。
+
+```text
+Platform Admins  →  platform-admins
+```
+
+每個群組會為其成員加上以群組命名的標籤。在 **Settings › Security › Group tags** 中，你可以重新命名標籤、將多個群組對應到同一個標籤，或停止為某個群組加上標籤。離開群組時，對應的標籤也會移除。
+
+## 輪替 token
+
+1. 按一下 **New token**，並將它安裝到你的身分識別提供者中。
+2. 等到新 token 顯示最後使用時間。
+3. 撤銷舊的 token。
+
+撤銷 token 會停止之後的更新，但不會變更現有成員。刪除 SSO 連線會撤銷所有 token。
+
+## SSO 與目錄同步
+
+工作區一旦簽發過 token，SSO 就不會再[自動加入成員](/console/sso#automatic-membership)。成員資格改由目錄決定，即使之後撤銷了 token 也是如此。

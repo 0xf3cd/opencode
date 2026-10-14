@@ -1,0 +1,137 @@
+---
+title: "JavaScript"
+---
+
+`@opencode/client` は、OpenCode HTTP API 用の TypeScript クライアントです。アプリケーションからネットワーク経由で OpenCode サーバーに接続する場合に使用します。ネイティブの型とメソッドは、[API リファレンス](/api)と同じコントラクトから生成されます。プラグイン RPC の型は、インポートした RPC 定義から取得されます。
+
+## インストール
+
+```sh
+bun add @opencode/client
+```
+
+## クライアントの作成
+
+サーバーの URL を指定してクライアントを作成し、API リソースごとにグループ化されたメソッドを呼び出します。
+
+```ts
+import { OpenCode } from "@opencode/client"
+
+const client = OpenCode.make({
+  baseUrl: "http://localhost:4096",
+})
+
+const session = await client.session.create({
+  location: { directory: "/workspace" },
+})
+
+await client.session.prompt({
+  sessionID: session.id,
+  text: "Review the current changes",
+})
+```
+
+## ヘッダーとリクエスト
+
+デフォルトの認証ヘッダーやアプリケーションヘッダーは、`OpenCode.make` の `headers` で渡します。独自の `fetch` 実装を指定することもできます。各操作は最後の引数でリクエストオプションを受け取り、`AbortSignal` やリクエストごとのヘッダーを指定できます。ただし、イベントのサブスクリプションは例外で、サブスクライバー単位のキャンセルのみを受け付け、ヘッダーはベースクライアントのものを使用します。
+
+```ts
+const client = OpenCode.make({
+  baseUrl: "https://opencode.example.com",
+  headers: {
+    authorization: `Bearer ${process.env.OPENCODE_TOKEN}`,
+  },
+})
+
+await client.session.list(undefined, {
+  signal: AbortSignal.timeout(10_000),
+})
+```
+
+## イベントのストリーミング
+
+ストリーミングエンドポイントは非同期イテラブルを返します。
+
+```ts
+for await (const event of client.event.subscribe()) {
+  console.log(event.type)
+}
+```
+
+ネイティブイベントと RPC イベントのサブスクライバーは、クライアントごとに 1 つの遅延接続を共有します。クライアント、ハンドル、イテラブルを作成してもイベント接続は開かれず、消費を始めた時点で接続されます。反復処理を抜けたりサブスクライバーを中止したりしても、終了するのはそのイテレーターだけです。最後のサブスクライバーが離れると接続が閉じられます。共有ソースは、アクティブなサブスクライバーが各イベントを受け取るまで待機するため、コンシューマーは時間のかかる処理を行う前にイベントをバッファリングしてください。
+
+サブスクリプションはライブ専用で、再生や自動再接続は行われません。ソースで障害が発生すると、現在のサブスクリプションは終了します。復旧後に再度サブスクライブしてください。遅れて参加したネイティブのサブスクライバーは、現在の `server.connected` マーカーを受け取りますが、過去のビジネスイベントは受け取りません。
+
+## プラグイン RPC
+
+プラグインの共有コントラクトをインポートして、`client.rpc` に渡します。
+
+```ts
+import { OpenCode } from "@opencode/client"
+import { Acme } from "opencode-acme-plugin/rpc"
+
+const acme = client.rpc(Acme)
+const result = await acme.search(
+  { query: "hello" },
+  { location: { directory: "/workspace" }, signal: AbortSignal.timeout(10_000) },
+)
+
+const unsubscribe = acme.events.on("updated", (event) => {
+  console.log(event.type, event.location.directory, event.data.text)
+})
+```
+
+メソッドの省略可能な第 2 引数には、プラグインが定義する入力とは別に、`location`、`signal`、`headers` を指定します。`location` を省略した場合は、ネイティブリクエストのデフォルトに従い、ベースの location ヘッダー、次にサーバーの作業ディレクトリが使われます。サブクライアントの作成時にはロケーションは選択されません。
+
+メソッドの引数と戻り値は定義から推論されます。スキーマの解析はコントラクトの境界で行われます。呼び出し側は受け付けられる入力表現を送信し、ハンドラーは解析済みの値を受け取ります。Promise クライアントは Standard Schema またはプレーンな JSON Schema の定義を受け付け、スキーマパーサーをローカルでは実行しません。サーバーが解析と変換を済ませた出力を返します。Effect Schema の定義には Effect クライアントが必要です。
+
+宣言済みのメソッドエラーは、ほかの Promise クライアントのエンドポイントのエラーと同様に reject され、catch したエラーは型付けされません。汎用の HTTP RPC エラーラッパーは、型付きサブクライアントによって取り除かれます。予約済みの `rpc.*` フレームワークエラーは通常の RPC エラーのまま扱われ、無関係な認証、トランスポート、プロトコルのエラーは、クライアントでの通常の表現を維持します。
+
+RPC のサブスクリプションはローカル名を使用し、その RPC のイベントをすべてのロケーションから受け取ります。イベントを絞り込むには、必須の `event.location` を確認してください。`events.subscribe` は、ネイティブの非同期イテラブル API と同じ形式です。
+
+```ts
+for await (const event of acme.events.subscribe("updated")) {
+  console.log(event.data.text)
+}
+```
+
+`events.on` は、同じソースに対する便利なラッパーで、サブスクライブ解除用の関数を返します。非同期コールバックは順番に await されます。コールバックまたはソースで障害が発生するとログに記録され、そのリスナーは終了します。ネイティブのサブスクリプションと型付きサブスクリプションは、どちらも同じ通常の `rpc.<rpcID>.<event>` エンベロープを受け取り、イベントデータはオブジェクトとして直接含まれます。ライブサブスクリプションでは、受け取れなかったイベントは再生されません。
+
+サーバー側でプラグインを設定し、そのプラグインが RPC を実装している必要があります。定義をインポートしても、RPC は登録されません。定義と登録の API については、[プラグイン RPC](/build/plugins/rpc) を参照してください。任意の HTTP クライアントから、汎用の `POST /api/rpc/{rpcID}/{method}` ルートを `{ "input": ... }` で呼び出し、`{ "output": ... }` を受け取ることもできます。input/output フィールドを省略した場合は、値なしを表します。
+
+## ローカルのバックグラウンドサービス
+
+メインのクライアントエントリポイントはブラウザー互換で、ローカルのプロセス管理は含まれません。Node アプリケーションでは、`@opencode/client/service` からネイティブの Promise サービス API をインポートします。
+
+- `Service.discover()` は、プロセスを起動せずに、正常な状態の登録済みエンドポイントを返します。
+- `Service.ensure()` は互換性のあるサービスを返し、必要に応じてサービスを起動します。
+- `Service.stop()` は、登録されているサービスインスタンスそのものを停止します。
+- `Service.headers(endpoint)` は、クライアント用の認証ヘッダーを作成します。
+
+```ts
+import { OpenCode } from "@opencode/client"
+import { Service } from "@opencode/client/service"
+
+const endpoint = await Service.ensure()
+const client = OpenCode.make({
+  baseUrl: endpoint.url,
+  headers: Service.headers(endpoint),
+})
+
+const info = await client.server.info()
+```
+
+`Service.ensure()` には、登録ファイル、バージョン、サービスコマンド、`onStart` コールバックを任意で指定できます。`version` には、正確な値または互換性を判定する述語関数を指定できます。
+
+```ts
+const endpoint = await Service.ensure({
+  file: "/var/run/opencode/service.json",
+  version: (version) => version.startsWith("2."),
+  command: ["opencode", "serve", "--service"],
+  onStart(reason, previousVersion) {
+    console.log(reason, previousVersion)
+  },
+})
+```
+
+これらのオプションを省略すると、標準の登録パスと `opencode serve --service` コマンドが使われます。

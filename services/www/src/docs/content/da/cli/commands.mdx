@@ -1,0 +1,583 @@
+---
+title: "Kommandoer"
+description: "Reference til opencode-kommandolinjen."
+---
+
+Alle kommandoer accepterer `--help` og viser så den fulde liste over flag, for eksempel `opencode run --help`. Nogle serverbaserede kommandoer accepterer `--standalone` for at køre en privat server eller `--server <url>` for at bruge en bestemt server. Se kommandoens hjælp for de flag, den understøtter.
+
+## run
+
+Sender en besked og udskriver svaret uden at åbne den interaktive brugerflade.
+
+```bash
+$ opencode run "Explain this repository"
+```
+
+### CI
+
+I CI skal du angive en API-nøgle til udbyderen som en hemmelighed og bruge selvstændig tilstand, så den private server modtager nøglen. Dette GitHub Actions-job gennemgår for eksempel det udtjekkede repository:
+
+```yaml
+name: OpenCode review
+on: [pull_request]
+
+jobs:
+  review:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - run: npm install --global @opencode/cli
+      - run: opencode run --standalone --model anthropic/claude-sonnet-4-5 "Review this repository for correctness and summarize any issues."
+        env:
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+```
+
+Vælg en model.
+
+```bash
+$ opencode run --model anthropic/claude-sonnet-4-5 "Refactor parseToken"
+```
+
+Fortsæt den seneste session.
+
+```bash
+$ opencode run --continue "Now handle the expired case"
+```
+
+Udskriv linjeafgrænset JSON til scripts.
+
+```bash
+$ opencode run --format json "List the TODO comments"
+```
+
+Vedhæft filer til beskeden.
+
+```bash
+$ opencode run --file src/server.ts --file src/client.ts "Review these for bugs"
+```
+
+Kør med en bestemt agent.
+
+```bash
+$ opencode run --agent build "Fix the failing test"
+```
+
+Se alle underkommandoer og flag.
+
+```bash
+$ opencode run --help
+```
+
+## mini
+
+Starter den minimale interaktive brugerflade i stedet for TUI'en i fuld skærm.
+
+```bash
+$ opencode mini
+```
+
+Fortsæt den seneste session.
+
+```bash
+$ opencode mini --continue
+```
+
+Start med en model og en indledende prompt.
+
+```bash
+$ opencode mini --model anthropic/claude-sonnet-4-5 --prompt "Summarize this repository"
+```
+
+Se alle underkommandoer og flag.
+
+```bash
+$ opencode mini --help
+```
+
+## session
+
+Administrerer sessioner.
+
+```bash
+$ opencode session list
+```
+
+Begræns listen, og udskriv JSON.
+
+```bash
+$ opencode session list --max-count 20 --format json
+```
+
+Slet en session og dens undersessioner.
+
+```bash
+$ opencode session delete ses_9c1b08
+```
+
+Eksporter sessionsdata som JSON.
+
+```bash
+$ opencode session export ses_4f2a1c
+```
+
+Fjern følsomme data fra samtaleforløb og filer ved eksport.
+
+```bash
+$ opencode session export ses_4f2a1c --sanitize
+```
+
+Importer sessionsdata fra en JSON-fil eller en URL.
+
+```bash
+$ opencode session import session.json
+```
+
+Importer til en bestemt mappe.
+
+```bash
+$ opencode session import session.json --directory ~/code/project
+```
+
+Se alle underkommandoer og flag.
+
+```bash
+$ opencode session --help
+```
+
+## auth
+
+Administrerer AI-udbydere og legitimationsoplysninger.
+
+```bash
+$ opencode auth list
+```
+
+Vis dem som JSON.
+
+```bash
+$ opencode auth list --format json
+```
+
+Log ind hos en udbyder.
+
+```bash
+$ opencode auth login anthropic
+```
+
+Log ind med en bestemt godkendelsesmetode.
+
+```bash
+$ opencode auth login anthropic --method key
+```
+
+Log ud af en gemt konto.
+
+```bash
+$ opencode auth logout anthropic work
+```
+
+Skift den aktive konto for en integration.
+
+```bash
+$ opencode auth switch anthropic work
+```
+
+Se alle underkommandoer og flag.
+
+```bash
+$ opencode auth --help
+```
+
+## models
+
+Viser alle tilgængelige modeller.
+
+```bash
+$ opencode models
+```
+
+Se alle underkommandoer og flag.
+
+```bash
+$ opencode models --help
+```
+
+## mcp
+
+Administrerer MCP-servere (Model Context Protocol).
+
+```bash
+$ opencode mcp list
+```
+
+Tilføj en fjernserver.
+
+```bash
+$ opencode mcp add context7 --url https://mcp.context7.com/mcp
+```
+
+Tilføj en lokal server til den globale konfiguration.
+
+```bash
+$ opencode mcp add everything --global -- npx -y @modelcontextprotocol/server-everything
+```
+
+Tilføj en lokal server med en miljøvariabel.
+
+```bash
+$ opencode mcp add everything --env LOG_LEVEL=debug -- npx -y @modelcontextprotocol/server-everything
+```
+
+Tilføj en fjernserver med en header.
+
+```bash
+$ opencode mcp add context7 --url https://mcp.context7.com/mcp --header CONTEXT7_API_KEY=secret
+```
+
+Godkend over for en fjernserver, der understøtter OAuth.
+
+```bash
+$ opencode mcp auth sentry
+```
+
+Fjern gemte OAuth-legitimationsoplysninger for en server.
+
+```bash
+$ opencode mcp logout sentry
+```
+
+Se alle underkommandoer og flag.
+
+```bash
+$ opencode mcp --help
+```
+
+## plugin
+
+Administrerer plugins.
+
+```bash
+$ opencode plugin list
+```
+
+Medtag indbyggede server-plugins.
+
+```bash
+$ opencode plugin list --builtin
+```
+
+Installer et plugin, og føj det til den globale konfiguration.
+
+```bash
+$ opencode plugin add @example/opencode-tui
+```
+
+Tjek om pakke-plugins har opdateringer.
+
+```bash
+$ opencode plugin check
+```
+
+Opdater pakke-plugins.
+
+```bash
+$ opencode plugin update
+```
+
+Fjern et plugin fra den globale konfiguration.
+
+```bash
+$ opencode plugin remove @example/opencode-tui
+```
+
+Se alle underkommandoer og flag.
+
+```bash
+$ opencode plugin --help
+```
+
+## stats
+
+Viser forbrugsstatistik, der kan deles.
+
+```bash
+$ opencode stats
+```
+
+Vis de seneste 7 dage.
+
+```bash
+$ opencode stats --days 7
+```
+
+Vis forbrug pr. model.
+
+```bash
+$ opencode stats --models
+```
+
+Vis detaljer om omkostninger og tokens.
+
+```bash
+$ opencode stats --cost
+```
+
+Udskriv JSON i stedet for en rapport.
+
+```bash
+$ opencode stats --json
+```
+
+Se alle underkommandoer og flag.
+
+```bash
+$ opencode stats --help
+```
+
+## serve
+
+Starter API- og webserveren. Se [Web](/cli/web).
+
+```bash
+$ opencode serve
+```
+
+Bind til alle netværksgrænseflader på en fast port.
+
+```bash
+$ opencode serve --hostname 0.0.0.0 --port 4096
+```
+
+Tillad en browserklient fra en anden origin.
+
+```bash
+$ opencode serve --cors https://app.example.com
+```
+
+Se alle underkommandoer og flag.
+
+```bash
+$ opencode serve --help
+```
+
+## pair
+
+Udskriver engangslinks og en QR-kode til det første af dem, som logger en browser eller app ind på serveren. Links
+udløber efter 5 minutter og virker én gang.
+
+```bash
+$ opencode pair
+```
+
+Brug en ekstern URL i linkene.
+
+```bash
+$ opencode pair --url https://dev.example.com
+```
+
+Par hvor som helst fra via en OpenTunnel-fjernadresse. Det eksponerer serveren mod internettet, så første gang
+fjernadgang slås til, forklarer kommandoen dette og beder dig acceptere. Se [Fjernadgang](/cli/web#remote-access).
+
+```bash
+$ opencode pair --remote
+```
+
+Accepter uden at blive spurgt, for eksempel i et script uden terminal.
+
+```bash
+$ opencode pair --remote --yes
+```
+
+Se alle underkommandoer og flag.
+
+```bash
+$ opencode pair --help
+```
+
+## service
+
+Administrerer baggrundsserveren. Se [Web](/cli/web).
+
+```bash
+$ opencode service start
+```
+
+Genstart den.
+
+```bash
+$ opencode service restart
+```
+
+Vis dens status.
+
+```bash
+$ opencode service status
+```
+
+Stop den.
+
+```bash
+$ opencode service stop
+```
+
+Læs en indstilling.
+
+```bash
+$ opencode service get hostname
+```
+
+Angiv en indstilling.
+
+```bash
+$ opencode service set hostname 0.0.0.0
+```
+
+Tillad en ekstra CORS-origin.
+
+```bash
+$ opencode service set cors https://app.example.com
+```
+
+Send en miljøvariabel videre til serverprocessen.
+
+```bash
+$ opencode service set env OPENCODE_LOG_LEVEL DEBUG
+```
+
+Nulstil en indstilling til standardværdien.
+
+```bash
+$ opencode service unset hostname
+```
+
+Se alle underkommandoer og flag.
+
+```bash
+$ opencode service --help
+```
+
+## reload
+
+Genindlæser konfigurationen uden at genstarte serveren. Kørende sessioner fortsætter med friske tjenester ved næste trinskift.
+
+```bash
+$ opencode reload
+```
+
+## api
+
+Sender en anmodning til den kørende server.
+
+```bash
+$ opencode api GET /api/session
+```
+
+Kald et operations-ID med en forespørgselsparameter.
+
+```bash
+$ opencode api session.list --param limit=10
+```
+
+Send en JSON-body.
+
+```bash
+$ opencode api session.create --data '{"title": "New session"}'
+```
+
+Tilføj en header til anmodningen.
+
+```bash
+$ opencode api GET /api/session -H "accept: application/json"
+```
+
+Se alle underkommandoer og flag.
+
+```bash
+$ opencode api --help
+```
+
+## acp
+
+Starter en Agent Client Protocol-server over stdin og stdout til editorintegrationer. Den kører, indtil klienten lukker forbindelsen.
+
+```bash
+$ opencode acp
+```
+
+Se alle underkommandoer og flag.
+
+```bash
+$ opencode acp --help
+```
+
+## debug
+
+Indeholder værktøjer til fejlsøgning og fejlfinding.
+
+```bash
+$ opencode debug agents
+```
+
+Vis konfigurationskilder.
+
+```bash
+$ opencode debug config
+```
+
+Vis globale stier.
+
+```bash
+$ opencode debug paths
+```
+
+Udskriv en enkelt sti.
+
+```bash
+$ opencode debug paths db
+```
+
+Se alle underkommandoer og flag.
+
+```bash
+$ opencode debug --help
+```
+
+## upgrade
+
+Opgraderer OpenCode til den nyeste eller en bestemt version. Alias: `update`.
+
+```bash
+$ opencode upgrade
+```
+
+Opgrader til en bestemt version med en bestemt pakkehåndtering.
+
+```bash
+$ opencode upgrade 2.0.21 --method bun
+```
+
+Se alle underkommandoer og flag.
+
+```bash
+$ opencode upgrade --help
+```
+
+## uninstall
+
+Fjerner OpenCode og alle relaterede filer.
+
+```bash
+$ opencode uninstall
+```
+
+Se en forhåndsvisning af, hvad der ville blive fjernet.
+
+```bash
+$ opencode uninstall --dry-run
+```
+
+Se alle underkommandoer og flag.
+
+```bash
+$ opencode uninstall --help
+```

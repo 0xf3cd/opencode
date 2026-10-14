@@ -1,0 +1,247 @@
+---
+title: "ธีม"
+---
+
+เลือกธีมจาก UI บนเทอร์มินัลได้โดยกด `Ctrl+P` เลือก **Open settings** แล้วเปิด **Theme** หรือจะตั้งค่าโดยตรงในการกำหนดค่า CLI ส่วนกลางก็ได้:
+
+```json title="~/.config/opencode/cli.json"
+{
+  "theme": {
+    "name": "tokyonight",
+    "mode": "system"
+  }
+}
+```
+
+ธีมเป็นส่วนหนึ่งของไคลเอนต์เทอร์มินัล ให้ตั้งค่าการเลือกธีมใน `cli.json` ไม่ใช่ `opencode.json` ดูตำแหน่งไฟล์กำหนดค่าและการตั้งค่าเทอร์มินัลอื่น ๆ ได้ที่[การตั้งค่า CLI](/cli/config)
+
+## โหมด
+
+ใช้ `system` เพื่อให้ธีมเปลี่ยนตามรูปลักษณ์ของเทอร์มินัล หรือล็อกธีมไว้ที่โหมดเดียว:
+
+```json title="~/.config/opencode/cli.json"
+{
+  "theme": {
+    "name": "opencode",
+    "mode": "dark"
+  }
+}
+```
+
+| ค่า | พฤติกรรม |
+| -------- | --------------------------------------------- |
+| `system` | ใช้โหมดสว่างหรือมืดตามเทอร์มินัล |
+| `dark`   | ใช้ธีมมืดเสมอ |
+| `light`  | ใช้ธีมสว่างเสมอ |
+
+หากธีมแบบกำหนดเองมีเพียงโหมดเดียว OpenCode จะใช้โหมดนั้นเมื่อมีการขออีกโหมดหนึ่ง
+
+## ธีมในตัว
+
+เลือกธีมในตัวด้วยชื่อ:
+
+```json title="~/.config/opencode/cli.json"
+{
+  "theme": {
+    "name": "catppuccin"
+  }
+}
+```
+
+ธีมที่มีให้ใช้ได้แก่:
+
+- `aura`, `ayu`, `carbonfox`, `cobalt2`, `cursor`, `dracula`, `everforest`, `flexoki`
+- `catppuccin`, `catppuccin-frappe`, `catppuccin-macchiato`
+- `github`, `gruvbox`, `kanagawa`, `material`, `matrix`, `mercury`, `monokai`, `nightowl`, `nord`
+- `one-dark`, `opencode`, `orng`, `lucent-orng`, `osaka-jade`, `palenight`, `rosepine`
+- `solarized`, `synthwave84`, `tokyonight`, `vercel`, `vesper`, `zenburn`
+
+ธีม `system` ใช้ได้เมื่อ OpenCode อ่านชุดสี (palette) ของเทอร์มินัลได้
+
+## ไฟล์ธีม
+
+หากต้องการสร้างธีมส่วนกลางชื่อ `ocean` ให้ใช้เครื่องมือ theme สร้างไฟล์ฉบับสมบูรณ์ในไดเรกทอรีธีมส่วนกลาง โครงสร้างส่วนที่เกี่ยวข้องมีลักษณะดังนี้:
+
+```json title="~/.config/opencode/themes/ocean.json (excerpt)"
+{
+  "base": {
+    "text": {
+      "base": "#d8f3ff"
+    }
+  },
+  "dark": {
+    "hue": {
+      "accent": "$hue.cyan"
+    }
+  }
+}
+```
+
+จากนั้นเลือก `ocean` ในการตั้งค่า หรือตั้ง `theme.name` เป็น `ocean` ใน `cli.json` ชื่อไฟล์ที่ไม่รวม `.json` คือชื่อธีม
+
+| ขอบเขต | ไดเรกทอรี |
+| ------- | ------------------------------------------ |
+| ส่วนกลาง | `~/.config/opencode/themes/`               |
+| โปรเจกต์ | `.opencode/themes/` ในโครงสร้างโปรเจกต์ |
+
+OpenCode อ่านเฉพาะไฟล์ `.json` ธีมที่อยู่ใกล้ไดเรกทอรีปัจจุบันมากกว่าจะแทนที่ธีมส่วนกลางหรือธีมในไดเรกทอรีแม่ที่มีชื่อเดียวกัน
+
+## รูปแบบ
+
+ธีม V2 ทุกธีมต้องประกาศโครงสร้างโทเค็น `base` ที่สมบูรณ์หนึ่งชุด และชุดสี hue ของ `light` หรือ `dark` อย่างน้อยหนึ่งชุด โหมดต่าง ๆ สืบทอดจาก base ของไฟล์นั้นเท่านั้น ไม่ได้สืบทอดจากธีม OpenCode ในตัวหรือสืบทอดกันเอง ให้ใช้เครื่องมือ theme สร้าง base ที่สมบูรณ์ก่อนปรับแต่ง
+
+ตัวอย่างด้านล่างแสดงเฉพาะส่วนที่เกี่ยวข้องกับแต่ละแนวคิด ไม่ใช่ไฟล์ธีมฉบับสมบูรณ์
+
+```json title="themes/ocean.json"
+{
+  "base": {
+    "text": {
+      "base": "#16324f"
+    }
+  },
+  "light": {
+    "hue": {}
+  },
+  "dark": {
+    "hue": {},
+    "text": { "base": "#d8f3ff" }
+  }
+}
+```
+
+## สี
+
+ใช้สีแบบ hex, `transparent` หรือการอ้างอิงไปยังสีอื่นในธีม:
+
+```json title="themes/ocean.json"
+{
+  "base": {
+    "text": {
+      "base": "#d8f3ff",
+      "muted": "$hue.neutral.400"
+    },
+    "background": {
+      "base": "transparent"
+    }
+  }
+}
+```
+
+ค่า hex ใช้ได้ 3, 4, 6 หรือ 8 หลัก การอ้างอิงขึ้นต้นด้วย `$` ส่วนการอ้างอิง hue ใช้รูปแบบ `$hue.<name>.<step>`
+
+## Hue
+
+แทนที่ alias ของ hue เพื่อเปลี่ยนกลุ่มสีที่เกี่ยวข้องกันทั้งหมดในครั้งเดียว:
+
+```json title="themes/ocean.json"
+{
+  "base": {
+    "categorical": ["accent", "purple", "green"]
+  },
+  "dark": {
+    "hue": {
+      "accent": "$hue.cyan",
+      "interactive": "$hue.blue"
+    }
+  }
+}
+```
+
+| ประเภท | ค่า |
+| ------- | -------------------------------------------------------------------- |
+| Base    | `gray`, `red`, `orange`, `yellow`, `green`, `cyan`, `blue`, `purple` |
+| Alias   | `accent`, `interactive`, `neutral`                                 |
+| Step    | `100`, `200`, `300`, `400`, `500`, `600`, `700`, `800`, `900`      |
+
+step ของ hue เรียงตามทิศทางคอนทราสต์ของโหมด ธีมสว่างไล่จากเข้มที่ `100` ไปสว่างที่ `900` ส่วนธีมมืดไล่จากสว่างที่ `100` ไปเข้มที่ `900`
+
+`categorical` กำหนดลำดับ hue ที่ใช้แยกเอเจนต์และรายการอื่น ๆ ที่ปรากฏซ้ำ ต้องมี base hue หรือ alias อย่างน้อยหนึ่งค่า
+
+## สถานะ
+
+ใช้คีย์สถานะเพื่อเปลี่ยนสีขององค์ประกอบที่โต้ตอบได้ สถานะที่ไม่ได้ระบุจะใช้ค่า base ที่ใกล้ที่สุด:
+
+```json title="themes/ocean.json"
+{
+  "base": {
+    "text": {
+      "action": {
+        "primary": {
+          "base": "$hue.interactive.400",
+          "$hovered": "$hue.interactive.300",
+          "$disabled": "$hue.neutral.600"
+        }
+      }
+    }
+  }
+}
+```
+
+| กลุ่ม | ค่า |
+| --------- | --------------------------------------------------------- |
+| Action    | `primary`, `secondary`, `destructive`                     |
+| สถานะ | `$hovered`, `$focused`, `$pressed`, `$selected`, `$disabled` |
+
+ฟิลด์ฟอร์มใช้คีย์สถานะเดียวกันโดยตรงใต้ `text.formfield` หรือ `background.formfield`
+
+## โทเค็น
+
+`base` ฉบับสมบูรณ์มีโทเค็นครบทุกกลุ่ม โหมดหนึ่ง ๆ แทนที่ส่วนใดก็ได้ของ base หลังจากระบุชุดสี hue ของตัวเองครบแล้ว:
+
+```json title="themes/ocean.json"
+{
+  "base": {
+    "border": {
+      "base": "$hue.neutral.700"
+    },
+    "syntax": {
+      "comment": "$hue.neutral.500",
+      "keyword": "$hue.accent.400"
+    },
+    "diff": {
+      "text": {
+        "added": "$hue.green.400",
+        "removed": "$hue.red.400"
+      }
+    }
+  }
+}
+```
+
+| กลุ่ม | วัตถุประสงค์ |
+| ------------ | ------------------------------------------------------------- |
+| `text`       | ข้อความพื้นฐาน ข้อความจาง ข้อความของ action ฟิลด์ฟอร์ม และข้อความแจ้งผล (feedback) |
+| `background` | พื้นหลังพื้นฐาน พื้นผิว action ฟิลด์ฟอร์ม และสีพื้นของข้อความแจ้งผล |
+| `border`     | เส้นขอบ |
+| `scrollbar`  | แถบเลื่อน |
+| `diff`       | สีของส่วนที่เพิ่ม ส่วนที่ลบ บริบท ไฮไลต์ และหมายเลขบรรทัด |
+| `syntax`     | การไฮไลต์ซอร์สโค้ด |
+| `markdown`   | องค์ประกอบ Markdown |
+
+คีย์ของ syntax ได้แก่ `comment`, `keyword`, `function`, `variable`, `string`, `number`, `type`, `operator` และ `punctuation` ส่วนคีย์ของ Markdown ได้แก่ `text`, `heading`, `link`, `linkText`, `code`, `blockQuote`, `emphasis`, `strong`, `horizontalRule`, `listItem`, `listEnumeration`, `image`, `imageText` และ `codeBlock`
+
+## พื้นผิวยกระดับ
+
+แผง ไดอะล็อก เมนู และการแจ้งเตือนแบบ toast จะเลือกระดับความลึกจาก `background.raised` ไดอะล็อกยังรองรับพื้นผิวตามบริบท `@dialog` เพิ่มเติมด้วย TUI จะแปลงค่าชุดสีใหม่อีกครั้งหลังจากใช้ `@dialog` โทเค็นที่อ้างอิง `$background.base` จึงเปลี่ยนตามพื้นหลังของไดอะล็อก:
+
+```json title="themes/ocean.json"
+{
+  "base": {
+    "background": {
+      "base": "#071521",
+      "raised": {
+        "base": "#0c1f2e",
+        "high": "#102a3c",
+        "max": "#16364b"
+      }
+    },
+    "@dialog": {
+      "background": {
+        "base": "$background.raised.base"
+      }
+    }
+  }
+}
+```
+
+`@dialog` รับกลุ่มโทเค็นเดียวกับโหมด base ค่า `base` ตามบริบทของ action ยังใช้เป็นค่าสำรองสำหรับสถานะที่ไม่ได้ระบุของ action นั้นด้วย แต่การแทนที่สถานะที่ระบุไว้ชัดเจนยังคงมีผลเหนือกว่า

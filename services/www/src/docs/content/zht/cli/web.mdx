@@ -1,0 +1,101 @@
+---
+title: "Web"
+description: "在瀏覽器中執行 OpenCode。"
+---
+
+OpenCode 內建網頁介面，由驅動 TUI 的同一個伺服器提供。網頁介面預設為啟用，並受密碼保護。
+
+## 存取
+
+```bash
+$ opencode pair
+
+  Open a link to connect. Links work once and expire in 5 minutes.
+
+  http://127.0.0.1:49374/auth/connect/...
+
+  █▀▀▀▀▀█ ...
+```
+
+在瀏覽器中開啟連結，會以工作階段 cookie 登入並載入網頁介面。在 OpenCode 應用程式中掃描 QR code，或將連結貼到應用程式的伺服器位址欄位，也會以相同方式連線。工作階段的有效期為 30 天；變更伺服器密碼會登出所有工作階段。
+
+### 透過 SSH
+
+如果伺服器只監聽 localhost，請從你的電腦轉送它的連接埠，再於本機開啟印出的連結：
+
+```bash
+$ ssh -L 49374:127.0.0.1:49374 my-server
+```
+
+伺服器預設在連接埠 49374 上執行，且只監聽 localhost。你可以使用 `opencode service` 指令變更這項設定。
+
+### 遠端存取
+
+若要從任何地方連線，請透過 [OpenTunnel](https://github.com/anomalyco/opentunnel) 遠端位址進行配對：
+
+```bash
+$ opencode pair --remote
+```
+
+第一次開啟遠端存取時，指令會先詢問你是否要繼續：
+
+```text
+▲  This will expose your OpenCode server to the internet.
+│  Traffic is end-to-end encrypted, and access requires your server password.
+│  To pair locally instead, run `opencode pair` without the --remote flag.
+│
+◆  Expose your server to the internet?
+│  ● Yes / ○ No
+```
+
+在非互動式終端機中，除非傳入 `--yes` 表示同意，否則指令會失敗。同意之後，往後執行就不會再詢問，即使已經使用 `opencode service set remote false` 關閉遠端存取也一樣。
+
+## 設定
+
+使用 `opencode service set` 設定任何選項：
+
+```bash
+# Listen on every network interface
+$ opencode service set hostname 0.0.0.0
+
+# Use a fixed port instead of the channel default
+$ opencode service set port 49374
+
+# Replace the generated password
+$ opencode service set password "a-long-secret"
+
+# Allow a web client served from another origin
+$ opencode service set cors https://app.example.com,https://other.example.com
+
+# Pass an environment variable to the server process
+$ opencode service set env OPENCODE_LOG_LEVEL DEBUG
+```
+
+變更設定會停止背景伺服器。若要套用新的設定，請執行：
+
+```bash
+$ opencode service start
+```
+
+## 獨立執行
+
+`opencode serve` 會在前景執行相同的伺服器，而不是透過共用的背景服務執行。
+
+```bash
+$ opencode serve --hostname 0.0.0.0 --port 4096
+server listening on http://0.0.0.0:4096
+server password <password>
+```
+
+適用於以下情況：
+
+- 在共用、常駐或遠端的主機上執行 OpenCode，再使用 `opencode --server <url>` 連線用戶端。
+- 為單一處理程序控制主機名稱、連接埠和 CORS 來源。
+- 在 systemd、Docker 等預期使用前景處理程序的監管程式或環境中執行。
+- 使用專屬的伺服器，而不是共用的背景服務。
+
+使用 `--server` 將用戶端連線到該伺服器：
+
+```bash
+$ opencode --server http://127.0.0.1:4096
+```

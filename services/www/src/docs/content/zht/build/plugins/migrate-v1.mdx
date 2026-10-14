@@ -1,0 +1,335 @@
+---
+title: "從 V1 遷移外掛"
+---
+
+外掛設定可以自動正規化，但外掛的實作程式碼必須手動移植。V1 的外掛函式會回傳一個包含工具和 hook 的物件。V2 外掛則以預設匯出提供一個含有 `id` 和 `setup(ctx)` 的定義；`setup` 會透過上下文註冊 hook、轉換、工具和訂閱。
+
+<Callout type="warning">
+  V1 的外掛實作無法在 V2 中執行。只移動檔案或重新命名設定項目是不夠的。
+</Callout>
+
+## 遷移外掛設定
+
+將 `plugin` 改名為 `plugins`，並把「套件與選項」的 tuple 改寫成物件：
+
+```jsonc
+// V1
+{
+  "plugin": [
+    "opencode-example-plugin",
+    ["./plugin/local.ts", { "enabled": true }]
+  ]
+}
+
+// V2
+{
+  "plugins": [
+    "opencode-example-plugin",
+    {
+      "package": "./plugin/local.ts",
+      "options": { "enabled": true }
+    }
+  ]
+}
+```
+
+V2 會同時從 `.opencode/plugin/` 和 `.opencode/plugins/` 探索本機外掛；V2 的檔案請放在 `.opencode/plugins/`。移動外掛時，請把它依賴的輔助模組一起放在旁邊。本機外掛和套件外掛使用相同的實作 API。
+
+## 替換進入點
+
+變更套件的匯入路徑，用 `Plugin.define` 取代匯出的外掛函式，並將初始化邏輯移到 `setup` 中。
+
+```ts title="V1"
+import type { Plugin } from "@opencode-ai/plugin"
+
+export const ExamplePlugin: Plugin = async ({ directory, project, client }) => {
+  await client.app.log({
+    body: { service: "example", level: "info", message: `Loaded for ${project.id}` },
+  })
+
+  return {
+    // V1 tools and hooks
+  }
+}
+```
+
+```ts title="V2"
+import { Plugin } from "@opencode/plugin"
+
+export default Plugin.define({
+  id: "example",
+  async setup(ctx) {
+    await ctx.storage.set("last-project", ctx.location.project.id)
+    console.log(`Loaded for ${ctx.location.directory}`)
+  },
+})
+```
+
+每個 V2 外掛都需要一個穩定的 `id`。外掛儲存空間以這個 ID 為範圍，狀態和診斷資訊也會用這個 ID 識別外掛。已發布的外掛應該依賴與目標 OpenCode 版本相容的 `@opencode/plugin` 版本。
+
+## 遷移上下文
+
+V2 的上下文既是 OpenCode 用戶端，也是外掛的擴充 API。大部分操作都依領域分組，而不是放在獨立的 `client` 屬性底下。
+
+| V1                                      | V2                                                                  |
+| --------------------------------------- | ------------------------------------------------------------------- |
+| `directory`                             | `ctx.location.directory`                                            |
+| `project`                               | `ctx.location.project`                                              |
+| `client`                                | 各領域的方法，例如 `ctx.session`、`ctx.permission`、`ctx.agent` |
+| 外掛選項參數                 | `ctx.options`                                                       |
+| 回傳的 `dispose()` hook               | `setup` 回傳的清理函式                                |
+| 回傳的 `event` hook                   | `ctx.event.subscribe()`                                             |
+| 回傳的設定、模型或工具變更 | 對應領域的 `transform(...)`                                           |
+| `$` Bun shell 輔助函式                    | 自行匯入並管理外掛使用的處理程序 API                  |
+
+`ctx.location` 描述這個外掛執行個體載入時所在的位置，而不是外掛可能觀察到的每個工作階段或事件的位置。如果需要區分，請讀取工作階段或事件資料。
+
+上下文提供的領域遠多於表格所列，包括各種清單、指令、整合、MCP 伺服器、參考目錄、技能、儲存空間、VCS、worktree 和網頁搜尋。請參閱[完整的外掛上下文](/build/plugins#api)。
+
+## 在 `setup` 中註冊 hook
+
+V1 以字串鍵回傳 hook。V2 則在負責該操作的領域上註冊每個 hook。回呼函式會收到一個可修改的事件物件，而不是分開的 `input` 和 `output` 物件。
+
+```ts title="V1"
+import type { Plugin } from "@opencode-ai/plugin"
+
+export const GuardPlugin: Plugin = async () => ({
+  "tool.execute.before": async (input, output) => {
+    if (input.tool === "read" && output.args.filePath.includes(".env")) {
+      throw new Error("Do not read .env files")
+    }
+  },
+  "shell.env": async (_input, output) => {
+    output.env.COMPANY_ENV = "development"
+  },
+})
+```
+
+```ts title="V2"
+import { Plugin } from "@opencode/plugin"
+
+export default Plugin.define({
+  id: "company.guard",
+  async setup(ctx) {
+    await ctx.tool.hook("execute.before", (event) => {
+      const input = event.input as { filePath?: string }
+      if (event.tool === "read" && input.filePath?.includes(".env")) {
+        throw new Error("Do not read .env files")
+      }
+    })
+
+    await ctx.shell.hook("create.before", (event) => {
+      event.env.COMPANY_ENV = "development"
+    })
+  },
+})
+```
+
+註冊會在外掛的整個生命週期內保持有效，並在外掛卸載時釋放。只有當外掛需要用 `registration.dispose()` 提早移除特定的 hook 或轉換時，才需要保留回傳的註冊物件。
+
+透過下表找出每個 V1 hook 最接近的 V2 API：
+
+| V1 擴充點                     | V2 API                                                       |
+| -------------------------------------- | ------------------------------------------------------------ |
+| `event`                                | `ctx.event.subscribe()`                                      |
+| `dispose`                              | `setup` 回傳的清理函式                         |
+| `config`                               | 在受影響的領域上使用轉換                           |
+| `tool` 對應表                             | `ctx.tool.transform(...)`                                    |
+| `auth`                                 | `ctx.integration.transform(...)` 及整合 API        |
+| `provider`                             | `ctx.provider.transform(...)` 和 `ctx.model.transform(...)` |
+| `chat.message`                         | `ctx.session.hook("prompt", ...)`                            |
+| `chat.params`                          | `ctx.session.hook("context", ...)`                           |
+| `chat.headers`                         | `ctx.session.hook("model.request", ...)` 或 `"http.request"` |
+| `permission.ask`                       | `ctx.permission.hook("evaluate", ...)`                       |
+| `command.execute.before`               | 依用途選擇指令轉換或 prompt hook   |
+| `tool.execute.before`                  | `ctx.tool.hook("execute.before", ...)`                       |
+| `tool.execute.after`                   | `ctx.tool.hook("execute.after", ...)`                        |
+| `shell.env`                            | `ctx.shell.hook("create.before", ...)`                       |
+| `tool.definition`                      | `ctx.tool.transform(...)`                                    |
+| `experimental.chat.system.transform`   | `ctx.session.hook("context", ...)` 並編輯 `event.system`   |
+| `experimental.chat.messages.transform` | `ctx.session.hook("context", ...)` 並編輯 `event.messages` |
+| `experimental.session.compacting`      | `ctx.session.hook("compaction", ...)`                        |
+
+這些是遷移的目標位置，不一定只是單純改名。特別要注意的是，V2 的 `prompt` hook 會在提示詞被持久接收之前執行，而 `context` 則在代理發出模型請求之前立即執行。如果某項轉換必須套用到所有類型的模型請求，請分別註冊 `context`、`compaction`、`generate` 和 `title`。
+
+並非每個實驗性的 V1 hook 都有直接對應的 V2 hook。使用 `experimental.compaction.autocontinue`、`experimental.provider.small_model` 或 `experimental.text.complete` 的外掛，請改用 V2 的工作階段、供應商、模型和事件 API 重新設計，不要沿用內部生命週期的假設。
+
+`command.execute.before` 同樣沒有一對一的全域 hook。如果指令由外掛自己擁有，請使用 `ctx.command.transform` 註冊指令。如果真正的目的是修改由指令和其他來源送出的提示詞，請使用 prompt hook。
+
+## 遷移請求 hook
+
+V2 將提示詞接收、模型可見的上下文、語意化模型選項和原生 HTTP 分開處理。請選擇外掛所需範圍最小的那一層。
+
+```ts title="V1"
+export const RequestPlugin = async () => ({
+  "chat.params": async (_input, output) => {
+    output.temperature = 0.2
+    output.maxOutputTokens = 8_000
+  },
+  "chat.headers": async (_input, output) => {
+    output.headers["x-plugin"] = "review"
+  },
+  "experimental.chat.system.transform": async (_input, output) => {
+    output.system.push("Focus on correctness.")
+  },
+})
+```
+
+```ts title="V2"
+import { Plugin } from "@opencode/plugin"
+
+export default Plugin.define({
+  id: "review-request",
+  async setup(ctx) {
+    await ctx.session.hook("context", (event) => {
+      event.system.push({ type: "text", text: "Focus on correctness." })
+      event.options.temperature = 0.2
+      event.options.maxTokens = 8_000
+    })
+
+    await ctx.session.hook("model.request", (event) => {
+      event.headers["x-plugin"] = "review"
+    })
+  },
+})
+```
+
+語意化的供應商選項請放在 `event.options`。模型請求的標頭和原始請求設定請使用 `model.request`；只有在外掛需要存取與供應商之間的原生 HTTP 交換時，才使用 `http.request` 或 `http.response`。只針對特定供應商的 hook 可以把 `{ providerID: "..." }` 作為 `ctx.session.hook` 的第三個參數傳入。
+
+## 遷移自訂工具
+
+V1 會回傳一個用舊版 `tool()` 輔助函式建立的 `tool` 對應表。V2 則透過同步的 `ctx.tool.transform` 編輯器註冊工具定義。工具 schema 使用 JSON Schema，執行結果會回傳結構化內容。
+
+```ts title="V1"
+import { tool } from "@opencode-ai/plugin"
+
+export const ToolsPlugin = async () => ({
+  tool: {
+    greeting: tool({
+      description: "Create a greeting",
+      args: { name: tool.schema.string() },
+      async execute(args) {
+        return `Hello ${args.name}!`
+      },
+    }),
+  },
+})
+```
+
+```ts title="V2"
+import { Plugin } from "@opencode/plugin"
+
+export default Plugin.define({
+  id: "greeting",
+  async setup(ctx) {
+    await ctx.tool.transform((editor) => {
+      editor.add({
+        name: "greeting",
+        description: "Create a greeting",
+        input: {
+          type: "object",
+          properties: { name: { type: "string" } },
+          required: ["name"],
+          additionalProperties: false,
+        },
+        async execute(input) {
+          return { content: `Hello ${(input as { name: string }).name}!` }
+        },
+      })
+    })
+  },
+})
+```
+
+轉換是可重播的狀態編輯。回呼函式要保持同步、輕量，而且不能有一次性的副作用。請在註冊前載入外部資料，在回呼函式中引用它，並在資料變更時呼叫該領域的 `reload()` 方法。後面的外掛轉換會看到前面的變更，並且可以更新、取代或移除這些變更。
+
+同樣的轉換模式也取代了 V1 的 `config` 和 `provider` hook，但 V2 不提供單一可修改的全域設定物件。請在負責該變更的領域上註冊：`ctx.agent`、`ctx.provider`、`ctx.model`、`ctx.command`、`ctx.integration`、`ctx.mcp`、`ctx.reference`、`ctx.skill`、`ctx.tool`、`ctx.vcs`、`ctx.websearch` 或 `ctx.worktree`。驗證方法屬於整合；供應商轉換負責提供來源定義和供應商設定，模型轉換則對所有已啟用供應商的完整模型集合套用限制和覆寫。
+
+```ts
+await ctx.provider.transform((editor) => {
+  editor.update("anthropic", (provider) => {
+    provider.headers = { ...provider.headers, "x-company": "engineering" }
+  })
+})
+
+await ctx.model.transform((editor) => {
+  editor.list("anthropic").forEach((model) => {
+    if (!model.capabilities.tools) editor.remove(model.providerID, model.id)
+  })
+})
+```
+
+## 遷移事件與清理
+
+V1 的 `event` 回呼函式在 V2 中變成對公開伺服器事件串流的非同步訂閱。請在 `setup` 回傳的清理函式中中止訂閱。
+
+```ts title="V2"
+import { Plugin } from "@opencode/plugin"
+
+export default Plugin.define({
+  id: "notifications",
+  setup(ctx) {
+    const controller = new AbortController()
+
+    void (async () => {
+      for await (const event of ctx.event.subscribe({ signal: controller.signal })) {
+        if (event.type === "session.idle") console.log("Session completed")
+      }
+    })()
+
+    return () => controller.abort()
+  },
+})
+```
+
+計時器、子處理程序、socket 和外掛擁有的其他資源，請在清理函式中處理。hook 和轉換的註冊以外掛為範圍，會自動清理。
+
+## 遷移選項與持久狀態
+
+從 `ctx.options` 讀取選項。如果狀態屬於某個外掛，請使用 `ctx.storage`，不要自行建立全域檔案；它的 JSON 值會持久保存，並以外掛為範圍。
+
+```ts
+const strict = ctx.options.strict === true
+await ctx.storage.set("settings", { strict })
+const settings = await ctx.storage.get("settings")
+```
+
+## 用同一個套件同時支援 V1 和 V2
+
+套件可以暫時透過同一個預設匯出提供兩種實作。V1 會呼叫 `server()`，V2 會呼叫 `setup()`。兩套 API 仍然是分開的；這種寫法不會自動轉換 hook。
+
+```ts title="src/index.ts"
+import { Plugin } from "@opencode/plugin"
+
+export default {
+  ...Plugin.define({
+    id: "example",
+    async setup(ctx) {
+      await ctx.tool.hook("execute.before", () => {
+        console.log("A tool is about to run")
+      })
+    },
+  }),
+  async server() {
+    return {
+      "tool.execute.before": async () => {
+        console.log("A tool is about to run")
+      },
+    }
+  },
+}
+```
+
+OpenCode `1.18.29` 以上版本支援 V1 物件形式的進入點。如果你要支援更舊的 V1 版本，請使用不同的套件版本或進入點，並測試你宣稱支援的最舊版本。支援期結束後，請移除 V1 實作。
+
+## 驗證移植後的外掛
+
+針對每個外掛：
+
+1. 確認它的 ID 和來源出現在已啟用的外掛清單中。
+2. 實際觸發每個已註冊的 hook、轉換、工具、指令和事件訂閱。
+3. 重新載入或移除外掛，確認清理正常運作。
+4. 在乾淨的專案中測試外掛選項和保存的狀態。
+5. 已發布的套件請測試實際安裝的套件，而不只是工作區中連結的副本。
+
+完整的 Promise API 請參閱[外掛指南](/build/plugins)，Effect 進入點請參閱 [Effect 外掛](/build/plugins/effect)，自訂方法和事件請參閱[外掛 RPC](/build/plugins/rpc)，TUI 擴充功能請參閱 [CLI 外掛](/build/plugins/cli)。

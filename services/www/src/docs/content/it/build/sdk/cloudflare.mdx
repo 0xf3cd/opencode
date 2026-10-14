@@ -1,0 +1,89 @@
+---
+title: "Cloudflare"
+---
+
+Usa `@opencode/sdk/workerd` all'interno di un Durable Object di Cloudflare. Questo profilo usa lo storage SQLite
+dell'oggetto, rende persistenti gli eventi durevoli per il ripristino dopo la rimozione dalla memoria (eviction) e sostituisce i servizi di
+filesystem e di processo locali non disponibili.
+
+```sh
+bun add @opencode/sdk
+```
+
+Mantieni un solo host per tutta la durata dell'istanza del Durable Object, invece di crearne uno a ogni richiesta.
+
+```ts
+import { OpenCodeWorkerd } from "@opencode/sdk/workerd"
+import myPlugin from "./my-plugin"
+
+export class OpenCodeDO {
+  private readonly opencode: Promise<OpenCodeWorkerd.Interface>
+
+  constructor(state: DurableObjectState) {
+    this.opencode = state.blockConcurrencyWhile(() =>
+      OpenCodeWorkerd.create({
+        storage: state.storage,
+        config: { default_agent: "build" },
+        plugins: [myPlugin],
+      }),
+    )
+  }
+
+  async fetch() {
+    const opencode = await this.opencode
+    return Response.json(await opencode.server.info())
+  }
+}
+```
+
+`blockConcurrencyWhile` trattiene tutti gli eventi del Durable Object finché l'host non è pronto e reimposta l'oggetto se
+l'inizializzazione fallisce. La Promise conservata dà agli handler delle richieste accesso diretto allo stesso host dopo
+l'avvio.
+
+```ts
+constructor(state: DurableObjectState) {
+  this.opencode = state.blockConcurrencyWhile(() =>
+    OpenCodeWorkerd.create({ storage: state.storage }),
+  )
+}
+```
+
+Wrangler seleziona le implementazioni di OpenCode compatibili con Workerd tramite la condizione di pacchetto `workerd`.
+Cloudflare può rimuovere un Durable Object dalla memoria senza eseguire la pulizia, quindi la correttezza non dipende dalla
+chiamata a `close()`.
+
+```jsonc title="wrangler.jsonc"
+{
+  "compatibility_flags": ["nodejs_compat"]
+}
+```
+
+## Personalizzazione
+
+Personalizza la tua istanza di OpenCode registrando plugin inclusi nel bundle del Worker. Passa i plugin a
+`OpenCodeWorkerd.create()` per personalizzare agenti, modelli, strumenti e altri comportamenti:
+
+```ts
+import { Plugin } from "@opencode/plugin"
+import { OpenCodeWorkerd } from "@opencode/sdk/workerd"
+
+const plugin = Plugin.define({
+  id: "customize-agent",
+  async setup(ctx) {
+    await ctx.agent.transform((agents) => {
+      agents.update("build", (agent) => {
+        agent.description = "Builds features and fixes bugs for our team"
+      })
+    })
+  },
+})
+
+await OpenCodeWorkerd.create({
+  storage: state.storage,
+  config: { default_agent: "build" },
+  plugins: [plugin],
+})
+```
+
+Consulta la [documentazione completa sui plugin](/build/plugins) per hook, trasformazioni, strumenti e contesto completo
+dei plugin.

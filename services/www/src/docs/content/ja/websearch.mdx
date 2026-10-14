@@ -1,0 +1,95 @@
+---
+title: "Web 検索"
+---
+
+OpenCode に最新の情報を尋ねると、Web を検索して結果を読み、出典へのリンクを含めて回答します。
+
+```text
+Find the latest Bun release and summarize the changes.
+```
+
+最初の検索時には、Web 検索の許可とプロバイダーの選択を求められます。選択内容は記憶され、以降のセッションでも使われます。
+
+## プロバイダー
+
+OpenCode には 5 つの検索プロバイダーが含まれています。
+
+| プロバイダー | ID | 環境変数 |
+| --- | --- | --- |
+| Exa | `exa` | `EXA_API_KEY` |
+| Firecrawl | `firecrawl` | `FIRECRAWL_API_KEY` |
+| Parallel | `parallel` | `PARALLEL_API_KEY` |
+| Tavily | `tavily` | `TAVILY_API_KEY` |
+| TinyFish | `tinyfish` | `TINYFISH_API_KEY`（省略可） |
+
+TUI から `/connect` でアカウントを接続するか、OpenCode を起動する前にプロバイダーの環境変数を設定します。
+
+```bash
+$ TAVILY_API_KEY=your-key opencode
+```
+
+## プロバイダーの選択
+
+`opencode.jsonc` でプロバイダーを指定すると、選択の確認を省略できます。
+
+```jsonc title="opencode.jsonc"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "websearch": {
+    "provider": "tavily",
+  },
+}
+```
+
+`"random"` を指定すると、利用可能なプロバイダーが自動的に選ばれます。各セッションは、選ばれたプロバイダーがレート制限を受けるまでそのプロバイダーを使い続けます。
+
+```jsonc title="opencode.jsonc"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "websearch": {
+    "provider": "random",
+  },
+}
+```
+
+## レート制限
+
+プロバイダーが HTTP 429 を返した場合、ランダム選択では利用可能な別のプロバイダーで検索を再試行します。レート制限を受けたプロバイダーは、`Retry-After` で指定された期間、またはレスポンスに有効な期間が含まれていない場合は 60 秒間、待機状態になります。
+
+```text
+Exa returns HTTP 429
+→ Exa enters cooldown
+→ OpenCode retries with another provider
+```
+
+すべてのプロバイダーが待機中の場合、検索はただちに失敗します。セッションを移動するか、そのサーバーを再起動すると、記憶されていたプロバイダーはクリアされます。待機状態は、同じワークスペース内のセッション間で共有されます。
+
+## 権限
+
+Web 検索では、権限のアクションとして `websearch` を、リソースとして検索クエリを使います。明示的に許可されていない検索の前に確認を求めるには、次のように設定します。
+
+```jsonc title="opencode.jsonc"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "permissions": [
+    {
+      "action": "websearch",
+      "resource": "*",
+      "effect": "ask",
+    },
+  ],
+}
+```
+
+ルールの順序とマッチングについては、[権限](/permissions)を参照してください。
+
+## 無効化
+
+`websearch` を `false` に設定すると、モデルへのリクエストから Web 検索ツールが除外されます。
+
+```jsonc title="opencode.jsonc"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "websearch": false,
+}
+```

@@ -1,0 +1,129 @@
+---
+title: "Anbieter"
+description: "Eigene Konten bei Modellanbietern mit einem Workspace der OpenCode Console verbinden und festlegen, welche Modelle Mitglieder nutzen können."
+---
+
+Verbinde Anbieterkonten, für die du bereits bezahlst, etwa Anthropic, OpenAI oder AWS Bedrock, und teile ihre Modelle
+mit allen im Workspace. Die Console speichert die Zugangsdaten und stellt jeden Anbieter über ihr Gateway bereit.
+Mitglieder nutzen die Modelle also, ohne den Schlüssel des Anbieters je zu sehen. Dasselbe Gateway steht über die
+[Anbieter-API](/console/api/providers) auch deinen eigenen Tools zur Verfügung.
+
+Owner und Admins verwalten Anbieter auf dem Tab **Providers**. Mitglieder erhalten die aktivierten Modelle in OpenCode,
+nachdem sie `/connect` ausgeführt haben.
+
+## Anbieter verbinden
+
+1. Öffne **Providers** und klicke auf **Connect Provider**.
+2. Wähle einen Anbieter aus dem Katalog und gib seinen API-Schlüssel ein.
+3. Klicke optional auf **Test connection** und dann auf **Save**.
+
+Der Katalog umfasst Anthropic, OpenAI, Google, xAI, DeepSeek, Mistral, Groq, OpenRouter und viele mehr. Anbieter aus
+dem Katalog bringen ihre Modelle bereits vorkonfiguriert mit.
+
+### Cloud-Anbieter
+
+Cloud-Anbieter benötigen ein paar zusätzliche Angaben.
+
+| Anbieter              | Angaben                                    |
+| --------------------- | ------------------------------------------ |
+| Azure                 | Ressourcenname und API-Schlüssel           |
+| AWS Bedrock           | Region und API-Schlüssel                   |
+| Google Vertex AI      | Region und JSON des Dienstkontos           |
+| Cloudflare AI Gateway | Konto-ID, Gateway-ID und API-Token         |
+| Databricks            | Workspace-URL und Token                    |
+
+### Eigene Anbieter
+
+Klicke auf **Add Custom Provider**, um einen beliebigen anderen Endpunkt anzubinden, und füge dann mit **Add Model**
+seine Modelle hinzu.
+
+| Feld       | Beschreibung                                                                                     |
+| ---------- | ------------------------------------------------------------------------------------------------ |
+| Base URL   | Wohin die Console Anfragen weiterleitet, zum Beispiel `https://api.deepseek.com/v1`.             |
+| Format     | Chat Completions, Responses API, Anthropic Compatible oder Google Generative AI.                 |
+| Auth mode  | Bearer, API-Schlüssel-Header oder eigener Header.                                                |
+| Credential | Der Schlüssel, den die Console an den Anbieter sendet.                                           |
+
+## Modelle auswählen
+
+Öffne einen Anbieter, um seine Modelle zu sehen. Nur aktivierte Modelle stehen Mitgliedern zur Verfügung.
+
+- Mit dem Schalter **Enabled** aktivierst oder deaktivierst du ein Modell.
+- Aktiviere **New models**, um Modelle, die der Anbieter künftig hinzufügt, automatisch zu aktivieren.
+
+## Modelle bearbeiten
+
+Klicke auf ein Modell, um es zu bearbeiten. Änderungen werden gespeichert, wenn du das Panel schließt.
+
+| Abschnitt     | Was du ändern kannst                                                        |
+| ------------- | --------------------------------------------------------------------------- |
+| General       | Anzeigename, API-ID, Tool-Unterstützung, Eingabe- und Ausgabetypen          |
+| Variants      | Varianten mit eigenen Headern oder eigenem Body                             |
+| Configuration | Standardvariante, Header und Body der Anfrage, Token-Limits                 |
+| Cost Tiers    | Preise für Eingabe, Ausgabe, Cache-Lesen und Cache-Schreiben pro 1M Tokens  |
+
+### Eigene Preise
+
+Katalogmodelle starten mit dem Listenpreis des Anbieters. Hast du individuelle Preise ausgehandelt, etwa einen Rabatt
+in deinem OpenAI-Vertrag, überschreibe die Preise unter **Cost Tiers**, damit Nutzungsberichte und
+[Budgets](/console/budgets) dem entsprechen, was du tatsächlich zahlst.
+
+| Feld             | Listenpreis | Dein Preis |
+| ---------------- | ----------- | ---------- |
+| Input price      | $2.50       | $2.00      |
+| Output price     | $15.00      | $12.00     |
+| Cache read price | $0.25       | $0.20      |
+
+Geänderte Preise sind auf der Anbieterseite hervorgehoben. Mit **Restore default value** an einem Feld oder
+**⋯ › Restore...** am Modell kehrst du zum Listenpreis zurück.
+
+Füge eine Stufe **Context** hinzu, wenn ein Modell ab einer bestimmten Kontextgröße mehr berechnet, zum Beispiel für
+Prompts mit mehr als 200K Tokens.
+
+### Eigene Modelle
+
+Klicke auf **Add Model**, um ein Modell hinzuzufügen, das nicht im Katalog enthalten ist, und gib seinen **Display
+name** und seine **Model ID** an. Mit **⋯ › Duplicate...** an einem bestehenden Modell übernimmst du dessen
+Einstellungen als Ausgangspunkt.
+
+## OpenCode-Modelle
+
+Auf dem Tab **Models** verwaltest du die von der Console bereitgestellten [Modelle](/console/models), die aus dem
+Guthaben des Workspace bezahlt werden. Er funktioniert wie eine Anbieterseite:
+
+- Einzelne Modelle aktivieren oder deaktivieren.
+- **Free models** deaktivieren, um kostenlose Modelle für den Workspace zu sperren.
+- **New models** aktivieren, um neue Console-Modelle automatisch freizuschalten.
+
+Deaktiviere den gesamten Anbieter über **⋯ › Disable**, um nur deine eigenen Anbieter zu verwenden.
+
+## In OpenCode verwenden
+
+Mitglieder führen `/connect` aus und wählen den Workspace. Jeder aktivierte Anbieter erscheint mit dem Namen des
+Workspace, gefolgt vom Namen des Anbieters, und `/models` listet seine aktivierten Modelle auf.
+
+```text
+Acme Inc. / Anthropic
+```
+
+Aktiviere **Managed providers only** unter **Settings › General**, um OpenCode für alle auf die Anbieter des Workspace
+zu beschränken.
+
+## Deaktivieren oder entfernen
+
+Öffne das Menü **⋯** des Anbieters:
+
+- **Disable** blendet den Anbieter und seine Modelle für Mitglieder aus, behält aber seine Einstellungen.
+- **Remove...** löscht den Anbieter und seine Modelle. Der Dialog zeigt, wer ihn zuletzt genutzt hat, und bietet
+  **Disable instead** als Alternative an.
+
+Um einen Schlüssel zu rotieren, klicke auf der Anbieterseite auf die Zugangsdaten und gib den neuen Schlüssel ein.
+
+## Abrechnung
+
+Der Anbieter rechnet die Tokens direkt mit dir ab; die Console zieht dafür kein Guthaben ab. Sie erfasst trotzdem jede
+Anfrage und deren Kosten anhand der Preise des Modells, sodass Nutzungsberichte und [Budgets](/console/budgets) sie
+berücksichtigen.
+
+Wenn du einen Anbieter aus deinen eigenen Tools statt aus OpenCode aufrufen möchtest, verwende die
+[Anbieter-API](/console/api/providers).

@@ -1,0 +1,121 @@
+---
+title: "工作階段預熱"
+---
+
+工作階段預熱會在你兩次提問之間暫停時，定期傳送模型請求，以保留供應商端的提示詞快取或其他短期狀態。此功能預設為停用。
+
+在任何 [OpenCode 設定檔](/config)中啟用預熱：
+
+```jsonc title="opencode.jsonc"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "warming": true,
+}
+```
+
+使用這個設定時，如果最近有活動的工作階段已經四分鐘沒有發出模型請求，OpenCode 就會預熱該工作階段。之後每四分鐘預熱一次，直到距離最近一次非預熱請求滿 30 分鐘為止。
+
+## 選項
+
+使用物件形式可以變更預熱提示詞、閒置間隔或作用時間範圍：
+
+```jsonc title="opencode.jsonc"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "warming": {
+    "prompt": "Do not perform any work. Reply with exactly: OK",
+    "interval": "5 minutes",
+    "duration": "1 hour",
+  },
+}
+```
+
+| 欄位 | 預設值 | 用途 |
+| --- | --- | --- |
+| `prompt` | 保持連線的指示 | 每次預熱請求時，以暫時性使用者訊息的形式附加。預設內容會要求模型不執行任何工作、不使用工具，並回覆 `OK`。 |
+| `interval` | `"4 minutes"` | 發出下一次預熱請求前的閒置時間。 |
+| `duration` | `"30 minutes"` | 預熱時間範圍，從最近一次非預熱的模型請求開始計算。 |
+
+物件中省略的欄位會保留預設值。例如，以下設定只會變更間隔：
+
+```jsonc title="opencode.jsonc"
+{
+  "warming": {
+    "interval": "2 minutes",
+  },
+}
+```
+
+## 時間長度
+
+`interval` 和 `duration` 接受時間長度字串。兩者都必須解析為大於零的有限值，否則 OpenCode 會略過預熱並記錄一則警告。
+
+```jsonc title="opencode.jsonc"
+{
+  "warming": {
+    "interval": "30 seconds",
+    "duration": "1 hour",
+  },
+}
+```
+
+## 時機
+
+預熱會在非預熱的模型請求之後開始。每次預熱請求完成後，會開始計算下一段閒置間隔，但作用時間範圍不會因此延長。
+
+```text
+00:00  normal model request
+00:04  warming request
+00:08  warming request
+00:30  warming stops
+```
+
+任何新的非預熱模型活動都會重設這兩個計時器。如果間隔大於或等於時間範圍，作用時間範圍會在送出預熱請求之前就結束。
+
+```text
+00:00  normal model request
+00:20  normal model request; window restarts
+00:24  warming request
+00:50  warming stops
+```
+
+## 請求
+
+預熱請求會使用工作階段目前的模型、代理、指示和對話上下文。OpenCode 會暫時附加設定好的提示詞、呼叫一次模型，然後捨棄回應。
+
+```text
+[current session context]
+[transient user message: keep-alive prompt]
+→ one model response, discarded
+```
+
+這個請求不會接收輸入、不會在對話記錄中新增訊息，也不會變更持久保存的工作階段狀態。OpenCode 不會分派本機工具呼叫，也不會繼續工具迴圈；預設提示詞也會要求模型不要使用工具。
+
+## 失敗
+
+預熱失敗只會記錄在日誌中，不會讓工作階段失敗或改變工作階段。OpenCode 會等到下一個間隔再重試，而原本的作用時間範圍仍會繼續倒數。
+
+```text
+00:04  warming request fails; session is unchanged
+00:08  next warming attempt
+```
+
+## 費用
+
+預熱請求是真正的供應商請求。它們和其他模型請求一樣，可能消耗 token、產生費用、計入速率限制，也可能失敗。
+
+- 間隔越短，請求量越多。
+- 時間範圍越長，允許的預熱請求越多。
+- 只有在供應商端的效益值得額外用量時，才啟用預熱。
+
+例如，在預設值下，一段未中斷的 30 分鐘時間範圍內最多會嘗試預熱七次：分別在第 4、8、12、16、20、24 和 28 分鐘。
+
+## 停用
+
+將 `warming` 設為 `false` 即可明確停用。省略這個欄位時，預熱同樣保持停用。
+
+```jsonc title="opencode.jsonc"
+{
+  "warming": false,
+}
+```

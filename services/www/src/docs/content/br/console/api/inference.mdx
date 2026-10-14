@@ -1,0 +1,100 @@
+---
+title: "API de inferência"
+description: "Chame modelos compatíveis com OpenAI, Anthropic e Gemini pela inferência do Console com um único header de autenticação."
+---
+
+A inferência do Console serve APIs compatíveis com OpenAI, Anthropic e Gemini a partir de `https://opencode.ai/inference`.
+Envie uma requisição `POST` em JSON para o endpoint que corresponde à família de API do modelo.
+
+```bash
+curl -X POST "https://opencode.ai/inference/openai/v1/chat/completions" \
+  -H "Authorization: Bearer <token>" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "model": "kimi-k2.6",
+    "messages": [{ "role": "user", "content": "Say hi" }]
+  }'
+```
+
+## Autenticação
+
+Substitua `<token>` por uma [chave de conta de serviço](/console/api#service-accounts) criada no
+[Console](https://opencode.ai/console). Os modelos pagos exigem o header; os modelos de chat gratuitos podem ser chamados
+sem ele.
+
+```text
+Authorization: Bearer <token>
+```
+
+## Endpoints
+
+| API                     | Caminho                                                   |
+| ----------------------- | --------------------------------------------------------- |
+| OpenAI Chat Completions | `/inference/openai/v1/chat/completions`                   |
+| OpenAI Responses        | `/inference/openai/v1/responses`                          |
+| Anthropic Messages      | `/inference/anthropic/v1/messages`                        |
+| Gemini                  | `/inference/google/v1beta/models/<model>:generateContent` |
+
+Cada modelo é servido por uma única família de API. Consulte a tabela de [endpoints dos modelos](/console/models#endpoints)
+ou obtenha a lista atualizada:
+
+```bash
+curl https://opencode.ai/inference/v1/models
+```
+
+### OpenAI Chat Completions
+
+Modelos abertos como `kimi-k2.6`, `glm-5.1` e `minimax-m2.7`, além dos modelos gratuitos, usam a API Chat Completions.
+
+```bash
+curl -X POST "https://opencode.ai/inference/openai/v1/chat/completions" \
+  -H "Authorization: Bearer <token>" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "model": "glm-5.1",
+    "messages": [{ "role": "user", "content": "Say hi" }]
+  }'
+```
+
+### OpenAI Responses
+
+Os modelos GPT usam a Responses API.
+
+```bash
+curl -X POST "https://opencode.ai/inference/openai/v1/responses" \
+  -H "Authorization: Bearer <token>" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "model": "gpt-5.5",
+    "input": "Say hi"
+  }'
+```
+
+### Anthropic Messages
+
+Os modelos Claude e Qwen usam a Messages API. `max_tokens` é obrigatório.
+
+```bash
+curl -X POST "https://opencode.ai/inference/anthropic/v1/messages" \
+  -H "Authorization: Bearer <token>" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "model": "claude-sonnet-4-6",
+    "max_tokens": 1024,
+    "messages": [{ "role": "user", "content": "Say hi" }]
+  }'
+```
+
+### Gemini
+
+Nos modelos Gemini, o modelo e o método vão no caminho. Substitua `:generateContent` por `:streamGenerateContent` para
+receber a resposta via stream.
+
+```bash
+curl -X POST "https://opencode.ai/inference/google/v1beta/models/gemini-3.1-pro:generateContent" \
+  -H "Authorization: Bearer <token>" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "contents": [{ "parts": [{ "text": "Say hi" }] }]
+  }'
+```

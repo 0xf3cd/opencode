@@ -1,0 +1,168 @@
+---
+title: "API-oversikt"
+description: "Autentiser mot OpenCode Console-API-et med nøkler for tjenestekontoer eller brukertokener."
+---
+
+Med Console-API-et kan integrasjoner lese konfigurasjonen til arbeidsområdet og administrere budsjetter. Stiene er
+relative til base-URL-en for Console.
+
+```bash
+export CONSOLE_URL="https://opencode.ai/console"
+export SERVICE_API_KEY="oc_sk_..."
+
+curl --fail-with-body "${CONSOLE_URL}/api/v2/config" \
+  --header "Authorization: Bearer ${SERVICE_API_KEY}"
+```
+
+| API                                    | Endepunkter                                |
+| -------------------------------------- | ------------------------------------------ |
+| [Inferens](/console/api/inference)     | `https://opencode.ai/inference/...`        |
+| [Leverandører](/console/api/providers) | `https://opencode.ai/inference/custom/...` |
+| [Budsjetter](/console/api/budgets)     | `/api/v1/budgets/members`                  |
+| [Konfigurasjon](#workspace-config)     | `GET /api/v2/config`                       |
+
+## Tjenestekontoer
+
+Integrasjoner autentiserer seg med en tjenestekonto: et ikke-menneskelig medlem av arbeidsområdet med egne API-nøkler,
+egen bruk og eget [budsjett](/console/budgets#service-account-budgets). Eiere og administratorer administrerer dem fra
+**Keys**.
+
+1. Åpne **Keys** og klikk på **Add Service Account**, og gi den et navn, for eksempel `CI Pipeline`.
+2. Åpne tjenestekontoen og klikk på **Add API Key**.
+3. Velg **Key name**, **Permissions** og eventuelt en **Expiry date**, og klikk deretter på **Create key**.
+4. Kopier nøkkelen. Den vises bare én gang.
+
+```text
+oc_sk_1a2b3c4d5e6f_...
+```
+
+Send nøkkelen som et bearer-token. Den er knyttet til ett arbeidsområde, så du trenger ingen header for arbeidsområdet.
+
+```text
+Authorization: Bearer oc_sk_...
+```
+
+### Tillatelser
+
+| Tillatelse     | Gir tilgang til                                                                                                          |
+| -------------- | ------------------------------------------------------------------------------------------------------------------------ |
+| Inference only | Forespørsler til [inferens](/console/api/inference) og [leverandører](/console/api/providers), og `GET /api/v2/config`.  |
+| All            | Alt over, og i tillegg Console-API-et med administratortilgang, unntatt administrasjon av modeller.                      |
+
+Noen handlinger krever alltid at en person er logget inn i Console, selv med en **All**-nøkkel: å invitere medlemmer,
+endre roller, fjerne medlemmer og opprette eller tilbakekalle nøkler.
+
+### Tilbakekall nøkler
+
+Åpne tjenestekontoen og tilbakekall en nøkkel fra **API Keys**. Hvis du fjerner tjenestekontoen, tilbakekalles alle
+nøklene. Automatiseringer som bruker en tilbakekalt eller utløpt nøkkel, får HTTP `401` umiddelbart.
+
+## Brukertokener
+
+Brukertokener opptrer som en innlogget person med personens rolle i arbeidsområdet. Send tokenet med en `x-org-id`-header
+som angir arbeidsområdet.
+
+```bash
+curl --fail-with-body "${CONSOLE_URL}/api/v2/config" \
+  --header "Authorization: Bearer ${USER_TOKEN}" \
+  --header "x-org-id: org_..."
+```
+
+Tokener fra [enhetsflyten](#device-flow) er knyttet til arbeidsområdet som ble valgt ved innlogging, og trenger ikke
+headeren. En annen `x-org-id` gir `403`.
+
+## Enhetsflyt
+
+OpenCode logger inn med OAuth Device Authorization Grant (RFC 8628). Andre CLI-er kan bruke den samme flyten.
+
+1. Be om en enhetskode. Send `supports_org_scope=true` for å knytte tokenet til et arbeidsområde.
+
+   ```bash
+   curl --fail-with-body "${CONSOLE_URL}/auth/device/code" \
+     --data "client_id=my-cli" \
+     --data "supports_org_scope=true"
+   ```
+
+   Svaret inneholder `device_code`, `user_code`, `verification_uri_complete`, `expires_in` (600 sekunder) og
+   `interval` (5 sekunder).
+
+2. Åpne `verification_uri_complete` i en nettleser. Det er en sti som `/console/device?user_code=...`, relativt til
+   `https://opencode.ai`. Personen logger inn, velger et arbeidsområde og godkjenner.
+
+3. Spør etter tokenet hvert `interval` sekund med den samme `client_id`.
+
+   ```bash
+   curl --fail-with-body "${CONSOLE_URL}/auth/device/token" \
+     --data "grant_type=urn:ietf:params:oauth:grant-type:device_code" \
+     --data "device_code=..." \
+     --data "client_id=my-cli"
+   ```
+
+   Frem til godkjenning er svaret `400` med `authorization_pending`. Ved suksess returneres `access_token`,
+   `refresh_token`, `expires_in` og `org_id`.
+
+4. Forny før tilgangstokenet utløper. Koblingen til arbeidsområdet beholdes.
+
+   ```bash
+   curl --fail-with-body "${CONSOLE_URL}/auth/device/token" \
+     --data "grant_type=refresh_token" \
+     --data "refresh_token=..." \
+     --data "client_id=my-cli"
+   ```
+
+Hvert oppdateringstoken kan bare brukes én gang. Hvis et gammelt oppdateringstoken brukes på nytt, tilbakekalles hele
+økten.
+
+## Konfigurasjon for arbeidsområdet
+
+`GET /api/v2/config` returnerer leverandørene og modellene som er tilgjengelige for arbeidsområdet, i
+[konfigurasjonsformatet](/config) til OpenCode V2. OpenCode laster den inn etter `/connect`.
+
+```bash
+curl --fail-with-body "${CONSOLE_URL}/api/v2/config" \
+  --header "Authorization: Bearer ${SERVICE_API_KEY}"
+```
+
+```json
+{
+  "providers": {
+    "opencode": {
+      "name": "OpenCode",
+      "env": ["OPENCODE_CONSOLE_TOKEN"],
+      "package": "aisdk:@ai-sdk/openai-compatible",
+      "settings": {
+        "baseURL": "https://opencode.ai/inference/openai/v1",
+        "apiKey": "{env:OPENCODE_CONSOLE_TOKEN}"
+      },
+      "headers": { "x-opencode-org-id": "org_..." },
+      "models": {
+        "kimi-k2.6": { "name": "Kimi K2.6" }
+      }
+    }
+  }
+}
+```
+
+| Felt                    | Beskrivelse                                                                                 |
+| ----------------------- | ------------------------------------------------------------------------------------------- |
+| `providers`             | Console, Go og tilkoblede leverandører, hver med sine gateway-innstillinger og modeller.    |
+| `websearch`             | Driftet [nettsøk](/console/websearch), for medlemmer når det er slått på.                   |
+| `mcp`                   | Console-MCP-serveren, for medlemmer.                                                        |
+| `experimental.policies` | [Policy](/policies#console)-setninger for arbeidsområdet.                                   |
+
+Alle tillatelsesnivåer for nøkler og alle medlemsroller kan lese konfigurasjonen.
+
+## Feil
+
+Feil returnerer JSON med en `_tag` som angir feilen.
+
+```json
+{ "_tag": "Forbidden" }
+```
+
+| Status | Betydning                                                                                         |
+| ------ | ------------------------------------------------------------------------------------------------- |
+| `400`  | `OrgRequired`: et brukertoken ble sendt uten `x-org-id`.                                          |
+| `401`  | Legitimasjon mangler, er ugyldig, er utløpt eller er tilbakekalt.                                 |
+| `403`  | Feil arbeidsområde, manglende tillatelse eller en **Inference only**-nøkkel mot et Console-endepunkt. |
+| `404`  | Arbeidsområdet finnes ikke eller er slettet.                                                      |

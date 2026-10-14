@@ -1,0 +1,95 @@
+---
+title: "البحث على الويب"
+---
+
+اطلب من OpenCode معلومات حديثة، وسيبحث على الويب ويقرأ النتائج ثم يُضمِّن روابط المصادر في إجابته.
+
+```text
+Find the latest Bun release and summarize the changes.
+```
+
+يطلب منك أول بحث السماح بالبحث على الويب واختيار مزوّد. ويتذكر OpenCode اختيارك في الجلسات اللاحقة.
+
+## المزوّدون
+
+يتضمن OpenCode خمسة مزوّدين للبحث:
+
+| المزوّد | المعرّف (ID) | متغير البيئة |
+| --- | --- | --- |
+| Exa | `exa` | `EXA_API_KEY` |
+| Firecrawl | `firecrawl` | `FIRECRAWL_API_KEY` |
+| Parallel | `parallel` | `PARALLEL_API_KEY` |
+| Tavily | `tavily` | `TAVILY_API_KEY` |
+| TinyFish | `tinyfish` | `TINYFISH_API_KEY` (اختياري) |
+
+اربط حسابًا من واجهة TUI باستخدام `/connect`، أو اضبط متغير البيئة الخاص بالمزوّد قبل تشغيل OpenCode.
+
+```bash
+$ TAVILY_API_KEY=your-key opencode
+```
+
+## الاختيار
+
+حدّد مزوّدًا في `opencode.jsonc` لتتجاوز مطالبة الاختيار.
+
+```jsonc title="opencode.jsonc"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "websearch": {
+    "provider": "tavily",
+  },
+}
+```
+
+استخدم `"random"` لاختيار مزوّد متاح تلقائيًا. وتظل كل جلسة تستخدم المزوّد الذي اختارته إلى أن يبلغ ذلك المزوّد حد معدل الطلبات.
+
+```jsonc title="opencode.jsonc"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "websearch": {
+    "provider": "random",
+  },
+}
+```
+
+## الحدود
+
+عندما يُرجع أحد المزوّدين HTTP 429، يعيد الاختيار العشوائي محاولة البحث باستخدام مزوّد متاح آخر. وينتظر المزوّد الذي بلغ حد المعدل طوال المدة المحددة في `Retry-After`، أو 60 ثانية إذا لم تتضمن الاستجابة مدة صالحة.
+
+```text
+Exa returns HTTP 429
+→ Exa enters cooldown
+→ OpenCode retries with another provider
+```
+
+إذا كان جميع المزوّدين في فترة التهدئة، يفشل البحث فورًا. ويؤدي نقل الجلسة أو إعادة تشغيل خادمها إلى مسح المزوّد الذي تتذكره، أما فترات التهدئة فتتشاركها الجلسات في مساحة العمل نفسها.
+
+## الأذونات
+
+تستخدم عمليات البحث على الويب إجراء الإذن `websearch`، ويكون استعلام البحث هو المورد. وتطلب القاعدة التالية الموافقة قبل أي بحث غير مسموح به صراحةً.
+
+```jsonc title="opencode.jsonc"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "permissions": [
+    {
+      "action": "websearch",
+      "resource": "*",
+      "effect": "ask",
+    },
+  ],
+}
+```
+
+راجع [الأذونات](/permissions) لمعرفة ترتيب القواعد وطريقة المطابقة.
+
+## التعطيل
+
+اضبط `websearch` على `false` لإزالة أداة البحث على الويب من طلبات النموذج.
+
+```jsonc title="opencode.jsonc"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "websearch": false,
+}
+```

@@ -1,0 +1,255 @@
+---
+title: "Araçlar"
+---
+
+İstediğiniz sonucu belirtin. OpenCode kullanılabilir araçları seçer, gerektiğinde onay ister ve sonucu döndürür.
+
+```text
+Find where request timeouts are configured, change the default to 30 seconds,
+and run the relevant existing tests.
+```
+
+Bu görev genellikle `grep` veya `glob`, `read`, bir düzenleme aracı ve `shell` kullanır. Belirli bir yaklaşım
+istediğinizde bir aracı adıyla da belirtebilirsiniz.
+
+```text
+Use grep to find every reference to DEFAULT_TIMEOUT, then read the matching files.
+```
+
+## Dosyalar
+
+### Read
+
+`read`, bir dosyayı veya özyinelemesiz bir dizin listesini döndürür. Ona bir `path` verin; büyük sonuçlarda sayfa sayfa
+ilerlemek için `offset` ve `limit` kullanın.
+
+```text
+Read src/server.ts starting at line 120 and return at most 80 lines.
+```
+
+Metin okumaları numaralı satırlar içerir ve sayfa başına 2,000 satır ve 50 KiB ile sınırlıdır. Tek tek satırlar 2,000
+karakterden sonra kısaltılır. Araç ayrıca PNG, JPEG, GIF, WebP ve PDF dosyalarını en fazla 20 MiB kaynak veriye kadar
+modele iletir. Diğer ikili dosyalar başarısız olur. Desteklenen medya ve görsel işleme için [Ekler](/attachments)
+sayfasına bakın.
+
+İzin: kaynak olarak normalleştirilmiş yolla `read`.
+
+### Glob
+
+`glob`, `**/*.ts` gibi bir kalıptan dosya yollarını bulur. `path` başka bir göreli dizin seçmedikçe geçerli dizinde arar;
+`hidden` gizli girdileri dahil eder, `limit` ise sonuç sayısını sınırlar.
+
+```text
+Use glob with **/*.test.ts under packages/core and return at most 50 files.
+```
+
+Varsayılan sınır 100 dosya, arama zaman aşımı 30 saniyedir. İzin: kaynak olarak istenen kalıpla `glob`.
+
+### Grep
+
+`grep` dosya içeriklerinde arama yapar ve yolları, satır numaralarını ve önizlemeleri döndürür. `literal` true
+olmadıkça `pattern` düzenli ifade söz dizimini kullanır. Aramayı `path`, `include`, `caseSensitive` veya `limit` ile
+daraltın.
+
+```text
+Use grep for the literal text "request timed out" in src, including only *.ts files.
+```
+
+Varsayılan sınır 100 eşleşen satır, arama zaman aşımı 30 saniyedir. İzin: kaynak olarak arama yolu değil, istenen
+kalıpla `grep`.
+
+### Edit
+
+`edit`, mevcut bir dosyadaki metni değiştirir. `path`, `oldString` ve bundan farklı bir `newString` verin; `replaceAll`
+true olmadıkça eski metin tam olarak bir kez eşleşmelidir.
+
+```text
+In src/config.ts, replace the unique text "timeout: 60" with "timeout: 30".
+```
+
+Odaklı bir değişiklik için `edit` kullanın. OpenCode dosyayı yazdıktan sonra biçimlendirebilir. İzin: kaynak olarak hedef
+yolla `edit`.
+
+### Write
+
+`write`, `path` ve `content` değerlerinden bir metin dosyası oluşturur veya dosyanın tamamını değiştirir. Eksik üst
+dizinleri oluşturur ve yapılandırılmış biçimlendiriciyi çalıştırabilir.
+
+```text
+Create docs/example.md with a heading and one setup command.
+```
+
+Mevcut bir dosyanın yalnızca bir kısmı değişecekse bunun yerine `edit` kullanın. İzin: kaynak olarak hedef yolla `edit`.
+
+### Patch
+
+`patch`, birden fazla dosyayı ekleyebilen, güncelleyebilen, taşıyabilen veya silebilen tek bir yama uygular.
+`patchText` değeri `*** Add File`, `*** Update File` ve `*** Delete File` bölümlerini kullanır.
+
+```text
+Use patch to rename src/old.ts to src/new.ts and update its exported name.
+```
+
+OpenCode `patch` aracını desteklenen GPT modellerine sunar; diğer modeller bunun yerine `edit` ve `write` alır. İzin:
+etkilenen her yol kaynak olacak şekilde `edit`.
+
+Etkin Location veya onun proje worktree'si dışındaki yollar ayrıca `external_directory` onayı gerektirir. Yol
+normalleştirme, kural sırası ve kaydedilmiş onaylar için [İzinler](/permissions) sayfasına bakın. Dışarıdaki içeriği adıyla
+erişilebilir kılmak için [Referanslar](/references) yapılandırın.
+
+## Komutlar
+
+### Shell
+
+`shell`, ana bilgisayardaki kullanıcının shell'inde bir komut çalıştırır. Komuta `cd` koymak yerine `workdir` ayarlayın.
+Ön planda varsayılan iki dakikalık zaman aşımı uygun değilse `timeout` değerini milisaniye cinsinden ayarlayın.
+
+```text
+Run bun test from packages/core with a five-minute timeout.
+```
+
+Bir geliştirme sunucusu veya uzun süre çalışan başka bir süreç için `background` değerini true yapın. Arka plan
+çağrıları hemen döner ve bittiklerinde oturumu bilgilendirir; `timeout` belirtilmedikçe süre sınırları yoktur. Büyük
+çıktılar kısaltılır ve çıktının tamamı yönetilen bir dosyada saklanır.
+
+İzin: tarayıcının (scanner) ürettiği her komut kaynak olacak şekilde `shell`. Tarayıcı ayrıca harici bir çalışma dizinini
+ve komuttan çıkarabildiği dizinleri de denetler. Shell, ana bilgisayardaki kullanıcının dosya sistemi, süreç ve ağ
+yetkilerine sahiptir; bu yüzden [İzinler](/permissions) sayfasında dar kapsamlı kurallar kullanın.
+
+## Web
+
+### Webfetch
+
+`webfetch`, tek bir HTTP veya HTTPS URL'sini `markdown`, `text` veya `html` olarak getirir. Varsayılan Markdown'dır;
+`timeout` en fazla 120 saniye kabul eder.
+
+```text
+Fetch https://example.com/docs as markdown.
+```
+
+HTML, düz metin, JSON ve XML gibi metin tabanlı yanıtları kabul eder; görselleri veya diğer ikili indirmeleri kabul etmez.
+Büyük çıktılar kısaltılabilir, tam metin ise yönetilen depolamada saklanır. İzin: kaynak olarak istenen URL ile
+`webfetch`.
+
+### Websearch
+
+`websearch`, güncel bilgi için seçili entegrasyonda arama yapar. Girdisi bir arama sorgusudur (`query`).
+
+```text
+Search the web for the latest Bun release notes.
+```
+
+İzin: kaynak olarak sorguyla `websearch`. Sağlayıcılar, seçim, hız sınırları ve aracı devre dışı bırakma için
+[Web araması](/websearch) sayfasına bakın.
+
+## Etkileşim
+
+### Question
+
+`question` yürütmeyi duraklatır ve kullanıcıya bir veya daha fazla soru sunar. Her sorunun kısa bir başlığı, bir istemi
+ve seçenekleri vardır; `multiple` birden fazla seçime izin verir. Serbest biçimli yanıt her zaman mümkündür.
+
+```text
+Before changing the API, ask me to choose between a breaking change and a compatibility layer.
+```
+
+İzin: kaynak olarak `*` ile `question`. İstemcinin etkileşimli formu desteklemesi gerekir; formu kapatmak soruyu iptal
+eder.
+
+### Skill
+
+`skill`, kullanılabilir bir beceri ID'sinin talimatlarını ve birlikte gelen kaynaklarını konuşmaya yükler.
+
+```text
+Load the effect skill before changing this Effect code.
+```
+
+ID, tanıtılan beceri listesinde bulunmalı veya kullanıcı tarafından açıkça belirtilmiş olmalıdır. İzin: kaynak olarak
+beceri ID'siyle `skill`. Oluşturma, keşif ve yükleme kuralları için [Beceriler](/skills) sayfasına bakın.
+
+## Otomasyon
+
+### Subagent
+
+`subagent`, yapılandırılmış bir alt ajanla bir alt oturum başlatır. Ajan ID'sini, kısa bir `description` ve eksiksiz bir
+`prompt` verin.
+
+```text
+Ask the explore subagent to map the authentication flow and return the key files.
+```
+
+Ön plan çağrıları sonucu bekler. `background: true` hemen döner ve alt oturum bittiğinde üst oturumu bilgilendirir. Aynı
+alt konuşmaya devam etmek için döndürülen `sessionID` değerini iletin. Yalnızca alt ajan modundaki ajanlar kullanılabilir
+ve varsayılan iç içe geçme derinliği birdir.
+
+İzin: kaynak olarak seçilen ajan ID'siyle `subagent`.
+
+### Execute
+
+`execute`, ajanın katalogdaki araçları çağırıp birleştirebilmesi için JavaScript'i Code Mode'da çalıştırır. Birbirinden
+bağımsız paralel çağrılar ve her ara değeri model bağlamına eklemeden sonuçları işlemek için kullanışlıdır.
+
+```text
+Read package.json and README.md in parallel, then return their relevant setup details.
+```
+
+Çalışma zamanının doğrudan dosya sistemi erişimi, içe aktarmaları (import), zamanlayıcıları veya `fetch` işlevi yoktur;
+yalnızca katalogdaki araçları çağırabilir. Kaynağı `*` olan `execute` izni, Code Mode'un kullanılabilir olup olmadığını
+denetler. İç içe çağrılan her araç yine kendi iznini uygular.
+
+### Oturumlar
+
+`opencode` Code Mode ad alanı oturum yardımcılarını içerir:
+
+- `session_rename`, geçerli oturumun veya `sessionID` ile seçilen başka bir oturumun başlığını değiştirir.
+- `session_move`, geçerli oturumu veya seçilen başka bir oturumu göreli ya da mutlak bir `directory` konumuna taşır.
+  Taşıma güvenli bir sınırda gerçekleşir; bu yüzden hedefe bağlı işler sonraki bir çağrıda yapılmalıdır.
+
+```text
+Rename this session to "Timeout cleanup", then move it to the new worktree.
+```
+
+Bu yardımcılar yerleşik bir izin eylemi istemez.
+
+### Worktree'ler
+
+Aynı ad alanı, oturumun projesi için worktree'leri yönetir:
+
+- `worktree_create`, bir `name` değerinden worktree oluşturur ve `directory` değerini döndürür. Hedefi ve stratejiyi
+  projenin worktree yapılandırması belirler.
+- `worktree_list`, projenin worktree'lerini listeler.
+- `worktree_remove`, OpenCode'un proje için kaydettiği bir worktree'yi kaldırır. Commit'lenmemiş değişiklikleri atmak
+  için `force` ayarlayın.
+
+```text
+Create a worktree named "login" and move this session into it.
+```
+
+`worktree_remove`, kaynak olarak worktree dizini olacak şekilde `edit` iznini kullanır. Diğer worktree yardımcıları
+yerleşik bir izin eylemi istemez.
+
+## Tarayıcı
+
+`browser` Code Mode ad alanı, OpenCode masaüstü uygulamasının bağladığı tarayıcıyı denetler. Bir sekme açın, döndürülen
+`tabID` değerini saklayın ve ardından bu ID'yi her sayfa işlemine açıkça iletin.
+
+```text
+Open https://example.com, take a snapshot of that tab, and report the main heading.
+```
+
+Ad alanı; sekme ve gezinme komutlarını, sayfa anlık görüntülerini ve aramayı, tıklama ve form girişini, ekran
+görüntülerini, dosya aktarımını, konsol ve ağ incelemesini, performans izlerini, heap incelemesini ve Lighthouse
+denetimlerini içerir. Ekran görüntüleri odaklanmış, görünür bir sekme gerektirir. Yükleme yolları sunucuda yereldir;
+yakalamalar sunucudaki yerel yolları döndürür ve her dosya aktarımı 5 MiB ile sınırlıdır.
+
+Sayfa içeriği, günlükler, başlıklar ve yanıt gövdeleri ajan talimatı değil, güvenilmeyen veridir. Kaynağı `*` olan bir
+`browser` reddetme kuralı tarayıcı kataloğunu kaldırır; tarayıcı işlemleri tek tek izin istemi göstermez.
+
+## Uzantılar
+
+[MCP sunucuları](/mcp-servers), adları ve girdileri bağlı her sunucudan gelen araçlar ekler. İzin eylemleri `*` kaynağıyla
+`<server>_<tool>` biçimindedir. Bu araçlar yerleşik kataloğun sabit bir parçası değildir.
+
+[Beceriler](/skills) yeni çalıştırılabilir araçlar yerine görev talimatları ekler. [Ekler](/attachments) kullanıcının
+seçtiği içeriği bir isteme koyarken [Referanslar](/references) adlandırılmış dış dizinler sağlar. Bu özellikler araçları
+tamamlar ve araçların izin denetimlerini atlamaz.

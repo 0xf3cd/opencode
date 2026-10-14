@@ -1,0 +1,248 @@
+---
+title: "Richtlinien"
+description: "OpenCode-Aktionen auf benannten Ressourcen erlauben oder verbieten – die Richtlinie der Organisation hat das letzte Wort."
+---
+
+Richtlinien entscheiden, ob OpenCode eine Aktion auf einer benannten Ressource ausführen
+darf. Du legst sie unter `policies` an; außerdem kann ein verbundener
+[OpenCode Console](/console)-Workspace sie bereitstellen.
+
+Richtlinien sind von [Berechtigungen](/permissions) getrennt. Berechtigungen sind
+Tool-Regeln pro Agent, die `allow`, `deny` oder `ask` sein können. Richtlinien sind
+binär, fragen nie nach und schränken immer nur ein, was Berechtigungen und Anbieter
+sonst erlauben würden.
+
+## Konfigurieren
+
+Um einen Anbieter überall zu verbieten, füge `opencode.jsonc` eine Regel hinzu:
+
+```jsonc
+{
+  "$schema": "https://opencode.ai/config.json",
+  "policies": [{ "action": "provider.use", "resource": "openai", "effect": "deny" }],
+}
+```
+
+Ein verbotener Anbieter verschwindet aus dem Katalog und der Modellauswahl, selbst wenn
+gültige Zugangsdaten vorhanden sind.
+
+Frühere Versionen lasen Richtlinien aus `experimental.policies`. Dieser Schlüssel
+funktioniert weiterhin und wird mit `policies` zusammengeführt:
+
+```jsonc
+{
+  "experimental": {
+    "policies": [{ "action": "provider.use", "resource": "openai", "effect": "deny" }],
+  },
+}
+```
+
+## Regeln
+
+Jede Regel hat drei Felder:
+
+| Feld       | Werte                                         | Bedeutung                                                     |
+| ---------- | --------------------------------------------- | ------------------------------------------------------------- |
+| `action`   | `provider.use`, `tool.use`, `integration.use` | Die gesteuerte Operation                                      |
+| `resource` | String oder Platzhaltermuster                 | Worauf sich die Regel bezieht; hängt von der Aktion ab    |
+| `effect`   | `allow`, `deny`                               | Die Entscheidung, wenn diese Regel zutrifft               |
+
+Regeln, die die Validierung nicht bestehen, werden mit einer Warnung im Serverlog
+verworfen; der Rest der Liste gilt weiterhin. Prüfe das Log, nachdem du ein `deny`
+bearbeitet hast.
+
+## Abgleich
+
+Ressourcen verwenden dieselben Platzhalter für den gesamten Wert wie Berechtigungen:
+`*` passt auf null oder mehr Zeichen, `?` auf genau eines.
+
+```jsonc
+{
+  "policies": [{ "action": "provider.use", "resource": "company-*", "effect": "deny" }],
+}
+```
+
+Damit werden `company-us` und `company-eu` verboten. Ein Muster, das auf ` *` endet,
+passt auch auf den Wert ohne Argumente: `shell:git push *` deckt also auch ein
+alleinstehendes `git push` ab.
+
+## Reihenfolge
+
+Treffen mehrere Regeln zu, gewinnt die letzte. Eine Spezifitätsregel gibt es
+nicht. Stelle allgemeine Regeln deshalb an den Anfang und Ausnahmen dahinter.
+Trifft keine zu, ist die Aktion erlaubt.
+
+```jsonc
+{
+  "policies": [
+    { "action": "provider.use", "resource": "*", "effect": "deny" },
+    { "action": "provider.use", "resource": "anthropic", "effect": "allow" },
+  ],
+}
+```
+
+Nur Anthropic bleibt verfügbar.
+
+## Anbieter
+
+`provider.use` steuert, ob ein Anbieter überhaupt verwendet werden kann. Die Ressource
+ist die Anbieter-ID: `anthropic`, `openai`, `opencode` oder eine eigene ID aus
+[`providers`](/providers).
+
+```jsonc
+{
+  "providers": {
+    "company-ai": {
+      "package": "@opencode/ai/providers/openai-compatible",
+      "settings": { "baseURL": "https://ai.company.example/v1" },
+    },
+  },
+  "policies": [
+    { "action": "provider.use", "resource": "*", "effect": "deny" },
+    { "action": "provider.use", "resource": "company-ai", "effect": "allow" },
+  ],
+}
+```
+
+Der Eintrag unter `providers` konfiguriert den Endpunkt; die Regeln machen ihn zum
+einzigen Anbieter, den OpenCode verwendet. Die Richtlinie gilt unabhängig davon, wie
+OpenCode den Anbieter kennt: über Katalogdaten, Umgebungsvariablen, gespeicherte
+Konten, integrierte Plugins oder die Konfiguration.
+
+Verwende `provider.use` anstelle der V1-Listen `enabled_providers` und
+`disabled_providers`. V1-Dateien werden weiterhin geladen; siehe
+[Von V1 migrieren](/migrate-v1#supported-fields-without-direct-native-equivalents).
+
+## Tools
+
+`tool.use`-Regeln lassen eine [Berechtigungsprüfung](/permissions) hart
+scheitern. Die Ressource lautet `<action>:<value>` und wird mit jeder Ressource
+abgeglichen, die das Tool prüft.
+
+```jsonc
+{
+  "policies": [
+    { "action": "tool.use", "resource": "shell:git push *", "effect": "deny" },
+    { "action": "tool.use", "resource": "edit:*.env", "effect": "deny" },
+    { "action": "tool.use", "resource": "webfetch:*", "effect": "deny" },
+  ],
+}
+```
+
+Eine verbotene Prüfung schlägt mit `Blocked by configuration policy` fehl, statt
+nachzufragen. Sie greift nach den Agentenregeln und gespeicherten Freigaben und
+überschreibt damit sowohl ein `ask` als auch eine „Allow always“-Freigabe.
+
+| Muster                       | Blockiert                                              |
+| ---------------------------- | ------------------------------------------------------ |
+| `shell:*`                    | Jeden Shell-Befehl                                     |
+| `read:*/.ssh/*`              | Das Lesen von SSH-Material                             |
+| `external_directory:*`       | Jeden Zugriff außerhalb der Location oder des Worktrees |
+| `subagent:general`           | Das Starten eines bestimmten Subagenten                |
+| `github_delete_repository:*` | Ein einzelnes MCP-Tool                                 |
+| `*`                          | Alles, was nicht bereits verboten ist                  |
+
+Eine `tool.use`-Regel mit `allow` gewährt niemals Zugriff. Sie hebt lediglich ein
+früheres, allgemeineres `deny` auf; danach entscheiden die Regeln des Agenten.
+
+```jsonc
+{
+  "policies": [
+    { "action": "tool.use", "resource": "shell:*", "effect": "deny" },
+    { "action": "tool.use", "resource": "shell:git status *", "effect": "allow" },
+  ],
+}
+```
+
+Für `git status` greift die `shell`-Regel des Agenten; alle anderen Befehle sind
+blockiert.
+
+## Integrationen
+
+`integration.use` steuert, ob ein MCP-Server, ein Skill oder ein Plugin geladen wird.
+Die Ressource besteht aus der Art der Integration und ihrer ID:
+
+| Ressource         | Gilt für                                                                      |
+| ----------------- | ----------------------------------------------------------------------------- |
+| `mcp:<server>`    | Einen [MCP-Server](/mcp-servers) anhand seines konfigurierten Namens          |
+| `skill:<id>`      | Einen [Skill](/skills) anhand seiner ID                                       |
+| `plugin:<target>` | Ein [Plugin](/plugins) anhand des Paketnamens ohne Version oder absoluten Pfads |
+
+```jsonc
+{
+  "policies": [
+    { "action": "integration.use", "resource": "mcp:*", "effect": "deny" },
+    { "action": "integration.use", "resource": "mcp:github", "effect": "allow" },
+    { "action": "integration.use", "resource": "plugin:opencode-acme-cli", "effect": "deny" },
+  ],
+}
+```
+
+Ein verbotener MCP-Server oder Skill wird entfernt, und ein verbotenes Plugin wird
+nicht geladen – unabhängig davon, wie es konfiguriert wurde.
+
+## Vorrang
+
+Bei normalen Einstellungen gewinnt die nächstgelegene Konfiguration. Bei Richtlinien
+ist es umgekehrt: Regeln aus übergeordneter Konfiguration werden später
+ausgewertet und überschreiben daher speziellere. Verwaltete Konfiguration und die
+verbundene Console haben immer das letzte Wort.
+
+| Autorität      | Quelle                                                                                                         |
+| -------------- | -------------------------------------------------------------------------------------------------------------- |
+| 1 (höchste)    | Verbundener OpenCode Console-Workspace                                                                         |
+| 2              | Verwaltete macOS-Einstellungen (`/Library/Managed Preferences/ai.opencode.managed.plist`)                      |
+| 3              | Systemweite `opencode.json(c)` (`/Library/Application Support/opencode`, `/etc/opencode`, `%ProgramData%\opencode`) |
+| 4              | Globale `~/.config/opencode/opencode.json(c)`                                                                  |
+| 5              | Direkte `opencode.json(c)`; äußere Verzeichnisse gehen inneren vor                                             |
+| 6 (niedrigste) | `.opencode/opencode.json(c)`; äußere Verzeichnisse gehen inneren vor                                           |
+
+Ein Repository kann einen Anbieter, den du global verbietest, nicht wieder aktivieren:
+
+```jsonc title="~/.config/opencode/opencode.jsonc"
+{
+  "policies": [{ "action": "provider.use", "resource": "openai", "effect": "deny" }],
+}
+```
+
+```jsonc title="project/opencode.jsonc"
+{
+  "policies": [{ "action": "provider.use", "resource": "openai", "effect": "allow" }],
+}
+```
+
+`openai` bleibt verboten. Innerhalb einer Datei behalten Regeln ihre geschriebene
+Reihenfolge.
+
+## Console
+
+Ein Workspace in der [OpenCode Console](/console) übersetzt seine Richtlinien für
+Providers und Tools in Regeln und liefert sie mit der Workspace-Konfiguration aus.
+OpenCode hängt sie hinter alle selbst verfassten Regeln an, sodass sie das letzte
+Wort haben: Ein `deny` der Organisation lässt sich durch ein `allow` in einem
+Repository oder beim Benutzer nicht aufheben, und ein `allow` der Organisation hebt ein
+`deny` mit niedrigerer Autorität auf.
+
+Verbote durch diese Regeln nennen den Workspace:
+
+```text
+Blocked by Acme's policy
+```
+
+Die Regeln folgen dem verbundenen Konto.
+
+| Ereignis                       | Ergebnis                                                          |
+| ------------------------------ | ----------------------------------------------------------------- |
+| Console-Richtlinie ändert sich | Wird beim nächsten Abruf übernommen, etwa einmal pro Minute       |
+| Wechsel zu einem anderen Workspace | Regeln werden durch die des neuen Workspaces ersetzt      |
+| Verbindung getrennt            | Regeln werden gelöscht                                       |
+| Console nicht erreichbar       | Die letzten Regeln dieser Verbindung bleiben in Kraft        |
+
+Das Console-Plugin und das Richtlinien-Plugin lassen sich nicht über `plugins`
+deaktivieren; siehe [Plugin-Steuerung](/plugins#control).
+
+<Callout type="note">
+  Richtlinien konfigurieren weder Endpunkte noch Zugangsdaten und können einen nicht nutzbaren Anbieter nicht nutzbar
+  machen. Sie isolieren auch keinen Plugin-Code in einer Sandbox: Ein verbotener Anbieter wird auf dem normalen Weg über
+  Anbieter und Modell blockiert.
+</Callout>

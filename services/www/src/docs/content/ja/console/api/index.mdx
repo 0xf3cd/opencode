@@ -1,0 +1,156 @@
+---
+title: "API の概要"
+description: "サービスアカウントのキーまたはユーザートークンを使って OpenCode Console API で認証します。"
+---
+
+Console API を使うと、インテグレーションからワークスペースの設定を読み取ったり、予算を管理したりできます。パスは Console のベース URL からの相対パスです。
+
+```bash
+export CONSOLE_URL="https://opencode.ai/console"
+export SERVICE_API_KEY="oc_sk_..."
+
+curl --fail-with-body "${CONSOLE_URL}/api/v2/config" \
+  --header "Authorization: Bearer ${SERVICE_API_KEY}"
+```
+
+| API                                 | エンドポイント |
+| ----------------------------------- | ------------------------------------------ |
+| [推論](/console/api/inference) | `https://opencode.ai/inference/...`        |
+| [プロバイダー](/console/api/providers) | `https://opencode.ai/inference/custom/...` |
+| [予算](/console/api/budgets) | `/api/v1/budgets/members`                  |
+| [ワークスペースの設定](#workspace-config) | `GET /api/v2/config`                       |
+
+## サービスアカウント
+
+インテグレーションはサービスアカウントで認証します。サービスアカウントは、独自の API キー、使用量、[予算](/console/budgets#service-account-budgets)を持つ、人間ではないワークスペースのメンバーです。オーナーと管理者は **Keys** でサービスアカウントを管理します。
+
+1. **Keys** を開いて **Add Service Account** をクリックし、`CI Pipeline` のような名前を付けます。
+2. サービスアカウントを開き、**Add API Key** をクリックします。
+3. **Key name**、**Permissions**、必要に応じて **Expiry date** を指定し、**Create key** をクリックします。
+4. キーをコピーします。キーは一度しか表示されません。
+
+```text
+oc_sk_1a2b3c4d5e6f_...
+```
+
+キーはベアラートークンとして送信します。キーは 1 つのワークスペースに紐付いているため、ワークスペースを指定するヘッダーは不要です。
+
+```text
+Authorization: Bearer oc_sk_...
+```
+
+### 権限
+
+| 権限 | 許可される操作 |
+| -------------- | --------------------------------------------------------------------------------------------------------------- |
+| Inference only | [推論 API](/console/api/inference) と[プロバイダー API](/console/api/providers) へのリクエスト、および `GET /api/v2/config`。 |
+| All            | 上記のすべてに加え、管理者権限での Console API の利用（モデルの管理を除く）。 |
+
+一部の操作は、**All** のキーであっても、常に Console にサインインしたユーザーが行う必要があります。メンバーの招待、ロールの変更、メンバーの削除、キーの作成と取り消しがこれに該当します。
+
+### キーの取り消し
+
+サービスアカウントを開き、**API Keys** からキーを取り消します。サービスアカウントを削除すると、そのすべてのキーが取り消されます。取り消されたキーや期限切れのキーを使う自動処理は、ただちに HTTP `401` を受け取ります。
+
+## ユーザートークン
+
+ユーザートークンは、サインインしたユーザーとして、そのワークスペースでのロールに基づいて動作します。トークンは、ワークスペースを指定する `x-org-id` ヘッダーとともに送信します。
+
+```bash
+curl --fail-with-body "${CONSOLE_URL}/api/v2/config" \
+  --header "Authorization: Bearer ${USER_TOKEN}" \
+  --header "x-org-id: org_..."
+```
+
+[デバイスフロー](#device-flow)で取得したトークンは、サインイン時に選択したワークスペースに紐付いているため、このヘッダーは不要です。異なる `x-org-id` を指定すると `403` が返されます。
+
+## デバイスフロー
+
+OpenCode は、OAuth デバイス認可グラント（RFC 8628）でサインインします。ほかの CLI でも同じフローを使用できます。
+
+1. デバイスコードをリクエストします。トークンをワークスペースに紐付けるには、`supports_org_scope=true` を送信します。
+
+   ```bash
+   curl --fail-with-body "${CONSOLE_URL}/auth/device/code" \
+     --data "client_id=my-cli" \
+     --data "supports_org_scope=true"
+   ```
+
+   レスポンスには、`device_code`、`user_code`、`verification_uri_complete`、`expires_in`（600 秒）、`interval`（5 秒）が含まれます。
+
+2. ブラウザーで `verification_uri_complete` を開きます。これは `/console/device?user_code=...` のような、`https://opencode.ai` からの相対パスです。ユーザーがサインインしてワークスペースを選び、承認します。
+
+3. 同じ `client_id` を使い、`interval` 秒ごとにトークンをポーリングします。
+
+   ```bash
+   curl --fail-with-body "${CONSOLE_URL}/auth/device/token" \
+     --data "grant_type=urn:ietf:params:oauth:grant-type:device_code" \
+     --data "device_code=..." \
+     --data "client_id=my-cli"
+   ```
+
+   承認されるまで、レスポンスは `authorization_pending` を含む `400` です。成功すると、`access_token`、`refresh_token`、`expires_in`、`org_id` が返されます。
+
+4. アクセストークンの有効期限が切れる前にリフレッシュします。ワークスペースへの紐付けは維持されます。
+
+   ```bash
+   curl --fail-with-body "${CONSOLE_URL}/auth/device/token" \
+     --data "grant_type=refresh_token" \
+     --data "refresh_token=..." \
+     --data "client_id=my-cli"
+   ```
+
+各リフレッシュトークンは 1 回だけ使用できます。古いリフレッシュトークンを再利用すると、セッション全体が取り消されます。
+
+## ワークスペースの設定
+
+`GET /api/v2/config` は、ワークスペースで利用できるプロバイダーとモデルを OpenCode V2 の[設定](/config)形式で返します。OpenCode は `/connect` の後にこれを読み込みます。
+
+```bash
+curl --fail-with-body "${CONSOLE_URL}/api/v2/config" \
+  --header "Authorization: Bearer ${SERVICE_API_KEY}"
+```
+
+```json
+{
+  "providers": {
+    "opencode": {
+      "name": "OpenCode",
+      "env": ["OPENCODE_CONSOLE_TOKEN"],
+      "package": "aisdk:@ai-sdk/openai-compatible",
+      "settings": {
+        "baseURL": "https://opencode.ai/inference/openai/v1",
+        "apiKey": "{env:OPENCODE_CONSOLE_TOKEN}"
+      },
+      "headers": { "x-opencode-org-id": "org_..." },
+      "models": {
+        "kimi-k2.6": { "name": "Kimi K2.6" }
+      }
+    }
+  }
+}
+```
+
+| フィールド | 説明 |
+| ----------------------- | -------------------------------------------------------------------------------- |
+| `providers`             | Console、Go、接続済みのプロバイダー。それぞれのゲートウェイ設定とモデルを含みます。 |
+| `websearch`             | ホスト型の [Web 検索](/console/websearch)。有効な場合にメンバー向けに含まれます。 |
+| `mcp`                   | メンバー向けの Console MCP サーバー。 |
+| `experimental.policies` | ワークスペースの[ポリシー](/policies#console)ステートメント。 |
+
+設定は、すべてのキー権限レベルとメンバーロールで読み取れます。
+
+## エラー
+
+エラーは、エラー名を示す `_tag` を含む JSON で返されます。
+
+```json
+{ "_tag": "Forbidden" }
+```
+
+| ステータス | 意味 |
+| ------ | ---------------------------------------------------------------------------------------- |
+| `400`  | `OrgRequired`：ユーザートークンが `x-org-id` なしで送信されました。 |
+| `401`  | 認証情報がない、無効、期限切れ、または取り消されています。 |
+| `403`  | ワークスペースが異なる、権限がない、または **Inference only** のキーで Console のエンドポイントにアクセスしました。 |
+| `404`  | ワークスペースが存在しないか、削除されています。 |

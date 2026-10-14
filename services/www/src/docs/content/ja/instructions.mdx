@@ -1,0 +1,112 @@
+---
+title: "指示"
+---
+
+`AGENTS.md` ファイルを追加すると、プロジェクトに関する指示を OpenCode に継続的に与えられます。ビルドコマンド、アーキテクチャのメモ、コーディング規約、検証の要件などを記述します。
+
+```md title="AGENTS.md"
+# Project instructions
+
+- Run `bun typecheck` after changing TypeScript.
+- Keep database queries in `src/database`.
+- Do not edit generated files directly.
+```
+
+プロジェクトの指示ファイルはコミットしておくと、リポジトリで作業する全員が同じ指示を受け取れます。
+
+## スコープ
+
+`AGENTS.md` は、その指示を適用したいディレクトリに配置します。OpenCode はグローバルファイルを読み込んだ後、現在のワークスペースディレクトリからホームディレクトリに向かって、すべての `AGENTS.md` を読み込みます。ホームディレクトリ外のワークスペースでは、プロジェクトのルートで探索を停止します。
+
+```text
+~/.config/opencode/AGENTS.md
+~/code/my-project/AGENTS.md
+~/code/my-project/packages/AGENTS.md
+~/code/my-project/packages/web/AGENTS.md  ← current workspace
+```
+
+この例では、4 つのファイルすべてが読み込まれ、次の順序で結合されます。
+
+```text
+~/.config/opencode/AGENTS.md
+packages/web/AGENTS.md
+packages/AGENTS.md
+AGENTS.md
+```
+
+どこでも適用される指示はグローバルファイルに記述します。リポジトリ全体に関わる指示はプロジェクトのルートに、より限定的な指示は対象のコードの近くに配置します。OpenCode はファイルを結合するだけで、ファイル間の矛盾は解決しません。
+
+ワークスペースがプロジェクトのルートの外にある場合は、グローバルファイルだけが読み込まれます。グローバルファイルを無効にせずにプロジェクトの `AGENTS.md` の探索だけをスキップするには、`OPENCODE_DISABLE_PROJECT_CONFIG=1` を設定します。
+
+<Callout type="note">
+  OpenCode V2 が認識するのは `AGENTS.md` だけです。`CLAUDE.md` をフォールバックとして使うことはありません。
+</Callout>
+
+## 探索
+
+ワークスペースより下にある指示ファイルは、エージェントがプロジェクトを探索する過程で検出されます。ファイルを読み取ったりディレクトリの内容を一覧表示したりすると、その対象とワークスペースの間にある `AGENTS.md` ファイルが読み込まれます。
+
+```text
+my-project/                         ← current workspace
+├── AGENTS.md                       loaded initially
+└── packages/
+    └── web/
+        ├── AGENTS.md               loaded when this area is read
+        └── src/
+            └── app.ts              read target
+```
+
+ネストしたファイルは近いものから順に読み込まれ、その指示エントリがモデルから見える履歴に残っている間は重複して読み込まれません。同じ領域を再度読み取っても、通常は再び挿入されません。圧縮やリバートによってそのエントリが削除された場合は、その後の読み取りで再びファイルが読み込まれることがあります。
+
+ネストしたファイルを読み込んだ後に編集しても、変更は自動的には検出されません。更新した内容をすぐに反映させる必要がある場合は、新しいセッションを開始してください。
+
+## 順序
+
+最初に、選択されたエージェントまたはプロバイダーのシステムプロンプトが送信されます。続いて OpenCode は、初期の指示を次の順序で組み立てます。
+
+```text
+1. Agent or provider system prompt
+2. Built-in environment and date context
+3. Code Mode tool guidance, when enabled
+4. Global and project AGENTS.md files
+5. Available skill, reference, and MCP guidance
+6. Session-specific instruction entries supplied through the API
+```
+
+これらのソースは、互いに上書きされるのではなく結合されます。後から検出されたネストした `AGENTS.md` ファイルは、検出された順にセッション履歴に追加されます。
+
+## 更新
+
+セッションの実行中にグローバルの `AGENTS.md` や上位方向に探索された `AGENTS.md` を編集すると、その指示を更新できます。
+
+```bash
+$ printf '\n- Run the integration suite before committing.\n' >> AGENTS.md
+```
+
+次のモデルリクエストの前に OpenCode が変更を検出し、保留中の入力を渡す前に指示の更新を追加します。
+
+```text
+AGENTS.md changes
+→ instruction update
+→ next prompt
+```
+
+- 常に読み込まれる `AGENTS.md` をすべて削除すると、それまでの指示がもう適用されないことがセッションに通知されます。
+- 一時的な読み取りエラーが発生した場合は、指示が削除されたとは見なさず、最後に確認できた指示が維持されます。
+- セッションを移動しても指示の状態は保持されるため、移動先の指示は更新として追加されます。
+- セッションのリバートを確定すると、指示の状態がクリアされ、次のプロンプトの前に指示が再読み込みされます。
+
+指示の内容は特権的な扱いのままです。クライアントからは、どのソースが変更されたかはわかりますが、その内容は見えません。
+
+## 設定
+
+V2 の設定スキーマは `instructions` 配列を受け付けますが、現在の V2 では、そこに指定したファイル、glob パターン、URL は解決されません。次の設定を記述しても、現時点ではモデルに指示は追加されません。
+
+```jsonc title="opencode.jsonc"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "instructions": ["CONTRIBUTING.md", "docs/guidelines/*.md", "https://example.com/instructions.md"],
+}
+```
+
+V2 で有効な指示には `AGENTS.md` を使用してください。設定ファイルの場所と優先順位については、[設定](/config)を参照してください。

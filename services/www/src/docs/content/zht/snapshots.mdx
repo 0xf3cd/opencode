@@ -1,0 +1,111 @@
+---
+title: "快照"
+---
+
+快照可讓你同時復原最近的對話和檔案變更。你可以用它來修改最近的工作，但重要的內容仍應以 Git commit 或備份保存。
+
+## 工作流程
+
+在你想修改的回應之後執行 `/undo`。OpenCode 會暫存這次回復、還原受影響的檔案，並把被移除的提示詞放回輸入框，讓你重新編輯。
+
+```text
+/undo
+
+# Edit the restored prompt, then submit it again.
+Add validation without changing the public API.
+```
+
+送出編輯後的提示詞，就會確認套用暫存的回復。送出之前，可以執行 `/redo` 取消回復，還原你在執行 `/undo` 之前的對話和檔案。
+
+```text
+/redo
+```
+
+終端機也提供預設的快速鍵：
+
+| 動作 | 指令 | 快速鍵 |
+| --- | --- | --- |
+| 暫存回復上一則訊息 | `/undo` | `<leader>u` |
+| 取消暫存的回復 | `/redo` | `<leader>r` |
+
+你也可以選取較早的訊息並選擇 **Revert**，暫存回復到該訊息的時間點。
+
+## 擷取
+
+在每個模型步驟中，OpenCode 會在呼叫模型之前嘗試建立一次快照，並在該步驟記錄為成功或失敗時再建立一次。助理訊息會記錄這兩個快照之間有哪些路徑發生變更。
+
+```text
+before model step ── snapshot A
+model edits src/api.ts
+step finishes ────── snapshot B ── changed: src/api.ts
+```
+
+擷取採盡力而為的方式。如果任一快照無法取得，對話仍會繼續，但該步驟的檔案變更可能無法還原。
+
+## 範圍
+
+快照涵蓋工作階段在 Git worktree 中的作用目錄。例如，在 `packages/app` 中開啟的工作階段，會擷取 `packages/app` 底下符合條件的檔案，而不會擷取儲存庫中其他位置的變更。
+
+| 內容 | 是否擷取 | 範例 |
+| --- | --- | --- |
+| 作用目錄中已追蹤的檔案 | 是 | `packages/app/src/app.tsx` |
+| 未被忽略、單檔不超過 2 MiB 的未追蹤檔案 | 是 | `packages/app/notes.txt` |
+| 被 Git 忽略的檔案 | 否 | `packages/app/dist/app.js` |
+| 單檔大於 2 MiB 的未追蹤檔案 | 否 | `packages/app/debug.log` |
+| 作用目錄以外的檔案 | 否 | `packages/server/src/index.ts` |
+| Git 中繼資料及其他副作用 | 否 | commit、分支、資料庫或處理程序 |
+
+檔案系統快照需要 Git 儲存庫。在儲存庫以外，`/undo` 仍可回復對話記錄，但無法還原檔案。
+
+## 還原
+
+回復只會還原所選對話邊界之後、歸屬於助理步驟的路徑。每個路徑都會回到第一個被回復的步驟之前的狀態；如果某個檔案是由這些步驟建立的，而且當時並不存在，就會被移除。
+
+| 時間軸 | `src/api.ts` | `src/new.ts` |
+| --- | --- | --- |
+| 所選邊界 | 版本 A | 不存在 |
+| 之後的助理步驟 | 版本 B | 已建立 |
+| 回復之後 | 版本 A | 已移除 |
+
+不歸屬於這些步驟的路徑不會被變動。受影響路徑上目前的編輯可能會被覆寫，因此繼續之前，請先檢查還原摘要和 `git diff`。
+
+```sh
+git diff --stat
+git diff
+```
+
+## 儲存
+
+OpenCode 會將快照儲存在本機資料目錄下一個獨立的內部 Git 物件資料庫中。擷取快照不會建立 commit、移動分支，也不會刻意變更儲存庫的索引。
+
+```sh
+# Your repository remains an ordinary dirty worktree after capture.
+git status --short
+```
+
+快照物件可能包含已追蹤檔案及符合條件的未追蹤檔案的完整內容。請將 OpenCode 資料目錄視為敏感的本機資料。
+
+## 設定
+
+快照預設為啟用。在[設定](/config#snapshots)中將 `snapshots` 設為 `false`，即可停止之後的檔案系統擷取。
+
+```jsonc title="opencode.jsonc"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "snapshots": false,
+}
+```
+
+停用快照不會刪除已儲存的快照。對話回復仍然可用，但如果沒有擷取到的檔案系統狀態，就無法還原相關的檔案變更。
+
+## 安全性
+
+快照只是一項便利功能，並非交易機制或備份：
+
+- shell 指令可能會變更服務、處理程序、網路資源、資料庫、Git 狀態、被忽略的輸出，或作用目錄以外的檔案。還原快照並不會撤銷這些影響。
+- 當擷取失敗，或沒有可用的快照組時，中斷或失敗的工作可能會留下變更。
+- 還原受影響的路徑會覆寫其目前內容。取消暫存的回復也可能覆寫之後的編輯。
+- 工作階段執行期間，OpenCode 會拒絕回復操作，但外部編輯器和指令仍可能在擷取與還原之間變更 worktree。
+- 確認回復只會將訊息從目前的對話畫面中移除，並不會從持久保存的工作階段記錄或既有的快照儲存空間中移除。這不是安全清除。
+
+在有未提交變更的 worktree 上使用 `/undo` 之前，請先提交或備份重要的工作。

@@ -1,0 +1,232 @@
+---
+title: "Politikalar"
+description: "Adlandırılmış kaynaklar üzerindeki OpenCode eylemlerine izin verin veya bunları reddedin; son söz kuruluş politikasındadır."
+---
+
+Politikalar, OpenCode'un adlandırılmış bir kaynak üzerinde bir eylem gerçekleştirip gerçekleştiremeyeceğine karar verir.
+`policies` altında yazılırlar ve bağlı bir [OpenCode Console](/console) çalışma alanı tarafından da iletilebilirler.
+
+Politikalar [izinlerden](/permissions) ayrıdır. İzinler, `allow`, `deny` veya `ask` sonucunu verebilen ajan bazındaki
+araç kurallarıdır. Politikalar ise ikilidir, hiçbir zaman onay istemez ve yalnızca izinlerin ve sağlayıcıların normalde
+izin vereceği şeyleri daraltır.
+
+## Yapılandırma
+
+Bir sağlayıcıyı her yerde reddetmek için `opencode.jsonc` dosyasına bir ifade ekleyin:
+
+```jsonc
+{
+  "$schema": "https://opencode.ai/config.json",
+  "policies": [{ "action": "provider.use", "resource": "openai", "effect": "deny" }],
+}
+```
+
+Reddedilen bir sağlayıcı, geçerli kimlik bilgileri olsa bile katalogdan ve model seçiminden kaybolur.
+
+Önceki sürümler politikaları `experimental.policies` anahtarından okuyordu. Bu anahtar hâlâ çalışır ve `policies` ile
+birleştirilir:
+
+```jsonc
+{
+  "experimental": {
+    "policies": [{ "action": "provider.use", "resource": "openai", "effect": "deny" }],
+  },
+}
+```
+
+## İfadeler
+
+Her ifadenin üç alanı vardır:
+
+| Alan       | Değerler                                      | Anlam                                                |
+| ---------- | --------------------------------------------- | ---------------------------------------------------- |
+| `action`   | `provider.use`, `tool.use`, `integration.use` | Denetlenen işlem                                     |
+| `resource` | dize veya joker karakterli kalıp              | İfadenin neye uygulandığı; eyleme bağlıdır           |
+| `effect`   | `allow`, `deny`                               | Bu ifade eşleştiğinde verilen karar                  |
+
+Doğrulamadan geçemeyen ifadeler, sunucu günlüğüne bir uyarı yazılarak atılır; listenin geri kalanı yine uygulanır. Bir
+`deny` ifadesini düzenledikten sonra günlüğü kontrol edin.
+
+## Eşleştirme
+
+Kaynaklar, izinlerle aynı tam değer joker karakterlerini kullanır: `*` sıfır veya daha fazla karakterle, `?` ise tek bir
+karakterle eşleşir.
+
+```jsonc
+{
+  "policies": [{ "action": "provider.use", "resource": "company-*", "effect": "deny" }],
+}
+```
+
+Bu ifade `company-us` ve `company-eu` sağlayıcılarını reddeder. ` *` ile biten bir kalıp, değerin argümansız hâliyle de
+eşleşir; bu yüzden `shell:git push *` tek başına `git push` komutunu da kapsar.
+
+## Sıra
+
+Birden fazla ifade eşleştiğinde sonuncusu geçerli olur. Özgüllük kuralı yoktur; bu yüzden geniş kapsamlı ifadeleri önce,
+istisnaları onlardan sonra yazın. Hiçbiri eşleşmezse eyleme izin verilir.
+
+```jsonc
+{
+  "policies": [
+    { "action": "provider.use", "resource": "*", "effect": "deny" },
+    { "action": "provider.use", "resource": "anthropic", "effect": "allow" },
+  ],
+}
+```
+
+Yalnızca Anthropic kullanılabilir kalır.
+
+## Sağlayıcılar
+
+`provider.use`, bir sağlayıcının hiç kullanılıp kullanılamayacağını denetler. Kaynak, sağlayıcı ID'sidir: `anthropic`,
+`openai`, `opencode` veya [`providers`](/providers) içindeki özel bir ID.
+
+```jsonc
+{
+  "providers": {
+    "company-ai": {
+      "package": "@opencode/ai/providers/openai-compatible",
+      "settings": { "baseURL": "https://ai.company.example/v1" },
+    },
+  },
+  "policies": [
+    { "action": "provider.use", "resource": "*", "effect": "deny" },
+    { "action": "provider.use", "resource": "company-ai", "effect": "allow" },
+  ],
+}
+```
+
+`providers` girdisi uç noktayı yapılandırır; ifadeler ise onu OpenCode'un kullanacağı tek sağlayıcı yapar. Politika, bir
+sağlayıcının nasıl tanındığından bağımsız olarak uygulanır: katalog verileri, ortam değişkenleri, kayıtlı hesaplar,
+yerleşik eklentiler veya yapılandırma.
+
+V1'deki `enabled_providers` ve `disabled_providers` listeleri yerine `provider.use` kullanın. V1 dosyaları hâlâ yüklenir;
+[V1'den geçiş](/migrate-v1#supported-fields-without-direct-native-equivalents) sayfasına bakın.
+
+## Araçlar
+
+`tool.use` ifadeleri bir [izin](/permissions) denetimini kesin olarak reddeder. Kaynak `<action>:<value>` biçimindedir ve
+aracın denetlediği her kaynakla karşılaştırılır.
+
+```jsonc
+{
+  "policies": [
+    { "action": "tool.use", "resource": "shell:git push *", "effect": "deny" },
+    { "action": "tool.use", "resource": "edit:*.env", "effect": "deny" },
+    { "action": "tool.use", "resource": "webfetch:*", "effect": "deny" },
+  ],
+}
+```
+
+Reddedilen bir denetim, onay istemek yerine `Blocked by configuration policy` hatasıyla başarısız olur. Ajan kurallarından
+ve kaydedilmiş onaylardan sonra uygulandığı için hem `ask` sonucunu hem de “Allow always” onayını geçersiz kılar.
+
+| Kalıp                        | Engellediği                                 |
+| ---------------------------- | ------------------------------------------- |
+| `shell:*`                    | Tüm shell komutları                         |
+| `read:*/.ssh/*`              | SSH dosyalarını okuma                       |
+| `external_directory:*`       | Location veya worktree dışındaki her erişim |
+| `subagent:general`           | Tek bir alt ajanı başlatma                  |
+| `github_delete_repository:*` | Tek bir MCP aracı                           |
+| `*`                          | Henüz reddedilmemiş her şey                 |
+
+`allow` etkili bir `tool.use` ifadesi hiçbir zaman erişim vermez. Yalnızca daha önceki, daha geniş kapsamlı bir `deny`
+ifadesini kaldırır; ardından kararı ajanın kendi kuralları verir.
+
+```jsonc
+{
+  "policies": [
+    { "action": "tool.use", "resource": "shell:*", "effect": "deny" },
+    { "action": "tool.use", "resource": "shell:git status *", "effect": "allow" },
+  ],
+}
+```
+
+`git status` için karar ajanın `shell` kuralına bırakılır; diğer tüm komutlar engellenir.
+
+## Entegrasyonlar
+
+`integration.use`, bir MCP sunucusunun, becerinin veya eklentinin yüklenip yüklenmeyeceğini denetler. Kaynak, entegrasyon
+türü ve ID'sidir:
+
+| Kaynak            | Uygulandığı yer                                                   |
+| ----------------- | ----------------------------------------------------------------- |
+| `mcp:<server>`    | Yapılandırılmış adıyla bir [MCP sunucusu](/mcp-servers)           |
+| `skill:<id>`      | ID'siyle bir [beceri](/skills)                                    |
+| `plugin:<target>` | Sürümsüz paket adı veya mutlak yoluyla bir [eklenti](/plugins)    |
+
+```jsonc
+{
+  "policies": [
+    { "action": "integration.use", "resource": "mcp:*", "effect": "deny" },
+    { "action": "integration.use", "resource": "mcp:github", "effect": "allow" },
+    { "action": "integration.use", "resource": "plugin:opencode-acme-cli", "effect": "deny" },
+  ],
+}
+```
+
+Reddedilen bir MCP sunucusu veya beceri, nasıl yapılandırılmış olursa olsun kaldırılır; reddedilen bir eklenti ise
+yüklenmez.
+
+## Öncelik sırası
+
+Sıradan ayarlarda en yakın yapılandırma geçerli olur. Politikalar bunu tersine çevirir: daha geniş kapsamlı
+yapılandırmadan gelen ifadeler daha sonra değerlendirilir ve böylece daha dar kapsamlı olanları geçersiz kılar. Yönetilen
+yapılandırma ve bağlı Console her zaman son sözü söyler.
+
+| Yetki       | Kaynak                                                                                                         |
+| ----------- | -------------------------------------------------------------------------------------------------------------- |
+| 1 (en yüksek) | Bağlı OpenCode Console çalışma alanı                                                                         |
+| 2           | macOS yönetilen tercihleri (`/Library/Managed Preferences/ai.opencode.managed.plist`)                          |
+| 3           | Sistem `opencode.json(c)` dosyası (`/Library/Application Support/opencode`, `/etc/opencode`, `%ProgramData%\opencode`) |
+| 4           | Genel `~/.config/opencode/opencode.json(c)` dosyası                                                            |
+| 5           | Doğrudan `opencode.json(c)` dosyası; dış dizinler iç dizinlere üstün gelir                                     |
+| 6 (en düşük) | `.opencode/opencode.json(c)` dosyası; dış dizinler iç dizinlere üstün gelir                                   |
+
+Bir depo, genel olarak reddettiğiniz bir sağlayıcıyı yeniden etkinleştiremez:
+
+```jsonc title="~/.config/opencode/opencode.jsonc"
+{
+  "policies": [{ "action": "provider.use", "resource": "openai", "effect": "deny" }],
+}
+```
+
+```jsonc title="project/opencode.jsonc"
+{
+  "policies": [{ "action": "provider.use", "resource": "openai", "effect": "allow" }],
+}
+```
+
+`openai` reddedilmiş olarak kalır. Tek bir dosya içinde ifadeler yazıldıkları sırayı korur.
+
+## Console
+
+[OpenCode Console](/console) üzerindeki bir çalışma alanı, Providers ve Tools politikalarını ifadelere derler ve bunları
+çalışma alanı yapılandırmasıyla birlikte döndürür. OpenCode bu ifadeleri yazılmış tüm ifadelerin ardına ekler; bu yüzden
+son söz onlarındır: bir kuruluşun `deny` ifadesi bir deponun veya kullanıcının `allow` ifadesiyle kaldırılamaz, bir
+kuruluşun `allow` ifadesi ise daha düşük yetkili bir `deny` ifadesini kaldırır.
+
+Bu ifadelerden kaynaklanan retler çalışma alanının adını belirtir:
+
+```text
+Blocked by Acme's policy
+```
+
+İfadeler bağlı hesaba göre belirlenir.
+
+| Olay                             | Sonuç                                                    |
+| -------------------------------- | -------------------------------------------------------- |
+| Console politikası değişir       | Bir sonraki alımda, yaklaşık dakikada bir uygulanır      |
+| Başka bir çalışma alanına geçilir | İfadeler o çalışma alanının ifadeleriyle değiştirilir   |
+| Bağlantı kesilir                 | İfadeler temizlenir                                      |
+| Console'a erişilemez             | O bağlantının son ifadeleri geçerliliğini korur          |
+
+Console eklentisi ve politika eklentisi `plugins` üzerinden devre dışı bırakılamaz; [eklenti denetimi](/plugins#control)
+bölümüne bakın.
+
+<Callout type="note">
+  Politikalar uç noktaları veya kimlik bilgilerini yapılandırmaz ve kullanılamayan bir sağlayıcıyı kullanılabilir hâle
+  getiremez. Eklenti kodunu da korumalı alana (sandbox) almaz: reddedilen bir sağlayıcı, normal sağlayıcı ve model yolunda
+  engellenir.
+</Callout>

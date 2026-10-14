@@ -1,0 +1,192 @@
+---
+title: "Fejlfinding"
+---
+
+<Callout type="tip">
+  Du kan bede OpenCode om at fejlsøge sig selv. Beskriv problemet, og bed den om at bruge denne side om fejlfinding; den
+  kan læse trinene nedenfor, undersøge sin tjeneste og sine logfiler og hjælpe med at finde problemet.
+</Callout>
+
+OpenCode bruger en klient-server-arkitektur. En baggrundsserver ejer sessioner, plugins, tilladelser og anden
+applikationstilstand. Start med at finde ud af, om et problem ligger i en klient, i den fælles server eller i et bestemt
+projekt.
+
+## Kontroller baggrundstjenesten
+
+Vis oplysninger om den aktuelle server:
+
+```bash
+opencode service status
+```
+
+Kontroller at API'et er sundt:
+
+```bash
+opencode api get /api/info
+```
+
+Genstart tjenesten, hvis den sidder fast eller ikke er sund:
+
+```bash
+opencode service restart
+```
+
+Du kan også stoppe og starte den eksplicit:
+
+```bash
+opencode service stop
+opencode service start
+```
+
+<Callout type="note">
+  OpenCode finder eller starter normalt den fælles baggrundstjeneste automatisk. Du behøver kun tjenestekommandoerne,
+  når du skal diagnosticere dens livscyklus.
+</Callout>
+
+## Tillad en browser-origin
+
+Hvis en browserklient på en anden origin ikke kan oprette forbindelse på grund af CORS, så føj klientens origin til
+tjenestekonfigurationen:
+
+```bash
+opencode service set cors http://192.168.1.10:3001
+opencode service get cors
+```
+
+Brug en præcis HTTP- eller HTTPS-origin, inklusive porten når det er nødvendigt, uden sti eller afsluttende skråstreg.
+Hvis du vil tillade flere origins, så angiv en kommasepareret liste som ét argument; mellemrum omkring hver origin
+fjernes:
+
+```bash
+opencode service set cors "http://192.168.1.10:3001, https://app.example.com"
+```
+
+`service get cors` udskriver et JSON-array. Fjern den konfigurerede liste med:
+
+```bash
+opencode service unset cors
+```
+
+Når du angiver eller fjerner tjenestekonfiguration, stoppes baggrundstjenesten. Den nye konfiguration træder i kraft
+ved næste start; brug `opencode service start` til at starte den eksplicit.
+
+For en server i forgrunden skal du gentage `--cors` for hver ekstra tilladt origin:
+
+```bash
+opencode serve --cors http://192.168.1.10:3001 --cors https://app.example.com
+```
+
+Med `serve --service` tilsidesætter angivne `--cors`-flag den gemte liste for den pågældende proces. Uden disse flag
+bruger tjenestetilstanden den gemte liste. CORS ændrer ikke lytteadressen og omgår ikke serverens godkendelse.
+
+## Undersøg API'et
+
+Kommandoen `api` bruger den lokale tjenesteopdagelse og godkendelsesflowet. Den accepterer enten en HTTP-metode og en
+sti eller et OpenAPI-operations-ID.
+
+Se [API-referencen](/api) for alle endpoints og operations-ID'er.
+
+Send en JSON-brødtekst i anmodningen med `--data` eller `-d`, og tilføj headers med `--header` eller `-H`.
+
+<Callout type="warning">
+  Når du kører `opencode api`, kan baggrundstjenesten blive startet, hvis der ikke er en kompatibel og sund tjeneste
+  tilgængelig.
+</Callout>
+
+## Læs logfiler
+
+Installerede builds skriver logfiler til:
+
+```text
+~/.local/share/opencode/log/opencode.log
+```
+
+Følg loggen, mens du genskaber problemet:
+
+```bash
+tail -f ~/.local/share/opencode/log/opencode.log
+```
+
+Hver linje indeholder et `run`-ID for processen og et `role`-felt. Brug `role=server` til aktivitet i sessioner,
+udbydere, plugins, tilladelser og værktøjer.
+
+```bash
+grep 'role=server' ~/.local/share/opencode/log/opencode.log
+grep 'run=8fc3b1d5' ~/.local/share/opencode/log/opencode.log
+```
+
+## Indsaml CPU- og hukommelsesprofiler
+
+På macOS og Linux kan du sende et signal til en kørende OpenCode-proces for at indsamle diagnosticeringsdata. Hent
+baggrundsserverens PID fra health-endpointet:
+
+```bash
+opencode api get /api/info
+```
+
+Brug `pid` fra svaret med et af disse signaler:
+
+- `SIGPROF` indsamler en CPU-profil over ti sekunder:
+
+  ```bash
+  kill -SIGPROF <pid>
+  ```
+
+  Resultatet skrives til logmappen som `cpu-<pid>-<timestamp>.cpuprofile`.
+
+- `SIGUSR1` tager et snapshot af hukommelsen (heap):
+
+  ```bash
+  kill -SIGUSR1 <pid>
+  ```
+
+  Resultatet skrives til logmappen som `heap-<pid>-<timestamp>.heapsnapshot`.
+
+Vent på `CPU profile written` eller `heap snapshot written` i `opencode.log`, før du åbner filen. Den tilhørende
+logpost indeholder hele stien. Du kan undersøge begge filtyper i Chrome DevTools.
+
+<Callout type="note">
+  Profiler udløst af signaler er ikke tilgængelige på Windows. Når der skrives et heap-snapshot, kan processen gå i
+  pause, og dens hukommelsesforbrug kan stige midlertidigt.
+</Callout>
+
+## Tjenestefiler
+
+Den fælles server registrerer sig selv i:
+
+```text
+~/.local/state/opencode/service.json
+```
+
+Dens private tjenestekonfiguration gemmes separat i:
+
+```text
+~/.config/opencode/service.json
+```
+
+Databasen ligger normalt i:
+
+```text
+~/.local/share/opencode/opencode.db
+```
+
+`OPENCODE_DB` kan tilsidesætte databasens placering.
+
+<Callout type="warning">
+  Slet eller rediger ikke tjenestefiler eller databasen under fejlfinding. Brug tjenestekommandoerne til at styre
+  dæmonen, og tag en sikkerhedskopi, før du undersøger gemte data med eksterne værktøjer.
+</Callout>
+
+## Rapporter et problem
+
+Medtag følgende, når du rapporterer et problem, der kan genskabes:
+
+- Output fra `opencode --version`
+- Output fra `opencode service status`
+- Den korteste række trin, der genskaber problemet
+- Om problemet påvirker den fælles tjeneste, en bestemt klient eller ét projekt
+- Relevante loglinjer, inklusive deres `run`- og `role`-felter
+
+Fjern API-nøgler, autorisations-headers, prompts, filindhold og andre følsomme data, før du deler logfiler.
+
+Opret problemer, der kan genskabes, i [GitHub Issues](https://github.com/anomalyco/opencode/issues).

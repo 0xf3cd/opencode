@@ -1,0 +1,408 @@
+---
+title: "Сочетания клавиш"
+---
+
+Сочетания клавиш настраиваются в `cli.json`:
+
+```json title="cli.json"
+{
+  "keybinds": {
+    "leader": "ctrl+space",
+    "command.palette.show": "ctrl+k",
+    "app.exit": ["ctrl+c", "ctrl+d"],
+    "app.debug": false
+  },
+  "leader": {
+    "timeout": 1500
+  }
+}
+```
+
+Для одной клавиши используйте строку:
+
+```json
+{
+  "keybinds": {
+    "command.palette.show": "ctrl+k"
+  }
+}
+```
+
+Альтернативные варианты разделяйте запятыми:
+
+```json
+{
+  "keybinds": {
+    "app.exit": "ctrl+c,ctrl+d"
+  }
+}
+```
+
+Чтобы отключить сочетание, укажите `"none"` или `false`:
+
+```json
+{
+  "keybinds": {
+    "app.debug": "none",
+    "help.show": false
+  }
+}
+```
+
+Чтобы настроить обработку события, используйте объект:
+
+```json
+{
+  "keybinds": {
+    "prompt.paste": {
+      "key": "ctrl+v",
+      "preventDefault": false
+    }
+  }
+}
+```
+
+По умолчанию `leader` — это `ctrl+x`. `<leader>` в других сочетаниях ссылается на эту клавишу.
+
+```json
+{
+  "keybinds": {
+    "leader": "ctrl+space",
+    "model.list": "<leader>m"
+  },
+  "leader": {
+    "timeout": 2000
+  }
+}
+```
+
+Неизвестные ID команд отклоняются.
+
+## Приложение
+
+| ID | По умолчанию | Описание |
+| --- | --- | --- |
+| `leader` | `ctrl+x` | Клавиша leader для составных сочетаний |
+| `app.exit` | `ctrl+c,ctrl+d,<leader>q` | Выйти из приложения |
+| `app.debug` | `none` | Показать или скрыть панель отладки |
+| `app.console` | `none` | Показать или скрыть консоль |
+| `app.scrap` | `none` | Открыть экран черновика |
+| `app.toggle.animations` | `none` | Включить или выключить анимацию |
+| `app.toggle.file_context` | `none` | Включить или выключить контекст файла |
+| `app.toggle.diffwrap` | `none` | Включить или выключить перенос строк в diff |
+| `app.toggle.paste_summary` | `none` | Включить или выключить сводку вставки |
+| `command.palette.show` | `ctrl+p` | Показать доступные команды |
+| `help.show` | `none` | Открыть справку |
+| `docs.open` | `none` | Открыть документацию |
+| `opencode.settings` | `none` | Открыть настройки |
+| `server.pair` | `none` | Выполнить сопряжение устройства |
+| `service.restart` | `none` | Перезапустить сервис |
+
+## Mini
+
+Команда `app.clear` работает только в [`opencode mini`](/cli). Нажмите `ctrl+l`, чтобы очистить видимую часть экрана и
+заново отрисовать промпт. История прокрутки терминала сохраняется.
+
+```json title="cli.json"
+{
+  "keybinds": {
+    "app.clear": "ctrl+l"
+  }
+}
+```
+
+| ID | По умолчанию | Описание |
+| --- | --- | --- |
+| `app.clear` | `ctrl+l` | Очистить экран |
+
+## Просмотр diff
+
+Нажмите `d` (`diff.switch_source`), чтобы выбрать **All**, **Committed**, **Uncommitted** или **Last turn** (внутри
+сессии), либо выберите **Base**, чтобы сменить ветку для сравнения. Выбор сохраняется до выхода из TUI. Начальную
+область можно задать в [`diffs.source` в `cli.json`](/cli/config#diffs).
+
+Сочетания для прокрутки, постраничного перехода и перехода в начало или конец всегда управляют diff. Переключения фокуса
+с клавиатуры нет: щелкните файл, чтобы открыть его, щелкните папку, чтобы развернуть или свернуть ее, а дерево файлов
+прокручивайте колесом мыши.
+
+Для перехода между файлами используйте `n` / `p` или `alt+down` / `alt+up` (Option в macOS). В режиме просмотра diff
+сочетания с Alt переключают файлы, а не вкладки сессий.
+
+Нажмите `m`, чтобы отметить файл как просмотренный и свернуть тело его патча. В режиме всех файлов повторное нажатие
+`m` снимает отметку и снова раскрывает патч. В режиме одного файла после отметки автоматически открывается следующий
+файл, но на последнем файле переход останавливается, а не начинается сначала. Снятие отметки никогда не переключает
+файл.
+
+Щелкните правой кнопкой мыши файл на боковой панели или его заголовок в diff и выберите **Mark complete** (или
+**Mark incomplete**). Это меняет то же состояние «просмотрено», что и `m`. Если отметить через меню другой файл, он не
+выбирается, а текущий читаемый файл не переключается.
+
+Альтернативы `diff.help` с Shift нужны для терминалов, которые при нажатии `?` сообщают о модификаторе Shift.
+
+| ID | По умолчанию | Описание |
+| --- | --- | --- |
+| `diff.open` | `none` | Открыть просмотр diff |
+| `diff.close` | `escape,q` | Закрыть просмотр diff |
+| `diff.down` | `j,down` | Прокрутить diff вниз |
+| `diff.up` | `k,up` | Прокрутить diff вверх |
+| `diff.page.down` | `pagedown,ctrl+f` | Прокрутить diff на страницу вниз |
+| `diff.page.up` | `pageup,ctrl+b` | Прокрутить diff на страницу вверх |
+| `diff.half_page.down` | `ctrl+d` | Прокрутить diff на полстраницы вниз |
+| `diff.half_page.up` | `ctrl+u` | Прокрутить diff на полстраницы вверх |
+| `diff.first` | `gg,home` | Перейти в начало diff |
+| `diff.last` | `shift+g,end` | Перейти в конец diff |
+| `diff.next_hunk` | `]` | Перейти к следующему фрагменту diff |
+| `diff.previous_hunk` | `[` | Перейти к предыдущему фрагменту diff |
+| `diff.next_file` | `n,alt+down` | Перейти к следующему файлу diff |
+| `diff.previous_file` | `p,alt+up` | Перейти к предыдущему файлу diff |
+| `diff.toggle_file_tree` | `b` | Показать или скрыть дерево файлов |
+| `diff.single_patch` | `s` | Включить или выключить режим одного патча |
+| `diff.switch_source` | `d` | Выбрать область просмотра diff |
+| `diff.toggle_view` | `v` | Переключить раздельный или объединенный вид |
+| `diff.mark_reviewed` | `m` | Отметить выбранный файл как просмотренный или снять отметку |
+| `diff.help` | `?,shift+?,shift+/` | Показать другие сочетания просмотра diff |
+
+Устаревшие записи конфигурации `diff.toggle`, `diff.expand`, `diff.expand_all`, `diff.collapse` и `diff.switch_focus`
+по-прежнему принимаются, но больше не регистрируют сочетания.
+
+## Внешний вид и навигация
+
+| ID | По умолчанию | Описание |
+| --- | --- | --- |
+| `prompt.editor` | `<leader>e` | Открыть внешний редактор |
+| `theme.switch` | `none` | Показать доступные темы |
+| `theme.switch_mode` | `none` | Переключить светлый и темный режим темы |
+| `theme.mode.lock` | `none` | Закрепить режим темы или снять закрепление |
+| `session.sidebar.toggle` | `<leader>b` | Показать или скрыть боковую панель |
+| `terminal.toggle` | `<leader>t` | Показать или скрыть панель терминала |
+| `session.toggle.scrollbar` | `none` | Показать или скрыть полосу прокрутки сессии |
+| `opencode.status` | `<leader>s` | Показать статус |
+| `opencode.debug` | `none` | Показать отладочную информацию |
+
+## Сессии
+
+| ID | По умолчанию | Описание |
+| --- | --- | --- |
+| `session.export` | `<leader>x` | Экспортировать сессию в редактор |
+| `session.copy` | `none` | Скопировать историю сессии |
+| `session.move` | `none` | Переместить сессию |
+| `session.new` | `<leader>n` | Создать новую сессию |
+| `session.list` | `<leader>l` | Показать все сессии |
+| `open.menu` | `ctrl+o` | Открыть недавние сессии и проекты |
+| `session.tab.next` | `ctrl+tab,alt+down` | Перейти на следующую вкладку сессии |
+| `session.tab.previous` | `ctrl+shift+tab,alt+up` | Перейти на предыдущую вкладку сессии |
+| `session.tab.history.back` | `none` | Назад по истории вкладок сессий |
+| `session.tab.history.forward` | `ctrl+i` | Вперед по истории вкладок сессий |
+| `session.tab.next_unread` | `alt+shift+down` | Перейти на следующую непрочитанную вкладку сессии |
+| `session.tab.previous_unread` | `alt+shift+up` | Перейти на предыдущую непрочитанную вкладку сессии |
+| `session.tab.close` | `<leader>w` | Закрыть текущую вкладку сессии |
+| `session.tab.reopen` | `ctrl+shift+t` | Снова открыть последнюю закрытую вкладку сессии |
+| `session.timeline` | `<leader>g` | Показать хронологию сессии |
+| `session.fork` | `none` | Ответвить сессию от сообщения |
+| `session.rename` | `ctrl+r` | Переименовать сессию |
+| `session.delete` | `ctrl+d` | Удалить сессию |
+| `session.share` | `none` | Поделиться текущей сессией |
+| `session.unshare` | `none` | Закрыть общий доступ к текущей сессии |
+| `session.interrupt` | `escape` | Прервать текущую сессию |
+| `session.background` | `ctrl+b` | Перевести блокирующие инструменты сессии в фон |
+| `session.compact` | `<leader>c` | Сжать контекст сессии |
+| `session.aside` | `none` | Задать вопрос по ходу |
+| `session.cd` | `none` | Сменить рабочий каталог |
+| `session.queued_prompts` | `<leader>q` | Управлять промптами в очереди |
+| `queued_prompt.undo` | `ctrl+u` | Отменить промпт в очереди |
+| `queued_prompt.delete` | `ctrl+d` | Удалить промпт из очереди |
+| `session.toggle.exploration_grouping` | `none` | Включить или выключить группировку связанных вызовов инструментов |
+| `session.child.first` | `down` | Показать или скрыть выбор субагента |
+| `session.child.next` | `right` | Перейти к следующей дочерней сессии |
+| `session.child.previous` | `left` | Перейти к предыдущей дочерней сессии |
+| `session.parent` | `up` | Перейти к родительской сессии |
+| `session.pin.toggle` | `ctrl+f` | Закрепить сессию в списке сессий или открепить ее |
+| `session.quick_switch.1` | `<leader>1` | Перейти к сессии в быстром слоте 1 |
+| `session.quick_switch.2` | `<leader>2` | Перейти к сессии в быстром слоте 2 |
+| `session.quick_switch.3` | `<leader>3` | Перейти к сессии в быстром слоте 3 |
+| `session.quick_switch.4` | `<leader>4` | Перейти к сессии в быстром слоте 4 |
+| `session.quick_switch.5` | `<leader>5` | Перейти к сессии в быстром слоте 5 |
+| `session.quick_switch.6` | `<leader>6` | Перейти к сессии в быстром слоте 6 |
+| `session.quick_switch.7` | `<leader>7` | Перейти к сессии в быстром слоте 7 |
+| `session.quick_switch.8` | `<leader>8` | Перейти к сессии в быстром слоте 8 |
+| `session.quick_switch.9` | `<leader>9` | Перейти к сессии в быстром слоте 9 |
+| `session.tab.select.1` | `<leader>1,ctrl+1` | Перейти на вкладку сессии 1 |
+| `session.tab.select.2` | `<leader>2,ctrl+2` | Перейти на вкладку сессии 2 |
+| `session.tab.select.3` | `<leader>3,ctrl+3` | Перейти на вкладку сессии 3 |
+| `session.tab.select.4` | `<leader>4,ctrl+4` | Перейти на вкладку сессии 4 |
+| `session.tab.select.5` | `<leader>5,ctrl+5` | Перейти на вкладку сессии 5 |
+| `session.tab.select.6` | `<leader>6,ctrl+6` | Перейти на вкладку сессии 6 |
+| `session.tab.select.7` | `<leader>7,ctrl+7` | Перейти на вкладку сессии 7 |
+| `session.tab.select.8` | `<leader>8,ctrl+8` | Перейти на вкладку сессии 8 |
+| `session.tab.select.9` | `<leader>9,ctrl+9` | Перейти на вкладку сессии 9 |
+| `session.tab.select.10` | `<leader>0,ctrl+0` | Перейти на вкладку сессии 10 |
+
+## Модели и агенты
+
+| ID | По умолчанию | Описание |
+| --- | --- | --- |
+| `stash.delete` | `ctrl+d` | Удалить запись из отложенных |
+| `model.dialog.provider` | `ctrl+a` | Открыть список провайдеров из окна выбора модели |
+| `model.dialog.favorite` | `ctrl+f` | Добавить модель в избранное или убрать из него |
+| `model.list` | `<leader>m` | Показать доступные модели |
+| `model.cycle_recent` | `f2` | Следующая недавно использованная модель |
+| `model.cycle_recent_reverse` | `shift+f2` | Предыдущая недавно использованная модель |
+| `model.cycle_favorite` | `none` | Следующая избранная модель |
+| `model.cycle_favorite_reverse` | `none` | Предыдущая избранная модель |
+| `mcp.list` | `none` | Показать MCP-серверы |
+| `provider.connect` | `none` | Подключить интеграцию |
+| `agent.list` | `<leader>a` | Показать агентов |
+| `agent.cycle` | `shift+tab` | Следующий агент |
+| `agent.cycle.reverse` | `none` | Предыдущий агент |
+| `variant.cycle` | `ctrl+t` | Переключить вариант модели по кругу |
+| `variant.list` | `none` | Показать варианты модели |
+
+## Навигация по сессии
+
+| ID | По умолчанию | Описание |
+| --- | --- | --- |
+| `session.page.up` | `pageup,ctrl+alt+b` | Прокрутить сообщения на страницу вверх |
+| `session.page.down` | `pagedown,ctrl+alt+f` | Прокрутить сообщения на страницу вниз |
+| `session.line.up` | `ctrl+alt+y` | Прокрутить сообщения на строку вверх |
+| `session.line.down` | `ctrl+alt+e` | Прокрутить сообщения на строку вниз |
+| `session.half.page.up` | `ctrl+alt+u` | Прокрутить сообщения на полстраницы вверх |
+| `session.half.page.down` | `ctrl+alt+d` | Прокрутить сообщения на полстраницы вниз |
+| `session.first` | `ctrl+g,home,alt+home` | Перейти к первому сообщению |
+| `session.last` | `ctrl+alt+g,end` | Перейти к последнему сообщению |
+| `session.message.next` | `none` | Перейти к следующему сообщению |
+| `session.message.previous` | `none` | Перейти к предыдущему сообщению |
+| `session.message.user.next` | `none` | Перейти к следующему сообщению пользователя |
+| `session.message.user.previous` | `none` | Перейти к предыдущему сообщению пользователя |
+| `session.messages_last_user` | `alt+end` | Перейти к последнему сообщению пользователя |
+| `messages.copy` | `<leader>y` | Скопировать сообщение |
+| `session.undo` | `<leader>u` | Отменить сообщение |
+| `session.redo` | `<leader>r` | Вернуть сообщение |
+| `session.toggle.thinking` | `none` | Показать или скрыть блоки рассуждений |
+
+## Команды промпта
+
+| ID | По умолчанию | Описание |
+| --- | --- | --- |
+| `prompt.submit` | `none` | Отправить промпт |
+| `prompt.queue` | `<leader>return` | Поставить промпт в очередь |
+| `prompt.editor_context.clear` | `none` | Очистить контекст редактора |
+| `prompt.images.view` | `<leader>i` | Просмотреть прикрепленные изображения |
+| `prompt.skills` | `none` | Открыть выбор навыков |
+| `prompt.stash` | `none` | Отложить промпт |
+| `prompt.stash.pop` | `none` | Вернуть отложенный промпт |
+| `prompt.stash.list` | `none` | Показать отложенные промпты |
+
+## Редактирование ввода
+
+| ID | По умолчанию | Описание |
+| --- | --- | --- |
+| `prompt.clear` | `ctrl+c` | Очистить поле ввода |
+| `prompt.paste` | `{"key":"ctrl+v","preventDefault":false}` (`ctrl+v`; `preventDefault: false`) | Вставить из буфера обмена |
+| `input.submit` | `return` | Отправить ввод |
+| `input.newline` | `shift+return,ctrl+return,alt+return,ctrl+j` | Вставить перевод строки |
+| `input.move.left` | `left,ctrl+b` | Переместить курсор влево |
+| `input.move.right` | `right,ctrl+f` | Переместить курсор вправо |
+| `input.move.up` | `up` | Переместить курсор вверх |
+| `input.move.down` | `down` | Переместить курсор вниз |
+| `input.select.left` | `shift+left` | Выделить влево |
+| `input.select.right` | `shift+right` | Выделить вправо |
+| `input.select.up` | `shift+up` | Выделить вверх |
+| `input.select.down` | `shift+down` | Выделить вниз |
+| `input.line.home` | `ctrl+a` | Перейти в начало строки |
+| `input.line.end` | `ctrl+e` | Перейти в конец строки |
+| `input.select.line.home` | `ctrl+shift+a` | Выделить до начала строки |
+| `input.select.line.end` | `ctrl+shift+e` | Выделить до конца строки |
+| `input.visual.line.home` | `alt+a` | Перейти в начало визуальной строки |
+| `input.visual.line.end` | `alt+e` | Перейти в конец визуальной строки |
+| `input.select.visual.line.home` | `alt+shift+a` | Выделить до начала визуальной строки |
+| `input.select.visual.line.end` | `alt+shift+e` | Выделить до конца визуальной строки |
+| `input.buffer.home` | `none` | Перейти в начало буфера |
+| `input.buffer.end` | `none` | Перейти в конец буфера |
+| `input.select.buffer.home` | `shift+home` | Выделить до начала буфера |
+| `input.select.buffer.end` | `shift+end` | Выделить до конца буфера |
+| `input.delete.line` | `ctrl+shift+d` | Удалить строку |
+| `input.delete.to.line.end` | `ctrl+k` | Удалить до конца строки |
+| `input.delete.to.line.start` | `ctrl+u` | Удалить до начала строки |
+| `input.backspace` | `backspace,shift+backspace` | Удалить символ слева (Backspace) |
+| `input.delete` | `ctrl+d,delete,shift+delete` | Удалить символ |
+| `input.undo` | `ctrl+-,super+z` | Отменить действие |
+| `input.redo` | `ctrl+.,super+shift+z` | Повторить действие |
+| `input.word.forward` | `alt+f,alt+right,ctrl+right` | Перейти на слово вперед |
+| `input.word.backward` | `alt+b,alt+left,ctrl+left` | Перейти на слово назад |
+| `input.select.word.forward` | `alt+shift+f,alt+shift+right` | Выделить слово вперед |
+| `input.select.word.backward` | `alt+shift+b,alt+shift+left` | Выделить слово назад |
+| `input.delete.word.forward` | `alt+d,alt+delete,ctrl+delete` | Удалить слово вперед |
+| `input.delete.word.backward` | `ctrl+w,ctrl+backspace,alt+backspace` | Удалить слово назад |
+| `input.select.all` | `super+a` | Выделить все |
+| `prompt.history.previous` | `up` | Предыдущий элемент истории |
+| `prompt.history.next` | `down` | Следующий элемент истории |
+
+## Поле ввода
+
+| ID | По умолчанию | Описание |
+| --- | --- | --- |
+| `composer.subagent.up` | `up` | Предыдущий субагент |
+| `composer.subagent.down` | `down` | Следующий субагент |
+| `composer.subagent.select` | `return` | Перейти к субагенту |
+| `composer.subagent.interrupt` | `ctrl+d` | Прервать субагента |
+| `composer.shell.up` | `up` | Предыдущая оболочка |
+| `composer.shell.down` | `down` | Следующая оболочка |
+| `composer.shell.select` | `return` | Показать вывод оболочки |
+| `composer.shell.kill` | `ctrl+d` | Принудительно завершить команду оболочки |
+
+Чтобы посмотреть перехваченные stdout и stderr, выберите запущенную команду на вкладке **Shell** и нажмите **Enter** или
+щелкните по ней. Для прокрутки используйте **↑/↓**, **Page Up/Down** или **Home**, **End** — чтобы следить за новым
+выводом, а **Esc** — чтобы вернуться, не останавливая команду. Окно просмотра показывает последний вывод и остается
+открытым после завершения команды; вывод, перенаправленный в файл, не отображается.
+
+## Диалоги и автодополнение
+
+| ID | По умолчанию | Описание |
+| --- | --- | --- |
+| `dialog.select.prev` | `up,ctrl+p` | Перейти к предыдущему элементу диалога |
+| `dialog.select.next` | `down,ctrl+n` | Перейти к следующему элементу диалога |
+| `dialog.select.page_up` | `pageup` | Перейти на страницу вверх в диалоге |
+| `dialog.select.page_down` | `pagedown` | Перейти на страницу вниз в диалоге |
+| `dialog.select.home` | `home` | Перейти к первому элементу диалога |
+| `dialog.select.end` | `end` | Перейти к последнему элементу диалога |
+| `dialog.select.submit` | `return` | Подтвердить выбранный элемент диалога |
+| `dialog.prompt.submit` | `return` | Отправить ввод в диалоге |
+| `dialog.worktree.generate` | `tab` | Сгенерировать имя worktree |
+| `dialog.move_session.new` | `ctrl+a` | Новый worktree |
+| `dialog.move_session.move` | `ctrl+m` | Переместить сессию в worktree |
+| `dialog.move_session.delete` | `ctrl+d` | Удалить worktree |
+| `dialog.move_session.refresh` | `ctrl+r` | Обновить список worktree |
+| `prompt.autocomplete.prev` | `up,ctrl+p` | Перейти к предыдущему варианту автодополнения |
+| `prompt.autocomplete.next` | `down,ctrl+n` | Перейти к следующему варианту автодополнения |
+| `prompt.autocomplete.hide` | `escape` | Скрыть автодополнение |
+| `prompt.autocomplete.select` | `return` | Выбрать вариант автодополнения |
+| `prompt.autocomplete.complete` | `tab` | Дополнить выбранным вариантом |
+| `permission.prompt.fullscreen` | `ctrl+f` | Развернуть запрос разрешения на весь экран или свернуть |
+| `plugins.toggle` | `return` | Включить или выключить плагин |
+| `dialog.mcp.toggle` | `space` | Включить или выключить MCP-сервер |
+| `dialog.plugins.update` | `ctrl+u` | Обновить плагин из диалога плагинов |
+| `dialog.plugins.check` | `ctrl+r` | Проверить обновления плагинов |
+
+## Терминал и плагины
+
+| ID | По умолчанию | Описание |
+| --- | --- | --- |
+| `terminal.suspend` | `ctrl+z` | Приостановить терминал |
+| `terminal.title.toggle` | `none` | Включить или выключить заголовок терминала |
+| `plugins.list` | `none` | Открыть диалог управления плагинами |
+
+## Which-key
+
+| ID | По умолчанию | Описание |
+| --- | --- | --- |
+| `which-key.toggle` | `ctrl+alt+k` | Показать или скрыть панель which-key |
+| `which-key.layout.toggle` | `ctrl+alt+shift+k` | Переключить макет which-key |
+| `which-key.pending.toggle` | `ctrl+alt+shift+p` | Включить или выключить предпросмотр незавершенных сочетаний which-key |
+| `which-key.group.previous` | `ctrl+alt+left,ctrl+alt+[` | Предыдущая группа which-key |
+| `which-key.group.next` | `ctrl+alt+right,ctrl+alt+]` | Следующая группа which-key |
+| `which-key.scroll.up` | `ctrl+alt+up,ctrl+alt+p` | Прокрутить which-key вверх |
+| `which-key.scroll.down` | `ctrl+alt+down,ctrl+alt+n` | Прокрутить which-key вниз |
+| `which-key.page.up` | `ctrl+alt+pageup` | Прокрутить which-key на страницу вверх |
+| `which-key.page.down` | `ctrl+alt+pagedown` | Прокрутить which-key на страницу вниз |
+| `which-key.home` | `ctrl+alt+home` | Перейти к первому сочетанию which-key |
+| `which-key.end` | `ctrl+alt+end` | Перейти к последнему сочетанию which-key |

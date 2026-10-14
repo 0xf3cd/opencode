@@ -1,0 +1,95 @@
+---
+title: "Обзор"
+---
+
+`@opencode/sdk` встраивает OpenCode прямо в ваше приложение. В отличие от
+[сетевого клиента](/build/client), SDK собирает сервер OpenCode внутри процесса и передает вызовы API через его
+HTTP-маршрутизатор в памяти. HTTP-порт при этом не открывается, а между клиентом и сервером нет лишнего сетевого
+перехода.
+
+О работе в Cloudflare Durable Objects читайте в [руководстве по Cloudflare](/build/sdk/cloudflare).
+
+Установите SDK:
+
+```sh
+bun add @opencode/sdk
+```
+
+## Создание хоста
+
+`OpenCode.create()` возвращает хост, временем жизни которого вы управляете явно. Используйте `await using`, чтобы
+освободить его маршрутизатор, сервисы Location, файберы и регистрации плагинов, привязанные к его области видимости:
+
+```ts
+import { OpenCode } from "@opencode/sdk"
+
+await using opencode = await OpenCode.create()
+const session = await opencode.sessions.create({
+  location: { directory: "/workspace" },
+})
+
+await opencode.sessions.prompt({
+  sessionID: session.id,
+  text: "Review the current changes",
+})
+```
+
+Если явное управление ресурсами недоступно, вызовите `await opencode.close()` самостоятельно.
+
+Встроенный хост использует те же значения Promise, объявленные ошибки, параметры запросов и потоки `AsyncIterable`,
+что и `@opencode/client`. Он предоставляет полный сгенерированный клиент и добавляет удобные псевдонимы `sessions` и
+`events` для групп сессий и событий.
+
+## Worktree
+
+Операциям с worktree нужен `projectID`. Создание и обновление загружают конфигурацию и плагины из сохраненного
+основного checkout проекта. Получение списка читает только сохраненный перечень; удаление активирует плагины основного
+checkout и использует записанную стратегию, а если эта стратегия недоступна, завершается ошибкой.
+
+```ts
+const projectID = session.projectID
+const worktree = await opencode.worktree.create({ projectID, name: "task" })
+await opencode.worktree.refresh({ projectID })
+await opencode.worktree.remove({ projectID, directory: worktree.directory, force: false })
+```
+
+Обновление находит worktree во всех известных корневых каталогах checkout с помощью всех доступных стратегий.
+Собственную стратегию можно зарегистрировать через [преобразование worktree в плагине](/build/plugins#worktrees).
+
+## Поток событий
+
+```ts
+for await (const event of opencode.events.subscribe()) {
+  console.log(event.type)
+}
+```
+
+Передайте `AbortSignal` через сгенерированные параметры запроса или выйдите из цикла итерации, чтобы отменить чтение
+тела ответа.
+
+## Настройка
+
+Настраивайте экземпляр OpenCode, регистрируя плагины. Передайте плагины в `OpenCode.create()`, чтобы при запуске
+встроенного хоста изменить агентов, модели, инструменты и другое поведение:
+
+```ts
+import { Plugin } from "@opencode/plugin"
+import { OpenCode } from "@opencode/sdk"
+
+const plugin = Plugin.define({
+  id: "customize-agent",
+  async setup(ctx) {
+    await ctx.agent.transform((agents) => {
+      agents.update("build", (agent) => {
+        agent.description = "Builds features and fixes bugs for our team"
+      })
+    })
+  },
+})
+
+await using opencode = await OpenCode.create({ plugins: [plugin] })
+```
+
+Чтобы зарегистрировать еще один плагин после запуска, вызовите `await opencode.plugin(plugin)`.
+
+Хуки, преобразования, инструменты и полный контекст плагина описаны в [документации по плагинам](/build/plugins).

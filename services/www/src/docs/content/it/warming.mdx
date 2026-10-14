@@ -1,0 +1,141 @@
+---
+title: "Warm-up"
+---
+
+Il warm-up della sessione invia richieste periodiche al modello per mantenere attive le
+cache dei prompt lato provider o altri stati di breve durata mentre fai una pausa tra un
+prompt e l'altro. È disabilitato per impostazione predefinita.
+
+Abilita il warm-up in un qualsiasi [file di configurazione di OpenCode](/config):
+
+```jsonc title="opencode.jsonc"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "warming": true,
+}
+```
+
+Con questa configurazione, OpenCode esegue il warm-up di una sessione attiva di recente dopo
+quattro minuti senza richieste al modello. Continua ogni quattro minuti finché non sono
+trascorsi 30 minuti dall'ultima richiesta che non sia di warm-up.
+
+## Opzioni
+
+Usa la forma a oggetto per modificare il prompt di warm-up, l'intervallo di inattività o la
+finestra attiva:
+
+```jsonc title="opencode.jsonc"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "warming": {
+    "prompt": "Do not perform any work. Reply with exactly: OK",
+    "interval": "5 minutes",
+    "duration": "1 hour",
+  },
+}
+```
+
+| Campo | Predefinito | Scopo |
+| --- | --- | --- |
+| `prompt` | Istruzione keep-alive | Aggiunto come messaggio utente temporaneo a ogni richiesta di warm-up. Il valore predefinito chiede al modello di non svolgere alcun lavoro, non usare strumenti e rispondere con `OK`. |
+| `interval` | `"4 minutes"` | Tempo di inattività prima della richiesta di warm-up successiva. |
+| `duration` | `"30 minutes"` | Finestra di warm-up, misurata dall'ultima richiesta al modello che non sia di warm-up. |
+
+I campi dell'oggetto omessi mantengono i valori predefiniti. Ad esempio, questa configurazione
+modifica solo l'intervallo:
+
+```jsonc title="opencode.jsonc"
+{
+  "warming": {
+    "interval": "2 minutes",
+  },
+}
+```
+
+## Durate
+
+`interval` e `duration` accettano stringhe di durata. Entrambi devono corrispondere a valori
+finiti maggiori di zero; in caso contrario OpenCode salta il warm-up e registra un avviso nei log.
+
+```jsonc title="opencode.jsonc"
+{
+  "warming": {
+    "interval": "30 seconds",
+    "duration": "1 hour",
+  },
+}
+```
+
+## Tempistiche
+
+Il warm-up inizia dopo una richiesta al modello che non sia di warm-up. Al termine di una
+richiesta di warm-up parte l'intervallo di inattività successivo, ma la finestra attiva non
+viene estesa.
+
+```text
+00:00  normal model request
+00:04  warming request
+00:08  warming request
+00:30  warming stops
+```
+
+Qualsiasi nuova attività del modello diversa dal warm-up azzera entrambi i timer. Se
+l'intervallo è uguale o superiore alla durata, la finestra attiva scade prima che venga inviata
+una richiesta di warm-up.
+
+```text
+00:00  normal model request
+00:20  normal model request; window restarts
+00:24  warming request
+00:50  warming stops
+```
+
+## Richieste
+
+Una richiesta di warm-up usa il modello, l'agente, le istruzioni e il contesto della
+conversazione correnti della sessione. OpenCode aggiunge temporaneamente il prompt
+configurato, esegue una sola chiamata al modello e scarta la risposta.
+
+```text
+[current session context]
+[transient user message: keep-alive prompt]
+→ one model response, discarded
+```
+
+La richiesta non accetta input, non aggiunge messaggi alla cronologia e non modifica lo stato
+persistente della sessione. OpenCode non esegue chiamate a strumenti locali né prosegue un ciclo
+di strumenti; anche il prompt predefinito chiede al modello di non usare strumenti.
+
+## Errori
+
+Gli errori del warm-up vengono registrati nei log senza far fallire né modificare la sessione.
+OpenCode attende l'intervallo successivo prima di riprovare, mentre il conto alla rovescia della
+finestra attiva originale prosegue.
+
+```text
+00:04  warming request fails; session is unchanged
+00:08  next warming attempt
+```
+
+## Costi
+
+Le richieste di warm-up sono vere richieste al provider. Possono consumare token, generare
+costi, contare ai fini dei limiti di frequenza e fallire come le altre richieste al modello.
+
+- Intervalli più brevi aumentano il volume di richieste.
+- Durate più lunghe consentono più richieste di warm-up.
+- Abilita il warm-up solo quando il beneficio lato provider giustifica il consumo aggiuntivo.
+
+Ad esempio, con i valori predefiniti sono possibili fino a sette tentativi di warm-up in una
+finestra ininterrotta di 30 minuti: ai minuti 4, 8, 12, 16, 20, 24 e 28.
+
+## Disattivazione
+
+Imposta `warming` su `false` per disabilitarlo esplicitamente. Anche omettendo il campo il
+warm-up resta disabilitato.
+
+```jsonc title="opencode.jsonc"
+{
+  "warming": false,
+}
+```

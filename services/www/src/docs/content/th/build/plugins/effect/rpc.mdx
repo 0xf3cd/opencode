@@ -1,0 +1,165 @@
+---
+title: "RPC"
+---
+
+ปลั๊กอิน Effect เปิดให้ใช้เมธอดและอีเวนต์ที่คืนค่าเป็น Effect และ Stream ที่มีชนิดข้อมูลกำกับได้
+
+## นิยาม
+
+ใช้ `Rpc.define` ร่วมกับ Effect Schema เพื่อนิยาม RPC
+
+```ts title="src/rpc.ts"
+import { Rpc } from "@opencode/plugin/rpc"
+import { Schema } from "effect"
+
+export const Acme = Rpc.define({
+  id: "acme",
+  methods: {
+    search: {
+      input: Schema.Struct({ query: Schema.String }),
+      output: Schema.Struct({ text: Schema.String }),
+      errors: {
+        not_found: Schema.Struct({ query: Schema.String }),
+      },
+    },
+  },
+  events: {
+    updated: {
+      schema: Schema.Struct({ itemID: Schema.String, text: Schema.String }),
+    },
+  },
+})
+```
+
+### การตรวจสอบความถูกต้อง
+
+Effect Schema ตรวจสอบความถูกต้องของค่าและอนุมานชนิดข้อมูล TypeScript ให้
+
+```ts
+input: Schema.Struct({ query: Schema.String })
+```
+
+รองรับ JSON Schema และ Standard Schema ด้วย
+
+### อินพุตและเอาต์พุต
+
+ใช้ `input` สำหรับอาร์กิวเมนต์ของเมธอด และ `output` สำหรับค่าที่คืนกลับ หากไม่มีค่าใดก็ละตัวนั้นไว้ได้
+
+```ts
+search: {
+  input: Schema.Struct({ query: Schema.String }),
+  output: Schema.Struct({ text: Schema.String }),
+}
+```
+
+### ข้อผิดพลาด
+
+เพิ่มความล้มเหลวที่คาดไว้ลงใน `errors` แต่ละคีย์จะกลายเป็น `type` ของข้อผิดพลาด
+
+```ts
+errors: {
+  not_found: Schema.Struct({ query: Schema.String }),
+}
+```
+
+### อีเวนต์
+
+เพิ่มอีเวนต์ลงในแผนผัง `events` ระดับบนสุด ข้อมูลของอีเวนต์ต้องเป็นออบเจกต์
+
+```ts
+events: {
+  updated: {
+    schema: Schema.Struct({ itemID: Schema.String, text: Schema.String }),
+  },
+}
+```
+
+## Implement
+
+ลงทะเบียน implementation จาก Effect ของปลั๊กอิน:
+
+```ts title="src/index.ts"
+import { Plugin } from "@opencode/plugin/effect"
+import { Effect } from "effect"
+import { Acme } from "./rpc.js"
+
+export default Plugin.define({
+  id: "acme-effect-plugin",
+  effect: (ctx) =>
+    Effect.gen(function* () {
+      const registration = yield* ctx.rpc.register(Acme, {
+        search: ({ query }, context) =>
+          findText(query).pipe(
+            Effect.flatMap((text) =>
+              text
+                ? Effect.succeed({ text })
+                : Effect.fail(context.error("not_found", "Result not found", { query })),
+            ),
+          ),
+      })
+
+      const acme = ctx.rpc(Acme)
+      const result = yield* acme.search({ query: "hello" })
+
+      yield* registration.events.emit("updated", { itemID: "item-1", text: result.text })
+    }).pipe(Effect.orDie),
+})
+```
+
+แผนผังข้อผิดพลาดจะกลายเป็นชนิดข้อผิดพลาดของ Effect ในแต่ละเมธอด ใช้ `context.error(...)` เพื่อสร้างข้อผิดพลาดที่ประกาศไว้
+
+## เรียกใช้
+
+เมื่อลงทะเบียน RPC แล้ว จะเรียกใช้ผ่าน HTTP หรือจากปลั๊กอินอื่นก็ได้
+
+### HTTP
+
+สร้างไคลเอนต์ Effect แล้วสร้าง subclient สำหรับ RPC:
+
+```ts
+import { OpenCode } from "@opencode/client/effect"
+import { Effect } from "effect"
+import { FetchHttpClient } from "effect/http"
+import { Acme } from "opencode-acme-plugin/rpc"
+
+const program = Effect.gen(function* () {
+  const client = yield* OpenCode.make({ baseUrl: "http://localhost:4096" })
+  const acme = client.rpc(Acme)
+  return yield* acme.search({ query: "hello" })
+})
+
+const result = await Effect.runPromise(program.pipe(Effect.provide(FetchHttpClient.layer)))
+```
+
+### ปลั๊กอิน
+
+ปลั๊กอิน Effect อื่นสร้าง subclient ภายในจากบริบทของตัวเองได้:
+
+```ts
+import { Effect } from "effect"
+
+effect: (ctx) =>
+  Effect.gen(function* () {
+    const acme = ctx.rpc(Acme)
+    const result = yield* acme.search({ query: "hello" })
+    yield* Effect.logInfo(result.text)
+  }).pipe(Effect.orDie)
+```
+
+### Subscribe
+
+อีเวนต์ RPC เป็น Stream ให้ subscribe ด้วยชื่ออีเวนต์ แล้วรัน Stream ในไฟเบอร์ที่ผูกกับ scope:
+
+```ts
+import { Effect, Stream } from "effect"
+
+const acme = ctx.rpc(Acme)
+
+yield *
+  acme.events.subscribe("updated").pipe(
+    Stream.runForEach((event) => Effect.logInfo(event.data.text)),
+    Effect.forkScoped,
+  )
+```
+
+การ subscribe รับเฉพาะอีเวนต์สด และจะปิดลงเมื่อหยุดใช้ข้อมูลจาก Stream

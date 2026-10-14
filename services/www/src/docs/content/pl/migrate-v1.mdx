@@ -1,0 +1,604 @@
+---
+title: "Migracja z V1"
+---
+
+OpenCode 1 i OpenCode 2 korzystają z tego samego polecenia `opencode` i domyślnie nie są już instalowane obok siebie.
+Przed instalacją V2 usuń instalację V1 zarządzaną przez menedżer pakietów; instalator V2 uruchamiany przez curl zastępuje
+plik binarny V1.
+
+## Zmiany niezgodne wstecz
+
+V2 wprowadza trzy celowe zmiany niezgodne wstecz:
+
+- [Wtyczki](/build/plugins/migrate-v1) korzystają z nowego API wtyczek.
+- [API serwera i klienci](#server-api-and-clients) mają nowe kontrakty.
+- [Konfiguracja klienta terminalowego](/cli/config) przechodzi z warstwowych plików `tui.json(c)` do jednego globalnego
+  pliku `cli.json` (migrowanego automatycznie).
+
+Obsługiwana funkcjonalność V1 spoza tych obszarów ma pozostać zgodna z V1. Niektóre pola akceptowane przez schemat V1
+nigdy nie miały odpowiednika w V2 i są celowo ignorowane – ich listę znajdziesz w sekcji
+[Pola akceptowane, ale nieobsługiwane](#accepted-but-unsupported-fields).
+
+Istniejące obsługiwane pola konfiguracji serwera, definicje agentów i poleceń, umiejętności oraz inne pliki w
+`.opencode/` powinny działać bez zmian. Jeśli obsługiwane zachowanie opisane w tym przewodniku przestanie działać w V2,
+traktuj to jako błąd zgodności, a nie spodziewany wymóg migracji.
+
+<Callout type="tip">
+  Jeśli obsługiwana funkcjonalność V1 nie działa w V2, zgłoś problem ze zgodnością zgodnie ze wskazówkami w sekcji
+  [Rozwiązywanie problemów](/troubleshooting).
+</Callout>
+
+## Instalacja V2
+
+Zainstaluj klienta terminalowego V2, korzystając z [przewodnika uruchamiania w terminalu](/cli).
+
+Nie musisz przepisywać wszystkiego przed uruchomieniem V2. Praktyczna kolejność migracji wygląda tak:
+
+1. Zachowaj dotychczasową konfigurację i definicje w plikach.
+2. Uruchom V2 i sprawdź modele, dane uwierzytelniające, agentów, uprawnienia i serwery MCP.
+3. Przenieś wtyczki, ponieważ implementacje wtyczek V1 nie działają w V2.
+4. Przenieś integracje, które wywołują API serwera.
+5. Gdy będziesz gotowy, przekształć konfigurację do natywnej postaci V2. Ten krok jest opcjonalny.
+
+Na czas sprawdzania migracji zachowaj kopię konfiguracji V1. V1 i V2 korzystają z tych samych lokalizacji konfiguracji,
+więc nie wskazuj w V1 plików, które przekształcono już do postaci dostępnej wyłącznie w V2.
+
+## Konfiguracja
+
+Ta sekcja dotyczy zarówno konfiguracji JSON/JSONC, jak i definicji w plikach w katalogu `.opencode/`.
+
+### Korzystanie z dotychczasowej konfiguracji
+
+V2 odczytuje istniejącą konfigurację systemową, globalną i projektową z tych samych lokalizacji co V1:
+
+```text
+/Library/Application Support/opencode/opencode.json(c)
+/etc/opencode/opencode.json(c)
+%ProgramData%\opencode\opencode.json(c)
+/Library/Managed Preferences/<user>/ai.opencode.managed.plist
+/Library/Managed Preferences/ai.opencode.managed.plist
+~/.config/opencode/opencode.json(c)
+<project>/opencode.json(c)
+<project>/.opencode/opencode.json(c)
+```
+
+V2 normalizuje obsługiwane pola V1 i natywne pola V2 w pamięci, nie modyfikując pliku źródłowego. Istniejąca obsługiwana
+konfiguracja V1 ma nadal działać, więc nie musisz jej przekształcać, aby wypróbować lub wdrożyć V2.
+
+Tak jak w V1 konfiguracja systemowa i zarządzane preferencje macOS mają najwyższe pierwszeństwo, więc ich ustawienia
+nadpisują pliki globalne i projektowe. Ich [zasady](/policies#precedence), w tym zmigrowane `enabled_providers` i
+`disabled_providers`, również mają pierwszeństwo przed zasadami globalnymi i projektowymi. Nadpisanie ustawienia nie
+powstrzyma użytkowników przed dodawaniem dostawców, serwerów MCP, agentów ani wtyczek, dlatego ograniczenia wymuszane
+przez administratora wyrażaj jako `policies`, a nie jako zwykłe ustawienia, takie jak `permissions`.
+
+### Migracja z pomocą OpenCode
+
+Format konfiguracji V1 jest nadal obsługiwany. Natywny format V2 jest opcjonalny – sprawia, że wiele ustawień jest
+bardziej jawnych i wygodniejszych w użyciu.
+
+Zalecany sposób migracji to poproszenie OpenCode, aby zaktualizował konfigurację za Ciebie:
+
+```text
+Migrate my OpenCode configuration, including file-based definitions, from the V1 format to the native V2 format.
+Preserve its behavior and all unrelated settings.
+```
+
+OpenCode może przeanalizować cały plik, wprowadzić odpowiednie zmiany opisane poniżej i nie ruszać ustawień, których nie
+trzeba zmieniać. Konwersja nie musi odbyć się za jednym razem: obsługiwane pola V1 i natywne pola V2 mogą współistnieć na
+najwyższym poziomie. Gdy obie formy ustawiają tę samą wartość kanoniczną, pierwszeństwo ma poprawna wartość natywna V2,
+niezależnie od kolejności kluczy w JSON.
+
+Mieszanie formatów w zagnieżdżonych obiektach jest celowo ograniczone. OpenCode rozpoznaje mieszane elementy V1 i V2 w
+`mcp`, `compaction` i `experimental`, ale nie wnioskuje rekurencyjnie formatu wewnątrz poszczególnych agentów, dostawców,
+poleceń ani modeli. Każdy taki zagnieżdżony wpis zapisuj w całości w jednym formacie. Sama obsługiwana składnia V1 nie
+generuje ostrzeżeń; ostrzeżenia pojawiają się dla niepoprawnych wartości, nieobsługiwanych starszych pól i sprzecznych
+wartości V1/V2, a niezwiązane z nimi poprawne ustawienia są nadal wczytywane.
+
+### Udostępnianie
+
+Przestarzała wartość logiczna V1 `autoshare` zmienia się w jawną zasadę `share`:
+
+```jsonc
+// V1
+{ "autoshare": true }
+
+// V2
+{ "share": "auto" }
+```
+
+Użyj `"manual"`, `"auto"` lub `"disabled"`. Jeśli plik V1 korzysta już z `share`, zmiana nie jest potrzebna.
+
+### Uprawnienia i narzędzia
+
+V1 grupuje efekty uprawnień według narzędzi. V2 używa jednej uporządkowanej tablicy `permissions`, dzięki czemu
+pierwszeństwo i wyjątki są jawne:
+
+```jsonc
+// V1
+{
+  "permission": {
+    "bash": {
+      "git push *": "ask"
+    },
+    "edit": "allow"
+  },
+  "tools": {
+    "websearch": false
+  }
+}
+
+// V2
+{
+  "permissions": [
+    { "action": "shell", "resource": "git push *", "effect": "ask" },
+    { "action": "edit", "resource": "*", "effect": "allow" },
+    { "action": "websearch", "resource": "*", "effect": "deny" }
+  ]
+}
+```
+
+Zmieniły się też akcje uprawnień: `bash` to teraz `shell`, `task` to teraz `subagent`, a `write` i `patch` to teraz
+`edit`. Uporządkowany format reguł V2 opisano w sekcji [Uprawnienia](/permissions).
+
+### Agenci i tryby
+
+Mapy `agent` (w liczbie pojedynczej) i przestarzała `mode` zmieniają się w `agents`. Pola agentów są bardziej spójne z
+resztą konfiguracji V2:
+
+```jsonc
+// V1
+{
+  "agent": {
+    "reviewer": {
+      "prompt": "Review for correctness and missing tests.",
+      "model": "anthropic/claude-sonnet-4-5",
+      "variant": "high",
+      "disable": false,
+      "permission": {
+        "edit": "deny"
+      }
+    }
+  }
+}
+
+// V2
+{
+  "agents": {
+    "reviewer": {
+      "system": "Review for correctness and missing tests.",
+      "model": "anthropic/claude-sonnet-4-5#high",
+      "disabled": false,
+      "permissions": [
+        { "action": "edit", "resource": "*", "effect": "deny" }
+      ]
+    }
+  }
+}
+```
+
+`prompt` zmienia się w `system`, `disable` w `disabled`, a osobne pole `variant` dołącza do odwołania do modelu po znaku
+`#`. `temperature`, `top_p` i specyficzne dla dostawcy `options` przechodzą do `request.body`. `maxSteps` zmienia się w
+`steps`. Wpisy ze starej mapy `mode` stają się agentami głównymi.
+
+### Migawki
+
+Zmień nazwę pola `snapshot` (w liczbie pojedynczej) na `snapshots`. Jego wartość logiczna się nie zmienia:
+
+```jsonc
+// V1
+{ "snapshot": false }
+
+// V2
+{ "snapshots": false }
+```
+
+### Multimedia
+
+Zmień nazwę obiektu `attachment` (w liczbie pojedynczej) na `media`. Zagnieżdżone ustawienia obrazów zachowują te same
+nazwy:
+
+```jsonc
+// V1
+{ "attachment": { "image": { "auto_resize": true } } }
+
+// V2
+{ "media": { "image": { "auto_resize": true } } }
+```
+
+### Serwery MCP
+
+V2 grupuje serwery w `mcp.servers`, zastępuje `enabled` odwrotnym polem `disabled` i rozdziela limity czasu według ich
+przeznaczenia:
+
+```jsonc
+// V1
+{
+  "mcp": {
+    "playwright": {
+      "type": "local",
+      "command": ["npx", "@playwright/mcp"],
+      "enabled": true,
+      "timeout": 30000
+    }
+  }
+}
+
+// V2
+{
+  "mcp": {
+    "servers": {
+      "playwright": {
+        "type": "local",
+        "command": ["npx", "@playwright/mcp"],
+        "disabled": false,
+        "timeout": {
+          "catalog": 30000,
+          "execution": 30000
+        }
+      }
+    }
+  }
+}
+```
+
+Pola OAuth serwerów zdalnych używają notacji snake case: `clientId` zmienia się w `client_id`, `clientSecret` w
+`client_secret`, `callbackPort` w `callback_port`, a `redirectUri` w `redirect_uri`. Wartość V1
+`experimental.mcp_timeout` staje się też domyślną wartością `mcp.timeout.catalog` i `mcp.timeout.execution`. Zobacz
+[Serwery MCP](/mcp-servers).
+
+### Kompaktowanie
+
+V2 grupuje budżet tokenów zachowywanego kontekstu w `keep` i nadaje rezerwie czytelniejszą nazwę:
+
+```jsonc
+// V1
+{
+  "compaction": {
+    "preserve_recent_tokens": 8000,
+    "reserved": 20000
+  }
+}
+
+// V2
+{
+  "compaction": {
+    "keep": {
+      "tokens": 8000
+    },
+    "buffer": 20000
+  }
+}
+```
+
+`auto` zachowuje swoją nazwę. V2 nie ma natywnych pól `tail_turns` ani `prune`; oba starsze pola są ignorowane z
+ostrzeżeniem. Ostatni kontekst jest zamiast tego zachowywany według budżetu tokenów. Zobacz
+[Kompaktowanie](/compaction).
+
+### Umiejętności
+
+V1 rozdziela dodatkowe ścieżki i URL-e umiejętności. V2 łączy je w jedną uporządkowaną tablicę:
+
+```jsonc
+// V1
+{
+  "skills": {
+    "paths": ["./team-skills"],
+    "urls": ["https://example.com/skills/"]
+  }
+}
+
+// V2
+{
+  "skills": ["./team-skills", "https://example.com/skills/"]
+}
+```
+
+Istniejące pliki umiejętności i automatyczne wykrywanie w `.opencode/skills/` się nie zmieniają. Zobacz
+[Umiejętności](/skills).
+
+### Polecenia
+
+Zmień nazwę mapy `command` (w liczbie pojedynczej) na `commands`, a `subtask` na `subagent`. Osobne pole `variant` modelu
+dołącz do odwołania do modelu:
+
+```jsonc
+// V1
+{
+  "command": {
+    "review": {
+      "template": "Review the current changes.",
+      "model": "anthropic/claude-sonnet-4-5",
+      "variant": "high",
+      "subtask": true
+    }
+  }
+}
+
+// V2
+{
+  "commands": {
+    "review": {
+      "template": "Review the current changes.",
+      "model": "anthropic/claude-sonnet-4-5#high",
+      "subagent": true
+    }
+  }
+}
+```
+
+`template`, `description` i `agent` zachowują swoje nazwy. Starsze pole `subtask` jest nadal akceptowane; delegowane
+polecenia działają teraz automatycznie w tle i przekazują wyniki do sesji nadrzędnej. Istniejące definicje poleceń w
+Markdownie są nadal obsługiwane. Zobacz [Polecenia](/commands).
+
+### Odwołania
+
+Zmień nazwę przestarzałej mapy `reference` (w liczbie pojedynczej) na `references`:
+
+```jsonc
+// V1
+{ "reference": { "docs": "../docs" } }
+
+// V2
+{ "references": { "docs": "../docs" } }
+```
+
+V1 akceptuje już `references`, więc jeśli plik z niego korzysta, zmiana nie jest potrzebna. Wpisy odwołań zachowują tę
+samą postać. Zobacz [Odwołania](/references).
+
+### Dostawcy
+
+Zmień nazwę mapy `provider` (w liczbie pojedynczej) na `providers`. V2 rozdziela pakiet środowiska uruchomieniowego,
+endpoint i ustawienia żądań:
+
+```jsonc
+// V1
+{
+  "provider": {
+    "acme": {
+      "npm": "@ai-sdk/openai-compatible",
+      "api": "https://llm.example.com/v1",
+      "options": {
+        "apiKey": "{env:ACME_API_KEY}"
+      }
+    }
+  }
+}
+
+// V2
+{
+  "providers": {
+    "acme": {
+      "package": "aisdk:@ai-sdk/openai-compatible",
+      "settings": {
+        "baseURL": "https://llm.example.com/v1",
+        "apiKey": "{env:ACME_API_KEY}"
+      }
+    }
+  }
+}
+```
+
+Pole V1 `npm` zmienia się w `package`, a pakiety AI SDK otrzymują prefiks `aisdk:`. `api` zmienia się w
+`settings.baseURL`. `options` dostawcy są rozdzielane na `settings`, `headers` i `body` zależnie od ich roli w żądaniu.
+`options.setCacheKey` zmienia się w `compatibility.supportsPromptCacheKey` na poziomie dostawcy. Zobacz
+[Dostawcy](/providers).
+
+V2 scalił dwie starsze przestrzenie nazw dostawców:
+
+| ID dostawcy w V1           | Kanoniczny ID dostawcy w V2 |
+| -------------------------- | --------------------------- |
+| `azure-cognitive-services` | `azure`                     |
+| `google-vertex-anthropic`  | `google-vertex`             |
+
+Migracja jednoznacznych pól V1 dotyczących dostawców, agentów, poleceń i filtrów dostawców korzysta z tych kanonicznych
+ID. Wspólne pole `model` na najwyższym poziomie zachowuje dokładny ID dostawcy, ponieważ ta sama składnia jest poprawna w
+natywnej konfiguracji V2; podczas migracji starszego wbudowanego dostawcy zaktualizuj to pole do kanonicznego ID.
+
+### Modele i warianty
+
+Modele pozostają zagnieżdżone w swoim dostawcy, ale kilka pól modelu staje się bardziej jawnych:
+
+- `id` zmienia się w `modelID`.
+- `tool_call` i `modalities` zmieniają się w `capabilities.tools`, `capabilities.input` i `capabilities.output`.
+- `status` o wartości `"deprecated"` zmienia się w `disabled: true`.
+- Koszty pamięci podręcznej przechodzą z `cache_read` i `cache_write` do `cache.read` i `cache.write`.
+- Specyficzne dla dostawcy `options` zmieniają się w `settings`.
+- Obiekt wariantów V1 staje się tablicą V2, w której każdy wpis ma `id`.
+
+```jsonc
+// V1
+{
+  "variants": {
+    "high": {
+      "reasoningEffort": "high"
+    }
+  }
+}
+
+// V2
+{
+  "variants": [
+    {
+      "id": "high",
+      "settings": {
+        "reasoningEffort": "high"
+      }
+    }
+  ]
+}
+```
+
+Pełną natywną postać modelu opisano w sekcji [Modele](/models).
+
+### Obsługiwane pola bez bezpośrednich natywnych odpowiedników
+
+Większość pól, które zachowują tę samą postać – w tym `shell`, `model`, `default_agent`, `watcher`, `formatter`,
+`instructions`, `enterprise` i `tool_output` – nie wymaga migracji.
+
+V2 akceptuje i zachowuje konfigurację `lsp`, ale nie uruchamia serwerów językowych, nie udostępnia narzędzi LSP i nie
+generuje diagnostyki LSP. Procesy pracy zależne od tych możliwości zastąp poleceniami lintera, sprawdzania typów lub
+kompilatora używanymi w projekcie.
+
+Filtry dostawców z V1 nie mają odpowiedników jeden do jednego w natywnej konfiguracji V2, ale ich działanie jest nadal
+obsługiwane za pomocą [zasad](/policies):
+
+- `enabled_providers` zmienia się w wewnętrzną zasadę dostawców, która domyślnie odrzuca wszystko, a następnie zezwala na
+  wymienionych dostawców.
+- `disabled_providers` zmienia się w wewnętrzne zasady odrzucające wymienionych dostawców.
+- `autoupdate` zmienia się w `update`: `false` odpowiada `"disable"`, `"notify"` odpowiada `"notify"`, a `true`
+  odpowiada `"auto"`.
+- `small_model` staje się wyborem `model` dla wbudowanego agenta `title`. W natywnej konfiguracji V2 używaj zamiast tego
+  `agents.title.model`.
+
+Możesz zachować te pola w składni V1. OpenCode normalizuje je bez ostrzeżeń.
+
+### Pola akceptowane, ale nieobsługiwane
+
+Schemat V1 akceptował również pola, które nie mają obsługiwanego działania w V2. V2 ignoruje te wartości i zgłasza
+ostrzeżenie, aby nie zostały wzięte za aktywną konfigurację:
+
+- `logLevel`: przy uruchamianiu OpenCode użyj `OPENCODE_LOG_LEVEL`.
+- `server`: użyj usługi V2 i jawnych opcji serwera; API serwera to celowa zmiana niezgodna wstecz.
+- `subagent_depth` na najwyższym poziomie: użyj zamiast tego `experimental.subagent_depth`.
+- `compaction.tail_turns` i `compaction.prune`: V2 używa zamiast tego `compaction.keep.tokens` i kompaktowania opartego
+  na punktach kontrolnych.
+- Pole `name` agenta w konfiguracji JSON V1.
+- Wpis MCP z V1 zawierający tylko `enabled`, bez pola `type`.
+- Eksperymentalne pola V1 `batch_tool`, `openTelemetry`, `primary_tools` i `continue_loop_on_deny`.
+- Pola dostawcy V1 `id`, `whitelist` i `blacklist`.
+- Pola modelu dostawcy V1 `release_date`, `attachment`, `reasoning`, `temperature`, `experimental`, `status` o wartości
+  innej niż `deprecated` oraz logiczne `interleaved`.
+
+Ignorowanie tych pól jest celowe i nie jest regresją zgodności. Jeśli V2 nie zachowuje zachowania określonego w innym
+miejscu tego przewodnika jako obsługiwane, postępuj zgodnie ze wskazówkami dotyczącymi zgłaszania problemów w sekcji
+[Rozwiązywanie problemów](/troubleshooting).
+
+### Pliki agentów
+
+Pliki agentów V1 mogą znajdować się w `agent/`, `agents/`, `mode/` lub `modes/`. V2 nadal wykrywa wszystkie cztery
+katalogi. Preferowana lokalizacja w V2 to:
+
+```text
+.opencode/agents/<name>.md
+```
+
+Pliki w katalogu V1 `mode/` lub `modes/` reprezentują agentów głównych. Przenosząc taki plik do `agents/`, dodaj do jego
+frontmattera `mode: primary`. Pliki z `agent/` można przenieść do `agents/` bez zmiany ID wyprowadzanego ze ścieżki.
+
+Podczas przekształcania frontmattera do natywnych pól V2:
+
+- Zachowaj treść Markdown jako instrukcje systemowe agenta.
+- Zmień nazwę `prompt` na `system`, jeśli występuje w konfiguracji JSON; treść pliku nie wymaga pola `system`.
+- Zmień nazwę `disable` na `disabled`, a `permission` na `permissions`.
+- Połącz `model` i `variant` w postaci `provider/model#variant`.
+- Przenieś `temperature`, `top_p` i opcje specyficzne dla dostawcy do `request.body`.
+
+V2 automatycznie tłumaczy starszy frontmatter agentów, więc te zmiany są opcjonalne. Zobacz [Agenci](/agents).
+
+### Pliki poleceń
+
+Pliki poleceń V1 mogą znajdować się w `command/` lub `commands/`. V2 wykrywa oba katalogi. Preferowana lokalizacja to:
+
+```text
+.opencode/commands/<name>.md
+```
+
+Przenieś pliki z `command/` do tej samej ścieżki względnej w `commands/`, aby zachować nazwy poleceń. Treść Markdown
+pozostaje szablonem polecenia, a pola frontmattera `description` i `agent` zachowują te same nazwy. Zmień nazwę `subtask`
+na `subagent`, aby używać natywnej nazwy delegowania w tle. Jeśli frontmatter ma osobne pola `model` i `variant`, dołącz
+wariant do modelu i usuń `variant`:
+
+```yaml
+# V1
+model: anthropic/claude-sonnet-4-5
+variant: high
+subtask: true
+
+# V2
+model: anthropic/claude-sonnet-4-5#high
+subagent: true
+```
+
+Zobacz [Polecenia](/commands).
+
+### Pliki umiejętności
+
+V2 wykrywa umiejętności zarówno w `.opencode/skill/`, jak i w `.opencode/skills/`. Preferowany układ to:
+
+```text
+.opencode/skills/<skill-id>/SKILL.md
+```
+
+Przenieś cały katalog umiejętności, a nie tylko `SKILL.md`, aby skrypty, materiały referencyjne i inne pliki pomocnicze
+wskazywane ścieżkami względnymi pozostały dostępne. Nie zmieniaj nazwy katalogu, aby zachować ID umiejętności. Istniejący
+frontmatter i treść Markdown umiejętności nie wymagają przepisywania pod V2. Zobacz [Umiejętności](/skills).
+
+### Pliki instrukcji
+
+Istniejące pliki `AGENTS.md` pozostają na swoim miejscu. V2 wykrywa globalny plik `~/.config/opencode/AGENTS.md` oraz
+pliki `AGENTS.md` z otoczenia – od bieżącego katalogu aż do katalogu domowego. W przypadku projektów spoza katalogu
+domowego wykrywanie kończy się na katalogu głównym projektu.
+
+Jeśli konfiguracja V1 polegała na zapasowym pliku `CLAUDE.md`, przenieś te wskazówki do odpowiedniego pliku `AGENTS.md`.
+V2 obecnie wykrywa tylko `AGENTS.md`; ponieważ zachowanie V1 niezwiązane z API ma pozostać zgodne, zgłoś też problem ze
+zgodnością, podając szczegóły projektu, którego to dotyczy. Zobacz [Instrukcje](/instructions).
+
+## Konfiguracja klienta terminalowego
+
+V2 zastępuje warstwowe pliki V1 `tui.json(c)` jednym globalnym plikiem konfiguracyjnym klienta terminalowego:
+
+```text
+~/.config/opencode/cli.json
+```
+
+Ten plik należy do klienta terminalowego; usługa w tle go nie wczytuje. Jeśli `cli.json` nie istnieje, pierwsze
+uruchomienie klienta terminalowego V2 migruje obsługiwane globalne ustawienia `tui.json` i zapisane preferencje,
+pozostawiając pliki V1 bez zmian. Lokalna konfiguracja klienta na poziomie projektu nie jest migrowana, ponieważ
+konfiguracja klienta V2 jest globalna. Aktualny opis ustawień klienta znajdziesz w sekcji
+[Ustawienia CLI](/cli/config).
+
+## Wtyczki
+
+Zmień nazwę `plugin` na `plugins`. Krotkę złożoną z pakietu i opcji zastąp obiektem:
+
+```jsonc
+// V1
+{
+  "plugin": ["opencode-example-plugin", ["./plugin/local.ts", { "enabled": true }]]
+}
+
+// V2
+{
+  "plugins": [
+    "opencode-example-plugin",
+    {
+      "package": "./plugin/local.ts",
+      "options": { "enabled": true }
+    }
+  ]
+}
+```
+
+V2 wykrywa lokalne wtyczki zarówno w `.opencode/plugin/`, jak i w `.opencode/plugins/`; pliki V2 umieszczaj w
+`.opencode/plugins/`.
+
+<Callout type="warning">
+  Implementacje wtyczek V1 nie działają w V2. Przeniesienie pliku lub zmiana nazwy wpisu w konfiguracji nie wystarczy.
+</Callout>
+
+Punkty wejścia, hooki, narzędzia, zdarzenia i eksporty pakietów przeniesiesz, korzystając z osobnego
+[przewodnika migracji wtyczek](/build/plugins/migrate-v1).
+
+## API serwera i klienci
+
+OpenCode 2 ma zmienione, wygodniejsze API serwera i nowy zestaw klientów. Integracje, które wywołują API serwera V1,
+muszą zostać zmigrowane do API V2.
+
+Do opublikowanego API V2 uzyskasz dostęp za pomocą pakietu `@opencode/client`. Jego endpointy, typy żądań i odpowiedzi
+opisano w wygenerowanej [dokumentacji API](/api).
+
+## Weryfikacja konfiguracji
+
+Zanim zaczniesz polegać na V2 w codziennej pracy, sprawdź w projekcie model, dane uwierzytelniające dostawców, agentów,
+uprawnienia, serwery MCP i wtyczki. Zachowaj konfigurację V1, dopóki nie potwierdzisz, że V2 działa tak, jak potrzebujesz,
+i nie wskazuj w V1 konfiguracji przekształconej do natywnej postaci V2.

@@ -1,0 +1,222 @@
+---
+title: "RPC"
+---
+
+يمكن للإضافات أن تعرض توابع وأحداثًا مخصصة تعمل على الخادم، ويمكن للإضافات الأخرى أو العملاء استدعاؤها.
+
+## التعريف
+
+استخدم `Rpc.define` لسرد توابع RPC وأخطائه وأحداثه.
+
+```ts title="src/rpc.ts"
+import { Rpc } from "@opencode/plugin/rpc"
+
+export const Acme = Rpc.define({
+  id: "acme",
+  methods: {
+    search: {
+      input: {
+        type: "object",
+        properties: { query: { type: "string" } },
+        required: ["query"],
+        additionalProperties: false,
+      },
+      output: {
+        type: "object",
+        properties: { text: { type: "string" } },
+        required: ["text"],
+        additionalProperties: false,
+      },
+      errors: {
+        not_found: {
+          type: "object",
+          properties: { query: { type: "string" } },
+          required: ["query"],
+          additionalProperties: false,
+        },
+      },
+    },
+  },
+  events: {
+    updated: {
+      schema: {
+        type: "object",
+        properties: {
+          itemID: { type: "string" },
+          text: { type: "string" },
+        },
+        required: ["itemID", "text"],
+        additionalProperties: false,
+      },
+    },
+  },
+})
+```
+
+### التحقق من الصحة
+
+يصف تعريف RPC بنية مدخلات التوابع ومخرجاتها، وبنية الأحداث والأخطاء. ويدعم صيغتين للمخططات:
+
+- JSON Schema: بسيطة ولا تتطلب أي اعتماديات.
+- أي أداة تحقق متوافقة مع Standard Schema
+  - Zod
+  - Valibot
+  - ArkType
+
+### المدخلات والمخرجات
+
+يمكن لكل تابع أن يعرّف مخطط `input` لوسيطه ومخطط `output` لقيمته المُعادة. احذف أيًّا منهما إذا كان التابع لا يقبل قيمة
+أو لا يُعيدها.
+
+```ts
+search: {
+  input: {
+    type: "object",
+    properties: { query: { type: "string" } },
+    required: ["query"],
+  },
+  output: {
+    type: "object",
+    properties: { text: { type: "string" } },
+    required: ["text"],
+  },
+}
+```
+
+قيم JSON Schema من النوع `unknown` في TypeScript، لذا ضيّق نوعها قبل استخدامها. أما Standard Schema فيستنتج نوعي
+المدخلات والمخرجات تلقائيًا.
+
+### الأخطاء
+
+أضف خريطة `errors` إلى التابع لحالات الفشل المتوقعة. يصبح كل مفتاح قيمة `type` للخطأ، ويحدد مخططه بيانات الخطأ `data`.
+
+```ts
+errors: {
+  not_found: {
+    type: "object",
+    properties: { query: { type: "string" } },
+    required: ["query"],
+    additionalProperties: false,
+  },
+}
+```
+
+أسماء الأخطاء التي تبدأ بـ `rpc.` محجوزة لـ OpenCode.
+
+### الأحداث
+
+أضف الأحداث إلى خريطة `events` في المستوى الأعلى. لكل حدث مخطط للبيانات المُرسلة إلى المشتركين.
+
+يجب أن تكون بيانات الحدث كائنًا. استخدم مخطط كائن فارغًا عندما لا توجد بيانات:
+
+```ts
+events: {
+  refreshed: {
+    schema: { type: "object", additionalProperties: false },
+  },
+}
+```
+
+القيم المفردة والمصفوفات و`null` و`undefined` ليست بيانات حدث صالحة.
+
+## التنفيذ
+
+سجّل التنفيذ داخل `setup`:
+
+```ts title="src/index.ts"
+import { Plugin } from "@opencode/plugin"
+import { Acme } from "./rpc.js"
+
+export default Plugin.define({
+  id: "acme-plugin",
+  async setup(ctx) {
+    const registration = await ctx.rpc.register(Acme, {
+      search: async (input, context) => {
+        const { query } = input as { query: string }
+        const text = await findText(query, { signal: context.signal })
+        if (!text) return context.error("not_found", "Result not found", { query })
+        return { text }
+      },
+    })
+
+    const acme = ctx.rpc(Acme)
+    const result = await acme.search({ query: "hello" })
+
+    await registration.events.emit("updated", { itemID: "item-1", text: "ready" })
+  },
+})
+```
+
+بعد تسجيل RPC، يمكن للإضافة نفسها استدعاؤه عبر `ctx.rpc(Acme)`.
+
+يتضمن الوسيط الثاني `signal` للإلغاء و`context.error(...)` للأخطاء المُعرَّفة. يمكنك إعادة الخطأ أو رميه.
+
+يمكن لإضافة واحدة تسجيل أكثر من RPC واحد. ويؤدي التخلص من التسجيل (dispose) إلى إزالته.
+
+## الاستدعاء
+
+بعد تسجيل RPC، يمكن استدعاؤه عبر HTTP أو من إضافة أخرى.
+
+### HTTP
+
+أنشئ عميل OpenCode، ثم استخدم `client.rpc` لإنشاء عميل فرعي خاص بـ RPC:
+
+```ts
+import { OpenCode } from "@opencode/client"
+import { Acme } from "opencode-acme-plugin/rpc"
+
+const client = OpenCode.make({
+  baseUrl: "http://localhost:4096",
+})
+
+const acme = client.rpc(Acme)
+const result = await acme.search({ query: "hello" })
+```
+
+### من إضافة
+
+تملك الإضافات عميل OpenCode جاهزًا. فمثلًا، يمكن لإضافة TUI إنشاء عميل RPC الفرعي نفسه من `context.client`:
+
+```ts title="src/tui.ts"
+import { Plugin } from "@opencode/plugin/tui"
+import { Acme } from "opencode-acme-plugin/rpc"
+
+export default Plugin.define({
+  id: "acme-tui",
+  async setup(context) {
+    const acme = context.client.rpc(Acme)
+    const result = await acme.search({ query: "hello" })
+    console.log(result)
+  },
+})
+```
+
+### الاشتراك
+
+استخدم `events.on` لتمرير دالة رد نداء (callback)، وألغِ الاشتراك عندما لا تعود بحاجة إلى المستمع:
+
+```ts
+const unsubscribe = acme.events.on("updated", (event) => {
+  console.log(event.type, event.location.directory, event.data.text)
+})
+
+unsubscribe()
+```
+
+وللحصول على كائن قابل للتكرار غير متزامن (async iterable)، استخدم `events.subscribe("updated")`:
+
+```ts
+for await (const event of acme.events.subscribe("updated")) {
+  console.log(event.data.text)
+}
+```
+
+اشتراكات الأحداث حيّة فقط، لذا لا يتلقى المشتركون المنقطعون الأحداث التي تقع أثناء انقطاعهم.
+
+- اشترك بالاسم المحلي، مثل `updated`.
+- يحمل النوع المُستلَم بادئة، مثل `rpc.acme.updated`.
+- يتضمن كل حدث `data` و`location`.
+- يؤدي إلغاء تحميل الإضافة إلى إغلاق اشتراكاتها.
+
+يتلقى العملاء الخارجيون الأحداث من جميع المواقع، لذا تحقّق من `event.location` عند الحاجة. ولا يزال يلزم أن تكون إضافة
+الخادم مهيّأة وقيد التشغيل.

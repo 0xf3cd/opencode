@@ -1,0 +1,583 @@
+---
+title: "الأوامر"
+description: "مرجع سطر أوامر opencode."
+---
+
+يقبل كل أمر الخيار `--help` لعرض القائمة الكاملة لخياراته، مثل `opencode run --help`. وتقبل بعض الأوامر التي تعتمد على الخادم الخيار `--standalone` لتشغيل خادم خاص، أو `--server <url>` لاستهداف خادم محدد؛ راجع تعليمات الأمر لمعرفة الخيارات التي يدعمها.
+
+## run
+
+يرسل رسالة ويطبع الرد دون فتح الواجهة التفاعلية.
+
+```bash
+$ opencode run "Explain this repository"
+```
+
+### CI
+
+في CI، مرّر مفتاح API الخاص بالمزوّد كقيمة سرية، واستخدم الوضع المستقل ليتلقاه الخادم الخاص. مثلًا، تراجع مهمة GitHub Actions التالية المستودع الذي جرى سحبه:
+
+```yaml
+name: OpenCode review
+on: [pull_request]
+
+jobs:
+  review:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - run: npm install --global @opencode/cli
+      - run: opencode run --standalone --model anthropic/claude-sonnet-4-5 "Review this repository for correctness and summarize any issues."
+        env:
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+```
+
+اختر نموذجًا.
+
+```bash
+$ opencode run --model anthropic/claude-sonnet-4-5 "Refactor parseToken"
+```
+
+تابع آخر جلسة.
+
+```bash
+$ opencode run --continue "Now handle the expired case"
+```
+
+أخرج JSON مفصولًا بأسطر جديدة لاستخدامه في السكربتات.
+
+```bash
+$ opencode run --format json "List the TODO comments"
+```
+
+أرفق ملفات بالرسالة.
+
+```bash
+$ opencode run --file src/server.ts --file src/client.ts "Review these for bugs"
+```
+
+شغّل باستخدام وكيل محدد.
+
+```bash
+$ opencode run --agent build "Fix the failing test"
+```
+
+اعرض جميع الأوامر الفرعية والخيارات.
+
+```bash
+$ opencode run --help
+```
+
+## mini
+
+يشغّل الواجهة التفاعلية المصغّرة بدلًا من واجهة TUI بملء الشاشة.
+
+```bash
+$ opencode mini
+```
+
+تابع آخر جلسة.
+
+```bash
+$ opencode mini --continue
+```
+
+ابدأ بنموذج محدد وموجّه أولي.
+
+```bash
+$ opencode mini --model anthropic/claude-sonnet-4-5 --prompt "Summarize this repository"
+```
+
+اعرض جميع الأوامر الفرعية والخيارات.
+
+```bash
+$ opencode mini --help
+```
+
+## session
+
+يدير الجلسات.
+
+```bash
+$ opencode session list
+```
+
+حدّد عدد عناصر القائمة واطبعها بصيغة JSON.
+
+```bash
+$ opencode session list --max-count 20 --format json
+```
+
+احذف جلسة وجلساتها الفرعية.
+
+```bash
+$ opencode session delete ses_9c1b08
+```
+
+صدّر بيانات الجلسة بصيغة JSON.
+
+```bash
+$ opencode session export ses_4f2a1c
+```
+
+احجب بيانات المحادثة والملفات الحساسة عند التصدير.
+
+```bash
+$ opencode session export ses_4f2a1c --sanitize
+```
+
+استورد بيانات جلسة من ملف JSON أو من عنوان URL.
+
+```bash
+$ opencode session import session.json
+```
+
+استورد إلى دليل محدد.
+
+```bash
+$ opencode session import session.json --directory ~/code/project
+```
+
+اعرض جميع الأوامر الفرعية والخيارات.
+
+```bash
+$ opencode session --help
+```
+
+## auth
+
+يدير مزوّدي الذكاء الاصطناعي وبيانات الاعتماد.
+
+```bash
+$ opencode auth list
+```
+
+اعرضها بصيغة JSON.
+
+```bash
+$ opencode auth list --format json
+```
+
+سجّل الدخول لدى مزوّد.
+
+```bash
+$ opencode auth login anthropic
+```
+
+سجّل الدخول بطريقة مصادقة محددة.
+
+```bash
+$ opencode auth login anthropic --method key
+```
+
+سجّل الخروج من حساب محفوظ.
+
+```bash
+$ opencode auth logout anthropic work
+```
+
+بدّل الحساب النشط لتكامل ما.
+
+```bash
+$ opencode auth switch anthropic work
+```
+
+اعرض جميع الأوامر الفرعية والخيارات.
+
+```bash
+$ opencode auth --help
+```
+
+## models
+
+يعرض جميع النماذج المتاحة.
+
+```bash
+$ opencode models
+```
+
+اعرض جميع الأوامر الفرعية والخيارات.
+
+```bash
+$ opencode models --help
+```
+
+## mcp
+
+يدير خوادم MCP (Model Context Protocol).
+
+```bash
+$ opencode mcp list
+```
+
+أضف خادمًا بعيدًا.
+
+```bash
+$ opencode mcp add context7 --url https://mcp.context7.com/mcp
+```
+
+أضف خادمًا محليًا إلى التهيئة العامة.
+
+```bash
+$ opencode mcp add everything --global -- npx -y @modelcontextprotocol/server-everything
+```
+
+أضف خادمًا محليًا مع متغير بيئة.
+
+```bash
+$ opencode mcp add everything --env LOG_LEVEL=debug -- npx -y @modelcontextprotocol/server-everything
+```
+
+أضف خادمًا بعيدًا مع ترويسة.
+
+```bash
+$ opencode mcp add context7 --url https://mcp.context7.com/mcp --header CONTEXT7_API_KEY=secret
+```
+
+صادِق مع خادم بعيد يدعم OAuth.
+
+```bash
+$ opencode mcp auth sentry
+```
+
+أزِل بيانات اعتماد OAuth المخزّنة لخادم.
+
+```bash
+$ opencode mcp logout sentry
+```
+
+اعرض جميع الأوامر الفرعية والخيارات.
+
+```bash
+$ opencode mcp --help
+```
+
+## plugin
+
+يدير الإضافات.
+
+```bash
+$ opencode plugin list
+```
+
+ضمّن إضافات الخادم المدمجة.
+
+```bash
+$ opencode plugin list --builtin
+```
+
+ثبّت إضافة وأضفها إلى التهيئة العامة.
+
+```bash
+$ opencode plugin add @example/opencode-tui
+```
+
+تحقّق من وجود تحديثات لإضافات الحزم.
+
+```bash
+$ opencode plugin check
+```
+
+حدّث إضافات الحزم.
+
+```bash
+$ opencode plugin update
+```
+
+أزِل إضافة من التهيئة العامة.
+
+```bash
+$ opencode plugin remove @example/opencode-tui
+```
+
+اعرض جميع الأوامر الفرعية والخيارات.
+
+```bash
+$ opencode plugin --help
+```
+
+## stats
+
+يعرض إحصاءات استخدام قابلة للمشاركة.
+
+```bash
+$ opencode stats
+```
+
+اعرض آخر 7 أيام.
+
+```bash
+$ opencode stats --days 7
+```
+
+اعرض استخدام النماذج.
+
+```bash
+$ opencode stats --models
+```
+
+اعرض تفاصيل التكلفة وtokens.
+
+```bash
+$ opencode stats --cost
+```
+
+اطبع JSON بدلًا من التقرير.
+
+```bash
+$ opencode stats --json
+```
+
+اعرض جميع الأوامر الفرعية والخيارات.
+
+```bash
+$ opencode stats --help
+```
+
+## serve
+
+يشغّل خادم API وخادم الويب. راجع [الويب](/cli/web).
+
+```bash
+$ opencode serve
+```
+
+اربط الخادم بجميع الواجهات على منفذ ثابت.
+
+```bash
+$ opencode serve --hostname 0.0.0.0 --port 4096
+```
+
+اسمح لعميل متصفح من مصدر (origin) آخر.
+
+```bash
+$ opencode serve --cors https://app.example.com
+```
+
+اعرض جميع الأوامر الفرعية والخيارات.
+
+```bash
+$ opencode serve --help
+```
+
+## pair
+
+يطبع روابط تُستخدم مرة واحدة، إضافةً إلى رمز QR للرابط الأول، لتسجيل دخول متصفح أو تطبيق إلى الخادم. تنتهي صلاحية
+الروابط بعد 5 دقائق، ويعمل كل رابط مرة واحدة.
+
+```bash
+$ opencode pair
+```
+
+استخدم عنوان URL خارجيًا في الروابط.
+
+```bash
+$ opencode pair --url https://dev.example.com
+```
+
+أجرِ الاقتران من أي مكان عبر عنوان بعيد من OpenTunnel. يؤدي ذلك إلى كشف الخادم على الإنترنت، لذا يشرح الأمر ذلك في المرة
+الأولى التي يفعّل فيها الوصول عن بُعد ويطلب موافقتك. راجع [الوصول عن بُعد](/cli/web#remote-access).
+
+```bash
+$ opencode pair --remote
+```
+
+وافق دون سؤال، مثلًا في سكربت يعمل دون طرفية.
+
+```bash
+$ opencode pair --remote --yes
+```
+
+اعرض جميع الأوامر الفرعية والخيارات.
+
+```bash
+$ opencode pair --help
+```
+
+## service
+
+يدير الخادم الخلفي. راجع [الويب](/cli/web).
+
+```bash
+$ opencode service start
+```
+
+أعد تشغيله.
+
+```bash
+$ opencode service restart
+```
+
+اعرض حالته.
+
+```bash
+$ opencode service status
+```
+
+أوقفه.
+
+```bash
+$ opencode service stop
+```
+
+اقرأ قيمة إعداد.
+
+```bash
+$ opencode service get hostname
+```
+
+اضبط قيمة إعداد.
+
+```bash
+$ opencode service set hostname 0.0.0.0
+```
+
+اسمح بمصدر CORS إضافي.
+
+```bash
+$ opencode service set cors https://app.example.com
+```
+
+مرّر متغير بيئة إلى عملية الخادم.
+
+```bash
+$ opencode service set env OPENCODE_LOG_LEVEL DEBUG
+```
+
+أعد إعدادًا إلى قيمته الافتراضية.
+
+```bash
+$ opencode service unset hostname
+```
+
+اعرض جميع الأوامر الفرعية والخيارات.
+
+```bash
+$ opencode service --help
+```
+
+## reload
+
+يعيد تحميل التهيئة دون إعادة تشغيل الخادم. وتتابع الجلسات الجارية بخدمات محدَّثة عند حد الخطوة التالية.
+
+```bash
+$ opencode reload
+```
+
+## api
+
+يرسل طلبًا إلى الخادم قيد التشغيل.
+
+```bash
+$ opencode api GET /api/session
+```
+
+استدعِ معرّف عملية مع معامل استعلام.
+
+```bash
+$ opencode api session.list --param limit=10
+```
+
+أرسل متن طلب بصيغة JSON.
+
+```bash
+$ opencode api session.create --data '{"title": "New session"}'
+```
+
+أضف ترويسة إلى الطلب.
+
+```bash
+$ opencode api GET /api/session -H "accept: application/json"
+```
+
+اعرض جميع الأوامر الفرعية والخيارات.
+
+```bash
+$ opencode api --help
+```
+
+## acp
+
+يشغّل خادم Agent Client Protocol عبر stdin وstdout للتكامل مع المحررات. ويظل يعمل حتى يغلق العميل الاتصال.
+
+```bash
+$ opencode acp
+```
+
+اعرض جميع الأوامر الفرعية والخيارات.
+
+```bash
+$ opencode acp --help
+```
+
+## debug
+
+يوفّر أدوات للتصحيح واستكشاف الأخطاء وإصلاحها.
+
+```bash
+$ opencode debug agents
+```
+
+اعرض مصادر التهيئة.
+
+```bash
+$ opencode debug config
+```
+
+اعرض المسارات العامة.
+
+```bash
+$ opencode debug paths
+```
+
+اطبع مسارًا واحدًا.
+
+```bash
+$ opencode debug paths db
+```
+
+اعرض جميع الأوامر الفرعية والخيارات.
+
+```bash
+$ opencode debug --help
+```
+
+## upgrade
+
+يرقّي OpenCode إلى أحدث إصدار أو إلى إصدار محدد. الاسم البديل: `update`.
+
+```bash
+$ opencode upgrade
+```
+
+رقِّ إلى إصدار محدد باستخدام مدير حزم محدد.
+
+```bash
+$ opencode upgrade 2.0.21 --method bun
+```
+
+اعرض جميع الأوامر الفرعية والخيارات.
+
+```bash
+$ opencode upgrade --help
+```
+
+## uninstall
+
+يزيل OpenCode وجميع الملفات المرتبطة به.
+
+```bash
+$ opencode uninstall
+```
+
+اعرض مسبقًا ما ستجري إزالته.
+
+```bash
+$ opencode uninstall --dry-run
+```
+
+اعرض جميع الأوامر الفرعية والخيارات.
+
+```bash
+$ opencode uninstall --help
+```

@@ -1,0 +1,601 @@
+---
+title: "Migrer fra V1"
+---
+
+OpenCode 1 og OpenCode 2 bruker begge kommandoen `opencode`, og de installeres ikke lenger side om side som standard.
+Fjern en V1-installasjon som er installert med en pakkebehandler, før du installerer V2. V2-installasjonsprogrammet for
+curl erstatter V1-binærfilen.
+
+## Endringer som ikke er bakoverkompatible
+
+V2 har tre tilsiktede endringer som ikke er bakoverkompatible:
+
+- [Plugins](/build/plugins/migrate-v1) bruker et nytt plugin-API.
+- [Server-API-et og klientene](#server-api-and-clients) har nye kontrakter.
+- [Konfigurasjonen av terminalklienten](/cli/config) flyttes fra lagdelte `tui.json(c)`-filer til én global `cli.json`-fil
+  (migreres automatisk).
+
+Støttet V1-funksjonalitet utenfor disse områdene skal fortsatt være kompatibel med V1. Enkelte felt som V1-skjemaet
+godtok, har aldri hatt en V2-motpart og ignoreres med vilje. Disse er listet under
+[Felt som godtas, men ikke støttes](#accepted-but-unsupported-fields).
+
+Eksisterende støttede felt i serverkonfigurasjonen, agentdefinisjoner, kommandodefinisjoner, skills og andre filer i
+`.opencode/` skal fortsette å fungere uten endringer. Hvis støttet oppførsel som er beskrevet i denne veiledningen, slutter
+å fungere i V2, er det en kompatibilitetsfeil og ikke noe du forventes å migrere.
+
+<Callout type="tip">
+  Hvis støttet V1-funksjonalitet ikke fungerer i V2, følger du veiledningen for å rapportere problemer i
+  [Feilsøking](/troubleshooting) og melder et kompatibilitetsproblem.
+</Callout>
+
+## Installer V2
+
+Installer V2-terminalklienten ved hjelp av [veiledningen for å starte i terminalen](/cli).
+
+Du trenger ikke å skrive om alt før du starter V2. En praktisk migrering ser slik ut:
+
+1. Behold den eksisterende konfigurasjonen og de filbaserte definisjonene.
+2. Start V2, og kontroller modeller, legitimasjon, agenter, tillatelser og MCP-servere.
+3. Flytt over plugins, fordi V1-implementasjoner av plugins ikke kjører i V2.
+4. Flytt over integrasjoner som kaller server-API-et.
+5. Konverter konfigurasjonen til den native V2-formen når du er klar. Dette trinnet er valgfritt.
+
+Behold en kopi av V1-oppsettet mens du validerer migreringen. V1 og V2 bruker de samme konfigurasjonsplasseringene, så
+ikke la V1 peke på filer etter at du har konvertert dem til former som bare V2 forstår.
+
+## Konfigurasjon
+
+Denne delen dekker både JSON/JSONC-konfigurasjon og filbaserte definisjoner under `.opencode/`.
+
+### Bruk den eksisterende konfigurasjonen
+
+V2 leser eksisterende system-, global- og prosjektkonfigurasjon fra de samme plasseringene som V1:
+
+```text
+/Library/Application Support/opencode/opencode.json(c)
+/etc/opencode/opencode.json(c)
+%ProgramData%\opencode\opencode.json(c)
+/Library/Managed Preferences/<user>/ai.opencode.managed.plist
+/Library/Managed Preferences/ai.opencode.managed.plist
+~/.config/opencode/opencode.json(c)
+<project>/opencode.json(c)
+<project>/.opencode/opencode.json(c)
+```
+
+V2 leser de samme plasseringene. Støttede V1-felt og native V2-felt normaliseres i minnet uten at kildefilen skrives om.
+Eksisterende støttet V1-konfigurasjon skal fortsette å fungere, så du trenger ikke å konvertere den for å prøve eller ta i
+bruk V2.
+
+Som i V1 har systemkonfigurasjon og administrerte preferanser på macOS høyest prioritet, så innstillingene der overstyrer
+globale filer og prosjektfiler. [Policyene](/policies#precedence) deres, inkludert migrerte `enabled_providers` og
+`disabled_providers`, har også forrang foran globale policyer og prosjektpolicyer. Å overstyre en innstilling kan ikke
+hindre brukere i å legge til leverandører, MCP-servere, agenter eller plugins. Uttrykk derfor begrensninger som
+administratoren håndhever, som `policies` og ikke som vanlige innstillinger som `permissions`.
+
+### Be OpenCode om å migrere
+
+V1-konfigurasjonsformatet støttes fortsatt. Det native V2-formatet er valgfritt og gjør flere innstillinger mer
+eksplisitte og enklere å bruke.
+
+Den anbefalte migreringsveien er å be OpenCode om å oppdatere konfigurasjonen for deg:
+
+```text
+Migrate my OpenCode configuration, including file-based definitions, from the V1 format to the native V2 format.
+Preserve its behavior and all unrelated settings.
+```
+
+OpenCode kan gå gjennom hele filen, gjøre de relevante endringene nedenfor og unngå å skrive om innstillinger som ikke
+trenger å endres. Konverteringen trenger ikke å skje på én gang: Støttede V1-felt og native V2-felt kan eksistere side om
+side på toppnivå. Når begge formene setter den samme kanoniske verdien, har en gyldig native V2-verdi forrang, uavhengig av
+rekkefølgen på JSON-nøklene.
+
+Blanding på nestede nivåer er bevisst begrenset. OpenCode gjenkjenner blandede V1- og V2-medlemmer i `mcp`, `compaction`
+og `experimental`, men tolker ikke formater rekursivt inne i enkeltagenter, leverandører, kommandoer eller modeller. Hold
+hver av disse nestede oppføringene helt i ett format. Støttet V1-syntaks gir ingen advarsler i seg selv. Ugyldige verdier,
+ustøttede eldre felt og motstridende V1/V2-verdier gir advarsler, mens urelaterte gyldige innstillinger fortsatt lastes
+inn.
+
+### Deling
+
+Den avviklede boolske V1-verdien `autoshare` blir den eksplisitte `share`-policyen:
+
+```jsonc
+// V1
+{ "autoshare": true }
+
+// V2
+{ "share": "auto" }
+```
+
+Bruk `"manual"`, `"auto"` eller `"disabled"`. Hvis V1-filen allerede bruker `share`, trenger du ikke å endre noe.
+
+### Tillatelser og verktøy
+
+V1 grupperer tillatelseseffekter etter verktøy. V2 bruker én ordnet `permissions`-matrise, slik at prioritet og unntak
+blir eksplisitte:
+
+```jsonc
+// V1
+{
+  "permission": {
+    "bash": {
+      "git push *": "ask"
+    },
+    "edit": "allow"
+  },
+  "tools": {
+    "websearch": false
+  }
+}
+
+// V2
+{
+  "permissions": [
+    { "action": "shell", "resource": "git push *", "effect": "ask" },
+    { "action": "edit", "resource": "*", "effect": "allow" },
+    { "action": "websearch", "resource": "*", "effect": "deny" }
+  ]
+}
+```
+
+Handlingene for tillatelser er også endret: `bash` heter nå `shell`, `task` heter nå `subagent`, og `write` og `patch` er
+nå `edit`. Se [Tillatelser](/permissions) for det ordnede regelformatet i V2.
+
+### Agenter og moduser
+
+Entallsformen `agent` og det avviklede `mode`-kartet blir `agents`. Agentfeltene blir mer konsekvente med resten av
+V2-konfigurasjonen:
+
+```jsonc
+// V1
+{
+  "agent": {
+    "reviewer": {
+      "prompt": "Review for correctness and missing tests.",
+      "model": "anthropic/claude-sonnet-4-5",
+      "variant": "high",
+      "disable": false,
+      "permission": {
+        "edit": "deny"
+      }
+    }
+  }
+}
+
+// V2
+{
+  "agents": {
+    "reviewer": {
+      "system": "Review for correctness and missing tests.",
+      "model": "anthropic/claude-sonnet-4-5#high",
+      "disabled": false,
+      "permissions": [
+        { "action": "edit", "resource": "*", "effect": "deny" }
+      ]
+    }
+  }
+}
+```
+
+`prompt` blir `system`, `disable` blir `disabled`, og en separat `variant` føyes til modellreferansen etter `#`.
+`temperature`, `top_p` og leverandørspesifikke `options` flyttes under `request.body`. `maxSteps` blir `steps`. Oppføringer
+fra det gamle `mode`-kartet blir primæragenter.
+
+### Snapshots
+
+Gi entallsfeltet `snapshot` det nye navnet `snapshots`. Den boolske verdien endres ikke:
+
+```jsonc
+// V1
+{ "snapshot": false }
+
+// V2
+{ "snapshots": false }
+```
+
+### Medier
+
+Gi entallsobjektet `attachment` det nye navnet `media`. Nestede bildeinnstillinger beholder de samme navnene:
+
+```jsonc
+// V1
+{ "attachment": { "image": { "auto_resize": true } } }
+
+// V2
+{ "media": { "image": { "auto_resize": true } } }
+```
+
+### MCP-servere
+
+V2 grupperer servere under `mcp.servers`, erstatter `enabled` med det motsatte `disabled` og skiller tidsavbrudd etter
+formål:
+
+```jsonc
+// V1
+{
+  "mcp": {
+    "playwright": {
+      "type": "local",
+      "command": ["npx", "@playwright/mcp"],
+      "enabled": true,
+      "timeout": 30000
+    }
+  }
+}
+
+// V2
+{
+  "mcp": {
+    "servers": {
+      "playwright": {
+        "type": "local",
+        "command": ["npx", "@playwright/mcp"],
+        "disabled": false,
+        "timeout": {
+          "catalog": 30000,
+          "execution": 30000
+        }
+      }
+    }
+  }
+}
+```
+
+OAuth-felt for eksterne servere bruker snake case: `clientId` blir `client_id`, `clientSecret` blir `client_secret`,
+`callbackPort` blir `callback_port`, og `redirectUri` blir `redirect_uri`. V1-verdien `experimental.mcp_timeout` blir
+også standardverdien for `mcp.timeout.catalog` og `mcp.timeout.execution`. Se [MCP-servere](/mcp-servers).
+
+### Komprimering
+
+V2 grupperer tokenbudsjettet for bevart kontekst under `keep` og gir reserven et tydeligere navn:
+
+```jsonc
+// V1
+{
+  "compaction": {
+    "preserve_recent_tokens": 8000,
+    "reserved": 20000
+  }
+}
+
+// V2
+{
+  "compaction": {
+    "keep": {
+      "tokens": 8000
+    },
+    "buffer": 20000
+  }
+}
+```
+
+`auto` beholder navnet sitt. V2 har ingen native `tail_turns`- eller `prune`-felt; begge de eldre feltene ignoreres med en
+advarsel. Nylig kontekst bevares i stedet ut fra tokenbudsjettet. Se [Komprimering](/compaction).
+
+### Skills
+
+V1 skiller mellom ekstra skill-stier og URL-er. V2 samler begge i én ordnet matrise:
+
+```jsonc
+// V1
+{
+  "skills": {
+    "paths": ["./team-skills"],
+    "urls": ["https://example.com/skills/"]
+  }
+}
+
+// V2
+{
+  "skills": ["./team-skills", "https://example.com/skills/"]
+}
+```
+
+Eksisterende skill-filer og automatisk oppdagelse i `.opencode/skills/` endres ikke. Se [Skills](/skills).
+
+### Kommandoer
+
+Gi entallskartet `command` det nye navnet `commands`, og `subtask` det nye navnet `subagent`. Føy en separat
+modell-`variant` til modellreferansen:
+
+```jsonc
+// V1
+{
+  "command": {
+    "review": {
+      "template": "Review the current changes.",
+      "model": "anthropic/claude-sonnet-4-5",
+      "variant": "high",
+      "subtask": true
+    }
+  }
+}
+
+// V2
+{
+  "commands": {
+    "review": {
+      "template": "Review the current changes.",
+      "model": "anthropic/claude-sonnet-4-5#high",
+      "subagent": true
+    }
+  }
+}
+```
+
+`template`, `description` og `agent` beholder navnene sine. Det eldre `subtask` godtas fortsatt. Delegerte kommandoer
+kjører nå automatisk i bakgrunnen og rapporterer resultatene til den overordnede økten. Eksisterende kommandodefinisjoner
+i Markdown støttes fortsatt. Se [Kommandoer](/commands).
+
+### Referanser
+
+Gi det avviklede entallskartet `reference` det nye navnet `references`:
+
+```jsonc
+// V1
+{ "reference": { "docs": "../docs" } }
+
+// V2
+{ "references": { "docs": "../docs" } }
+```
+
+V1 godtar allerede `references`, så du trenger ikke å endre noe når filen bruker det. Referanseoppføringene beholder den
+samme formen. Se [Referanser](/references).
+
+### Leverandører
+
+Gi entallskartet `provider` det nye navnet `providers`. V2 skiller runtime-pakken, endepunktet og
+forespørselsinnstillingene:
+
+```jsonc
+// V1
+{
+  "provider": {
+    "acme": {
+      "npm": "@ai-sdk/openai-compatible",
+      "api": "https://llm.example.com/v1",
+      "options": {
+        "apiKey": "{env:ACME_API_KEY}"
+      }
+    }
+  }
+}
+
+// V2
+{
+  "providers": {
+    "acme": {
+      "package": "aisdk:@ai-sdk/openai-compatible",
+      "settings": {
+        "baseURL": "https://llm.example.com/v1",
+        "apiKey": "{env:ACME_API_KEY}"
+      }
+    }
+  }
+}
+```
+
+V1-feltet `npm` blir `package`, og AI SDK-pakker får prefikset `aisdk:`. `api` blir `settings.baseURL`.
+Leverandørens `options` deles opp i `settings`, `headers` og `body` etter hvilken rolle de har i forespørselen.
+`options.setCacheKey` blir `compatibility.supportsPromptCacheKey` på leverandøren. Se [Leverandører](/providers).
+
+V2 har slått sammen to eldre navnerom for leverandører:
+
+| Leverandør-ID i V1         | Kanonisk leverandør-ID i V2 |
+| -------------------------- | --------------------------- |
+| `azure-cognitive-services` | `azure`                     |
+| `google-vertex-anthropic`  | `google-vertex`             |
+
+Migrering av entydige V1-felt for leverandører, agenter, kommandoer og leverandørfiltre bruker disse kanoniske ID-ene. Det
+delte `model`-feltet på toppnivå beholder den nøyaktige leverandør-ID-en, fordi den samme syntaksen er gyldig i native
+V2-konfigurasjon. Oppdater feltet til den kanoniske ID-en når du migrerer en eldre innebygd leverandør.
+
+### Modeller og varianter
+
+Modeller ligger fortsatt nestet under leverandøren sin, men flere modellfelt blir mer eksplisitte:
+
+- `id` blir `modelID`.
+- `tool_call` og `modalities` blir `capabilities.tools`, `capabilities.input` og `capabilities.output`.
+- En `status` med verdien `"deprecated"` blir `disabled: true`.
+- Hurtigbufferkostnader flyttes fra `cache_read` og `cache_write` til `cache.read` og `cache.write`.
+- Leverandørspesifikke `options` blir `settings`.
+- Et V1-objekt med varianter blir en V2-matrise med en `id` på hver oppføring.
+
+```jsonc
+// V1
+{
+  "variants": {
+    "high": {
+      "reasoningEffort": "high"
+    }
+  }
+}
+
+// V2
+{
+  "variants": [
+    {
+      "id": "high",
+      "settings": {
+        "reasoningEffort": "high"
+      }
+    }
+  ]
+}
+```
+
+Se [Modeller](/models) for den komplette native modellformen.
+
+### Støttede felt uten direkte native motpart
+
+De fleste felt som beholder samme form, inkludert `shell`, `model`, `default_agent`, `watcher`, `formatter`,
+`instructions`, `enterprise` og `tool_output`, krever ingen migrering.
+
+V2 godtar og bevarer `lsp`-konfigurasjon, men kjører ikke språkservere, eksponerer ikke LSP-verktøy og gir ikke
+LSP-diagnostikk. Erstatt arbeidsflyter som er avhengige av disse funksjonene, med prosjektets kommandoer for linting,
+typesjekk eller kompilering.
+
+Leverandørfiltrene i V1 har ikke tilsvarende native konfigurasjonsfelt i V2, men oppførselen støttes fortsatt gjennom
+[policyer](/policies):
+
+- `enabled_providers` blir en intern leverandørpolicy som avslår alt som standard, etterfulgt av regler som tillater
+  de oppførte leverandørene.
+- `disabled_providers` blir interne avslagspolicyer for de oppførte leverandørene.
+- `autoupdate` blir `update`: `false` tilsvarer `"disable"`, `"notify"` tilsvarer `"notify"`, og `true` tilsvarer
+  `"auto"`.
+- `small_model` blir `model`-valget for den innebygde agenten `title`. Native V2-konfigurasjon bør bruke
+  `agents.title.model` i stedet.
+
+Du kan beholde disse feltene i V1-syntaks. OpenCode normaliserer dem uten advarsel.
+
+### Felt som godtas, men ikke støttes
+
+V1-skjemaet godtok også felt som ikke har noen støttet oppførsel i V2. V2 ignorerer disse verdiene og gir en advarsel, slik
+at de ikke forveksles med aktiv konfigurasjon:
+
+- `logLevel`: Bruk `OPENCODE_LOG_LEVEL` når du starter OpenCode.
+- `server`: Bruk V2-tjenesten og eksplisitte serveralternativer. Server-API-et er en tilsiktet endring som ikke er
+  bakoverkompatibel.
+- `subagent_depth` på toppnivå: Bruk `experimental.subagent_depth` i stedet.
+- `compaction.tail_turns` og `compaction.prune`: V2 bruker `compaction.keep.tokens` og sjekkpunktbasert komprimering i
+  stedet.
+- Agentfeltet `name` i V1-konfigurasjon i JSON.
+- En V1-oppføring for MCP som bare har `enabled` og mangler `type`.
+- De eksperimentelle V1-feltene `batch_tool`, `openTelemetry`, `primary_tools` og `continue_loop_on_deny`.
+- Leverandørfeltene `id`, `whitelist` og `blacklist` fra V1.
+- Leverandørmodellfeltene `release_date`, `attachment`, `reasoning`, `temperature`, `experimental`, en `status` som ikke er
+  `deprecated`, og boolsk `interleaved` fra V1.
+
+At disse feltene ignoreres, er tilsiktet og ikke en kompatibilitetsregresjon. Hvis V2 ikke bevarer oppførsel som er
+beskrevet som støttet andre steder i denne veiledningen, følger du veiledningen for å rapportere problemer i
+[Feilsøking](/troubleshooting).
+
+### Agentfiler
+
+Agentfiler i V1 kan ligge i `agent/`, `agents/`, `mode/` eller `modes/`. V2 oppdager fortsatt alle fire katalogene. Den
+foretrukne plasseringen i V2 er:
+
+```text
+.opencode/agents/<name>.md
+```
+
+Filer i en V1-katalog `mode/` eller `modes/` representerer primæragenter. Når du flytter en av dem til `agents/`, legger du
+til `mode: primary` i frontmatter. Filer under `agent/` kan flyttes til `agents/` uten at ID-en som utledes fra stien,
+endres.
+
+Når du konverterer frontmatter til native V2-felt:
+
+- Behold Markdown-innholdet som agentens systeminstruksjoner.
+- Gi `prompt` det nye navnet `system` når det står i JSON-konfigurasjon. Filinnhold trenger ikke et `system`-felt.
+- Gi `disable` det nye navnet `disabled`, og `permission` det nye navnet `permissions`.
+- Slå sammen `model` og `variant` som `provider/model#variant`.
+- Flytt `temperature`, `top_p` og leverandørspesifikke alternativer under `request.body`.
+
+V2 oversetter eldre agent-frontmatter automatisk, så disse endringene er valgfrie. Se [Agenter](/agents).
+
+### Kommandofiler
+
+Kommandofiler i V1 kan ligge i `command/` eller `commands/`. V2 oppdager begge. Den foretrukne plasseringen er:
+
+```text
+.opencode/commands/<name>.md
+```
+
+Flytt filer fra `command/` til samme relative sti under `commands/` for å beholde kommandonavnene. Markdown-innholdet er
+fortsatt kommandomalen, og frontmatter-feltene `description` og `agent` beholder de samme navnene. Gi `subtask` det nye
+navnet `subagent` for å bruke det native navnet for delegering i bakgrunnen. Hvis frontmatter har separate felt for
+`model` og `variant`, føyer du varianten til modellen og fjerner `variant`:
+
+```yaml
+# V1
+model: anthropic/claude-sonnet-4-5
+variant: high
+subtask: true
+
+# V2
+model: anthropic/claude-sonnet-4-5#high
+subagent: true
+```
+
+Se [Kommandoer](/commands).
+
+### Skill-filer
+
+V2 oppdager skills fra både `.opencode/skill/` og `.opencode/skills/`. Den foretrukne strukturen er:
+
+```text
+.opencode/skills/<skill-id>/SKILL.md
+```
+
+Flytt hele skill-katalogen, ikke bare `SKILL.md`, slik at relative skript, referanser og andre støttefiler fortsatt er
+tilgjengelige. Behold katalognavnet uendret for å bevare skill-ID-en. Eksisterende skill-frontmatter og Markdown-innhold
+trenger ikke å skrives om for V2. Se [Skills](/skills).
+
+### Instruksjonsfiler
+
+Eksisterende `AGENTS.md`-filer blir liggende der de er. V2 oppdager den globale `~/.config/opencode/AGENTS.md` og
+`AGENTS.md`-filer i omgivelsene fra gjeldende katalog opp til hjemmekatalogen. For prosjekter utenfor hjemmekatalogen
+stopper oppdagelsen ved prosjektroten.
+
+Hvis et V1-oppsett var avhengig av en fallback til `CLAUDE.md`, flytter du disse instruksjonene inn i den aktuelle
+`AGENTS.md`. V2 oppdager foreløpig bare `AGENTS.md`. Fordi V1-oppførsel utenom API-et skal forbli kompatibel, bør du også
+melde et kompatibilitetsproblem med detaljer om det berørte prosjektet. Se [Instruksjoner](/instructions).
+
+## Konfigurasjon av terminalklienten
+
+V2 erstatter lagdelte `tui.json(c)`-filer fra V1 med én global konfigurasjonsfil for terminalklienten:
+
+```text
+~/.config/opencode/cli.json
+```
+
+Terminalklienten eier denne filen; bakgrunnstjenesten laster den ikke inn. Når `cli.json` mangler, migrerer den første
+oppstarten av V2-terminalklienten støttede globale `tui.json`-innstillinger og lagrede preferanser, uten å endre
+V1-filene. Klientkonfigurasjon på prosjektnivå migreres ikke, fordi klientkonfigurasjonen i V2 er global. Se
+[CLI-innstillinger](/cli/config) for en oppdatert referanse over klientinnstillingene.
+
+## Plugins
+
+Gi `plugin` det nye navnet `plugins`. Erstatt en tuppel med pakke og alternativer med et objekt:
+
+```jsonc
+// V1
+{
+  "plugin": ["opencode-example-plugin", ["./plugin/local.ts", { "enabled": true }]]
+}
+
+// V2
+{
+  "plugins": [
+    "opencode-example-plugin",
+    {
+      "package": "./plugin/local.ts",
+      "options": { "enabled": true }
+    }
+  ]
+}
+```
+
+V2 oppdager lokale plugins fra både `.opencode/plugin/` og `.opencode/plugins/`. Bruk `.opencode/plugins/` for V2-filer.
+
+<Callout type="warning">
+  V1-implementasjoner av plugins kjører ikke i V2. Det er ikke nok å flytte en fil eller gi konfigurasjonsoppføringen et
+  nytt navn.
+</Callout>
+
+Flytt over inngangspunkter, hooks, verktøy, hendelser og pakkeeksporter ved hjelp av den egne
+[veiledningen for migrering av plugins](/build/plugins/migrate-v1).
+
+## Server-API og klienter
+
+OpenCode 2 har et revidert server-API som er enklere å bruke, og et nytt sett med klienter. Integrasjoner som kaller
+server-API-et i V1, må migreres til V2-API-et.
+
+Bruk pakken `@opencode/client` for å få tilgang til det utgitte V2-API-et. Se den genererte [API-referansen](/api) for
+endepunkter, forespørselstyper og svar.
+
+## Kontroller oppsettet
+
+Kontroller modellen, leverandørlegitimasjonen, agentene, tillatelsene, MCP-serverne og pluginene i et prosjekt før du
+stoler på V2 i det daglige arbeidet. Behold V1-oppsettet til du har bekreftet at V2 oppfører seg slik du trenger, og ikke
+la V1 peke på konfigurasjon som du har konvertert til den native V2-formen.

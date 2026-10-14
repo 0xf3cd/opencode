@@ -1,0 +1,85 @@
+---
+title: "Fakturering"
+description: "Tilføj kredit, konfigurer automatisk optankning, administrer betalingsmetoder, og download fakturaer i OpenCode Console."
+---
+
+Console er gratis for teams af enhver størrelse, uden betaling pr. bruger. Du betaler kun for forbrug, via forudbetalt
+kredit, der dækker hele arbejdsområdet. Ejere og administratorer administrerer faktureringen under
+**Settings › Billing**.
+
+Forbrug via [dine egne udbydere](/console/providers) faktureres af udbyderen, ikke af Console.
+
+## Tilføj en betalingsmetode
+
+1. Åbn **Settings › Billing**.
+2. Klik på **Add** under **Payment methods**.
+3. Vælg en metode, og gennemfør opsætningen i Stripe.
+
+Understøttede betalingsmetoder:
+
+- Kort
+- Link
+- Alipay
+- UPI
+- WeChat Pay
+
+Brug **⋯ › Make default** til at vælge den metode, der bruges til automatiske betalinger. Hvis du fjerner en metode,
+kan det stoppe automatisk optankning og Go-fornyelser, der bruger den.
+
+## Tilføj kredit
+
+1. Klik på **Add credits** under **Credits**.
+2. Vælg $10, $50 eller $100, eller vælg **Other**, og indtast et beløb.
+3. Vælg en betalingsmetode, og klik på **Confirm and pay**.
+
+Der lægges et gebyr på 4.6% + $0.31 oveni, så et køb på $50 koster $52.61, og hele beløbet på $50 føjes til saldoen.
+
+## Automatisk optankning
+
+Automatisk optankning køber kredit, når saldoen er ved at være lav.
+
+1. Klik på **Add rule** under **Auto-recharge**.
+2. Angiv den saldo, der udløser en betaling, og det beløb, der skal tilføjes.
+3. Klik på **Save**.
+
+Automatisk optankning trækker beløbet, inklusive gebyret, på standardbetalingsmetoden. Hvis en betaling mislykkes,
+slås automatisk optankning fra, indtil du konfigurerer den igen.
+
+## Se din saldo
+
+Kortet **Credits** under **Overview** viser saldoen for ejere og administratorer.
+
+## Når kreditten slipper op
+
+Betalte anmodninger fejler med HTTP `402`, når saldoen når nul. Saldoen bliver aldrig negativ.
+
+```text
+Upstream request failed: Insufficient account funds
+```
+
+## Fakturaer
+
+Hver betaling vises under **Invoices** med sin status og et link til **Download invoice** eller **View receipt**.
+
+| Post             | Oprettes ved               |
+| ---------------- | -------------------------- |
+| Balance top-up   | Tilføjelse af kredit       |
+| Automatic top-up | Automatisk optankning      |
+| Go subscription  | Tilmelding til Go          |
+| Go renewal       | Månedlig fornyelse af Go   |
+| Monthly Usage    | Fakturabaseret betaling    |
+
+## Fakturabaseret betaling
+
+Arbejdsområder med en kreditaftale kan faktureres månedligt i stedet for at købe kredit. Kontakt support for at få det
+konfigureret.
+
+- Forbruget trækkes på en kreditgrænse i stedet for en forudbetalt saldo.
+- Fakturaen for hver måned udstedes den 1. (UTC) og forfalder 14 dage senere.
+- Åbne fakturaer har en **Pay now**-knap.
+- Anmodninger fejler med HTTP `402`, når kreditgrænsen er nået, eller en faktura er forfalden.
+
+## Go
+
+[OpenCode Go](/console/go)-abonnementer bruger de samme betalingsmetoder og vises i samme fakturaliste. Slå
+**Extra usage** til på kortet **Credits** under **Overview** for at betale med kredit, når en Go-grænse er nået.

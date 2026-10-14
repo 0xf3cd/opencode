@@ -1,0 +1,646 @@
+---
+title: "CLI"
+---
+
+CLI-plugins udvider terminalen med kommandoer, ruter, slots, Markdown-renderere, notifikationer og lokal tilstand.
+
+```ts title="src/tui.ts"
+import { Plugin } from "@opencode/plugin/tui"
+
+export default Plugin.define({
+  id: "acme.cli",
+  setup(context) {
+    context.ui.toast.show({ message: "CLI plugin loaded", variant: "success" })
+  },
+})
+```
+
+Importer `@opencode/plugin/tui` direkte. OpenCode løser importen ved kørsel, så lokale CLI-plugins behøver ikke en
+absolut sti til en OpenCode-checkout.
+
+## Kontekst
+
+`setup` modtager konfiguration, app-metadata, den aktuelle placering, OpenCode-klienten, cachelagrede data, tematokens,
+OpenTUI-rendereren og de UI-API'er, der er beskrevet nedenfor.
+
+```ts
+setup(context) {
+  const compact = context.options.compact === true
+  const location = context.location ?? context.data.location.default()
+  const version = context.app.version
+  const channel = context.app.channel
+  const client = context.client
+  const renderer = context.renderer
+  const theme = context.theme
+}
+```
+
+Returner en oprydningsfunktion for ressourcer, som pluginnet ejer.
+
+```ts
+setup(context) {
+  const stop = context.data.on("session.execution.succeeded", () => {})
+  return () => stop()
+}
+```
+
+## Klient
+
+`context.client` er den genererede OpenCode-klient og kan kalde den forbundne server, også en fjernserver.
+
+```ts
+const response = await context.client.plugin.list({
+  location: context.location ?? context.data.location.default(),
+})
+const plugins = response.data
+```
+
+## Hændelser
+
+Brug `data.on` til én typet hændelse eller `data.listen` til alle serverhændelser; begge returnerer en funktion, der
+afmelder abonnementet.
+
+```ts
+const stopPermission = context.data.on("permission.asked", (event) => {
+  context.ui.toast.show({ message: `Permission ${event.data.id}` })
+})
+const stopAll = context.data.listen(({ details }) => console.log(details.type))
+
+return () => {
+  stopPermission()
+  stopAll()
+}
+```
+
+## Sessioner
+
+Sessionsdata giver adgang til liste, opslag, hierarki, omkostning, status, synkronisering og invalidering.
+
+```ts
+const sessions = context.data.session.list()
+const session = context.data.session.get(sessionID)
+const rootID = context.data.session.root(sessionID)
+const familyIDs = context.data.session.family(sessionID)
+const cost = context.data.session.cost(sessionID)
+const status = context.data.session.status(sessionID)
+await context.data.session.sync(sessionID)
+context.data.session.invalidate(sessionID)
+```
+
+Ventende inbox-elementer og beskeder har API'er til liste, opslag, synkronisering og invalidering.
+
+```ts
+await context.data.session.pending.sync(sessionID)
+const pending = context.data.session.pending.list(sessionID)
+context.data.session.pending.invalidate(sessionID)
+
+await context.data.session.message.sync(sessionID)
+const messages = context.data.session.message.list(sessionID)
+const message = context.data.session.message.get(sessionID, messageID)
+context.data.session.message.invalidate(sessionID)
+```
+
+Tilladelsesanmodninger kan læses og opdateres for en session.
+
+```ts
+await context.data.session.permission.sync(sessionID)
+const requests = context.data.session.permission.list(sessionID) ?? []
+context.data.session.permission.invalidate(sessionID)
+```
+
+Formularer kan listes, opdateres, besvares eller annulleres på en placering.
+
+```ts
+import type { FormCancelInput, FormReplyInput } from "@opencode/client"
+
+async function handleForm(reply: FormReplyInput, cancel: FormCancelInput) {
+  const location = context.location
+  await context.data.session.form.sync(sessionID, location)
+  const forms = context.data.session.form.list(sessionID, location) ?? []
+  await context.data.session.form.reply(reply, location)
+  await context.data.session.form.cancel(cancel, location)
+  context.data.session.form.invalidate(sessionID, location)
+}
+```
+
+## Projekter og shells
+
+Projekter og gemte tilladelser understøtter liste, opslag, synkronisering og invalidering.
+
+```ts
+await context.data.project.sync()
+const projects = context.data.project.list()
+const project = context.data.project.get(projectID)
+context.data.project.invalidate()
+
+await context.data.project.permission.sync(projectID)
+const saved = context.data.project.permission.list(projectID) ?? []
+context.data.project.permission.invalidate(projectID)
+```
+
+Shelldata understøtter liste, opslag, synkronisering og invalidering afgrænset til en placering.
+
+```ts
+await context.data.shell.sync(context.location)
+const shells = context.data.shell.list(context.location)
+const shell = context.data.shell.get(shellID)
+context.data.shell.invalidate(context.location)
+```
+
+## Placeringsdata
+
+Placeringstilstanden giver adgang til standardplaceringen og styring af opdatering.
+
+```ts
+const location = context.data.location.default()
+await context.data.location.sync(location)
+context.data.location.invalidate(location)
+```
+
+Versionsstyringstilstanden giver adgang til repository-oplysninger på en placering.
+
+```ts
+await context.data.location.vcs.sync(context.location)
+const vcs = context.data.location.vcs.info(context.location)
+const branch = vcs?.branch.current
+context.data.location.vcs.invalidate(context.location)
+```
+
+Agenter, kommandoer, integrationer, modeller, udbydere, referencer, skills og MCP-data har alle metoderne `list`, `sync`
+og `invalidate`.
+
+```ts
+const location = context.location
+await Promise.all([
+  context.data.location.agent.sync(location),
+  context.data.location.command.sync(location),
+  context.data.location.integration.sync(location),
+  context.data.location.model.sync(location),
+  context.data.location.provider.sync(location),
+  context.data.location.reference.sync(location),
+  context.data.location.skill.sync(location),
+  context.data.location.mcp.server.sync(location),
+  context.data.location.mcp.resource.sync(location),
+])
+
+const agents = context.data.location.agent.list(location) ?? []
+const commands = context.data.location.command.list(location) ?? []
+const integrations = context.data.location.integration.list(location) ?? []
+const models = context.data.location.model.list(location) ?? []
+const providers = context.data.location.provider.list(location) ?? []
+const references = context.data.location.reference.list(location) ?? []
+const skills = context.data.location.skill.list(location) ?? []
+const servers = context.data.location.mcp.server.list(location) ?? []
+const resources = context.data.location.mcp.resource.list(location) ?? []
+
+context.data.location.model.invalidate(location)
+```
+
+## Opmærksomhed
+
+Opmærksomhedsanmodninger kan vise en systemnotifikation, afspille en konfigureret lyd eller begge dele, afhængigt af om
+terminalen har fokus.
+
+```ts
+const result = await context.attention.notify({
+  title: "OpenCode",
+  message: "Session done",
+  notification: { when: "blurred" },
+  sound: { name: "done", volume: 0.5, when: "always" },
+})
+console.log(result.ok, result.notification, result.sound, result.skipped)
+```
+
+## Tema og renderer
+
+Brug semantiske tematokens med OpenTUI-elementer, og send `context.renderer` videre til renderer-specifikke hjælpere.
+
+```tsx
+const Status = () => <text fg={context.theme.text.base}>Ready</text>
+const renderer = context.renderer
+```
+
+## Solid-komponenter
+
+Brug `usePlugin` til at få adgang til den aktuelle kontekst i JSX, der renderes af en rute, en dialog eller et slot.
+
+```tsx
+import { usePlugin } from "@opencode/plugin/tui"
+
+function Status() {
+  const context = usePlugin()
+  return <text fg={context.theme.text.base}>{context.app.version}</text>
+}
+```
+
+## Markdown
+
+Registrer en renderer til kodeblokke for et bestemt sprog; den returnerede funktion afregistrerer den igen.
+
+```ts
+const unregister = context.markdown.registerCodeBlockRenderer("acme", (_token, render) => render.defaultRender())
+return unregister
+```
+
+## Kommandoer og keymaps
+
+Registrer palette-, slash- og tastaturkommandoer i et reaktivt keymap-lag.
+
+```ts
+context.keymap.layer(() => ({
+  mode: "global",
+  priority: 10,
+  commands: [
+    {
+      id: "acme.status",
+      title: "Show Acme status",
+      group: "Acme",
+      bind: "ctrl+g",
+      palette: true,
+      slash: { name: "acme", aliases: ["status"], arguments: true },
+      enabled: () => true,
+      suggested: true,
+      run: async (input) => context.ui.toast.show({ message: input ?? "Ready" }),
+    },
+  ],
+  bindings: ["acme.status"],
+}))
+```
+
+Kald `layer` fra `setup`, også efter en `await`, eller fra en komponent. Hvert lag fjernes ved det første af følgende:
+
+- Pluginnet deaktiveres, genindlæses eller fejler under opsætning.
+- Komponenten eller den reaktive beregning, der oprettede laget, for eksempel et slot, en rute eller en dialog, frigives.
+
+Lag-factoryen skal være ren. OpenCode evaluerer den én gang uden afhængighedssporing for at validere kommandoernes
+oprindelige form og derefter reaktivt. Fejl i den oprindelige kommandoform, for eksempel en palettekommando uden ID,
+kastes fra `layer()`. OpenTUI håndterer fejl ved parsing af bindinger. Fejl fra senere reaktive opdateringer følger
+Solids fejlhåndtering.
+
+```ts
+async setup(context) {
+  const settings = await loadSettings()
+  context.keymap.layer(() => ({
+    mode: "global",
+    commands: [{ id: "acme.sync", title: "Sync Acme", palette: true, run: () => sync(settings) }],
+  }))
+}
+```
+
+Et lag kan målrettes mod én OpenTUI-renderable og kan returnere `false` fra en kommando for at fortsætte
+tastaturafviklingen.
+
+```ts
+context.keymap.layer(() => ({
+  target: () => panel,
+  commands: [{ bind: "escape", run: (_input, event) => (event ? false : undefined) }],
+}))
+```
+
+Afvikl kommandoer, se genveje og kommandotilstand, eller skub en midlertidig inputtilstand.
+
+```ts
+context.keymap.dispatch("acme.status", "verbose")
+const shortcuts = context.keymap.shortcuts("acme.status")
+const commands = context.keymap.commands()
+const pending = context.keymap.pending()
+const active = context.keymap.active()
+const currentMode = context.keymap.mode.current()
+const popMode = context.keymap.mode.push("acme-search")
+popMode()
+```
+
+## Lager
+
+Varigt lager gemmer JSON på tværs af genstarter og synkroniseres mellem TUI-instanser.
+
+```ts
+const [settings, updateSettings] = context.storage.store("settings", {
+  initial: { compact: false },
+})
+await updateSettings((draft) => {
+  draft.compact = true
+})
+```
+
+Hukommelseslager overlever genindlæsning af plugins, men kasseres, når TUI'en afsluttes.
+
+```ts
+const [state, updateState] = context.storage.memory("state", {
+  initial: { count: 0 },
+})
+updateState((draft) => {
+  draft.count++
+})
+```
+
+## Dialoger og toast-notifikationer
+
+Brug promise-baserede dialoger til advarsler, bekræftelser, tekstinput og valg.
+
+```ts
+await context.ui.dialog.alert({ title: "Acme", message: "Ready" })
+const confirmed = await context.ui.dialog.confirm({
+  title: "Continue?",
+  message: "Run the Acme action?",
+  label: { confirm: "Run", cancel: "Cancel" },
+})
+const name = await context.ui.dialog.prompt({ title: "Name", placeholder: "release" })
+const mode = await context.ui.dialog.select({
+  title: "Mode",
+  current: "safe",
+  options: [
+    { title: "Safe", value: "safe", description: "Ask before changes" },
+    { title: "Fast", value: "fast", disabled: false, category: "Advanced" },
+  ],
+})
+```
+
+### Søgning i valg
+
+Angiv `search` for selv at styre matchning og rækkefølgen af resultater. Funktionen kører for hver forespørgsel, også den
+tomme, og modtager kun aktiverede valgmuligheder. Resultaterne vises i den returnerede rækkefølge, med hver kategori vist
+inline.
+
+```ts
+const project = await context.ui.dialog.select({
+  title: "Projects",
+  options: [
+    { title: "Alpha", value: "alpha", category: "Recent" },
+    { title: "Beta", value: "beta", category: "Pinned" },
+  ],
+  search: (query, options) =>
+    options
+      .filter((option) => option.title.toLowerCase().includes(query.toLowerCase()))
+      .toSorted((left, right) => right.title.localeCompare(left.title)),
+})
+```
+
+### Handlinger i valg
+
+Handlinger vises i bunden af dialogen og køres via deres tastaturbinding, et klik eller fokus med Tab efterfulgt af
+Enter. Som standard modtager de den valgte værdi og er utilgængelige, når intet er valgt. Brug `selection: "none"` til
+handlinger, der ikke kræver et valg.
+
+```ts
+await context.ui.dialog.select({
+  title: "Projects",
+  options: [{ title: "Alpha", value: "alpha" }],
+  actions: [
+    { bind: "ctrl+o", title: "Inspect", onTrigger: (value) => context.ui.toast.show({ message: value }) },
+    { bind: "ctrl+a", title: "Close", side: "right", selection: "none", onTrigger: () => context.ui.dialog.clear() },
+  ],
+})
+```
+
+- En handling lukker ikke dialogen og afgør ikke promiset.
+- Enter eller et klik på en valgmulighed resolver den valgte værdi.
+- Escape, `clear()` eller visning af en anden dialog resolver `undefined`.
+- Bind ikke `ctrl+n` eller `ctrl+p`. Dialogen reserverer dem til navigation, og dens egne bindinger har forrang.
+
+Brugerdefinerede JSX-dialoger kan angive deres størrelse og lukke sig selv.
+
+```tsx
+context.ui.dialog.set({ size: "large", centered: true })
+context.ui.dialog.show(
+  () => (
+    <box>
+      <text>Acme</text>
+    </box>
+  ),
+  () => console.log("closed"),
+)
+context.ui.dialog.clear()
+```
+
+Toast-notifikationer understøtter titel, besked, variant og varighed.
+
+```ts
+context.ui.toast.show({
+  title: "Acme",
+  message: "Saved",
+  variant: "success",
+  duration: 3000,
+})
+```
+
+## Ruter og faner
+
+Registrer en JSX-rute, se den aktuelle rute, og naviger til forsiden, en session eller pluginsiden.
+
+```tsx
+const unregister = context.ui.router.register({
+  name: "dashboard",
+  render: ({ data }) => <text>{String(data?.title ?? "Acme")}</text>,
+})
+const current = context.ui.router.current()
+context.ui.router.navigate({ type: "plugin", name: "dashboard", data: { title: "Status" } })
+context.ui.router.navigate({ type: "session", sessionID })
+context.ui.router.navigate({ type: "home" })
+return unregister
+```
+
+Når sessionsfaner er slået til, kan faner listes, åbnes, fokuseres, flyttes og lukkes. `open` ændrer ikke fokus;
+`focus` åbner fanen, hvis det er nødvendigt.
+
+```ts
+if (context.ui.tabs.enabled()) {
+  context.ui.tabs.open(backgroundSessionID)
+  context.ui.tabs.focus(sessionID)
+  const tabs = context.ui.tabs.list()
+  context.ui.tabs.move(backgroundSessionID, tabs.length - 1)
+  context.ui.tabs.close(sessionID)
+  context.ui.tabs.close()
+}
+```
+
+## Model
+
+Læs promptens valgte model, og skift dens variant. `current()` og `variant.list()` er reaktive, når de læses i en
+Solid-beregning. En `variant` med værdien `undefined` er modellens standard.
+
+```ts
+const selected = context.ui.model.current()
+const variants = context.ui.model.variant.list()
+context.ui.model.variant.set("high")
+context.ui.model.variant.set(undefined)
+```
+
+`variant.set` returnerer `false`, når ingen model er valgt, eller modellen ikke har den variant. Bind den til en kommando
+for at erstatte den indbyggede gennemgang af varianter, for eksempel for at springe modellens standard over:
+
+```ts
+context.keymap.layer(() => ({
+  commands: [
+    {
+      id: "acme.variant.cycle",
+      title: "Cycle variants",
+      bind: "tab",
+      run() {
+        const variants = context.ui.model.variant.list()
+        if (variants.length === 0) return
+        const index = variants.indexOf(context.ui.model.current()?.variant ?? "")
+        context.ui.model.variant.set(variants[(index + 1) % variants.length])
+      },
+    },
+  ],
+}))
+```
+
+## Slots
+
+Slots indsætter eller erstatter JSX ved `app`, `home.footer`, `home.footer.status`, `prompt.footer`,
+`prompt.footer.status`, `prompt.footer.file`, `session.composer.top`, `sidebar.content` eller `sidebar.footer`.
+
+```tsx
+return context.ui.slot({
+  append: "sidebar.content",
+  render: ({ sessionID }) => <text>{context.data.session.get(sessionID)?.title}</text>,
+})
+```
+
+Brug `prepend`, `append`, `before`, `after` eller `replace` til placeringen.
+
+```tsx
+context.ui.slot({ prepend: "home.footer", render: () => <text>Before footer content</text> })
+context.ui.slot({ append: "home.footer", render: () => <text>After footer content</text> })
+context.ui.slot({ before: "home.footer", render: () => <text>Before footer slot</text> })
+context.ui.slot({ after: "home.footer", render: () => <text>After footer slot</text> })
+context.ui.slot({ replace: "home.footer", render: () => <text>New footer</text> })
+```
+
+Brug `home.footer.status` til at tilføje indhold til den indbyggede bundlinje uden at erstatte den. Statusbidrag vises
+efter OpenCodes sundhedsindikatorer og før versionen.
+
+```tsx
+context.ui.slot({ append: "home.footer.status", render: () => <text>SYNCED</text> })
+```
+
+### Sessionspaneler
+
+Registrer et bidrag til `session.panel`, og åbn derefter panelet fra en kommando. Værten styrer størrelse, fokus og
+fuldskærmsvisning; pluginnet styrer indholdet. Det valgte navn sendes til hvert bidrag som `panel.name`, og hvert bidrag
+afgør selv, om det skal renderes.
+
+```tsx
+import { Show } from "solid-js"
+
+context.ui.slot({
+  append: "session.panel",
+  render: (panel) => (
+    <Show when={panel.name === "acme.review"}>
+      <ReviewPanel panel={panel} />
+    </Show>
+  ),
+})
+
+context.ui.slot({
+  append: "app",
+  render: () => {
+    context.keymap.layer(() => ({
+      mode: "global",
+      commands: [
+        {
+          id: "acme.review",
+          title: "Open review",
+          slash: { name: "review" },
+          run: () => {
+            context.ui.panel.open("acme.review")
+          },
+        },
+      ],
+    }))
+    return null
+  },
+})
+```
+
+- Åbning uden for en session returnerer `false`.
+- Det er et almindeligt slot: Alle fem placeringer og de eksisterende regler for rækkefølge ved erstatning gælder.
+- Brug `append` til bidrag, der kan vælges uafhængigt, så de kan eksistere side om side. `replace` overtager stadig slottet.
+- Navne er fælles valgværdier, ikke registrerede krav. Brug et navn med pluginpræfiks som `acme.review` for at undgå
+  kollisioner. Hvis du åbner et navn uden en matchende renderer, forbliver slottet tomt.
+- Skift af visning bevarer de monterede bidrag. Når panelet lukkes, frigives de; når et plugin deaktiveres, fjernes dets
+  bidrag via den normale oprydning af slots.
+- Panelets tastaturlag og inputtilstande er kun aktive, mens panelet har inputtet.
+
+Slottet modtager de reaktive egenskaber `name`, `sessionID`, `width`, `presentation` og `focused` samt handlingerne
+`focus`, `close` og `toggleFullscreen`. Værten holder smalle terminaler i fuld skærm; `toggleFullscreen` har ingen effekt,
+før der er plads nok til et sidepanel.
+
+```tsx
+import type { PanelInput } from "@opencode/plugin/tui/context"
+import { usePlugin } from "@opencode/plugin/tui"
+
+function ReviewPanel(props: { panel: PanelInput }) {
+  const context = usePlugin()
+  context.keymap.layer(() => ({
+    commands: [
+      {
+        id: "acme.review.fullscreen",
+        bind: "f",
+        run: props.panel.toggleFullscreen,
+      },
+    ],
+  }))
+  return <text>Reviewing {props.panel.sessionID}</text>
+}
+```
+
+Du kan bede om fuldskærmsvisning fra start, se dit aktive panel eller lukke det uden at påvirke et andet plugins panel.
+
+```ts
+context.ui.panel.open("acme.review", { presentation: "fullscreen" })
+const current = context.ui.panel.current()
+context.ui.panel.close()
+```
+
+## Formatering
+
+Formater filsystemstier til visning, herunder forkortelse af hjemmemappen.
+
+```ts
+const displayPath = context.ui.format.path(context.location?.directory ?? "/home/me/project")
+```
+
+## Publicer og indlæs
+
+Udstil CLI-pluginnet via `./tui`; tilføj OpenTUI som peer-afhængigheder, når pluginnet renderer JSX.
+
+```json title="package.json"
+{
+  "name": "opencode-acme-plugin",
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts",
+    "./tui": "./src/tui.tsx"
+  },
+  "dependencies": {
+    "@opencode/plugin": "latest"
+  },
+  "peerDependencies": {
+    "@opentui/core": ">=0.5.8",
+    "@opentui/solid": ">=0.5.8",
+    "solid-js": ">=1.9.0"
+  }
+}
+```
+
+Eksporter `./tui` ved siden af [hovedpluginnet](/build/plugins), så det indlæses automatisk.
+
+```ts title="src/index.ts"
+import { Plugin } from "@opencode/plugin"
+
+export default Plugin.define({
+  id: "acme.server",
+  setup() {},
+})
+```
+
+Konfigurer en pakke, der kun er til CLI'en, i [`cli.json`](/cli/plugins), så den forbliver aktiv mod fjernservere.
+
+```json title="cli.json"
+{
+  "plugins": ["opencode-acme-plugin"]
+}
+```

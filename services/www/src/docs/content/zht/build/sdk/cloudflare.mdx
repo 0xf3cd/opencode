@@ -1,0 +1,81 @@
+---
+title: "Cloudflare"
+---
+
+在 Cloudflare Durable Object 中使用 `@opencode/sdk/workerd`。這個設定檔使用物件本身的 SQLite 儲存空間，保存持久事件以便在被逐出後復原，並替換掉無法使用的本機檔案系統與處理程序服務。
+
+```sh
+bun add @opencode/sdk
+```
+
+在 Durable Object 執行個體的整個生命週期中只保留一個主機，不要每個請求都建立一個。
+
+```ts
+import { OpenCodeWorkerd } from "@opencode/sdk/workerd"
+import myPlugin from "./my-plugin"
+
+export class OpenCodeDO {
+  private readonly opencode: Promise<OpenCodeWorkerd.Interface>
+
+  constructor(state: DurableObjectState) {
+    this.opencode = state.blockConcurrencyWhile(() =>
+      OpenCodeWorkerd.create({
+        storage: state.storage,
+        config: { default_agent: "build" },
+        plugins: [myPlugin],
+      }),
+    )
+  }
+
+  async fetch() {
+    const opencode = await this.opencode
+    return Response.json(await opencode.server.info())
+  }
+}
+```
+
+`blockConcurrencyWhile` 會在主機就緒前擋下所有 Durable Object 事件，並在初始化失敗時重設物件。保留下來的 Promise 讓請求處理常式在啟動後可以直接存取同一個主機。
+
+```ts
+constructor(state: DurableObjectState) {
+  this.opencode = state.blockConcurrencyWhile(() =>
+    OpenCodeWorkerd.create({ storage: state.storage }),
+  )
+}
+```
+
+Wrangler 會透過 `workerd` 套件條件選用 OpenCode 適用於 Workerd 的實作。Cloudflare 可能會在不執行清理的情況下逐出 Durable Object，因此正確性不依賴於 `close()` 是否被呼叫。
+
+```jsonc title="wrangler.jsonc"
+{
+  "compatibility_flags": ["nodejs_compat"]
+}
+```
+
+## 自訂
+
+註冊與 Worker 一起打包的外掛，即可自訂你的 OpenCode 執行個體。將外掛傳給 `OpenCodeWorkerd.create()`，就能自訂代理、模型、工具和其他行為：
+
+```ts
+import { Plugin } from "@opencode/plugin"
+import { OpenCodeWorkerd } from "@opencode/sdk/workerd"
+
+const plugin = Plugin.define({
+  id: "customize-agent",
+  async setup(ctx) {
+    await ctx.agent.transform((agents) => {
+      agents.update("build", (agent) => {
+        agent.description = "Builds features and fixes bugs for our team"
+      })
+    })
+  },
+})
+
+await OpenCodeWorkerd.create({
+  storage: state.storage,
+  config: { default_agent: "build" },
+  plugins: [plugin],
+})
+```
+
+外掛 hook、轉換、工具和完整的外掛上下文，請參閱[完整的外掛文件](/build/plugins)。

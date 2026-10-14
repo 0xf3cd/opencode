@@ -1,0 +1,141 @@
+---
+title: "Wtyczki"
+---
+
+Dodaj do `opencode.json(c)` opublikowane pakiety, pakiety w określonej wersji, pakiety z zakresem (scope) lub lokalne
+katalogi wtyczek.
+
+## Konfiguracja
+
+```jsonc title="opencode.jsonc"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "plugins": [
+    "opencode-acme-plugin",
+    "opencode-acme-plugin@1.2.0",
+    "@acme/opencode-plugin",
+    "./plugins/local",
+    "../shared/plugin.ts",
+    "/absolute/path/plugin.ts",
+    "file:///home/me/plugins/local",
+    {
+      "package": "@acme/opencode-plugin",
+      "options": {
+        "agent": "reviewer",
+        "strict": true,
+      },
+    },
+  ],
+}
+```
+
+Ścieżki względne są rozwiązywane względem pliku konfiguracyjnego, który zawiera dany wpis. Tablice wtyczek z
+obowiązujących plików konfiguracyjnych są stosowane od najniższego do najwyższego pierwszeństwa, a nie zastępują się
+nawzajem.
+
+```text
+~/.config/opencode/opencode.jsonc
+./opencode.jsonc
+./.opencode/opencode.jsonc
+```
+
+## Wykrywanie
+
+OpenCode wczytuje też pliki `.ts` i `.js` oraz katalogi pakietów wtyczek leżące bezpośrednio w każdym znalezionym
+katalogu `.opencode/plugins/`.
+
+```text
+.opencode/
+└── plugins/
+    ├── concise.ts
+    ├── reviewer.js
+    └── acme-package/
+```
+
+Wtyczki globalne korzystają z tego samego układu w katalogu konfiguracyjnym OpenCode.
+
+```text
+~/.config/opencode/plugins/
+```
+
+Katalog `plugins/` położony obok pliku `opencode.json(c)` w katalogu głównym projektu nie jest wykrywany automatycznie;
+skonfiguruj jego pliki jawnie lub przenieś go do `.opencode/`.
+
+```jsonc title="opencode.jsonc"
+{
+  "plugins": ["./plugins/local"]
+}
+```
+
+## Włączanie i wyłączanie
+
+Wpisy wtyczek są przetwarzane po kolei. Poprzedź ID lub wzorzec znakiem `-`, aby go wyłączyć; użyj `*`, aby objąć
+wszystkie wtyczki, i `.*`, aby dopasować prefiks ID. Późniejszy wpis z ID ponownie włącza wtyczkę.
+
+```jsonc title="opencode.jsonc"
+{
+  "plugins": ["*", "-opencode.provider.*", "opencode.provider.openai", "-acme.reviewer"]
+}
+```
+
+Dwie wbudowane wtyczki ignorują wyłączanie, aby repozytorium nie mogło wyłączyć egzekwowania [zasad](/policies):
+`opencode.config.policy` oraz `opencode.provider.opencode` – połączenie z Console, które dostarcza zasady organizacji.
+
+## Zarządzanie
+
+Globalne wtyczki z pakietów zainstalujesz, wyświetlisz, sprawdzisz, zaktualizujesz lub usuniesz za pomocą CLI.
+
+```sh
+opencode plugin add opencode-acme-plugin@1.2.0
+opencode plugin list
+opencode plugin list --builtin
+opencode plugin check
+opencode plugin update
+opencode plugin update opencode-acme-plugin
+opencode plugin remove opencode-acme-plugin@1.2.0
+```
+
+`plugin check` sprawdza dostępność aktualizacji wtyczek serwera i wtyczek działających tylko w TUI. `plugin update`
+aktualizuje każdy nieaktualny pakiet; podaj skonfigurowany pakiet, aby sprawdzić lub zaktualizować tylko jego. Wtyczki
+lokalne i pakiety przypięte do dokładnej wersji są pomijane.
+
+Instalacja pakietów akceptuje nazwy npm z wersjami, tagami lub zakresami, a także specyfikacje pakietów Git zgodne z npm.
+Repozytoria Git można podać skrótem serwisu hostingowego, przez HTTPS lub SSH – w tym repozytoria prywatne dostępne dzięki
+Twoim istniejącym danym uwierzytelniającym Git.
+
+```sh
+opencode plugin add @acme/opencode-plugin@latest
+opencode plugin add github:acme/opencode-plugin
+opencode plugin add git+ssh://git@github.com/acme/opencode-plugin.git#main
+opencode plugin add 'github:acme/plugins#main::path:packages/opencode-plugin'
+```
+
+Obsługiwane są gałęzie, tagi, pełne hashe commitów oraz selektory podkatalogu repozytorium npm w postaci `::path:`.
+Ścieżki lokalne konfiguruj bezpośrednio; `plugin add` nie akceptuje archiwów tarball ani aliasów npm.
+
+## Przeładowywanie
+
+Zmiany w obserwowanych katalogach konfiguracyjnych są wczytywane automatycznie. Przy starcie serwer od razu wczytuje
+wtyczki z pakietów zapisanych w pamięci podręcznej, w tle instaluje brakujące pakiety i sprawdza aktualizacje
+nieprzypiętych wtyczek npm i Git, nie zmieniając zainstalowanego pakietu. Dokładne wersje npm i pełne hashe commitów Git
+pozostają przypięte. Zmiany w nieobserwowanych lokalnych zależnościach mogą nadal wymagać ponownego uruchomienia
+OpenCode.
+
+```sh
+touch .opencode/plugins/concise/index.ts
+opencode service restart
+```
+
+## Terminal
+
+Wtyczki działające tylko w CLI konfiguruje się osobno; pozostają aktywne również po połączeniu ze zdalnym serwerem.
+
+```json title="cli.json"
+{
+  "plugins": ["opencode-acme-cli"]
+}
+```
+
+<Card title="Tworzenie wtyczek" href="/build/plugins">
+  Twórz wtyczki, które dodają narzędzia, hooki, integracje, polecenia, agentów i inne funkcje.
+</Card>

@@ -1,0 +1,240 @@
+---
+title: "Umiejętności"
+---
+
+Utwórz umiejętność, aby dać agentowi instrukcje wielokrotnego użytku do konkretnego zadania. Umieść plik `SKILL.md` w `.opencode/skills/<skill-id>` i opisz w polu `description`, kiedy należy z niej korzystać.
+
+```markdown title=".opencode/skills/git-release/SKILL.md"
+---
+name: Git Release
+description: Prepare release notes, version bumps, and GitHub releases
+---
+
+## Workflow
+
+1. Read `references/release-policy.md`.
+2. Summarize merged changes since the previous tag.
+3. Propose the version bump before changing files.
+4. Run `scripts/changelog.ts` only after the user approves the version.
+```
+
+OpenCode zgłasza tę umiejętność modelowi, gdy jest istotna. Agent może wtedy wczytać jej instrukcje narzędziem `skill`, zamiast dodawać każdą umiejętność do każdego promptu.
+
+## Tworzenie
+
+Powiązane skrypty, materiały referencyjne i szablony trzymaj obok `SKILL.md`:
+
+```text
+.opencode/skills/
+└── git-release/
+    ├── SKILL.md
+    ├── scripts/
+    │   └── changelog.ts
+    └── references/
+        └── release-policy.md
+```
+
+Ścieżki zapisane w umiejętności są względne wobec katalogu zawierającego `SKILL.md`. Zalecana jest forma katalogowa, ponieważ zapewnia plikom pomocniczym własny katalog bazowy.
+
+## Wykrywanie
+
+OpenCode automatycznie przeszukuje te lokalizacje:
+
+| Zakres                   | Źródła                                 |
+| ------------------------ | -------------------------------------- |
+| Globalny                 | `~/.config/opencode/skills`            |
+| Globalny (zgodność)      | `~/.claude/skills`, `~/.agents/skills` |
+| Projekt                  | `.opencode/skills`                     |
+| Projekt (zgodność)       | `.claude/skills`, `.agents/skills`     |
+
+W przypadku źródeł projektowych OpenCode przeszukuje katalogi od bieżącego aż do katalogu głównego projektu i uwzględnia pasujące katalogi na każdym poziomie.
+
+Każde źródło może zawierać jedną z dwóch form:
+
+```text
+skills/
+├── review.md
+└── git-release/
+    └── SKILL.md
+```
+
+- Pliki Markdown muszą leżeć w katalogu głównym źródła, np. `skills/review.md`.
+- Pliki o nazwie dokładnie `SKILL.md` mogą leżeć na dowolnej głębokości, np. `skills/git-release/SKILL.md`.
+
+## Źródła
+
+Dodatkowe katalogi lokalne lub katalogi HTTP dodasz w tablicy `skills` w dowolnym pliku `opencode.json` lub `opencode.jsonc`:
+
+```jsonc title="opencode.jsonc"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "skills": [
+    "./team-skills",
+    "~/shared/opencode-skills",
+    "/opt/company-skills",
+    "https://example.com/opencode/skills/",
+  ],
+}
+```
+
+| Wartość | Rozwiązywanie |
+| ------- | ------------- |
+| Ścieżka względna | Względem aktywnego katalogu roboczego OpenCode, a nie pliku konfiguracyjnego |
+| Ścieżka `~/` | Względem katalogu domowego bieżącego użytkownika |
+| Ścieżka bezwzględna | Używana bez zmian |
+| URL `http://` lub `https://` | Wczytywany jako katalog HTTP |
+
+Każdy znaleziony plik konfiguracyjny dokłada swoje wpisy. Tablice `skills` są łączone, a nie zastępowane.
+
+## Katalogi HTTP
+
+Katalog HTTP to bazowy URL z plikiem `index.json`:
+
+```json title="index.json"
+{
+  "skills": [
+    {
+      "name": "git-release",
+      "version": "3",
+      "files": ["git-release.md", "references/release-policy.md"]
+    }
+  ]
+}
+```
+
+Dla tego wpisu OpenCode pobiera każdy plik z `<base-url>/git-release/<file>`.
+
+| Reguła | Wymaganie |
+| ------ | --------- |
+| Ścieżki | Muszą być bezpieczne, względne i z tego samego pochodzenia (same-origin) |
+| Plik wejściowy | Dołącz `SKILL.md` lub `<name>.md`, np. `git-release.md` |
+| Aktualizacje | Po zmianie plików zwiększ `version`, aby OpenCode odświeżył pamięć podręczną |
+
+W katalogu HTTP preferuj formę z nazwanym plikiem Markdown. Każdy pobrany katalog umiejętności staje się katalogiem głównym źródła, więc `git-release.md` ma ID `git-release`. Plik `SKILL.md` na poziomie głównym ma obecnie w V2 dosłowny ID `SKILL`.
+
+## Frontmatter
+
+We frontmatterze nadasz umiejętności nazwę i określisz, gdzie ma się pojawiać:
+
+```markdown title="SKILL.md"
+---
+name: Git Release
+description: Prepare a repository release
+metadata:
+  opencode/autoinvoke: false
+---
+
+Prepare the changelog, version bump, tag, and release notes.
+```
+
+| Pole                           | Działanie                                                               |
+| ------------------------------ | ----------------------------------------------------------------------- |
+| `name`                         | Wyświetlana nazwa; domyślnie ID wyprowadzony ze ścieżki                 |
+| `description`                  | Podsumowanie, na podstawie którego umiejętność jest pokazywana modelowi |
+| `metadata.opencode/autoinvoke` | Ustaw na `false`, aby pominąć umiejętność na liście dostępnej dla modelu |
+| `disable-model-invocation`     | Ustaw na `true`, aby uzyskać ten sam efekt co `opencode/autoinvoke: false` |
+
+W czasie działania cały frontmatter jest opcjonalny. Jeśli model ma wykrywać umiejętność, dodaj czytelny opis w `description` – umiejętności bez niego nie są zgłaszane modelowi.
+
+`opencode/autoinvoke: false` jedynie ukrywa umiejętność na liście dostępnej dla modelu. Umiejętność pozostaje zarejestrowana i nadal można ją jawnie wczytać według ID. Jeśli ustawiono zarówno `disable-model-invocation`, jak i `opencode/autoinvoke`, wygrywa `opencode/autoinvoke`. V2 akceptuje pola zapewniające przenośność, takie jak `license` i `compatibility`, ale ich nie interpretuje.
+
+## ID
+
+Ścieżka pliku wyznacza ID umiejętności. Pole `name` we frontmatterze to tylko wyświetlana etykieta.
+
+| Plik                              | ID            |
+| --------------------------------- | ------------- |
+| `<source>/git-release.md`         | `git-release` |
+| `<source>/git-release/SKILL.md`   | `git-release` |
+| `<source>/teams/release/SKILL.md` | `release`     |
+
+ID są dokładne i rozróżniają wielkość liter. W przypadku przenośnych umiejętności używaj unikalnego ID zapisanego małymi literami w notacji kebab-case, o długości 1–64 znaków, i utrzymuj go zgodnego z nazwą katalogu:
+
+```text
+^[a-z0-9]+(-[a-z0-9]+)*$
+```
+
+V2 obecnie nie wymusza tego wzorca, zalecanej długości 1–64 znaków, zgodności `name` z nazwą katalogu ani maksymalnej długości opisu.
+
+## Pierwszeństwo
+
+Umiejętności są wybierane według ID. Jeśli dwa źródła definiują `git-release`, OpenCode wczyta umiejętność ze źródła zarejestrowanego później:
+
+```text
+~/.config/opencode/skills/git-release/SKILL.md  ← lower precedence
+.opencode/skills/git-release/SKILL.md           ← loaded
+```
+
+Źródła są rejestrowane od najniższego do najwyższego pierwszeństwa:
+
+1. Wbudowane umiejętności
+2. `.claude/skills` – najpierw globalne, a potem od najdalszego katalogu nadrzędnego w stronę bieżącego katalogu
+3. `.agents/skills` – najpierw globalne, a potem od najdalszego katalogu nadrzędnego w stronę bieżącego katalogu
+4. `~/.config/opencode/skills`
+5. `.opencode/skills` projektu – od katalogu głównego projektu w stronę bieżącego katalogu
+6. Jawne wpisy `skills` w konfiguracji – w kolejności priorytetu konfiguracji i kolejności w tablicy
+
+Unikaj powielania ID, chyba że celowo chcesz nadpisać wcześniejszą umiejętność.
+
+## Wczytywanie
+
+Na każdym kroku modelu OpenCode wypisuje dozwolone umiejętności, które mają opis i nie ustawiają `opencode/autoinvoke` na `false`. Lista zawiera tylko ID, nazwę i opis, bez pełnej treści Markdown.
+
+Model wczytuje umiejętność, wywołując narzędzie `skill` z jej dokładnym ID:
+
+```json title="skill tool input"
+{
+  "id": "git-release"
+}
+```
+
+Następnie OpenCode:
+
+1. Wybiera bieżącą definicję dla tego ID.
+2. Sprawdza uprawnienie `skill` wybranego agenta.
+3. Dodaje do rozmowy treść Markdown bez frontmattera.
+4. Przekazuje katalog bazowy umiejętności i próbkę maksymalnie dziesięciu ścieżek plików pomocniczych.
+
+Aby samodzielnie wczytać umiejętność, wspomnij ją w prompcie jako `@skill-id`.
+
+Zawartość plików pomocniczych nie jest wczytywana automatycznie. Agent czyta je, gdy umiejętność mu to poleca. Próbka plików jest dostępna dla umiejętności `SKILL.md` w formie katalogowej; płaskie umiejętności w Markdownie nie otrzymują listy sąsiednich plików.
+
+## Uprawnienia
+
+Użyj akcji `skill` i ID umiejętności jako zasobu. Reguły są sprawdzane po kolei, a wygrywa ostatnia pasująca:
+
+```jsonc title="opencode.jsonc"
+{
+  "permissions": [
+    { "action": "skill", "resource": "*", "effect": "allow" },
+    { "action": "skill", "resource": "internal-*", "effect": "deny" },
+    { "action": "skill", "resource": "experimental-*", "effect": "ask" },
+  ],
+}
+```
+
+| Efekt | Działanie |
+| ----- | --------- |
+| `allow` | Zgłasza i wczytuje pasujące umiejętności bez zatwierdzania |
+| `ask` | Zgłasza pasujące umiejętności i pyta przed ich wczytaniem |
+| `deny` | Ukrywa pasujące umiejętności przed modelem i odrzuca ich wczytanie |
+
+Aby zastosować te same reguły tylko do jednego agenta, umieść je w `agents.<id>.permissions`.
+
+## Rozwiązywanie problemów
+
+Na przykład ID tej umiejętności to `release`, a nie nazwa z frontmattera `Git Release`:
+
+```text
+.opencode/skills/release/SKILL.md
+                      └─ ID: release
+```
+
+Jeśli umiejętności brakuje lub wczytuje się niewłaściwa treść:
+
+1. Upewnij się, że plik jest albo plikiem `*.md` na poziomie głównym, albo zagnieżdżonym plikiem o nazwie dokładnie `SKILL.md`.
+2. Sprawdź ID wyprowadzony ze ścieżki (z rozróżnianiem wielkości liter), a nie pole `name` z frontmattera.
+3. Dodaj `description`, jeśli model ma wykrywać umiejętność.
+4. Sprawdź `opencode/autoinvoke` i uprawnienia `skill` wybranego agenta.
+5. Poszukaj późniejszego źródła, które definiuje ten sam ID.
+6. W przypadku katalogów HTTP sprawdź `index.json`, ścieżki plików z tego samego pochodzenia i to, czy zmieniono `version`.

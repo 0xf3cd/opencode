@@ -1,0 +1,431 @@
+---
+title: "モデル"
+---
+
+現在のセッションで使うモデルは、`/models` で選択します。
+
+```text
+/models
+```
+
+OpenCode は、[models.dev](https://models.dev)、プロバイダーとのインテグレーション、ユーザーの設定からモデルを一覧表示します。セレクターには、現在のプロジェクトでプロバイダーが利用可能な、有効なモデルだけが表示されます。プロバイダーの接続については、[プロバイダー](/providers)を参照してください。
+
+## 選択
+
+プロバイダーやモデルの ID を推測するのではなく、`/models` からエントリを選んでください。選択は現在のセッションに適用され、設定は変更されません。
+
+```text
+anthropic/claude-sonnet-4-5
+```
+
+利用できるかどうかは、プロジェクトごとに異なります。
+
+- モデルが有効になっている必要があります。
+- そのプロバイダーが、現在のプロジェクトで利用可能である必要があります。
+- 別のプロジェクトの認証情報と設定は、自動的には引き継がれません。
+
+## 単発の実行
+
+設定済みのデフォルトを変えずに、コマンドラインでの 1 回の実行だけモデルを選ぶには、`--model` を使用します。
+
+```bash
+opencode run --model anthropic/claude-sonnet-4-5 "Refactor parseToken"
+```
+
+エージェントとコマンドでも、それぞれ独自のモデルを選択できます。[エージェント](/agents)と[コマンド](/commands)を参照してください。
+
+## デフォルト
+
+新しい作業で使うデフォルトを選ぶには、`opencode.json` または `opencode.jsonc` で `model` を設定します。
+
+```jsonc title="opencode.jsonc"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "model": "anthropic/claude-sonnet-4-5",
+}
+```
+
+設定したモデルが有効で、そのプロバイダーが利用可能な場合は、そのモデルがカタログのデフォルトになります。そうでない場合、OpenCode は利用可能なサポート対象のモデルのうち、最も新しいものにフォールバックします。
+
+- セッションですでに選択されているモデルは、設定済みのデフォルトより優先されます。
+- セッションのモデルを切り替えても、設定ファイルは書き換えられません。
+- 現在、ルートの `model` に保持されるのは、デフォルトのプロバイダーとモデルだけで、バリアントは保持されません。
+
+設定ファイルの配置場所と優先順位については、[設定](/config)を参照してください。
+
+## バリアント
+
+バリアントは 1 つのモデルに対する名前付きのオプションで、推論の強度やトークン予算の指定によく使われます。実行、セッション、エージェント、コマンドでバリアントを選ぶ場合は、`#variant` を付けます。
+
+```bash
+opencode run --model openai/gpt-5.2#high "Review this migration plan"
+```
+
+バリアント名は、選択したモデルの現在のカタログのメタデータに基づきます。`low`、`high`、`max` などの名前がすべてのモデルで使えるわけではなく、不明なバリアントを指定するとモデルの解決エラーになります。
+
+新しいバリアントを定義したり、同じ ID のカタログのバリアントを置き換えたりするには、モデルの `variants` 配列に記述します。
+
+```jsonc title="opencode.jsonc"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "providers": {
+    "openai": {
+      "models": {
+        "gpt-5.2": {
+          "settings": {
+            "reasoningEffort": "medium",
+          },
+          "variants": [
+            {
+              "id": "fast",
+              "settings": {
+                "reasoningEffort": "low",
+              },
+            },
+            {
+              "id": "deep",
+              "settings": {
+                "reasoningEffort": "high",
+                "reasoningSummary": "auto",
+              },
+            },
+          ],
+        },
+      },
+    },
+  },
+}
+```
+
+各バリアントには、`settings`、`headers`、`body` を指定できます。バリアントの値は、プロバイダーとモデルの値の後に適用されます。
+
+## オプション
+
+プロバイダーとモデルのエントリでは、`settings`、`headers`、`body` を使ってリクエストをカスタマイズできます。
+
+```jsonc title="opencode.jsonc"
+{
+  "providers": {
+    "openai": {
+      "settings": {
+        "baseURL": "https://api.example.com/v1",
+      },
+      "headers": {
+        "X-Team": "platform",
+      },
+      "models": {
+        "gpt-5.2": {
+          "settings": {
+            "reasoningEffort": "high",
+          },
+          "body": {
+            "store": false,
+          },
+        },
+      },
+    },
+  },
+}
+```
+
+| フィールド | 用途 |
+| ---------- | ------------------------------------------------------------------ |
+| `settings` | `baseURL` や `reasoningEffort` など、プロバイダーパッケージのオプション。 |
+| `headers`  | 追加の HTTP リクエストヘッダー。 |
+| `body`     | プロバイダー固有のリクエストボディのフィールド。 |
+
+OpenCode は、まずプロバイダーの値を、次にモデルの値を、最後に選択したバリアントの値を適用します。
+
+- ネストされた `settings` と `body` のオブジェクトはマージされます。
+- 配列とスカラー値は、後のものが前のものを置き換えます。
+- ヘッダー名は大文字と小文字を区別せずに照合されます。
+- オプションはプロバイダー固有のもので、別のプロバイダーパッケージでは無視されたり拒否されたりすることがあります。
+
+## エイリアス
+
+API のモデルにわかりやすいカタログ ID を付けるには、`modelID` を使用します。
+
+```jsonc title="opencode.jsonc"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "model": "openai/coding-default",
+  "providers": {
+    "openai": {
+      "models": {
+        "coding-default": {
+          "modelID": "gpt-5.2",
+          "name": "Coding default",
+          "capabilities": {
+            "tools": true,
+            "input": ["text", "image"],
+            "output": ["text"],
+          },
+          "limit": {
+            "context": 200000,
+            "output": 32000,
+          },
+        },
+      },
+    },
+  },
+}
+```
+
+この例では、`openai/coding-default` が選択可能な参照名で、プロバイダーには `gpt-5.2` が送信されます。カタログにまだ存在しないモデルについては、OpenCode は次のように仮定します。
+
+- ツールに対応し、テキストと画像を入力でき、テキストを出力する。
+- コンテキストの上限が 200,000 トークン、出力の上限が 32,000 トークン。
+- 入力の上限は指定なし。
+
+これらはフォールバック用の仮定であり、検出された機能ではありません。わかっている場合は、正確な `capabilities` と `limit` の値を設定してください。明示的に指定した値は、フォールバックの値を置き換えます。利用可能なカタログからモデルを非表示にするには、`disabled: true` を追加します。
+
+```jsonc title="opencode.jsonc"
+{
+  "providers": {
+    "openai": {
+      "models": {
+        "legacy-model": {
+          "disabled": true,
+        },
+      },
+    },
+  },
+}
+```
+
+## 推論
+
+OpenAI 互換のモデルが、アシスタントメッセージの独自フィールドで推論をストリーミングする場合は、`compatibility.reasoningField` を設定します。
+
+```jsonc title="opencode.jsonc"
+{
+  "providers": {
+    "local": {
+      "models": {
+        "reasoner": {
+          "compatibility": {
+            "reasoningField": "reasoning_content",
+          },
+        },
+      },
+    },
+  },
+}
+```
+
+OpenCode は `reasoning`、`reasoning_content`、`reasoning_text` を認識し、それ以外のプロバイダー固有の文字列も受け付けます。ストリーミングされる推論をそのフィールドから読み取り、過去のアシスタントメッセージをモデルに送り返す際には、そのフィールドを復元します。
+
+## プロンプトキャッシュ
+
+Anthropic のように、プロンプトキャッシュのブレークポイントが必要であることがわかっている経路では、OpenCode はブレークポイントを自動的に配置します。Claude のモデルを LiteLLM などの OpenAI 互換プロキシ経由で提供している場合、OpenCode はそれらのモデルが Anthropic 形式の `cache_control` ブレークポイントを必要とすることを判断できません。そのような Claude のモデルには、`compatibility.cacheFormat` を設定してください。
+
+```jsonc title="opencode.jsonc"
+{
+  "providers": {
+    "litellm": {
+      "package": "@opencode/ai/providers/openai-compatible",
+      "settings": { "baseURL": "https://litellm.example.com/v1" },
+      "models": {
+        "claude-sonnet-5": {
+          "compatibility": { "cacheFormat": "anthropic" },
+        },
+        "claude-opus-5-5": {
+          "compatibility": { "cacheFormat": "anthropic" },
+        },
+        // Other models on the same proxy cache automatically and need no setting.
+        "gpt-6.1": {},
+      },
+    },
+  },
+}
+```
+
+これにより、OpenCode は最後のツール定義、システムプロンプト、最新のメッセージに `cache_control: { "type": "ephemeral" }` を付けます。この場合、エンドポイントのデフォルトである 5 分間のキャッシュ有効期間が使われます。Alibaba Model Studio のモデルには `"alibaba"` を使用します。これらのモデルは同じマーカーを受け付けますが、ツール定義に付けたマーカーは無視します。プロバイダーが提供するすべてのモデルが同じ形式を受け付ける場合は、代わりにプロバイダーで `compatibility.cacheFormat` を設定します。
+
+## ローカルモデル
+
+OpenCode は、Ollama、LM Studio、vLLM のモデルを、それぞれのデフォルトのローカルアドレスで自動的に検出します。任意の OpenAI 互換サーバーを手動で設定することもできます。
+
+```text
+ollama/gemma3:4b
+lmstudio/google/gemma-4-26b-a4b
+vllm/Qwen/Qwen3-Coder-30B-A3B-Instruct
+```
+
+### Ollama
+
+Ollama が `http://127.0.0.1:11434` で待ち受けている場合は、`ollama` プロバイダー ID を使って検出されたモデルを選択します。
+
+```jsonc title="opencode.jsonc"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "model": "ollama/gemma3:4b",
+}
+```
+
+OpenCode はバックグラウンドでモデルの一覧を更新し、コンテキスト、画像認識、ツールの使用に関する機能を Ollama から読み取ります。埋め込み専用のモデルは除外されます。
+
+別のホストまたはポートを使う場合は、Ollama の OpenAI 互換 URL を設定します。検出には、引き続き同じパスプレフィックスにあるネイティブの Ollama API が使われます。
+
+```jsonc title="opencode.jsonc"
+{
+  "providers": {
+    "ollama": {
+      "settings": {
+        "baseURL": "http://127.0.0.1:5678/v1",
+        "apiKey": "{env:OLLAMA_API_KEY}",
+      },
+    },
+  },
+}
+```
+
+- エンドポイントでベアラー認証が不要な場合は、`apiKey` を省略します。
+- 検出を無効にするには、`"plugins": ["-opencode.provider.ollama"]` を指定します。
+
+### LM Studio
+
+認証なしの LM Studio サーバーが `http://127.0.0.1:1234` で動作している場合は、`lmstudio` プロバイダー ID を使って検出されたモデルを選択します。
+
+```jsonc title="opencode.jsonc"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "model": "lmstudio/google/gemma-4-26b-a4b",
+}
+```
+
+OpenCode はバックグラウンドでモデルの一覧を更新し、コンテキスト、画像認識、ツールの使用に関する機能を LM Studio から読み取ります。埋め込みモデルは除外されます。
+
+別のホストまたはポートを使う場合は、OpenAI 互換 URL を設定します。モデルは引き続き自動的に検出されます。
+
+```jsonc title="opencode.jsonc"
+{
+  "providers": {
+    "lmstudio": {
+      "settings": {
+        "baseURL": "http://127.0.0.1:5678/v1",
+        "apiKey": "{env:LMSTUDIO_API_KEY}",
+      },
+    },
+  },
+}
+```
+
+- LM Studio の認証が無効な場合は、`apiKey` を省略します。
+- 検出を無効にするには、`"plugins": ["-opencode.provider.lmstudio"]` を指定します。
+
+### vLLM
+
+vLLM が `http://127.0.0.1:8000` で待ち受けている場合は、`vllm` プロバイダー ID を使って検出されたモデルを選択します。
+
+```jsonc title="opencode.jsonc"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "model": "vllm/Qwen/Qwen3-Coder-30B-A3B-Instruct",
+}
+```
+
+OpenCode は `/health` を確認し、バックグラウンドで `/v1/models` を更新します。報告された `max_model_len` をコンテキストの上限として使い、`vllm` が所有するモデルカードだけを含めます。
+
+検出されたモデルは、テキストの入力と出力に対応するものとして扱われ、画像認識やツールには対応しないものとされます。vLLM では、`--enable-auto-tool-choice` や `--tool-call-parser` などのサーバーフラグでツール呼び出しを有効にしますが、これらは検出時には報告されません。
+
+別のエンドポイントや認証が必要なサーバーを使う場合は、その OpenAI 互換 URL を設定します。
+
+```jsonc title="opencode.jsonc"
+{
+  "providers": {
+    "vllm": {
+      "settings": {
+        "baseURL": "http://127.0.0.1:9000/v1",
+        "apiKey": "{env:VLLM_API_KEY}",
+      },
+    },
+  },
+}
+```
+
+- 認証が無効な場合は、`apiKey` を省略します。
+- 検出を無効にするには、`"plugins": ["-opencode.provider.vllm"]` を指定します。
+- パスプレフィックス付きのプロキシにも対応しています。たとえば `https://example.com/vllm/v1` の場合は、`/vllm/health` を確認し、`/vllm/v1/models` からモデルを検出します。
+
+### 互換サーバー
+
+その他の OpenAI 互換サーバーを使う場合は、プロバイダーパッケージ、エンドポイント、および 1 つ以上のモデルを定義します。
+
+```jsonc title="opencode.jsonc"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "model": "local/coder",
+  "providers": {
+    "local": {
+      "name": "Local server",
+      "package": "@opencode/ai/providers/openai-compatible",
+      "settings": {
+        "baseURL": "http://127.0.0.1:1234/v1",
+      },
+      "models": {
+        "coder": {
+          "modelID": "model-name-on-server",
+          "capabilities": {
+            "tools": true,
+            "input": ["text"],
+            "output": ["text"],
+          },
+          "limit": {
+            "context": 32768,
+            "output": 8192,
+          },
+        },
+      },
+    },
+  },
+}
+```
+
+サーバー上の実際のモデル名、上限、入力と出力の種類、ツールへの対応状況を指定してください。カスタムモデルのフォールバック値が正確かどうかを、OpenCode は検出できません。エンドポイントでキーが必要な場合は、`"apiKey": "{env:LOCAL_API_KEY}"` のように環境変数の置換を使って `settings` に `apiKey` を追加します。シークレットはコミットしないでください。
+
+## モデルの指定形式
+
+モデルの指定には、`provider/model` の形式を使い、必要に応じて `#variant` を付けます。
+
+```text
+openai/gpt-5.2
+openai/gpt-5.2#high
+openrouter/anthropic/claude-sonnet-4.5#high
+```
+
+| 部分 | ルール |
+| ---------- | ---------------------------------------------------------- |
+| プロバイダー | 最初の `/` までの部分。`/` や `#` を含めることはできません。 |
+| モデル | 追加の `/` 文字を含めることができます。`#` を含めることはできません。 |
+| バリアント | 存在する場合は `#` の後に続きます。 |
+| 大文字と小文字 | プロバイダー ID とモデル ID では、大文字と小文字が区別されます。 |
+
+プロバイダーの表示名ではなく、カタログの ID を使用してください。ルート、エージェント、コマンドの `model` フィールドでは、上記の文字列形式か、展開したオブジェクトを指定できます。
+
+```jsonc
+{
+  "model": {
+    "providerID": "openrouter",
+    "model": "anthropic/claude-sonnet-4.5",
+  },
+}
+```
+
+展開した形式は、自動生成する設定やプログラムで扱う設定に便利です。
+
+## 注意事項
+
+モデルを設定する際は、次のルールに注意してください。
+
+```jsonc
+{
+  "model": "openai/gpt-5.2"
+}
+```
+
+- セレクターのオブジェクトでは `model` を使用します。プロバイダーのカタログのエントリでは、プロバイダーに送信する ID に `modelID` を使用します。
+- ルートの選択形式はバリアントを受け付けますが、V2 のカタログのデフォルトではバリアントは保持されません。バリアントは、セッション、実行、エージェント、コマンドで選択してください。
+- モデルのオプションはプロバイダー固有のものです。別のプロバイダーパッケージでは無視されたり拒否されたりすることがあります。
+- カタログのデータ、認証情報、設定は、場所ごとに適用範囲が決まります。あるプロジェクトで利用できるモデルが、別のプロジェクトでは利用できない場合があります。
+- 設定ファイルは通常、自動的に再読み込みされます。すでに進行中のモデルへのリクエストでは、開始時の設定が維持されます。

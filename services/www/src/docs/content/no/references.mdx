@@ -1,0 +1,281 @@
+---
+title: "Referanser"
+---
+
+Referanser gir OpenCode navngitt tilgang til kataloger utenfor det gjeldende prosjektet. Legg til en referanse i
+`opencode.json` eller `opencode.jsonc`, og legg ved aliaset i klienten når du trenger det.
+
+```jsonc title="opencode.jsonc"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "references": {
+    "docs": {
+      "path": "../product-docs",
+      "description": "Use for product behavior and terminology",
+    },
+  },
+}
+```
+
+Når du har lagt ved `docs`, kan du be agenten undersøke den relevante filbanen:
+
+```text
+Read the attached docs reference and summarize api/authentication.md.
+```
+
+Bruk referanser til dokumentasjon, delte biblioteker, eksempler eller kildekode fra et annet repositorium.
+
+## Lokal
+
+Bruk `path` for en lokal katalog:
+
+```jsonc
+{
+  "references": {
+    "design-system": {
+      "path": "../design-system",
+      "description": "Use when working with components or design tokens",
+    },
+  },
+}
+```
+
+Filbaner tolkes slik:
+
+- Relative filbaner løses relativt til katalogen som inneholder konfigurasjonsfilen.
+- Absolutte filbaner støttes.
+- Filbaner relativt til hjemmekatalogen, som `~/docs`, støttes.
+
+Bruk kortformen med en streng når du ikke trenger andre felt:
+
+```jsonc
+{
+  "references": {
+    "docs": "../docs",
+    "shared": "~/work/shared",
+  },
+}
+```
+
+<Callout type="note">
+  En streng i kortform er bare en lokal filbane når den begynner med `.`, `/` eller `~`. Bruk `./docs`, ikke `docs`. En
+  verdi som bare er `docs`, tolkes som et Git-repositorium.
+</Callout>
+
+## Git
+
+Bruk `repository` for et eksternt Git-repositorium:
+
+```jsonc
+{
+  "references": {
+    "effect": {
+      "repository": "Effect-TS/effect",
+      "branch": "main",
+    },
+    "internal-sdk": {
+      "repository": "git@gitlab.example.com:platform/sdk.git",
+      "branch": "release/v2",
+    },
+  },
+}
+```
+
+Disse formene for eksterne repositorier støttes blant annet:
+
+- GitHub-kortformen `owner/repo`
+- Git-URL-er
+- Formen vert/filbane
+- Eksterne repositorier i SCP-stil
+
+Lokale `file:`-repositorier støttes ikke.
+
+Bruk kortformen med en streng for å følge standardgrenen til det eksterne repositoriet:
+
+```jsonc
+{
+  "references": {
+    "effect": "Effect-TS/effect",
+    "sdk": "gitlab.com/platform/sdk",
+  },
+}
+```
+
+Uten `branch` sjekker OpenCode ut og oppdaterer standardgrenen til det eksterne repositoriet. Grennavn kan inneholde
+bokstaver, tall, `/`, `_`, `.` og `-`, men kan ikke begynne med `-` eller inneholde `..`.
+
+```jsonc
+{
+  "references": {
+    "sdk": {
+      "repository": "example/sdk",
+      "branch": "release/v2.1",
+    },
+  },
+}
+```
+
+## Lagring
+
+OpenCode normaliserer hvert eksterne repositorium og lagrer én utsjekk per repositorium og gren i den globale
+datakatalogen sin. Uten en eksplisitt gren har filbanen denne formen:
+
+```text
+opencode/repos/<host>/<repository-path>
+```
+
+I en typisk Linux-installasjon lagres `Effect-TS/effect` her:
+
+```text
+~/.local/share/opencode/repos/github.com/Effect-TS/effect
+```
+
+En eksplisitt gren legger til et kodet `@<branch>`-suffiks:
+
+```text
+~/.local/share/opencode/repos/github.com/Effect-TS/effect@main
+```
+
+## Oppdatering
+
+Repositorier som mangler, klones asynkront. Eksisterende utsjekker kontrolleres i bakgrunnen når referanser lastes inn
+eller lastes inn på nytt, og etter at en ny prompt fra brukeren er tatt imot i deres Location.
+
+```text
+Prompt admitted → refresh check starts in background → agent continues
+```
+
+En utsjekk er aktuell for oppdatering når det siste oppdateringsforsøket var for minst 24 timer siden, eller når ingen
+forsøk er registrert. En oppdatering henter endringer og tilbakestiller til den konfigurerte grenen eller til
+standardgrenen til det eksterne repositoriet.
+
+```text
+Last attempt: 25 hours ago → eligible
+Last attempt: 2 hours ago  → skipped
+```
+
+Oppdateringen følger disse reglene:
+
+- Tidsstemplene beholdes når tjenesten startes på nytt.
+- Locations som bruker samme utsjekk, deler tidsstempelet.
+- Mislykkede forsøk logges og er fortsatt underlagt grensen på 24 timer.
+- Det skjer ingen periodisk polling mens en Location ikke er i bruk.
+- Feil ved kloning eller oppdatering hindrer ikke at andre referanser lastes inn.
+
+Prompter venter ikke på kloning eller oppdatering. Et vedlegg kan inneholde eldre innhold selv om en senere lesing med et
+verktøy ser den oppdaterte utsjekken, og en ny referanse kan dukke opp før utsjekken er klar.
+
+```text
+Attachment created → cached content
+Background refresh completes → later tool read sees newer content
+```
+
+<Callout type="warning">
+  Bufrede utsjekker er delt og kan oppdateres mens en agent bruker dem. Unngå å redigere bufrede utsjekker, fordi en
+  oppdatering tilbakestiller dem.
+</Callout>
+
+## Veiledning
+
+`description` forteller agenter når en referanse er relevant. Referanser med en beskrivelse vises i agentinstruksjonene
+med alias og fullstendig filbane.
+
+```jsonc
+{
+  "references": {
+    "docs": {
+      "path": "../docs",
+      "description": "Use for product behavior and terminology",
+    },
+  },
+}
+```
+
+Referanser uten beskrivelse er fortsatt tilgjengelige for klienter, men presenteres ikke automatisk for agenter.
+
+```jsonc
+{
+  "references": {
+    "archive": {
+      "path": "../archive",
+    },
+  },
+}
+```
+
+## Synlighet
+
+Sett `hidden` til `true` for å fjerne en referanse fra interaktive velgere i klienter:
+
+```jsonc
+{
+  "references": {
+    "internal": {
+      "path": "../internal",
+      "description": "Use for internal service behavior",
+      "hidden": true,
+    },
+  },
+}
+```
+
+`hidden` påvirker bare interaktiv synlighet. Referansen finnes fortsatt i referanse-API-et og, hvis den har en
+beskrivelse, i agentinstruksjonene.
+
+## Bruk
+
+Klienter legger ved en referanse via rotaliaset. Vedlegget inneholder en ikke-rekursiv liste over filene og katalogene
+direkte under roten.
+
+```text
+Attached alias: docs
+Ask: Inspect docs/guides/deployment.md and explain the deployment steps.
+```
+
+Be agenten undersøke en bestemt filbane når du trenger innhold lenger ned enn roten.
+
+## Tillatelser
+
+Referanser gir ingen ekstra verktøytillatelser. Tilgang utenfor den aktive Location følger fortsatt de vanlige
+verktøyreglene og tillatelsen `external_directory`. Redigering krever i tillegg den aktuelle redigeringstillatelsen.
+
+```text
+Read ../product-docs/api.md
+```
+
+Forespørselen lykkes bare når de aktive tillatelsene tillater den eksterne lesingen.
+
+## Felt
+
+| Felt          | Lokal    | Git      | Beskrivelse                                   |
+| ------------- | -------- | -------- | --------------------------------------------- |
+| `path`        | Påkrevd  | Nei      | Filbane til lokal katalog                     |
+| `repository`  | Nei      | Påkrevd  | Eksternt Git-repositorium                     |
+| `branch`      | Nei      | Valgfri  | Gren som skal hentes og sjekkes ut            |
+| `description` | Valgfri  | Valgfri  | Veiledning om når agenter bør bruke den       |
+| `hidden`      | Valgfri  | Valgfri  | Skjul den fra interaktive velgere i klienter  |
+
+En fullstendig Git-oppføring kan bruke alle Git-kompatible felt:
+
+```jsonc
+{
+  "references": {
+    "sdk": {
+      "repository": "example/sdk",
+      "branch": "main",
+      "description": "Use for SDK implementation details",
+      "hidden": false,
+    },
+  },
+}
+```
+
+## Aliaser
+
+Et alias kan ikke være tomt eller inneholde `/`, `\`, mellomrom, backtick eller komma.
+
+```text
+Valid:   docs
+Invalid: product docs
+Invalid: docs/api
+```

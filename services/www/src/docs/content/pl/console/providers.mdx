@@ -1,0 +1,126 @@
+---
+title: "Dostawcy"
+description: "Podłącz własne konta u dostawców modeli do obszaru roboczego OpenCode Console i wybierz, z których modeli mogą korzystać członkowie."
+---
+
+Podłącz konta u dostawców, za które już płacisz, np. Anthropic, OpenAI lub AWS Bedrock, i udostępnij ich modele
+wszystkim w obszarze roboczym. Console przechowuje dane uwierzytelniające i serwuje każdego dostawcę przez swoją
+bramkę (gateway), dzięki czemu członkowie korzystają z modeli, nigdy nie widząc klucza dostawcy. Ta sama bramka jest
+dostępna dla Twoich własnych narzędzi przez [API dostawców](/console/api/providers).
+
+Właściciele i administratorzy zarządzają dostawcami na karcie **Providers**. Członkowie otrzymują włączone modele w
+OpenCode po uruchomieniu `/connect`.
+
+## Podłączanie dostawcy
+
+1. Otwórz **Providers** i kliknij **Connect Provider**.
+2. Wybierz dostawcę z katalogu i wprowadź jego klucz API.
+3. Opcjonalnie kliknij **Test connection**, a następnie **Save**.
+
+Katalog obejmuje m.in. Anthropic, OpenAI, Google, xAI, DeepSeek, Mistral, Groq i OpenRouter. Dostawcy z katalogu mają
+wstępnie skonfigurowane modele.
+
+### Dostawcy chmurowi
+
+Dostawcy chmurowi wymagają kilku dodatkowych danych.
+
+| Dostawca              | Wymagane dane                              |
+| --------------------- | ------------------------------------------ |
+| Azure                 | Nazwa zasobu i klucz API                   |
+| AWS Bedrock           | Region i klucz API                         |
+| Google Vertex AI      | Region i plik JSON konta usługi            |
+| Cloudflare AI Gateway | ID konta, ID bramki i token API            |
+| Databricks            | URL obszaru roboczego i token              |
+
+### Dostawcy niestandardowi
+
+Kliknij **Add Custom Provider**, aby podłączyć dowolny inny endpoint, a następnie dodaj jego modele przyciskiem
+**Add Model**.
+
+| Pole       | Opis                                                                                    |
+| ---------- | --------------------------------------------------------------------------------------- |
+| Base URL   | Adres, na który Console przekazuje żądania, np. `https://api.deepseek.com/v1`.          |
+| Format     | Chat Completions, Responses API, Anthropic Compatible lub Google Generative AI.         |
+| Auth mode  | Bearer, nagłówek z kluczem API (API key header) lub niestandardowy nagłówek (Custom header). |
+| Credential | Klucz, który Console wysyła do dostawcy.                                                |
+
+## Wybór modeli
+
+Otwórz dostawcę, aby zobaczyć jego modele. Członkowie mają dostęp tylko do włączonych modeli.
+
+- Przełącznikiem **Enabled** włączysz lub wyłączysz model.
+- Włącz **New models**, aby automatycznie włączać modele, które dostawca doda w przyszłości.
+
+## Edycja modeli
+
+Kliknij model, aby go edytować. Zmiany są zapisywane po zamknięciu panelu.
+
+| Sekcja        | Co możesz zmienić                                                                  |
+| ------------- | ---------------------------------------------------------------------------------- |
+| General       | Nazwa wyświetlana, ID w API, obsługa narzędzi, typy danych wejściowych i wyjściowych |
+| Variants      | Warianty z własnymi nagłówkami lub treścią żądania                                 |
+| Configuration | Domyślny wariant, nagłówki i treść żądania, limity tokenów                         |
+| Cost Tiers    | Ceny za 1M tokenów: wejście, wyjście, odczyt z cache i zapis do cache              |
+
+### Niestandardowe ceny
+
+Modele z katalogu mają na start ceny katalogowe dostawcy. Jeśli masz wynegocjowane ceny, np. rabat w umowie z OpenAI,
+nadpisz je w sekcji **Cost Tiers**, aby raporty użycia i [budżety](/console/budgets) odpowiadały temu, ile faktycznie
+płacisz.
+
+| Pole             | Cena katalogowa | Twoja cena |
+| ---------------- | --------------- | ---------- |
+| Input price      | $2.50           | $2.00      |
+| Output price     | $15.00          | $12.00     |
+| Cache read price | $0.25           | $0.20      |
+
+Zmienione ceny są wyróżnione na stronie dostawcy. Aby wrócić do ceny katalogowej, użyj **Restore default value** przy
+polu lub **⋯ › Restore...** przy modelu.
+
+Dodaj próg **Context**, jeśli model nalicza wyższe opłaty powyżej określonego rozmiaru kontekstu, np. dla promptów
+dłuższych niż 200K tokenów.
+
+### Niestandardowe modele
+
+Kliknij **Add Model**, aby dodać model, którego nie ma w katalogu, podając jego **Display name** i **Model ID**. Użyj
+**⋯ › Duplicate...** przy istniejącym modelu, aby zacząć od jego ustawień.
+
+## Modele OpenCode
+
+Karta **Models** służy do zarządzania [modelami](/console/models) udostępnianymi przez Console, za które płaci się ze
+środków obszaru roboczego. Działa jak strona dostawcy:
+
+- Włączaj i wyłączaj poszczególne modele.
+- Wyłącz **Free models**, aby zablokować modele bezpłatne w obszarze roboczym.
+- Włącz **New models**, aby automatycznie włączać nowe modele Console.
+
+Wyłącz całego dostawcę przez **⋯ › Disable**, aby korzystać wyłącznie z własnych dostawców.
+
+## Korzystanie w OpenCode
+
+Członkowie uruchamiają `/connect` i wybierają obszar roboczy. Każdy włączony dostawca jest widoczny jako nazwa obszaru
+roboczego, po której następuje nazwa dostawcy, a `/models` wyświetla jego włączone modele.
+
+```text
+Acme Inc. / Anthropic
+```
+
+Włącz **Managed providers only** w **Settings › General**, aby ograniczyć OpenCode do dostawców obszaru roboczego dla
+wszystkich członków.
+
+## Wyłączanie lub usuwanie
+
+Otwórz menu **⋯** dostawcy:
+
+- **Disable** ukrywa dostawcę i jego modele przed członkami, ale zachowuje jego ustawienia.
+- **Remove...** usuwa dostawcę i jego modele. Okno dialogowe pokazuje, kto ostatnio z niego korzystał, i oferuje opcję
+  **Disable instead**.
+
+Aby wymienić klucz, kliknij dane uwierzytelniające na stronie dostawcy i wprowadź nowy klucz.
+
+## Rozliczenia
+
+Za tokeny obciąża Cię dostawca; Console nie pobiera za nie środków. Console nadal rejestruje każde żądanie i jego koszt
+według cennika modelu, więc są one uwzględniane w raportach użycia i [budżetach](/console/budgets).
+
+Aby wywoływać dostawcę z własnych narzędzi zamiast z OpenCode, użyj [API dostawców](/console/api/providers).

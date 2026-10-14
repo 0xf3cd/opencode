@@ -1,0 +1,95 @@
+---
+title: "Wyszukiwanie w sieci"
+---
+
+Gdy poprosisz OpenCode o aktualne informacje, może przeszukać sieć, przeczytać wyniki i dołączyć do odpowiedzi linki do źródeł.
+
+```text
+Find the latest Bun release and summarize the changes.
+```
+
+Przy pierwszym wyszukiwaniu OpenCode poprosi o zezwolenie na wyszukiwanie w sieci i wybór dostawcy. Twój wybór zostanie zapamiętany na potrzeby kolejnych sesji.
+
+## Dostawcy
+
+OpenCode zawiera pięciu dostawców wyszukiwania:
+
+| Dostawca | ID | Zmienna środowiskowa |
+| --- | --- | --- |
+| Exa | `exa` | `EXA_API_KEY` |
+| Firecrawl | `firecrawl` | `FIRECRAWL_API_KEY` |
+| Parallel | `parallel` | `PARALLEL_API_KEY` |
+| Tavily | `tavily` | `TAVILY_API_KEY` |
+| TinyFish | `tinyfish` | `TINYFISH_API_KEY` (opcjonalna) |
+
+Połącz konto w TUI poleceniem `/connect` albo ustaw zmienną środowiskową dostawcy przed uruchomieniem OpenCode.
+
+```bash
+$ TAVILY_API_KEY=your-key opencode
+```
+
+## Wybór dostawcy
+
+Ustaw dostawcę w `opencode.jsonc`, aby pominąć pytanie o wybór.
+
+```jsonc title="opencode.jsonc"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "websearch": {
+    "provider": "tavily",
+  },
+}
+```
+
+Użyj `"random"`, aby dostępny dostawca był wybierany automatycznie. Każda sesja korzysta z wybranego dostawcy, dopóki nie przekroczy on limitu żądań.
+
+```jsonc title="opencode.jsonc"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "websearch": {
+    "provider": "random",
+  },
+}
+```
+
+## Limity
+
+Gdy dostawca zwróci HTTP 429, losowy wybór ponawia wyszukiwanie u innego dostępnego dostawcy. Dostawca, który przekroczył limit, czeka przez okres podany w `Retry-After` lub przez 60 sekund, jeśli odpowiedź nie zawiera prawidłowego okresu.
+
+```text
+Exa returns HTTP 429
+→ Exa enters cooldown
+→ OpenCode retries with another provider
+```
+
+Jeśli wszyscy dostawcy są w okresie oczekiwania, wyszukiwanie od razu kończy się błędem. Przeniesienie sesji lub ponowne uruchomienie jej serwera czyści zapamiętanego dostawcę; okresy oczekiwania są wspólne dla sesji w tym samym obszarze roboczym.
+
+## Uprawnienia
+
+Wyszukiwania w sieci używają akcji uprawnień `websearch`, a jako zasobu – zapytania wyszukiwania. Przed wyszukiwaniami, na które nie zezwolono jawnie, OpenCode pyta o zgodę.
+
+```jsonc title="opencode.jsonc"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "permissions": [
+    {
+      "action": "websearch",
+      "resource": "*",
+      "effect": "ask",
+    },
+  ],
+}
+```
+
+Kolejność i dopasowywanie reguł opisano w sekcji [Uprawnienia](/permissions).
+
+## Wyłączanie
+
+Ustaw `websearch` na `false`, aby usunąć narzędzie wyszukiwania w sieci z żądań do modelu.
+
+```jsonc title="opencode.jsonc"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "websearch": false,
+}
+```

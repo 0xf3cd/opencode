@@ -1,0 +1,374 @@
+---
+title: "Міграція плагінів з V1"
+---
+
+Конфігурацію плагінів можна нормалізувати автоматично, але код реалізації плагінів доведеться перенести вручну. Функції
+плагінів V1 повертають один об'єкт з інструментами та хуками. Плагін V2 експортує за замовчуванням визначення з `id` і
+`setup(ctx)`; `setup` реєструє хуки, перетворення, інструменти й підписки через контекст.
+
+<Callout type="warning">
+  Реалізації плагінів V1 у V2 не працюють. Перемістити файл або перейменувати його запис у конфігурації недостатньо.
+</Callout>
+
+## Міграція конфігурації плагінів
+
+Перейменуйте `plugin` на `plugins`. Замініть кортеж «пакет і параметри» об'єктом:
+
+```jsonc
+// V1
+{
+  "plugin": [
+    "opencode-example-plugin",
+    ["./plugin/local.ts", { "enabled": true }]
+  ]
+}
+
+// V2
+{
+  "plugins": [
+    "opencode-example-plugin",
+    {
+      "package": "./plugin/local.ts",
+      "options": { "enabled": true }
+    }
+  ]
+}
+```
+
+V2 знаходить локальні плагіни як у `.opencode/plugin/`, так і в `.opencode/plugins/`; для файлів V2 використовуйте
+`.opencode/plugins/`. Переміщуючи плагін, тримайте допоміжні модулі поруч із ним. Локальні плагіни та плагіни-пакети
+використовують той самий API реалізації.
+
+## Заміна точки входу
+
+Змініть імпорт пакета, замініть експортовану функцію плагіна на `Plugin.define` і перенесіть ініціалізацію в `setup`.
+
+```ts title="V1"
+import type { Plugin } from "@opencode-ai/plugin"
+
+export const ExamplePlugin: Plugin = async ({ directory, project, client }) => {
+  await client.app.log({
+    body: { service: "example", level: "info", message: `Loaded for ${project.id}` },
+  })
+
+  return {
+    // V1 tools and hooks
+  }
+}
+```
+
+```ts title="V2"
+import { Plugin } from "@opencode/plugin"
+
+export default Plugin.define({
+  id: "example",
+  async setup(ctx) {
+    await ctx.storage.set("last-project", ctx.location.project.id)
+    console.log(`Loaded for ${ctx.location.directory}`)
+  },
+})
+```
+
+Кожен плагін V2 потребує стабільного `id`. Сховище плагіна прив'язане до цього ID, і він же ідентифікує плагін у стані та
+діагностиці. Опубліковані плагіни мають залежати від версії `@opencode/plugin`, сумісної з цільовим релізом OpenCode.
+
+## Міграція контексту
+
+Контекст V2 — це водночас клієнт OpenCode і API розширення для плагінів. Більшість операцій згруповано за доменами, а не
+зібрано в окремій властивості `client`.
+
+| V1                                         | V2                                                                   |
+| ------------------------------------------ | -------------------------------------------------------------------- |
+| `directory`                                | `ctx.location.directory`                                             |
+| `project`                                  | `ctx.location.project`                                               |
+| `client`                                   | доменні методи, як-от `ctx.session`, `ctx.permission`, `ctx.agent`   |
+| аргумент параметрів плагіна                | `ctx.options`                                                        |
+| повернений хук `dispose()`                 | функція очищення, яку повертає `setup`                               |
+| повернений хук `event`                     | `ctx.event.subscribe()`                                              |
+| повернені зміни конфігурації, моделей чи інструментів | `transform(...)` відповідного домену                      |
+| допоміжна функція оболонки Bun `$`         | імпортуйте API процесів, яке використовує плагін, і керуйте ним самі |
+
+`ctx.location` описує розташування, у якому завантажено цей екземпляр плагіна. Це не розташування кожної сесії чи події,
+яку може спостерігати плагін. Якщо ця різниця важлива, читайте дані сесії або події.
+
+Контекст надає значно більше доменів, ніж наведено в таблиці, зокрема каталоги, команди, інтеграції, сервери MCP,
+посилання на каталоги, навички, сховище, VCS, worktree і вебпошук. Див. [повний опис контексту плагіна](/build/plugins#api).
+
+## Реєстрація хуків у `setup`
+
+У V1 хуки повертаються за рядковими ключами. У V2 кожен хук реєструється в домені, якому належить операція. Колбек
+отримує одну змінну подію замість окремих об'єктів `input` і `output`.
+
+```ts title="V1"
+import type { Plugin } from "@opencode-ai/plugin"
+
+export const GuardPlugin: Plugin = async () => ({
+  "tool.execute.before": async (input, output) => {
+    if (input.tool === "read" && output.args.filePath.includes(".env")) {
+      throw new Error("Do not read .env files")
+    }
+  },
+  "shell.env": async (_input, output) => {
+    output.env.COMPANY_ENV = "development"
+  },
+})
+```
+
+```ts title="V2"
+import { Plugin } from "@opencode/plugin"
+
+export default Plugin.define({
+  id: "company.guard",
+  async setup(ctx) {
+    await ctx.tool.hook("execute.before", (event) => {
+      const input = event.input as { filePath?: string }
+      if (event.tool === "read" && input.filePath?.includes(".env")) {
+        throw new Error("Do not read .env files")
+      }
+    })
+
+    await ctx.shell.hook("create.before", (event) => {
+      event.env.COMPANY_ENV = "development"
+    })
+  },
+})
+```
+
+Реєстрації залишаються активними протягом усього життя плагіна й звільняються під час його вивантаження. Зберігайте
+повернену реєстрацію лише тоді, коли плагіну потрібно видалити конкретний хук або перетворення раніше за допомогою
+`registration.dispose()`.
+
+За цією таблицею знайдіть найближчий API V2 для кожного хука V1:
+
+| Точка розширення V1                    | API V2                                                       |
+| -------------------------------------- | ------------------------------------------------------------ |
+| `event`                                | `ctx.event.subscribe()`                                      |
+| `dispose`                              | функція очищення, яку повертає `setup`                       |
+| `config`                               | перетворення у відповідних доменах                           |
+| мапа `tool`                            | `ctx.tool.transform(...)`                                    |
+| `auth`                                 | `ctx.integration.transform(...)` та API інтеграцій           |
+| `provider`                             | `ctx.provider.transform(...)` і `ctx.model.transform(...)`   |
+| `chat.message`                         | `ctx.session.hook("prompt", ...)`                            |
+| `chat.params`                          | `ctx.session.hook("context", ...)`                           |
+| `chat.headers`                         | `ctx.session.hook("model.request", ...)` або `"http.request"` |
+| `permission.ask`                       | `ctx.permission.hook("evaluate", ...)`                       |
+| `command.execute.before`               | перетворення команд або хук промптів — залежно від мети      |
+| `tool.execute.before`                  | `ctx.tool.hook("execute.before", ...)`                       |
+| `tool.execute.after`                   | `ctx.tool.hook("execute.after", ...)`                        |
+| `shell.env`                            | `ctx.shell.hook("create.before", ...)`                       |
+| `tool.definition`                      | `ctx.tool.transform(...)`                                    |
+| `experimental.chat.system.transform`   | `ctx.session.hook("context", ...)` зі зміною `event.system`  |
+| `experimental.chat.messages.transform` | `ctx.session.hook("context", ...)` зі зміною `event.messages` |
+| `experimental.session.compacting`      | `ctx.session.hook("compaction", ...)`                        |
+
+Це напрями міграції, а не завжди точні перейменування. Зокрема, хук V2 `prompt` виконується до надійного прийняття
+промпту, а `context` — безпосередньо перед запитом агента до моделі. Якщо перетворення має застосовуватися до запитів до
+моделі всіх типів, зареєструйте `context`, `compaction`, `generate` і `title` окремо.
+
+Не для кожного експериментального хука V1 існує прямий відповідник у V2. Плагіни, які використовують
+`experimental.compaction.autocontinue`, `experimental.provider.small_model` або `experimental.text.complete`, переосмисліть
+з огляду на API сесій, провайдерів, моделей і подій V2, а не зберігайте припущення про внутрішній життєвий цикл.
+
+Для `command.execute.before` також немає глобального хука-відповідника один до одного. Якщо команда належить плагіну,
+зареєструйте її через `ctx.command.transform`. Якщо ж насправді потрібно змінювати промпти, надіслані командами та іншими
+джерелами, використайте хук промптів.
+
+## Міграція хуків запитів
+
+V2 розділяє прийняття промптів, контекст, видимий моделі, семантичні параметри моделі та нативний HTTP. Виберіть
+найвужчий рівень, який потрібен вашому плагіну.
+
+```ts title="V1"
+export const RequestPlugin = async () => ({
+  "chat.params": async (_input, output) => {
+    output.temperature = 0.2
+    output.maxOutputTokens = 8_000
+  },
+  "chat.headers": async (_input, output) => {
+    output.headers["x-plugin"] = "review"
+  },
+  "experimental.chat.system.transform": async (_input, output) => {
+    output.system.push("Focus on correctness.")
+  },
+})
+```
+
+```ts title="V2"
+import { Plugin } from "@opencode/plugin"
+
+export default Plugin.define({
+  id: "review-request",
+  async setup(ctx) {
+    await ctx.session.hook("context", (event) => {
+      event.system.push({ type: "text", text: "Focus on correctness." })
+      event.options.temperature = 0.2
+      event.options.maxTokens = 8_000
+    })
+
+    await ctx.session.hook("model.request", (event) => {
+      event.headers["x-plugin"] = "review"
+    })
+  },
+})
+```
+
+Передавайте семантичні параметри провайдера в `event.options`. Використовуйте `model.request` для заголовків запиту до
+моделі та необроблених налаштувань запиту, а `http.request` чи `http.response` — лише тоді, коли плагіну потрібен
+нативний HTTP-обмін із провайдером. Хуки для конкретного провайдера можуть передати `{ providerID: "..." }` третім
+аргументом у `ctx.session.hook`.
+
+## Міграція власних інструментів
+
+У V1 повертається мапа `tool`, створена старою допоміжною функцією `tool()`. У V2 визначення інструментів реєструються
+через синхронний редактор `ctx.tool.transform`. Схеми інструментів використовують JSON Schema, а виконання повертає
+структурований вміст.
+
+```ts title="V1"
+import { tool } from "@opencode-ai/plugin"
+
+export const ToolsPlugin = async () => ({
+  tool: {
+    greeting: tool({
+      description: "Create a greeting",
+      args: { name: tool.schema.string() },
+      async execute(args) {
+        return `Hello ${args.name}!`
+      },
+    }),
+  },
+})
+```
+
+```ts title="V2"
+import { Plugin } from "@opencode/plugin"
+
+export default Plugin.define({
+  id: "greeting",
+  async setup(ctx) {
+    await ctx.tool.transform((editor) => {
+      editor.add({
+        name: "greeting",
+        description: "Create a greeting",
+        input: {
+          type: "object",
+          properties: { name: { type: "string" } },
+          required: ["name"],
+          additionalProperties: false,
+        },
+        async execute(input) {
+          return { content: `Hello ${(input as { name: string }).name}!` }
+        },
+      })
+    })
+  },
+})
+```
+
+Перетворення — це зміни стану, які можна застосовувати повторно. Їхній колбек має бути синхронним, дешевим і без
+одноразових побічних ефектів. Завантажуйте зовнішні дані до реєстрації, захоплюйте їх у колбеку й викликайте метод
+`reload()` відповідного домену, коли ці дані змінюються. Перетворення пізнішого плагіна бачить попередні зміни й може
+оновити, замінити або видалити їх.
+
+Той самий підхід із перетвореннями замінює хуки V1 `config` і `provider`, але V2 не надає єдиного змінного глобального
+об'єкта конфігурації. Реєструйте зміну в домені, якому вона належить: `ctx.agent`, `ctx.provider`, `ctx.model`,
+`ctx.command`, `ctx.integration`, `ctx.mcp`, `ctx.reference`, `ctx.skill`, `ctx.tool`, `ctx.vcs`, `ctx.websearch` або
+`ctx.worktree`. Методи автентифікації належать інтеграціям; перетворення провайдерів додають визначення джерел і
+налаштування провайдерів, а перетворення моделей застосовують обмеження й перевизначення до повного набору моделей
+активних провайдерів.
+
+```ts
+await ctx.provider.transform((editor) => {
+  editor.update("anthropic", (provider) => {
+    provider.headers = { ...provider.headers, "x-company": "engineering" }
+  })
+})
+
+await ctx.model.transform((editor) => {
+  editor.list("anthropic").forEach((model) => {
+    if (!model.capabilities.tools) editor.remove(model.providerID, model.id)
+  })
+})
+```
+
+## Міграція подій і очищення
+
+Колбек `event` з V1 стає асинхронною підпискою на публічний потік подій сервера. Перервіть її у функції очищення, яку
+повертає `setup`.
+
+```ts title="V2"
+import { Plugin } from "@opencode/plugin"
+
+export default Plugin.define({
+  id: "notifications",
+  setup(ctx) {
+    const controller = new AbortController()
+
+    void (async () => {
+      for await (const event of ctx.event.subscribe({ signal: controller.signal })) {
+        if (event.type === "session.idle") console.log("Session completed")
+      }
+    })()
+
+    return () => controller.abort()
+  },
+})
+```
+
+Використовуйте функцію очищення для таймерів, підпроцесів, сокетів та інших ресурсів, якими володіє плагін. Реєстрації
+хуків і перетворень прив'язані до плагіна й очищуються автоматично.
+
+## Міграція параметрів і постійного стану
+
+Читайте параметри з `ctx.options`. Якщо стан належить плагіну, використовуйте `ctx.storage` замість власного глобального
+файлу: його JSON-значення зберігаються постійно й доступні лише цьому плагіну.
+
+```ts
+const strict = ctx.options.strict === true
+await ctx.storage.set("settings", { strict })
+const settings = await ctx.storage.get("settings")
+```
+
+## Підтримка V1 і V2 в одному пакеті
+
+Пакет може тимчасово надавати обидві реалізації через один експорт за замовчуванням. V1 викликає `server()`, а V2 —
+`setup()`. API залишаються окремими; така структура не перетворює хуки автоматично.
+
+```ts title="src/index.ts"
+import { Plugin } from "@opencode/plugin"
+
+export default {
+  ...Plugin.define({
+    id: "example",
+    async setup(ctx) {
+      await ctx.tool.hook("execute.before", () => {
+        console.log("A tool is about to run")
+      })
+    },
+  }),
+  async server() {
+    return {
+      "tool.execute.before": async () => {
+        console.log("A tool is about to run")
+      },
+    }
+  },
+}
+```
+
+Об'єктні точки входу V1 підтримуються в OpenCode `1.18.29` і новіших версіях. Якщо ви підтримуєте старіші релізи V1,
+використовуйте окремі версії пакета або точки входу й тестуйте з найстарішим релізом, підтримку якого заявляєте. Видаліть
+реалізацію V1, коли період її підтримки завершиться.
+
+## Перевірка перенесеного плагіна
+
+Для кожного плагіна:
+
+1. Переконайтеся, що його ID і джерело є в списку активних плагінів.
+2. Перевірте роботу кожного зареєстрованого хука, перетворення, інструмента, команди та підписки на події.
+3. Перевірте очищення, перезавантаживши або видаливши плагін.
+4. Протестуйте параметри плагіна та збережений стан на чистому проєкті.
+5. Для опублікованого пакета тестуйте встановлений пакет, а не лише копію, підключену через робочий простір.
+
+Повний Promise API описано в [посібнику з плагінів](/build/plugins), точку входу Effect — у розділі
+[Effect-плагіни](/build/plugins/effect), власні методи й події — у розділі [RPC плагінів](/build/plugins/rpc), а
+розширення TUI — у розділі [Плагіни CLI](/build/plugins/cli).

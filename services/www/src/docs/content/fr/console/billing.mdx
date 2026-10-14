@@ -1,0 +1,88 @@
+---
+title: "Facturation"
+description: "Ajoutez des crédits, configurez la recharge automatique, gérez les moyens de paiement et téléchargez les factures dans OpenCode Console."
+---
+
+La Console est gratuite quelle que soit la taille de l'équipe, sans frais par utilisateur. Vous ne payez que
+l'utilisation, à partir de crédits prépayés qui couvrent tout l'espace de travail. Les propriétaires et les
+administrateurs gèrent la facturation dans **Settings › Billing**.
+
+L'utilisation via [vos propres fournisseurs](/console/providers) est facturée par le fournisseur, et non par la Console.
+
+## Ajouter un moyen de paiement
+
+1. Ouvrez **Settings › Billing**.
+2. Sous **Payment methods**, cliquez sur **Add**.
+3. Choisissez un moyen de paiement et terminez la configuration Stripe.
+
+Moyens de paiement pris en charge :
+
+- Carte bancaire
+- Link
+- Alipay
+- UPI
+- WeChat Pay
+
+Utilisez **⋯ › Make default** pour choisir le moyen utilisé pour les prélèvements automatiques. Supprimer un moyen de
+paiement peut interrompre la recharge automatique et les renouvellements Go qui l'utilisent.
+
+## Ajouter des crédits
+
+1. Sous **Credits**, cliquez sur **Add credits**.
+2. Choisissez 10 $, 50 $ ou 100 $, ou sélectionnez **Other** et saisissez un montant.
+3. Choisissez un moyen de paiement et cliquez sur **Confirm and pay**.
+
+Des frais de traitement de 4,6 % + 0,31 $ s'ajoutent au montant : un achat de 50 $ coûte donc 52,61 $, et l'intégralité
+des 50 $ est ajoutée au solde.
+
+## Recharge automatique
+
+La recharge automatique achète des crédits lorsque le solde devient insuffisant.
+
+1. Sous **Auto-recharge**, cliquez sur **Add rule**.
+2. Définissez le solde qui déclenche un prélèvement et le montant à ajouter.
+3. Cliquez sur **Save**.
+
+La recharge automatique débite le moyen de paiement par défaut, frais de traitement compris. Si un prélèvement échoue,
+la recharge automatique se désactive jusqu'à ce que vous la configuriez de nouveau.
+
+## Consulter votre solde
+
+La carte **Credits** de la page **Overview** affiche le solde aux propriétaires et aux administrateurs.
+
+## Lorsque les crédits sont épuisés
+
+Les requêtes payantes échouent avec le code HTTP `402` dès que le solde atteint zéro. Le solde ne devient jamais négatif.
+
+```text
+Upstream request failed: Insufficient account funds
+```
+
+## Factures
+
+Chaque paiement apparaît sous **Invoices** avec son statut et un lien **Download invoice** ou **View receipt**.
+
+| Entrée           | Créée par                    |
+| ---------------- | ---------------------------- |
+| Balance top-up   | L'ajout de crédits           |
+| Automatic top-up | La recharge automatique      |
+| Go subscription  | L'abonnement à Go            |
+| Go renewal       | Le renouvellement mensuel de Go |
+| Monthly Usage    | Le paiement sur facture      |
+
+## Paiement sur facture
+
+Les espaces de travail disposant d'un accord de crédit peuvent être facturés mensuellement au lieu d'acheter des
+crédits. Contactez l'assistance pour la mettre en place.
+
+- L'utilisation est imputée sur une limite de crédit plutôt que sur un solde prépayé.
+- La facture de chaque mois est émise le 1er (UTC) et payable sous 14 jours.
+- Les factures impayées disposent d'un bouton **Pay now**.
+- Les requêtes échouent avec le code HTTP `402` lorsque la limite de crédit est atteinte ou qu'une facture est en
+  retard de paiement.
+
+## Go
+
+Les abonnements [OpenCode Go](/console/go) utilisent les mêmes moyens de paiement et apparaissent dans la même liste de
+factures. Activez **Extra usage** sur la carte des crédits de la page **Overview** pour payer avec vos crédits une fois
+une limite Go atteinte.

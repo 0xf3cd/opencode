@@ -1,0 +1,101 @@
+---
+title: "Budsjett-API"
+description: "Les de gjeldende månedlige budsjettene for alle medlemmer i arbeidsområdet, og administrer det egendefinerte budsjettet til hvert medlem."
+---
+
+Les de gjeldende månedlige budsjettene for alle medlemmer i arbeidsområdet, og administrer det egendefinerte budsjettet
+til hvert medlem fra en integrasjon.
+
+## Hurtigstart
+
+Opprett en API-nøkkel for en [tjenestekonto](/console/api#service-accounts) med **All**-tillatelser i [Console](https://opencode.ai/console).
+Nøkler med bare inferenstilgang kan ikke lese budsjettdata eller endre grenser.
+
+```bash
+export CONSOLE_URL="https://opencode.ai/console"
+export SERVICE_API_KEY="oc_sk_..."
+```
+
+List opp medlemsbudsjetter:
+
+```bash
+curl --fail-with-body \
+  "${CONSOLE_URL}/api/v1/budgets/members" \
+  --header "Authorization: Bearer ${SERVICE_API_KEY}" \
+  --header "Accept: application/json"
+```
+
+## List opp medlemsbudsjetter
+
+```text
+GET /api/v1/budgets/members
+```
+
+Svaret inneholder alle nåværende medlemmer, sortert etter e-postadresse. En grense med kilden `custom` er en overstyring
+for medlemmet; kilden `default` er arvet fra standardverdien for arbeidsområdet. Hvis grensen og kilden er null, har
+medlemmet ingen grense.
+
+```json
+[
+  {
+    "user_id": "user_...",
+    "email": "alice@example.com",
+    "limit_micro_cents": "7525000000",
+    "spent_micro_cents": "1250000000",
+    "exceeded": false,
+    "resets_at": "2026-10-01T00:00:00.000Z",
+    "source": "custom",
+    "updated_at": "2026-09-03T12:00:00.000Z"
+  }
+]
+```
+
+Beløpsfelt i svaret er desimalstrenger i mikrocent, slik at integrasjoner ikke mister presisjon. Én amerikansk dollar er
+100,000,000 mikrocent. Forbruk og tidspunkt for tilbakestilling gjelder inneværende kalendermåned i UTC. `updated_at` er
+null når medlemmet ikke har noen egendefinert overstyring.
+
+## Sett et egendefinert budsjett
+
+```text
+PUT /api/v1/budgets/members/:user_id
+```
+
+Sett et månedlig budsjett på $75.25 for ett medlem:
+
+```bash
+curl --fail-with-body --request PUT \
+  "${CONSOLE_URL}/api/v1/budgets/members/user_..." \
+  --header "Authorization: Bearer ${SERVICE_API_KEY}" \
+  --header "Content-Type: application/json" \
+  --data '{"budget_dollars":75.25}'
+```
+
+`budget_dollars` godtar et ikke-negativt beløp i amerikanske dollar med høyst to desimaler. PUT-forespørselen er
+idempotent og returnerer HTTP 204. Bruk medlems-ID-en som returneres av listeoperasjonen.
+
+## Gå tilbake til standardverdien for arbeidsområdet
+
+```text
+DELETE /api/v1/budgets/members/:user_id
+```
+
+Fjern den egendefinerte overstyringen:
+
+```bash
+curl --fail-with-body --request DELETE \
+  "${CONSOLE_URL}/api/v1/budgets/members/user_..." \
+  --header "Authorization: Bearer ${SERVICE_API_KEY}"
+```
+
+Å slette en overstyring sletter ikke medlemmet. Medlemmet arver deretter standardbudsjettet for arbeidsområdet, eller får
+ingen grense hvis arbeidsområdet ikke har noen standardverdi. Det er trygt å gjenta forespørselen, og den returnerer
+HTTP 204.
+
+## Feil
+
+| Status | Betydning                                                          |
+| ------ | ------------------------------------------------------------------ |
+| `400`  | Ugyldig medlems-ID eller budsjettbeløp.                            |
+| `401`  | API-nøkkelen for tjenesten mangler, er ugyldig, er utløpt eller er tilbakekalt. |
+| `403`  | API-nøkkelen har ikke tillatelse til å administrere budsjetter.    |
+| `404`  | Medlemmet finnes ikke i arbeidsområdet API-nøkkelen er knyttet til. |

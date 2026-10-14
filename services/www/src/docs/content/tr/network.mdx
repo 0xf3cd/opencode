@@ -1,0 +1,109 @@
+---
+title: Ağ
+description: Proxy'leri ve özel sertifika yetkililerini yapılandırın.
+---
+
+Standart proxy değişkenlerini ayarlayın ve loopback adreslerini hariç tutun. OpenCode, CLI ile arka plan hizmeti arasında
+yerel HTTP bağlantıları kullanır. Bu nedenle CLI ortamında bir proxy yapılandırıldığında loopback adreslerinin hariç
+tutulması zorunludur.
+
+```bash
+export HTTP_PROXY=http://proxy.example.com:8080
+export HTTPS_PROXY=http://proxy.example.com:8080
+export NO_PROXY=localhost,127.0.0.1,::1
+
+opencode
+```
+
+`HTTP_PROXY` değişkeni HTTP hedeflerini, `HTTPS_PROXY` değişkeni ise HTTPS hedeflerini yönetir. Proxy URL'sinin kendisi her
+iki değişkende de `http://` kullanabilir. `NO_PROXY`, proxy kullanılmadan doğrudan bağlanılacak ana bilgisayarların ve
+adreslerin virgülle ayrılmış listesidir.
+
+## Arka plan hizmeti
+
+Shell'de dışa aktarılan (`export`) değişkenler, arka plan hizmetini yalnızca hizmet o shell'den başlatıldığında etkiler.
+Sonraki başlatmalarda da aynı ağ ayarlarının kullanılması için değişkenleri yönetilen hizmet yapılandırmasına kalıcı
+olarak kaydedin.
+
+```bash
+opencode service set env HTTP_PROXY http://proxy.example.com:8080
+opencode service set env HTTPS_PROXY http://proxy.example.com:8080
+opencode service set env NO_PROXY localhost,127.0.0.1,::1
+opencode service start
+```
+
+Yönetilen bir ortam değişkenini değiştirmek çalışan hizmeti durdurur. `service start` komutu hizmeti yeni ortamla yeniden
+başlatır. CLI'ı çalıştırdığınız shell bir proxy ayarlıyorsa `NO_PROXY` değişkenini o shell'de de tutun; çünkü yönetilen
+hizmet değişkenleri CLI sürecine değil, sunucu sürecine uygulanır.
+
+Kalıcı olarak kaydedilmiş bir değişkeni `service unset env` komutuyla kaldırın:
+
+```bash
+opencode service unset env HTTPS_PROXY
+```
+
+## Kimlik doğrulama
+
+Proxy'niz URL içinde kimlik bilgisi kabul ediyorsa, kimlik doğrulama gerektiren her proxy URL'sine kullanıcı adını ve
+parolayı ekleyin. Kullanıcı adı veya parolada geçen `@`, `:` ve `/` gibi karakterleri yüzde kodlamasıyla (percent-encoding)
+yazın.
+
+```bash
+export HTTPS_PROXY='http://user:p%40ssword@proxy.example.com:8080'
+```
+
+Arka plan hizmeti için URL'nin tamamını kalıcı olarak kaydedin. Bu değer özel hizmet yapılandırmasında saklanır ve
+`opencode service get env` komutunun çıktısında görünür; bu yüzden bu çıktıyı kimseyle paylaşmayın.
+
+```bash
+opencode service set env HTTPS_PROXY 'http://user:p%40ssword@proxy.example.com:8080'
+```
+
+## Sertifikalar
+
+Proxy veya hedef sunucu, özel bir sertifika yetkilisi (CA) tarafından imzalanmış bir sertifika kullanıyorsa
+`NODE_EXTRA_CA_CERTS` değişkenini bir PEM dosyasına ayarlayın. Ek sertifika yetkilileri, süreç başlarken çalışma zamanının
+güven deposuna eklenir.
+
+```bash
+export NODE_EXTRA_CA_CERTS=/etc/company/ca.pem
+opencode --standalone
+```
+
+Arka plan hizmeti için dosya yolunu kalıcı olarak kaydedin, ardından hizmeti yeniden başlatın:
+
+```bash
+opencode service set env NODE_EXTRA_CA_CERTS /etc/company/ca.pem
+opencode service start
+```
+
+## Ön plan
+
+`--standalone` ve `serve`, kendi süreçlerinin ortamını kullanır. `opencode service set env` komutu bu süreçleri
+yapılandırmaz.
+
+```bash
+HTTP_PROXY=http://proxy.example.com:8080 \
+HTTPS_PROXY=http://proxy.example.com:8080 \
+NO_PROXY=localhost,127.0.0.1,::1 \
+opencode --standalone
+```
+
+Ön planda çalışan bir sunucu için de aynı yöntemi uygulayın:
+
+```bash
+HTTPS_PROXY=http://proxy.example.com:8080 \
+NO_PROXY=localhost,127.0.0.1,::1 \
+opencode serve
+```
+
+## Doğrulama
+
+Ayarları uyguladıktan sonra CLI'ın arka plan hizmetine erişebildiğini kontrol edin:
+
+```bash
+opencode api get /api/info
+```
+
+Başarılı bir sağlık denetimi yanıtı, yerel istemci ile hizmet arasındaki bağlantının çalıştığını doğrular. Hizmetin giden
+proxy ve sertifika yolunu doğrulamak için bir sağlayıcıya normal bir istek gönderin.

@@ -1,0 +1,240 @@
+---
+title: "المهارات"
+---
+
+أنشئ مهارة لتمنح الوكيل تعليمات قابلة لإعادة الاستخدام لمهمة محددة. ضع ملف `SKILL.md` في `.opencode/skills/<skill-id>`، وصِف في `description` متى ينبغي استخدامها.
+
+```markdown title=".opencode/skills/git-release/SKILL.md"
+---
+name: Git Release
+description: Prepare release notes, version bumps, and GitHub releases
+---
+
+## Workflow
+
+1. Read `references/release-policy.md`.
+2. Summarize merged changes since the previous tag.
+3. Propose the version bump before changing files.
+4. Run `scripts/changelog.ts` only after the user approves the version.
+```
+
+يعرض OpenCode هذه المهارة على النموذج عندما تكون ذات صلة. ويستطيع الوكيل حينها تحميل تعليماتها باستخدام الأداة `skill`، بدلًا من إضافة كل مهارة إلى كل موجّه.
+
+## الإنشاء
+
+احتفظ بالسكربتات والمراجع والقوالب ذات الصلة بجوار `SKILL.md`:
+
+```text
+.opencode/skills/
+└── git-release/
+    ├── SKILL.md
+    ├── scripts/
+    │   └── changelog.ts
+    └── references/
+        └── release-policy.md
+```
+
+المسارات المكتوبة داخل المهارة نسبية إلى الدليل الذي يحتوي على `SKILL.md`. ويُوصى بصيغة الدليل لأنها تمنح الملفات الداعمة دليلًا أساسيًا خاصًا بها.
+
+## الاكتشاف
+
+يبحث OpenCode تلقائيًا في هذه المواقع:
+
+| النطاق                 | المصادر                                |
+| --------------------- | -------------------------------------- |
+| عام                | `~/.config/opencode/skills`            |
+| عام للتوافق  | `~/.claude/skills`, `~/.agents/skills` |
+| المشروع               | `.opencode/skills`                     |
+| المشروع للتوافق | `.claude/skills`, `.agents/skills`     |
+
+في مصادر المشروع، يبحث OpenCode بدءًا من الدليل الحالي صعودًا حتى جذر المشروع، ويضمّن الدلائل المطابقة في كل مستوى.
+
+يمكن أن يحتوي كل مصدر على أيٍّ من الصيغتين:
+
+```text
+skills/
+├── review.md
+└── git-release/
+    └── SKILL.md
+```
+
+- يجب أن تكون ملفات Markdown في جذر المصدر، مثل `skills/review.md`.
+- يمكن أن تكون الملفات المسمّاة `SKILL.md` بالضبط في أي عمق، مثل `skills/git-release/SKILL.md`.
+
+## المصادر
+
+أضف مزيدًا من الدلائل المحلية أو كتالوجات HTTP باستخدام المصفوفة `skills` في أي ملف `opencode.json` أو `opencode.jsonc`:
+
+```jsonc title="opencode.jsonc"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "skills": [
+    "./team-skills",
+    "~/shared/opencode-skills",
+    "/opt/company-skills",
+    "https://example.com/opencode/skills/",
+  ],
+}
+```
+
+| القيمة | طريقة التحليل |
+| ----- | ---------- |
+| مسار نسبي | يُحلَّل من دليل العمل النشط لـ OpenCode، لا من ملف التهيئة |
+| مسار `~/` | يُحلَّل من الدليل الرئيسي للمستخدم الحالي |
+| مسار مطلق | يُستخدم كما هو مكتوب |
+| عنوان URL يبدأ بـ `http://` أو `https://` | يُحمَّل بوصفه كتالوج HTTP |
+
+يضيف كل ملف تهيئة مكتشَف عناصره. وتُجمع مصفوفات `skills` معًا بدلًا من أن يحل بعضها محل بعض.
+
+## الكتالوجات
+
+كتالوج HTTP هو عنوان URL أساسي يحتوي على ملف `index.json`:
+
+```json title="index.json"
+{
+  "skills": [
+    {
+      "name": "git-release",
+      "version": "3",
+      "files": ["git-release.md", "references/release-policy.md"]
+    }
+  ]
+}
+```
+
+بالنسبة إلى هذا العنصر، ينزّل OpenCode كل ملف من `<base-url>/git-release/<file>`.
+
+| القاعدة | المتطلب |
+| ---- | ----------- |
+| المسارات | يجب أن تكون آمنة ونسبية ومن المصدر (origin) نفسه |
+| ملف الدخول | ضمّن `SKILL.md` أو `<name>.md`، مثل `git-release.md` |
+| التحديثات | زِد قيمة `version` عند تغيّر الملفات ليحدّث OpenCode ذاكرته المؤقتة |
+
+فضّل صيغة Markdown المسمّاة في كتالوج HTTP. يصبح كل دليل مهارة منزَّل جذرًا لمصدر، لذا يكون معرّف `git-release.md` هو `git-release`. أما ملف `SKILL.md` في المستوى الجذري فمعرّفه حاليًا في V2 هو `SKILL` حرفيًا.
+
+## ترويسة frontmatter
+
+استخدم ترويسة frontmatter لتسمية المهارة والتحكم في مواضع ظهورها:
+
+```markdown title="SKILL.md"
+---
+name: Git Release
+description: Prepare a repository release
+metadata:
+  opencode/autoinvoke: false
+---
+
+Prepare the changelog, version bump, tag, and release notes.
+```
+
+| الحقل                          | السلوك                                                          |
+| ------------------------------ | ----------------------------------------------------------------- |
+| `name`                         | اسم العرض؛ قيمته الافتراضية هي المعرّف المشتق من المسار                     |
+| `description`                  | ملخص يُستخدم لعرض المهارة على النموذج                       |
+| `metadata.opencode/autoinvoke` | اضبطه على `false` لاستبعاد المهارة من قائمة المهارات المتاحة للنموذج  |
+| `disable-model-invocation`     | اضبطه على `true` للحصول على التأثير نفسه لـ `opencode/autoinvoke: false` |
+
+كل حقول frontmatter اختيارية في وقت التشغيل. أضف `description` واضحًا إذا كان ينبغي للنموذج اكتشاف المهارة؛ فالمهارات التي لا تحتوي عليه لا تُعرض على النموذج.
+
+لا يؤدي `opencode/autoinvoke: false` إلا إلى إخفاء المهارة من قائمة المهارات المتاحة للنموذج. وتظل المهارة مسجّلة، ويمكن تحميلها صراحةً بمعرّفها. وعند ضبط `disable-model-invocation` و`opencode/autoinvoke` معًا، يفوز `opencode/autoinvoke`. يقبل V2 حقول قابلية النقل مثل `license` و`compatibility` لكنه لا يفسّرها.
+
+## المعرّفات
+
+يحدد مسار الملف معرّف المهارة. أما `name` في ترويسة frontmatter فليس سوى تسمية للعرض.
+
+| الملف                              | المعرّف            |
+| --------------------------------- | ------------- |
+| `<source>/git-release.md`         | `git-release` |
+| `<source>/git-release/SKILL.md`   | `git-release` |
+| `<source>/teams/release/SKILL.md` | `release`     |
+
+المعرّفات مطابقة حرفيًا وحساسة لحالة الأحرف. وللمهارات القابلة للنقل، استخدم معرّفًا فريدًا بأحرف صغيرة وصيغة kebab-case يتراوح طوله بين 1 و64 محرفًا، وأبقِه متطابقًا مع اسم الدليل:
+
+```text
+^[a-z0-9]+(-[a-z0-9]+)*$
+```
+
+لا يفرض V2 حاليًا هذا النمط، ولا التوصية بطول 1–64 محرفًا، ولا التطابق بين `name` واسم الدليل، ولا حدًا أقصى لطول الوصف.
+
+## الأولوية
+
+تُختار المهارات حسب المعرّف. فإذا عرّف مصدران `git-release`، فإن المصدر المسجَّل لاحقًا هو الذي يوفّر المهارة التي يحمّلها OpenCode:
+
+```text
+~/.config/opencode/skills/git-release/SKILL.md  ← lower precedence
+.opencode/skills/git-release/SKILL.md           ← loaded
+```
+
+تُسجَّل المصادر من الأدنى أولوية إلى الأعلى:
+
+1. المهارات المدمجة
+2. الدليل `.claude/skills`، العام أولًا، ثم من السلف الأبعد نحو الدليل الحالي
+3. الدليل `.agents/skills`، العام أولًا، ثم من السلف الأبعد نحو الدليل الحالي
+4. الدليل `~/.config/opencode/skills`
+5. الدليل `.opencode/skills` الخاص بالمشروع، من جذر المشروع نحو الدليل الحالي
+6. عناصر `skills` الصريحة في التهيئة، حسب أولوية التهيئة وترتيب المصفوفة
+
+تجنّب المعرّفات المكررة ما لم تكن تقصد تجاوز مهارة سابقة.
+
+## التحميل
+
+في كل خطوة من خطوات النموذج، يعرض OpenCode المهارات المسموح بها التي لها وصف ولا تضبط `opencode/autoinvoke` على `false`. وتتضمن القائمة المعرّف والاسم والوصف فقط، لا متن Markdown الكامل.
+
+يحمّل النموذج المهارة باستدعاء الأداة `skill` مع معرّفها الدقيق:
+
+```json title="skill tool input"
+{
+  "id": "git-release"
+}
+```
+
+ثم يتولى OpenCode ما يلي:
+
+1. يختار التعريف الحالي لذلك المعرّف.
+2. يتحقق من إذن `skill` للوكيل المحدد.
+3. يضيف متن Markdown، دون ترويسة frontmatter، إلى المحادثة.
+4. يوفّر الدليل الأساسي للمهارة وعينة تصل إلى عشرة مسارات لملفات داعمة.
+
+لتحميل مهارة بنفسك، اذكرها في موجّهك بالصيغة `@skill-id`.
+
+لا تُحمَّل محتويات الملفات الداعمة تلقائيًا، بل يقرؤها الوكيل عندما توجّهه المهارة إلى ذلك. تتوفر عينة الملفات لمهارات `SKILL.md` القائمة على الدلائل؛ أما مهارات Markdown المسطّحة فلا تتلقى قائمة بالملفات المجاورة.
+
+## الأذونات
+
+استخدم الإجراء `skill` ومعرّف المهارة بوصفه المورد. تُنفَّذ القواعد بالترتيب، وتفوز آخر قاعدة مطابقة:
+
+```jsonc title="opencode.jsonc"
+{
+  "permissions": [
+    { "action": "skill", "resource": "*", "effect": "allow" },
+    { "action": "skill", "resource": "internal-*", "effect": "deny" },
+    { "action": "skill", "resource": "experimental-*", "effect": "ask" },
+  ],
+}
+```
+
+| التأثير | السلوك |
+| ------ | -------- |
+| `allow` | يعرض المهارات المطابقة ويحمّلها دون طلب موافقة |
+| `ask` | يعرض المهارات المطابقة ويطلب موافقتك قبل تحميلها |
+| `deny` | يخفي المهارات المطابقة عن النموذج ويرفض تحميلها |
+
+ضع القواعد نفسها ضمن `agents.<id>.permissions` لتطبيقها على وكيل واحد فقط.
+
+## استكشاف الأخطاء وإصلاحها
+
+مثلًا، معرّف هذه المهارة هو `release`، لا اسمها في ترويسة frontmatter وهو `Git Release`:
+
+```text
+.opencode/skills/release/SKILL.md
+                      └─ ID: release
+```
+
+إذا كانت مهارة مفقودة أو تحمّل محتوى خاطئًا:
+
+1. تأكد من أن الملف إما ملف `*.md` في المستوى الجذري، وإما ملف متداخل اسمه `SKILL.md` بالضبط.
+2. تحقق من المعرّف المشتق من المسار والحساس لحالة الأحرف، لا من `name` في ترويسة frontmatter.
+3. أضف `description` إذا كان ينبغي للنموذج اكتشاف المهارة.
+4. تحقق من `opencode/autoinvoke` ومن أذونات `skill` للوكيل المحدد.
+5. ابحث عن مصدر لاحق يعرّف المعرّف نفسه.
+6. في كتالوجات HTTP، تحقق من `index.json`، ومن أن مسارات الملفات من المصدر نفسه، ومن تغيير قيمة `version`.

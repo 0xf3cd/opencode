@@ -1,0 +1,101 @@
+---
+title: "Веб-поиск"
+---
+
+Если попросить OpenCode найти актуальную информацию, он может выполнить поиск в интернете, прочитать результаты и
+добавить в ответ ссылки на источники.
+
+```text
+Find the latest Bun release and summarize the changes.
+```
+
+При первом поиске OpenCode попросит разрешить веб-поиск и выбрать провайдера. Выбор запоминается для следующих сессий.
+
+## Провайдеры
+
+В OpenCode встроено пять поисковых провайдеров:
+
+| Провайдер | ID | Переменная окружения |
+| --- | --- | --- |
+| Exa | `exa` | `EXA_API_KEY` |
+| Firecrawl | `firecrawl` | `FIRECRAWL_API_KEY` |
+| Parallel | `parallel` | `PARALLEL_API_KEY` |
+| Tavily | `tavily` | `TAVILY_API_KEY` |
+| TinyFish | `tinyfish` | `TINYFISH_API_KEY` (необязательно) |
+
+Подключите аккаунт в TUI командой `/connect` или задайте переменную окружения провайдера перед запуском OpenCode.
+
+```bash
+$ TAVILY_API_KEY=your-key opencode
+```
+
+## Выбор провайдера
+
+Укажите провайдера в `opencode.jsonc`, чтобы OpenCode не спрашивал о выборе.
+
+```jsonc title="opencode.jsonc"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "websearch": {
+    "provider": "tavily",
+  },
+}
+```
+
+Значение `"random"` автоматически выбирает доступного провайдера. Каждая сессия продолжает использовать выбранного
+провайдера, пока он не упрется в ограничение частоты запросов.
+
+```jsonc title="opencode.jsonc"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "websearch": {
+    "provider": "random",
+  },
+}
+```
+
+## Ограничения
+
+Если провайдер возвращает HTTP 429, при случайном выборе поиск повторяется через другого доступного провайдера.
+Провайдер, превысивший лимит, ожидает в течение периода из `Retry-After` или 60 секунд, если в ответе нет корректного
+значения.
+
+```text
+Exa returns HTTP 429
+→ Exa enters cooldown
+→ OpenCode retries with another provider
+```
+
+Если все провайдеры находятся в режиме ожидания, поиск сразу завершается ошибкой. Перенос сессии или перезапуск ее
+сервера сбрасывает запомненного провайдера; периоды ожидания общие для всех сессий в одном рабочем пространстве.
+
+## Разрешения
+
+Веб-поиск использует действие разрешения `websearch`, а в качестве ресурса — поисковый запрос. Поиски, которые явно не
+разрешены, требуют подтверждения.
+
+```jsonc title="opencode.jsonc"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "permissions": [
+    {
+      "action": "websearch",
+      "resource": "*",
+      "effect": "ask",
+    },
+  ],
+}
+```
+
+Порядок правил и сопоставление описаны в разделе [Разрешения](/permissions).
+
+## Отключение
+
+Задайте `websearch: false`, чтобы убрать инструмент веб-поиска из запросов к модели.
+
+```jsonc title="opencode.jsonc"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "websearch": false,
+}
+```

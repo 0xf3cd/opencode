@@ -1,0 +1,108 @@
+---
+title: "Wprowadzenie"
+---
+
+Uruchom CLI w projekcie, aby otworzyć pełnoekranowy interfejs terminalowy:
+
+```bash
+opencode
+```
+
+Podaj katalog, aby pracować w innym projekcie:
+
+```bash
+opencode ~/code/my-project
+```
+
+Polecane terminale:
+
+- [Ghostty](https://ghostty.org)
+- [WezTerm](https://wezterm.org)
+- [Alacritty](https://alacritty.org)
+- [Kitty](https://sw.kovidgoyal.net/kitty/)
+
+Obsługa truecolor zapewnia najwierniejsze kolory motywów; terminale bez niej używają przybliżenia dostępnej palety.
+
+## Automatyzacja
+
+`opencode run` wysyła prompt bez otwierania interfejsu interaktywnego. Polecenie jest przeznaczone dla skryptów, zadań CI
+i innych przepływów pracy, które potrzebują odpowiedzi modelu bezpośrednio w terminalu.
+
+```bash
+opencode run "Explain this repository"
+```
+
+## Mini
+
+`opencode mini` uruchamia minimalny interfejs interaktywny OpenCode zamiast pełnoekranowego TUI.
+
+```bash
+opencode mini
+```
+
+Uruchom `opencode mini --help`, aby zobaczyć opcje dotyczące sesji, modelu, agenta, promptu i odtwarzania.
+
+## Usługa w tle
+
+Domyślnie OpenCode wykrywa lub uruchamia jeden współdzielony serwer w tle dla Twojego konta użytkownika. Każdy lokalny
+klient OpenCode łączy się z tym serwerem, który zarządza sesjami, konfiguracją, integracjami, uprawnieniami i
+wykonywaniem narzędzi.
+
+Użyj `--standalone`, aby uruchomić OpenCode z prywatnym serwerem, lub `--server`, aby połączyć się z serwerem pod
+konkretnym URL-em:
+
+```bash
+opencode --standalone
+opencode --server http://localhost:4096
+```
+
+Aby polecenia CLI domyślnie korzystały z prywatnych serwerów zamiast uruchamiać współdzieloną usługę, wyłącz ją:
+
+```bash
+opencode service set disabled true
+opencode
+```
+
+To zatrzymuje działającą usługę w tle. `--server` nadal łączy się z jawnie wskazanym serwerem, a
+`opencode service start` nadal może jawnie uruchomić współdzieloną usługę. Aby wrócić do automatycznego korzystania z
+usługi, uruchom `opencode service unset disabled`. Parowanie wymaga współdzielonej usługi i jest niedostępne, gdy jest
+ona wyłączona.
+
+Diagnostykę współdzielonej usługi opisano w sekcji [Rozwiązywanie problemów](/troubleshooting), a endpointy serwera – w
+[dokumentacji API](/api).
+
+## Ścieżki
+
+Wyświetl konkretną ścieżkę lokalną, aby użyć jej w innych narzędziach:
+
+```bash
+opencode debug paths db
+sqlite3 "$(opencode debug paths db)"
+```
+
+Opcjonalny selektor przyjmuje wartości `db`, `home`, `data`, `config`, `cache`, `state`, `tmp`, `bin`, `log` lub
+`repos` i wypisuje tylko ścieżkę oraz znak nowej linii. Ścieżka bazy danych uwzględnia kanał wydania i `OPENCODE_DB`;
+względne ścieżki nadpisujące bazę danych są rozwiązywane względem katalogu danych, a `:memory:` jest wypisywane bez
+zmian. To polecenie nie uruchamia serwera ani nie otwiera bazy danych.
+
+Pomiń selektor, aby wyświetlić wszystkie ścieżki z etykietami:
+
+```bash
+opencode debug paths
+```
+
+## Odinstalowanie
+
+Wyświetl podgląd plików i instalacji, które zostaną usunięte:
+
+```bash
+opencode uninstall --dry-run
+```
+
+Uruchom `opencode uninstall`, aby potwierdzić usunięcie. Przed usunięciem globalnego katalogu pamięci podręcznej,
+współdzielonego przez wersje i kanały OpenCode, OpenCode zatrzymuje zarejestrowane usługi w tle i trwałe terminale. Dane
+sesji, konfiguracja i stan nigdy nie są usuwane.
+
+- `--force` (`-f`) pomija potwierdzenie; używaj go do usuwania w trybie nieinteraktywnym.
+- Instalacje z menedżera pakietów są usuwane wykrytym menedżerem pakietów. Przy instalacjach przez curl wypisywane jest
+  końcowe polecenie do ręcznego usunięcia pliku wykonywalnego.

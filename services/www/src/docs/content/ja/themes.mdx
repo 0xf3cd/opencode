@@ -1,0 +1,247 @@
+---
+title: "テーマ"
+---
+
+テーマは、ターミナル UI で `Ctrl+P` を押し、**Open settings** を選択して **Theme** を開くと選べます。グローバルな CLI 設定で直接指定することもできます。
+
+```json title="~/.config/opencode/cli.json"
+{
+  "theme": {
+    "name": "tokyonight",
+    "mode": "system"
+  }
+}
+```
+
+テーマはターミナルクライアントに属する設定です。テーマの選択は、`opencode.json` ではなく `cli.json` に記述してください。設定ファイルの場所とその他のターミナルの設定については、[CLI 設定](/cli/config)を参照してください。
+
+## モード
+
+ターミナルの外観に合わせるには `system` を使用します。テーマを 1 つのモードに固定することもできます。
+
+```json title="~/.config/opencode/cli.json"
+{
+  "theme": {
+    "name": "opencode",
+    "mode": "dark"
+  }
+}
+```
+
+| 値 | 動作 |
+| -------- | --------------------------------------------- |
+| `system` | ターミナルのライトモードまたはダークモードに従います。 |
+| `dark`   | 常にダークテーマを使用します。 |
+| `light`  | 常にライトテーマを使用します。 |
+
+カスタムテーマが一方のモードしか提供していない場合、もう一方のモードが要求されても、OpenCode は提供されているモードを使用します。
+
+## 組み込みテーマ
+
+組み込みテーマは、名前を指定して選択します。
+
+```json title="~/.config/opencode/cli.json"
+{
+  "theme": {
+    "name": "catppuccin"
+  }
+}
+```
+
+利用できるテーマには、次のものがあります。
+
+- `aura`, `ayu`, `carbonfox`, `cobalt2`, `cursor`, `dracula`, `everforest`, `flexoki`
+- `catppuccin`, `catppuccin-frappe`, `catppuccin-macchiato`
+- `github`, `gruvbox`, `kanagawa`, `material`, `matrix`, `mercury`, `monokai`, `nightowl`, `nord`
+- `one-dark`, `opencode`, `orng`, `lucent-orng`, `osaka-jade`, `palenight`, `rosepine`
+- `solarized`, `synthwave84`, `tokyonight`, `vercel`, `vesper`, `zenburn`
+
+`system` テーマは、OpenCode がターミナルのカラーパレットを読み取れる場合に利用できます。
+
+## テーマファイル
+
+`ocean` という名前のグローバルなテーマを作成するには、テーマツールを使って、グローバルのテーマディレクトリに完全なファイルを生成します。主要な構造は次のようになります。
+
+```json title="~/.config/opencode/themes/ocean.json (excerpt)"
+{
+  "base": {
+    "text": {
+      "base": "#d8f3ff"
+    }
+  },
+  "dark": {
+    "hue": {
+      "accent": "$hue.cyan"
+    }
+  }
+}
+```
+
+その後、設定で `ocean` を選択するか、`cli.json` で `theme.name` を `ocean` に設定します。ファイル名から `.json` を除いたものがテーマ名になります。
+
+| 範囲 | ディレクトリ |
+| ------- | ------------------------------------------ |
+| グローバル | `~/.config/opencode/themes/`               |
+| プロジェクト | プロジェクトツリー内の `.opencode/themes/` |
+
+OpenCode が読み込むのは `.json` ファイルだけです。カレントディレクトリに近い場所にあるテーマは、同じ名前のグローバルのテーマや親ディレクトリのテーマを置き換えます。
+
+## 形式
+
+V2 のテーマはすべて、完全な `base` トークンツリーを 1 つと、`light` または `dark` の色相パレットを少なくとも 1 つ宣言します。各モードが継承するのは、そのファイルの base だけです。組み込みの OpenCode テーマや、もう一方のモードから継承することはありません。カスタマイズする前に、テーマツールを使って完全な base を生成してください。
+
+以下の例では、それぞれの概念に関係する部分だけを示しています。完全なテーマファイルではありません。
+
+```json title="themes/ocean.json"
+{
+  "base": {
+    "text": {
+      "base": "#16324f"
+    }
+  },
+  "light": {
+    "hue": {}
+  },
+  "dark": {
+    "hue": {},
+    "text": { "base": "#d8f3ff" }
+  }
+}
+```
+
+## 色
+
+16 進数のカラーコード、`transparent`、または別のテーマカラーへの参照を使用します。
+
+```json title="themes/ocean.json"
+{
+  "base": {
+    "text": {
+      "base": "#d8f3ff",
+      "muted": "$hue.neutral.400"
+    },
+    "background": {
+      "base": "transparent"
+    }
+  }
+}
+```
+
+16 進数の値には、3、4、6、8 桁のいずれかを使用できます。参照は `$` で始まり、色相への参照は `$hue.<name>.<step>` の形式になります。
+
+## 色相
+
+色相のエイリアスをオーバーライドすると、関連する一連の色をまとめて変更できます。
+
+```json title="themes/ocean.json"
+{
+  "base": {
+    "categorical": ["accent", "purple", "green"]
+  },
+  "dark": {
+    "hue": {
+      "accent": "$hue.cyan",
+      "interactive": "$hue.blue"
+    }
+  }
+}
+```
+
+| 種類 | 値 |
+| ------- | -------------------------------------------------------------------- |
+| 基本色相 | `gray`, `red`, `orange`, `yellow`, `green`, `cyan`, `blue`, `purple` |
+| エイリアス | `accent`, `interactive`, `neutral`                                 |
+| 段階 | `100`, `200`, `300`, `400`, `500`, `600`, `700`, `800`, `900`      |
+
+色相の段階は、モードのコントラストの方向に従います。ライトテーマでは `100` が暗く `900` が明るくなり、ダークテーマでは `100` が明るく `900` が暗くなります。
+
+`categorical` は、エージェントなどの繰り返し表示される項目を区別するための色相を、順序付きで設定します。少なくとも 1 つの基本色相またはエイリアスを含める必要があります。
+
+## 状態
+
+インタラクティブな要素の色を変更するには、状態キーを使用します。指定されていない状態には、最も近いベースの値が使われます。
+
+```json title="themes/ocean.json"
+{
+  "base": {
+    "text": {
+      "action": {
+        "primary": {
+          "base": "$hue.interactive.400",
+          "$hovered": "$hue.interactive.300",
+          "$disabled": "$hue.neutral.600"
+        }
+      }
+    }
+  }
+}
+```
+
+| グループ | 値 |
+| --------- | --------------------------------------------------------- |
+| アクション | `primary`, `secondary`, `destructive`                     |
+| 状態 | `$hovered`, `$focused`, `$pressed`, `$selected`, `$disabled` |
+
+フォームフィールドでは、同じ状態キーを `text.formfield` または `background.formfield` の直下で使用します。
+
+## トークン
+
+完全な `base` には、すべてのトークングループが含まれます。モードでは、完全な色相パレットを指定したうえで、base の任意の部分をオーバーライドできます。
+
+```json title="themes/ocean.json"
+{
+  "base": {
+    "border": {
+      "base": "$hue.neutral.700"
+    },
+    "syntax": {
+      "comment": "$hue.neutral.500",
+      "keyword": "$hue.accent.400"
+    },
+    "diff": {
+      "text": {
+        "added": "$hue.green.400",
+        "removed": "$hue.red.400"
+      }
+    }
+  }
+}
+```
+
+| グループ | 用途 |
+| ------------ | ------------------------------------------------------------- |
+| `text`       | 基本、控えめ、アクション、フォームフィールド、フィードバックのテキスト |
+| `background` | 基本、サーフェス、アクション、フォームフィールド、フィードバックの塗り |
+| `border`     | 枠線 |
+| `scrollbar`  | スクロールバー |
+| `diff`       | 追加、削除、コンテキスト、ハイライト、行番号の色 |
+| `syntax`     | ソースコードのハイライト |
+| `markdown`   | Markdown の要素 |
+
+構文のキーは、`comment`、`keyword`、`function`、`variable`、`string`、`number`、`type`、`operator`、`punctuation` です。Markdown のキーは、`text`、`heading`、`link`、`linkText`、`code`、`blockQuote`、`emphasis`、`strong`、`horizontalRule`、`listItem`、`listEnumeration`、`image`、`imageText`、`codeBlock` です。
+
+## 浮き上がったサーフェス
+
+パネル、ダイアログ、メニュー、トースト通知は、`background.raised` から奥行きの段階を選択します。ダイアログでは、さらにコンテキストに応じた `@dialog` サーフェスも使用できます。TUI は `@dialog` を適用した後にパレットを再解決するため、`$background.base` を参照するトークンはダイアログの背景に従います。
+
+```json title="themes/ocean.json"
+{
+  "base": {
+    "background": {
+      "base": "#071521",
+      "raised": {
+        "base": "#0c1f2e",
+        "high": "#102a3c",
+        "max": "#16364b"
+      }
+    },
+    "@dialog": {
+      "background": {
+        "base": "$background.raised.base"
+      }
+    }
+  }
+}
+```
+
+`@dialog` には、ベースのモードと同じトークングループを指定できます。また、アクションのコンテキストに応じた `base` は、指定されていない状態のフォールバックにもなります。状態を明示的にオーバーライドした場合は、そちらが優先されます。

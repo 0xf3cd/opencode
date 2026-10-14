@@ -1,0 +1,183 @@
+---
+title: "Kompaktierung"
+---
+
+Die Kompaktierung schafft in einer langen Sitzung Platz, indem sie ältere Teile der
+Unterhaltung durch eine Zusammenfassung ersetzt. So kann die Sitzung über das
+Kontextlimit des Modells hinaus weiterlaufen.
+
+## Funktionsweise
+
+Nähert sich eine Sitzung dem Kontextlimit des Modells, fasst OpenCode alles außer
+der jüngsten Unterhaltung zusammen – standardmäßig etwa 15.000 Tokens. Sobald die
+Zusammenfassung fertig ist, wird sie vor diese jüngste Unterhaltung gesetzt, und
+die Sitzung läuft von dort aus weiter.
+
+```text
+before   [ system prompt ][ older conversation ............ ][ recent 15k ][ pending work ]
+after    [ system prompt ][ summary ][ recent 15k ][ pending work ]
+```
+
+Das Modell sieht die Zusammenfassung als bisherige Unterhaltung. Spätere
+Kompaktierungen aktualisieren dieselbe Zusammenfassung, statt neu anzufangen.
+
+## Start
+
+Die automatische Kompaktierung ist standardmäßig aktiviert:
+
+```jsonc title="opencode.jsonc"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "compaction": {
+    "auto": true,
+    "keep": { "tokens": 15000 },
+  },
+}
+```
+
+Die Kompaktierung ist verlustbehaftet. Erhöhe `keep.tokens`, wenn es auf genaue
+jüngste Details ankommt, oder fordere die Kompaktierung selbst an, bevor die
+automatische greift.
+
+## Manuell
+
+Du kannst jederzeit eine Kompaktierung anfordern, auch bei einem kurzen Verlauf:
+
+```sh
+opencode api post /api/session/ses_example/compact --data '{}'
+```
+
+Der Befehl `api` findet den Hintergrunddienst und authentifiziert sich bei ihm. Die
+Antwort bestätigt nur, dass die Anfrage angenommen wurde; sie wartet nicht auf die
+Zusammenfassung. Verfolge die Events `session.compaction.*`, um zu erfahren, wann
+sie fertig ist. Die vollständige Operation findest du in der
+[API-Referenz](/api).
+
+| Regel | Verhalten |
+| --- | --- |
+| Zeitpunkt | Läuft am nächsten sicheren Punkt, vor noch wartenden Prompts. |
+| Wiederholungen | Anfragen, die eingehen, während eine aussteht, werden mit dieser zusammengeführt. |
+| Automatik | Funktioniert auch, wenn `compaction.auto` auf `false` steht. |
+
+Übergib eine `id`, um eine identische Wiederholung idempotent zu machen. Wird diese ID
+für eine andere Anfrage wiederverwendet, gibt die API einen Konflikt zurück.
+
+```sh
+opencode api post /api/session/ses_example/compact --data '{"id":"msg_compact_once"}'
+```
+
+## Einstellungen
+
+Füge `compaction` zu einer beliebigen [OpenCode-Konfigurationsdatei](/config) hinzu:
+
+```jsonc title="opencode.jsonc"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "compaction": {
+    "auto": false,
+    "keep": { "tokens": 24000 },
+    "buffer": 16000,
+  },
+}
+```
+
+| Feld | Standard | Verhalten |
+| --- | ---: | --- |
+| `auto` | `true` | Kompaktiert automatisch nahe dem Kontextlimit und versucht einmal eine Wiederherstellung, wenn ein Anbieter eine Anfrage als zu lang ablehnt. Die manuelle Kompaktierung funktioniert immer. |
+| `keep.tokens` | `15000` | Ungefähre Menge der jüngsten Unterhaltung, die neben der Zusammenfassung erhalten bleibt. Größere Werte bewahren mehr Details, lassen aber weniger Platz für neue Arbeit. |
+| `buffer` | 10 % des Limits | Tokens, die unterhalb des Modelllimits frei bleiben. Größere Werte lösen die automatische Kompaktierung früher aus. |
+
+`keep.tokens` und `buffer` akzeptieren nicht negative ganze Zahlen.
+
+## Anbieter
+
+Standardmäßig schreibt OpenCode die Zusammenfassung selbst, mit dem Modell der
+Sitzung. Manche Anbieter können die Unterhaltung stattdessen auf ihrer Seite
+kompaktieren. Aktiviere das pro Anbieter oder Modell mit `settings.compaction`:
+
+```jsonc title="opencode.jsonc"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "providers": {
+    "openai": {
+      "settings": { "compaction": { "type": "native" } },
+      "models": {
+        "gpt-4.1": { "settings": { "compaction": { "type": "summary" } } },
+      },
+    },
+  },
+}
+```
+
+Eine Modelleinstellung überschreibt die Anbietereinstellung. `native` verwendet die
+Kompaktierung des Anbieters, `summary` die von OpenCode.
+
+Bei nativer Kompaktierung sendet OpenCode die Unterhaltung an den
+Kompaktierungsendpunkt des Anbieters. Der Anbieter gibt ein undurchsichtiges,
+verschlüsseltes Element zurück, das die ältere Unterhaltung ersetzt. Deine jüngsten
+Nachrichten und Anhänge bleiben bis zu `keep.tokens` daneben erhalten:
+
+```text
+before   [ older conversation ........................ ][ recent user messages ]
+after    [ encrypted checkpoint + recent user messages ]
+```
+
+| Thema | Verhalten |
+| --- | --- |
+| Unterstützung | OpenAI-Responses-Modelle. Die Unterstützung hängt von Deployment und Modell ab. |
+| Schwellenwert | Dieselben Einstellungen `auto` und `buffer` wie bei der Kompaktierung per Zusammenfassung. Manuelle Anfragen funktionieren ebenfalls. |
+| Übertragbarkeit | Ein verschlüsselter Checkpoint funktioniert nur mit demselben Anbieter, Modell und Endpunkt. Wechselst du das Modell, läuft die Sitzung stattdessen mit der ursprünglichen Unterhaltung weiter. |
+| Zu lang | Lehnt der Anbieter eine Kompaktierung als zu lang ab, wiederholt OpenCode sie mit einer kleineren Anfrage. Es wechselt nicht zu einer Zusammenfassung. |
+
+## Zusammenfassungen
+
+Die Zusammenfassung ist so aufgebaut, dass ein anderer Agent die Arbeit daran
+anknüpfend fortsetzen könnte:
+
+```md
+## Objective
+Finish the authentication migration.
+
+## Next Move
+- Update the callback handler.
+- Verify the login flow.
+```
+
+Sie umfasst Ziel und Anforderungen, Entscheidungen, abgeschlossene und laufende
+Arbeit, Hindernisse und nächste Schritte sowie relevante Dateien. In der jüngsten
+Unterhaltung, die daneben erhalten bleibt, werden lange Tool-Ausgaben gekürzt und
+Anhangsdaten durch eine kurze Beschreibung ersetzt.
+
+Nach der Kompaktierung werden die aktuellen Versionen deiner Anweisungsdateien zur
+Ausgangsbasis der Sitzung; siehe [Anweisungen](/instructions).
+
+## Grenzen
+
+| Grenze | Ergebnis |
+| --- | --- |
+| Modell | Die Kompaktierung verwendet das Modell der Sitzung. Ein separates Kompaktierungsmodell gibt es nicht. |
+| Verlauf | Die Kompaktierung braucht ältere Unterhaltung, die sie ersetzen kann. Sie schafft keinen Platz, wenn eine Anfrage überwiegend aus festen Anweisungen und Tool-Schemas besteht. |
+| Größe | Ist die zu kompaktierende Unterhaltung selbst zu lang, sendet OpenCode eine gekürzte Textversion und lässt dabei unter Umständen die ältesten Wortwechsel weg. |
+| Wiederherstellung | Eine als zu lang abgelehnte Anfrage wird kompaktiert und einmal wiederholt. Eine zweite Ablehnung wird als Fehler zurückgegeben. |
+| Speicherung | Frühere Nachrichten bleiben gespeichert, auch wenn sie nicht mehr an das Modell gesendet werden. |
+
+In diesem Fall kann die Kompaktierung zum Beispiel nicht helfen:
+
+```text
+128k context = 120k fixed instructions and tools + 8k conversation
+```
+
+## Migration
+
+V1 arbeitete mit Tail-Turns und Pruning. V2 verwendet Zusammenfassungen und
+`compaction.keep.tokens`:
+
+```jsonc
+{
+  "compaction": {
+    "keep": { "tokens": 15000 }
+  }
+}
+```
+
+Die Einstellungen und das Verhalten auf dieser Seite gelten für V2.

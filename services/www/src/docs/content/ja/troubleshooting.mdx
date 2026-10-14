@@ -1,0 +1,176 @@
+---
+title: "トラブルシューティング"
+---
+
+<Callout type="tip">
+  OpenCode 自身にデバッグを依頼することもできます。問題を説明し、このトラブルシューティングのページを使うように依頼すると、OpenCode が以下の手順を読み、サービスとログを調べて、問題の特定を手伝います。
+</Callout>
+
+OpenCode はクライアント/サーバー型のアーキテクチャを採用しています。セッション、プラグイン、権限、その他のアプリケーションの状態は、バックグラウンドのサーバーが管理します。まずは、問題がクライアント、共有サーバー、特定のプロジェクトのどこにあるのかを切り分けます。
+
+## バックグラウンドサービスの確認
+
+現在のサーバーの情報を表示します。
+
+```bash
+opencode service status
+```
+
+API が正常に動作していることを確認します。
+
+```bash
+opencode api get /api/info
+```
+
+サービスが応答しない場合や正常でない場合は、再起動します。
+
+```bash
+opencode service restart
+```
+
+明示的に停止してから起動することもできます。
+
+```bash
+opencode service stop
+opencode service start
+```
+
+<Callout type="note">
+  通常、OpenCode は共有のバックグラウンドサービスを自動的に検出または起動します。サービスのコマンドが必要になるのは、サービスのライフサイクルを診断する場合だけです。
+</Callout>
+
+## ブラウザーのオリジンの許可
+
+別のオリジンにあるブラウザークライアントが CORS のために接続できない場合は、そのクライアントのオリジンをサービスの設定に追加します。
+
+```bash
+opencode service set cors http://192.168.1.10:3001
+opencode service get cors
+```
+
+HTTP または HTTPS のオリジンを正確に指定します。必要に応じてポートを含め、パスや末尾のスラッシュは付けません。複数のオリジンを許可するには、カンマ区切りのリストを 1 つの引数として渡します。各オリジンの前後の空白は取り除かれます。
+
+```bash
+opencode service set cors "http://192.168.1.10:3001, https://app.example.com"
+```
+
+`service get cors` は JSON 配列を出力します。設定したリストは次のコマンドで削除できます。
+
+```bash
+opencode service unset cors
+```
+
+サービスの設定を変更または削除すると、バックグラウンドサービスは停止します。新しい設定は次回の起動時に反映されます。明示的に起動するには `opencode service start` を使用します。
+
+フォアグラウンドのサーバーでは、許可するオリジンごとに `--cors` を繰り返し指定します。
+
+```bash
+opencode serve --cors http://192.168.1.10:3001 --cors https://app.example.com
+```
+
+`serve --service` では、指定した `--cors` フラグが、そのプロセスに限り保存済みのリストを上書きします。これらのフラグを指定しない場合、サービスモードでは保存済みのリストが使われます。CORS によって待ち受けアドレスが変わったり、サーバーの認証が回避されたりすることはありません。
+
+## API の調査
+
+`api` コマンドは、ローカルのサービス検出と認証のフローを使用します。HTTP メソッドとパス、または OpenAPI のオペレーション ID のいずれかを指定できます。
+
+すべてのエンドポイントとオペレーション ID については、[API リファレンス](/api)を参照してください。
+
+JSON のリクエストボディは `--data` または `-d` で渡し、ヘッダーは `--header` または `-H` で追加します。
+
+<Callout type="warning">
+  互換性のある正常なサービスが利用できない場合、`opencode api` を実行するとバックグラウンドサービスが起動することがあります。
+</Callout>
+
+## ログの確認
+
+インストール済みのビルドは、次の場所にログを書き込みます。
+
+```text
+~/.local/share/opencode/log/opencode.log
+```
+
+問題を再現しながら、ログを追跡します。
+
+```bash
+tail -f ~/.local/share/opencode/log/opencode.log
+```
+
+各行には、プロセスの `run` ID と `role` フィールドが含まれます。セッション、プロバイダー、プラグイン、権限、ツールのアクティビティを確認するには、`role=server` を使用します。
+
+```bash
+grep 'role=server' ~/.local/share/opencode/log/opencode.log
+grep 'run=8fc3b1d5' ~/.local/share/opencode/log/opencode.log
+```
+
+## CPU とメモリのプロファイルの取得
+
+macOS と Linux では、実行中の OpenCode プロセスにシグナルを送って診断データを取得できます。バックグラウンドサーバーの PID は、ヘルスチェックのエンドポイントから取得します。
+
+```bash
+opencode api get /api/info
+```
+
+レスポンスの `pid` を使って、次のいずれかのシグナルを送ります。
+
+- `SIGPROF` は、10 秒間の CPU プロファイルを取得します。
+
+  ```bash
+  kill -SIGPROF <pid>
+  ```
+
+  結果は、ログディレクトリに `cpu-<pid>-<timestamp>.cpuprofile` として書き込まれます。
+
+- `SIGUSR1` は、メモリ（ヒープ）のスナップショットを取得します。
+
+  ```bash
+  kill -SIGUSR1 <pid>
+  ```
+
+  結果は、ログディレクトリに `heap-<pid>-<timestamp>.heapsnapshot` として書き込まれます。
+
+ファイルを開く前に、`opencode.log` に `CPU profile written` または `heap snapshot written` が出力されるまで待ってください。対応するログエントリには、ファイルの完全なパスが含まれます。どちらの種類のファイルも Chrome DevTools で調べられます。
+
+<Callout type="note">
+  シグナルによるプロファイルの取得は Windows では利用できません。ヒープのスナップショットの書き込み中は、プロセスが一時停止したり、メモリ使用量が一時的に増えたりすることがあります。
+</Callout>
+
+## サービスのファイル
+
+共有サーバーは、次の場所に自身を登録します。
+
+```text
+~/.local/state/opencode/service.json
+```
+
+非公開のサービス設定は、別の場所に保存されます。
+
+```text
+~/.config/opencode/service.json
+```
+
+データベースは通常、次の場所にあります。
+
+```text
+~/.local/share/opencode/opencode.db
+```
+
+データベースの場所は、`OPENCODE_DB` で上書きできます。
+
+<Callout type="warning">
+  トラブルシューティング中に、サービスのファイルやデータベースを削除したり編集したりしないでください。デーモンの管理にはサービスのコマンドを使用し、永続データを外部ツールで調べる前にはバックアップを作成してください。
+</Callout>
+
+## 問題の報告
+
+再現可能な問題を報告する際は、次の情報を含めてください。
+
+- `opencode --version` の出力
+- `opencode service status` の出力
+- 問題を再現する最小限の手順
+- 問題が共有サービス、特定のクライアント、1 つのプロジェクトのどれに影響しているか
+- 関連するログの行（`run` と `role` のフィールドを含む）
+
+ログを共有する前に、API キー、認証ヘッダー、プロンプト、ファイルの内容、その他の機密データを削除してください。
+
+再現可能な問題は、[GitHub Issues](https://github.com/anomalyco/opencode/issues) で報告してください。

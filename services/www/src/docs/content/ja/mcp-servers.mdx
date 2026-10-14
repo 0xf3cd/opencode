@@ -1,0 +1,418 @@
+---
+title: "MCP サーバー"
+---
+
+OpenCode は [Model Context Protocol](https://modelcontextprotocol.io/) サーバーに接続し、ツール、プロンプト、リソース、指示などの機能を利用できるようにします。MCP のツールはモデルのコンテキストを消費するため、必要なサーバーだけを追加してください。
+
+## セットアップ
+
+リモートサーバーを使用するプロジェクトで追加し、接続を確認します。
+
+```sh
+opencode mcp add context7 --url https://mcp.context7.com/mcp
+opencode mcp list
+```
+
+このコマンドは、サーバーをプロジェクトの[設定](/config)に書き込みます。すべてのプロジェクトで使えるようにするには、`--global` を追加します。
+
+```sh
+opencode mcp add context7 --global --url https://mcp.context7.com/mcp
+```
+
+リモートサーバーは、デフォルトで OAuth を使用します。一覧に `needs authentication` と表示された場合は、OpenCode を開いて `/mcps` を実行し、サーバーを選択してサインインします。接続されたサーバーは、エージェントからすぐに利用できます。
+
+```text
+✓ context7  connected
+```
+
+## 設定
+
+サーバーを手動で設定するには、`mcp.servers` の下に一意の名前を付けて追加します。V2 では、サーバー名を `mcp` の直下には配置しません。
+
+```jsonc title="opencode.jsonc"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "mcp": {
+    "servers": {
+      "my-server": {
+        "type": "local",
+        "command": ["npx", "-y", "example-mcp-server"],
+      },
+    },
+  },
+}
+```
+
+サーバーは自動的に接続されます。設定は残したまま接続しないようにするには、`enabled` フィールドではなく `disabled` を使用します。
+
+```jsonc
+{
+  "mcp": {
+    "servers": {
+      "my-server": {
+        "type": "local",
+        "command": ["npx", "-y", "example-mcp-server"],
+        "disabled": true,
+      },
+    },
+  },
+}
+```
+
+優先順位の高いプロジェクト設定は、同じ名前のサーバーオブジェクト全体を置き換えます。接続やアカウントを分ける場合は別の名前を使用してください。同じ名前でオーバーライドする場合は、必須フィールドをすべて記述し直す必要があります。
+
+```jsonc title="opencode.jsonc"
+{
+  "mcp": {
+    "servers": {
+      "my-server": {
+        "type": "remote",
+        "url": "https://mcp.example.com/mcp",
+      },
+    },
+  },
+}
+```
+
+## ローカルサーバー
+
+ローカルサーバーは、OpenCode が MCP の stdio トランスポートで起動するコマンドです。`--` の後にコマンドを指定して追加します。
+
+```sh
+opencode mcp add everything -- npx -y @modelcontextprotocol/server-everything
+```
+
+作業ディレクトリや環境変数などのプロセスのオプションは、設定で指定します。
+
+```jsonc title="opencode.jsonc"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "mcp": {
+    "servers": {
+      "everything": {
+        "type": "local",
+        "command": ["npx", "-y", "@modelcontextprotocol/server-everything"],
+        "cwd": ".",
+        "environment": {
+          "LOG_LEVEL": "info",
+          "MCP_API_KEY": "{env:MCP_API_KEY}",
+        },
+      },
+    },
+  },
+}
+```
+
+| フィールド | 必須 | 説明 |
+| --- | --- | --- |
+| `type` | はい | `"local"` を指定する必要があります。 |
+| `command` | はい | 実行ファイルとその引数。 |
+| `cwd` | いいえ | プロセスのディレクトリ。相対パスはワークスペースを基準に解決されます。デフォルトもワークスペースです。 |
+| `environment` | いいえ | OpenCode から継承されるプロセス環境に追加する文字列の変数。 |
+| `disabled` | いいえ | `true` の場合は接続しません。デフォルトは `false` です。 |
+| `codemode` | いいえ | `false` に設定すると、Code Mode を介さずにツールを直接提供します。デフォルトは `true` です。 |
+| `timeout` | いいえ | サーバーごとのタイムアウトのオーバーライド。 |
+| `protocol` | いいえ | `legacy`（デフォルト）、`auto`、`2026-07-28` のいずれか。[プロトコルバージョン](#protocol-version)を参照してください。 |
+
+環境変数の置換には `{env:NAME}` を使用します。`$NAME` のようなシェルの式は、JSON の文字列内では展開されません。
+
+```jsonc
+{
+  "environment": {
+    "MCP_API_KEY": "{env:MCP_API_KEY}",
+  },
+}
+```
+
+## リモートサーバー
+
+リモートサーバーは MCP の Streamable HTTP トランスポートを使用し、絶対 URL が必要です。
+
+```sh
+opencode mcp add context7 --url https://mcp.context7.com/mcp
+```
+
+サーバーにヘッダーなどのオプションが必要な場合は、設定を使用します。シークレットはファイルに直接書かず、環境変数に保存してください。
+
+```jsonc title="opencode.jsonc"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "mcp": {
+    "servers": {
+      "context7": {
+        "type": "remote",
+        "url": "https://mcp.context7.com/mcp",
+        "oauth": false,
+        "headers": {
+          "CONTEXT7_API_KEY": "{env:CONTEXT7_API_KEY}",
+        },
+      },
+    },
+  },
+}
+```
+
+| フィールド | 必須 | 説明 |
+| --- | --- | --- |
+| `type` | はい | `"remote"` を指定する必要があります。 |
+| `url` | はい | Streamable HTTP の絶対エンドポイント。 |
+| `headers` | いいえ | エンドポイントに送信する文字列の HTTP ヘッダー。 |
+| `oauth` | いいえ | OAuth の設定。OAuth を無効にする場合は `false`。 |
+| `disabled` | いいえ | `true` の場合は接続しません。デフォルトは `false` です。 |
+| `codemode` | いいえ | `false` に設定すると、Code Mode を介さずにツールを直接提供します。デフォルトは `true` です。 |
+| `timeout` | いいえ | サーバーごとのタイムアウトのオーバーライド。 |
+| `protocol` | いいえ | `legacy`（デフォルト）、`auto`、`2026-07-28` のいずれか。[プロトコルバージョン](#protocol-version)を参照してください。 |
+
+`oauth: false` は、サーバーが API キーなどのヘッダーによる認証情報だけを使う場合にのみ指定してください。
+
+```jsonc
+{
+  "type": "remote",
+  "url": "https://mcp.example.com/mcp",
+  "oauth": false,
+  "headers": { "Authorization": "Bearer {env:MCP_API_KEY}" },
+}
+```
+
+## OAuth
+
+`oauth` が `false` でない限り、リモートサーバーでは OAuth が有効です。OpenCode は認可サーバーを検出し、PKCE を使用し、トークンを更新し、サポートされている場合は動的クライアント登録を試みます。認証情報はプロジェクトの設定の外に保存されます。
+
+動的登録を使う場合は、サーバーの URL だけを設定します。
+
+```jsonc title="opencode.jsonc"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "mcp": {
+    "servers": {
+      "sentry": {
+        "type": "remote",
+        "url": "https://mcp.sentry.dev/mcp",
+      },
+    },
+  },
+}
+```
+
+サーバーで認証が必要な場合は、`/mcps` を実行してサーバーを選択し、ブラウザーで認可を完了します。CLI から同じフローを開始することもできます。
+
+```sh
+opencode mcp auth sentry
+```
+
+プロバイダーからクライアントの認証情報が発行されている場合は、V2 のスネークケースの OAuth フィールドを使用します。
+
+```jsonc title="opencode.jsonc"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "mcp": {
+    "servers": {
+      "company-tools": {
+        "type": "remote",
+        "url": "https://mcp.example.com/mcp",
+        "oauth": {
+          "client_id": "{env:MCP_CLIENT_ID}",
+          "client_secret": "{env:MCP_CLIENT_SECRET}",
+          "scope": "tools:read tools:execute",
+          "callback_port": 19876,
+          "redirect_uri": "http://127.0.0.1:19876/callback",
+        },
+      },
+    },
+  },
+}
+```
+
+| フィールド | 説明 |
+| --- | --- |
+| `client_id` | 事前登録済みのクライアント ID。省略すると動的登録を試みます。 |
+| `client_secret` | 事前登録済みのクライアントのシークレット。 |
+| `scope` | 要求するスコープ（スペース区切り）。 |
+| `callback_port` | ローカルのコールバックポート（`1` から `65535`）。デフォルトでは、利用可能な一時ポートが使われます。 |
+| `redirect_uri` | 事前登録済みのループバック URI。そのパスとポートがローカルのコールバックリスナーに到達する必要があります。 |
+| `auth_server_metadata_url` | 認可サーバーの OAuth または OpenID Connect のメタデータドキュメントの URL。MCP サーバーが、認可サーバーを示す保護されたリソースのメタデータを公開していない場合に設定します。 |
+
+再度サインインする場合やアカウントを切り替える場合は、保存された OAuth の認証情報を削除します。
+
+```sh
+opencode mcp logout sentry
+```
+
+## タイムアウト
+
+タイムアウトはミリ秒単位の正の整数で指定します。デフォルトは `mcp.timeout` で設定し、サーバーの `timeout` オブジェクトで該当するデフォルトをオーバーライドできます。
+
+```jsonc title="opencode.jsonc"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "mcp": {
+    "timeout": {
+      "startup": 45000,
+      "catalog": 30000,
+      "execution": 600000,
+    },
+    "servers": {
+      "slow-tools": {
+        "type": "remote",
+        "url": "https://mcp.example.com/mcp",
+        "timeout": {
+          "catalog": 60000,
+        },
+      },
+    },
+  },
+}
+```
+
+| タイムアウト | デフォルト | 適用対象 |
+| --- | --- | --- |
+| `startup` | 30 秒 | トランスポートの接続とサーバーの初期化。 |
+| `catalog` | 30 秒 | ツール、プロンプト、リソース、リソーステンプレートの一覧取得。 |
+| `execution` | 12 時間 | ツール呼び出し、プロンプトの取得、リソースの読み取り。 |
+
+## プロトコルバージョン
+
+OpenCode はデフォルトで、従来の MCP の `initialize` ハンドシェイクを使ってすべてのサーバーとの接続を開始します。2026-07-28 リビジョンに基づくサーバーと通信するには、サーバーの `protocol` を設定します。
+
+```jsonc title="opencode.jsonc"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "mcp": {
+    "servers": {
+      "modern": {
+        "type": "remote",
+        "url": "https://mcp.example.com/mcp",
+        "protocol": "auto",
+      },
+    },
+  },
+}
+```
+
+| 値 | 動作 |
+| --- | --- |
+| `legacy` | デフォルト。`initialize` を送信し、2025-11-25 までのプロトコルリビジョンで通信します。 |
+| `auto` | `server/discover` で 2026-07-28 リビジョンへの対応を確認し、サーバーが対応していない場合は `legacy` にフォールバックします。 |
+| `2026-07-28` | 2026-07-28 リビジョンを必須とします。古いサーバーに対しては接続が失敗します。 |
+
+ローカルの `legacy` サーバーに対して確認を行うと、短時間だけ追加のプロセスが起動します。また、サーバーが不明なリクエストを無視する場合は、起動時のタイムアウトまで待機することがあります。そのため、`auto` は必要なサーバーに限定して使用してください。
+
+## 名前
+
+OpenCode はツールに `<server>_<tool>` という名前を付けます。英字、数字、`_`、`-` 以外の文字は `_` に置き換えられます。
+
+```text
+server: context 7
+tool:   resolve.library/id
+name:   context_7_resolve_library_id
+```
+
+MCP のプロンプトは、同じ正規化を適用した `<server>:<prompt>` という名前のコマンドになります。たとえば次のようになります。
+
+```text
+/context_7:find_docs
+```
+
+サーバー名は、正規化後も一意になる短い名前にしてください。デフォルトの Code Mode では、ツールは正規化されたサーバー名ごとにグループ化されます。
+
+```text
+tools.context_7.resolve_library_id(...)
+```
+
+## 権限
+
+デフォルトは Code Mode です。サーバーのツールをプロバイダーのネイティブなツール一覧に残す必要がある場合は、`codemode` を `false` に設定します。
+
+```jsonc
+{
+  "mcp": {
+    "servers": {
+      "context7": {
+        "type": "remote",
+        "url": "https://mcp.context7.com/mcp",
+        "codemode": false,
+      },
+    },
+  },
+}
+```
+
+サーバーを切断せずにツールを非表示にしたり拒否したりするには、権限アクションを使用します。正規化された `<server>_<tool>` という名前にマッチさせます。
+
+```jsonc
+{
+  "permissions": [
+    {
+      "action": "context7_*",
+      "resource": "*",
+      "effect": "deny",
+    },
+  ],
+}
+```
+
+## コンテキスト
+
+セッションに代わって行われる呼び出しでは、OpenCode はセッション ID を `CallToolRequest.params._meta["ai.opencode/sessionID"]` で送信します。これは、stdio と Streamable HTTP のどちらでも、直接のツールと Code Mode の両方に適用されます。
+
+```json
+{
+  "method": "tools/call",
+  "params": {
+    "name": "lookup",
+    "arguments": { "query": "example" },
+    "_meta": { "ai.opencode/sessionID": "ses_..." }
+  }
+}
+```
+
+この ID はツールの引数ではなくリクエストのメタデータであるため、モデルから見えるスキーマには含まれません。内容に意味を持たない相関用の値として扱ってください。
+
+| ルール | 動作 |
+| --- | --- |
+| 識別対象 | 呼び出し元の OpenCode のセッションを識別するもので、MCP トランスポートのセッションではありません。 |
+| 有無 | セッションのコンテキストがない呼び出しでは含まれない場合があります。 |
+| セキュリティ | この ID だけを認証や認可に使用しないでください。 |
+| プライバシー | リモートサーバーは ID をそのまま受け取り、ログに記録したり保持したりする可能性があります。 |
+
+## 管理
+
+サーバーとその現在の接続状態は、どのプロジェクトからでも一覧表示できます。
+
+```sh
+opencode mcp list
+```
+
+サーバーの表示、接続、切断、認証には、OpenCode の `/mcps` を使用します。サーバーの追加と OAuth の認証情報の管理には CLI を使用します。
+
+```sh
+opencode mcp add sentry --url https://mcp.sentry.dev/mcp
+opencode mcp auth sentry
+opencode mcp logout sentry
+```
+
+サーバーを削除するには、追加したプロジェクトまたはグローバルの設定からそのエントリを削除します。
+
+```jsonc
+{
+  "mcp": {
+    "servers": {},
+  },
+}
+```
+
+OAuth クライアントの設定、タイムアウト、作業ディレクトリ、有効・無効の永続的な設定は、設定ファイルを直接編集します。
+
+```jsonc
+{
+  "mcp": {
+    "servers": {
+      "sentry": {
+        "type": "remote",
+        "url": "https://mcp.sentry.dev/mcp",
+        "disabled": true,
+      },
+    },
+  },
+}
+```

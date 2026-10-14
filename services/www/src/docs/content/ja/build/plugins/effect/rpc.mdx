@@ -1,0 +1,165 @@
+---
+title: "RPC"
+---
+
+Effect プラグインでは、型付きの Effect と Stream を返すメソッドとイベントを公開できます。
+
+## 定義
+
+RPC は、`Rpc.define` と Effect Schema を使って定義します。
+
+```ts title="src/rpc.ts"
+import { Rpc } from "@opencode/plugin/rpc"
+import { Schema } from "effect"
+
+export const Acme = Rpc.define({
+  id: "acme",
+  methods: {
+    search: {
+      input: Schema.Struct({ query: Schema.String }),
+      output: Schema.Struct({ text: Schema.String }),
+      errors: {
+        not_found: Schema.Struct({ query: Schema.String }),
+      },
+    },
+  },
+  events: {
+    updated: {
+      schema: Schema.Struct({ itemID: Schema.String, text: Schema.String }),
+    },
+  },
+})
+```
+
+### バリデーション
+
+Effect Schema は値を検証し、その TypeScript の型を推論します。
+
+```ts
+input: Schema.Struct({ query: Schema.String })
+```
+
+JSON Schema と Standard Schema にも対応しています。
+
+### 入力と出力
+
+メソッドの引数には `input` を、戻り値には `output` を使用します。値がない場合は、どちらも省略できます。
+
+```ts
+search: {
+  input: Schema.Struct({ query: Schema.String }),
+  output: Schema.Struct({ text: Schema.String }),
+}
+```
+
+### エラー
+
+想定される失敗は `errors` に追加します。各キーがエラーの `type` になります。
+
+```ts
+errors: {
+  not_found: Schema.Struct({ query: Schema.String }),
+}
+```
+
+### イベント
+
+イベントはトップレベルの `events` マップに追加します。イベントデータはオブジェクトである必要があります。
+
+```ts
+events: {
+  updated: {
+    schema: Schema.Struct({ itemID: Schema.String, text: Schema.String }),
+  },
+}
+```
+
+## 実装
+
+プラグインの Effect から実装を登録します。
+
+```ts title="src/index.ts"
+import { Plugin } from "@opencode/plugin/effect"
+import { Effect } from "effect"
+import { Acme } from "./rpc.js"
+
+export default Plugin.define({
+  id: "acme-effect-plugin",
+  effect: (ctx) =>
+    Effect.gen(function* () {
+      const registration = yield* ctx.rpc.register(Acme, {
+        search: ({ query }, context) =>
+          findText(query).pipe(
+            Effect.flatMap((text) =>
+              text
+                ? Effect.succeed({ text })
+                : Effect.fail(context.error("not_found", "Result not found", { query })),
+            ),
+          ),
+      })
+
+      const acme = ctx.rpc(Acme)
+      const result = yield* acme.search({ query: "hello" })
+
+      yield* registration.events.emit("updated", { itemID: "item-1", text: result.text })
+    }).pipe(Effect.orDie),
+})
+```
+
+エラーマップは、各メソッドの Effect のエラー型になります。宣言済みのエラーを作成するには、`context.error(...)` を使用します。
+
+## 呼び出し
+
+RPC を登録すると、HTTP 経由またはほかのプラグインから呼び出せるようになります。
+
+### HTTP
+
+Effect クライアントを作成してから、RPC のサブクライアントを作成します。
+
+```ts
+import { OpenCode } from "@opencode/client/effect"
+import { Effect } from "effect"
+import { FetchHttpClient } from "effect/http"
+import { Acme } from "opencode-acme-plugin/rpc"
+
+const program = Effect.gen(function* () {
+  const client = yield* OpenCode.make({ baseUrl: "http://localhost:4096" })
+  const acme = client.rpc(Acme)
+  return yield* acme.search({ query: "hello" })
+})
+
+const result = await Effect.runPromise(program.pipe(Effect.provide(FetchHttpClient.layer)))
+```
+
+### プラグイン
+
+ほかの Effect プラグインは、自身のコンテキストからローカルのサブクライアントを作成できます。
+
+```ts
+import { Effect } from "effect"
+
+effect: (ctx) =>
+  Effect.gen(function* () {
+    const acme = ctx.rpc(Acme)
+    const result = yield* acme.search({ query: "hello" })
+    yield* Effect.logInfo(result.text)
+  }).pipe(Effect.orDie)
+```
+
+### サブスクライブ
+
+RPC イベントは Stream です。イベント名を指定してサブスクライブし、スコープ付きのファイバーで Stream を実行します。
+
+```ts
+import { Effect, Stream } from "effect"
+
+const acme = ctx.rpc(Acme)
+
+yield *
+  acme.events.subscribe("updated").pipe(
+    Stream.runForEach((event) => Effect.logInfo(event.data.text)),
+    Effect.forkScoped,
+  )
+```
+
+サブスクリプションはライブ専用で、Stream の消費が止まると閉じられます。

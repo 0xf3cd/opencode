@@ -1,0 +1,112 @@
+---
+title: "Instruksjoner"
+---
+
+Legg til en `AGENTS.md`-fil for å gi OpenCode varig veiledning for prosjektet. Bruk den til byggekommandoer, notater om arkitektur, kodekonvensjoner og krav til verifisering.
+
+```md title="AGENTS.md"
+# Project instructions
+
+- Run `bun typecheck` after changing TypeScript.
+- Keep database queries in `src/database`.
+- Do not edit generated files directly.
+```
+
+Commit instruksjonsfilene for prosjektet, slik at alle som jobber i repositoriet, får den samme veiledningen.
+
+## Omfang
+
+Plasser `AGENTS.md` i katalogen der veiledningen skal gjelde. OpenCode laster inn den globale filen og deretter hver `AGENTS.md` fra gjeldende arbeidskatalog og oppover mot hjemmekatalogen. For arbeidskataloger utenfor hjemmekatalogen stopper søket ved prosjektroten.
+
+```text
+~/.config/opencode/AGENTS.md
+~/code/my-project/AGENTS.md
+~/code/my-project/packages/AGENTS.md
+~/code/my-project/packages/web/AGENTS.md  ← current workspace
+```
+
+I dette eksemplet lastes alle de fire filene inn. De kombineres i denne rekkefølgen:
+
+```text
+~/.config/opencode/AGENTS.md
+packages/web/AGENTS.md
+packages/AGENTS.md
+AGENTS.md
+```
+
+Legg veiledning som gjelder overalt, i den globale filen. Legg veiledning for hele repositoriet i prosjektroten, og mer spesifikk veiledning nærmere koden den gjelder. OpenCode kombinerer filene og løser ikke konflikter mellom dem.
+
+Hvis arbeidskatalogen ligger utenfor prosjektroten, lastes bare den globale filen inn. Sett `OPENCODE_DISABLE_PROJECT_CONFIG=1` for å hoppe over søket etter `AGENTS.md` i prosjektet uten å deaktivere den globale filen.
+
+<Callout type="note">
+  OpenCode V2 gjenkjenner bare `AGENTS.md`. `CLAUDE.md` brukes ikke som fallback.
+</Callout>
+
+## Oppdagelse
+
+Instruksjonsfiler under arbeidskatalogen oppdages etter hvert som agenten utforsker prosjektet. Når agenten leser en fil eller lister opp en katalog, lastes alle `AGENTS.md`-filer mellom målet og arbeidskatalogen inn.
+
+```text
+my-project/                         ← current workspace
+├── AGENTS.md                       loaded initially
+└── packages/
+    └── web/
+        ├── AGENTS.md               loaded when this area is read
+        └── src/
+            └── app.ts              read target
+```
+
+Nestede filer lastes inn med den nærmeste først, og dupliseres ikke så lenge instruksjonsoppføringen deres fortsatt finnes i historikken modellen ser. Leser agenten det samme området igjen, blir de normalt ikke satt inn på nytt. Hvis komprimering eller en tilbakerulling fjerner oppføringen, kan en senere lesing laste inn filen igjen.
+
+Endringer i en nestet fil oppdages ikke automatisk etter at den er lastet inn. Start en ny økt når oppdatert tekst må gjelde umiddelbart.
+
+## Rekkefølge
+
+Systemprompten til den valgte agenten eller leverandøren sendes først. Deretter setter OpenCode sammen de første instruksjonene i denne rekkefølgen:
+
+```text
+1. Agent or provider system prompt
+2. Built-in environment and date context
+3. Code Mode tool guidance, when enabled
+4. Global and project AGENTS.md files
+5. Available skill, reference, and MCP guidance
+6. Session-specific instruction entries supplied through the API
+```
+
+Kildene kombineres i stedet for å overstyre hverandre. Nestede `AGENTS.md`-filer som oppdages senere, legges til i økthistorikken i den rekkefølgen de oppdages.
+
+## Oppdateringer
+
+Rediger en global `AGENTS.md`, eller en som er funnet oppover i katalogtreet, mens en økt kjører, for å oppdatere veiledningen.
+
+```bash
+$ printf '\n- Run the integration suite before committing.\n' >> AGENTS.md
+```
+
+Før neste modellforespørsel oppdager OpenCode endringen og legger til en instruksjonsoppdatering før ventende inndata leveres:
+
+```text
+AGENTS.md changes
+→ instruction update
+→ next prompt
+```
+
+- Hvis du fjerner alle omgivende `AGENTS.md`-filer, får økten beskjed om at de tidligere omgivende instruksjonene ikke lenger gjelder.
+- En midlertidig lesefeil beholder de sist kjente instruksjonene i stedet for å behandle dem som slettet.
+- Når en økt flyttes, beholdes instruksjonstilstanden, så veiledningen på målstedet blir lagt inn som en oppdatering.
+- Når en tilbakerulling i en økt fullføres, nullstilles instruksjonstilstanden, og instruksjonene lastes inn på nytt før neste prompt.
+
+Instruksjonsverdier er fortsatt privilegerte. Klienter kan se hvilke kilder som er endret, men ikke innholdet.
+
+## Konfigurasjon
+
+Konfigurasjonsskjemaet i V2 godtar en `instructions`-liste, men V2 løser foreløpig ikke opp filene, glob-mønstrene eller URL-ene i den. Denne konfigurasjonen legger ennå ikke til instruksjoner for modellen:
+
+```jsonc title="opencode.jsonc"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "instructions": ["CONTRIBUTING.md", "docs/guidelines/*.md", "https://example.com/instructions.md"],
+}
+```
+
+Bruk `AGENTS.md` for instruksjoner som skal gjelde i V2. Se [Konfigurasjon](/config) for plasseringen av konfigurasjonsfiler og prioritet.

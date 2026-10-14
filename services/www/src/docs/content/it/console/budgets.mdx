@@ -1,0 +1,87 @@
+---
+title: "Budget"
+description: "Limita la spesa mensile di un workspace, dei suoi membri e dei suoi account di servizio."
+---
+
+I budget limitano quanto un workspace spende ogni mese. Proprietari e amministratori li impostano dal pannello
+**Budget limits** delle pagine **Members** e **Keys**.
+
+## Livelli di budget
+
+| Budget                                     | Si applica a                                         | Dove impostarlo                                    |
+| ------------------------------------------ | ---------------------------------------------------- | -------------------------------------------------- |
+| Workspace                                  | Spesa complessiva di tutti i membri del workspace    | **Members** o **Keys › Monthly workspace budget**  |
+| Predefinito per utente                     | Ogni membro senza un limite personalizzato           | **Members › Monthly default user budget**          |
+| Personalizzato per utente                  | Un singolo membro                                    | Tabella **Members** o pagina del membro            |
+| Predefinito per account di servizio        | Ogni account di servizio senza un limite personalizzato | **Keys › Monthly default service account budget** |
+| Personalizzato per account di servizio     | Un singolo account di servizio                       | Pagina dell'account di servizio                    |
+
+Una richiesta deve rientrare sia nel budget del workspace sia nel budget della singola persona. Senza alcun budget, la
+spesa è illimitata.
+
+## Budget del workspace
+
+Il budget del workspace blocca le richieste di tutti quando il workspace lo raggiunge.
+
+1. Apri **Members** o **Keys**.
+2. In **Budget limits**, fai clic su **Monthly workspace budget**.
+3. Inserisci un **Workspace limit** in USD e fai clic su **Save**.
+
+## Budget dei membri
+
+Il budget predefinito per utente si applica a ogni membro senza un limite personalizzato. Impostalo in
+**Monthly default user budget**.
+
+Puoi assegnare un limite personalizzato a un membro in due modi:
+
+- Fai clic sulla cella **Limit** nella sua riga di **Members** e inserisci un importo.
+- Apri la pagina del membro e fai clic su **Set User Budget** in **Monthly Budget**.
+
+I limiti personalizzati sono evidenziati nella tabella Members. Cancella un limite personalizzato per riportare il
+membro al valore predefinito; la pagina del membro mostrerà allora **Using Default**.
+
+## Budget degli account di servizio
+
+Gli account di servizio funzionano allo stesso modo. Imposta **Monthly default service account budget** nella pagina
+**Keys**, oppure apri un account di servizio e fai clic su **Set Service Account Budget**.
+
+## Importi e azzeramento
+
+- Gli importi sono in dollari statunitensi, con al massimo due decimali.
+- I budget si azzerano il giorno 1 di ogni mese alle 00:00 UTC.
+- Un budget di `$0` blocca tutta la spesa conteggiata nei budget.
+
+## Cosa viene conteggiato
+
+| Spesa                                                                        | Conteggiata nei budget        |
+| ---------------------------------------------------------------------------- | ----------------------------- |
+| Modelli a pagamento della Console                                            | Sì                            |
+| Modelli dei [tuoi provider](/console/providers) con un prezzo impostato      | Sì, al prezzo configurato     |
+| [Ricerca web](/console/websearch)                                            | Sì                            |
+| Modelli gratuiti                                                             | No                            |
+| Utilizzo di [Go](/console/go) entro i limiti del piano                       | No                            |
+| Utilizzo extra di Go pagato con il credito                                   | Sì                            |
+
+## Raggiungimento del budget
+
+Le nuove richieste falliscono con HTTP `429` finché il budget non si azzera o un amministratore non lo aumenta. La
+risposta non indica quale budget è stato raggiunto.
+
+```text
+Upstream request failed: Account budget exceeded
+```
+
+I budget vengono controllati all'avvio di una richiesta. Le richieste già in corso vengono completate, quindi la spesa
+può superare leggermente il limite.
+
+## Monitoraggio della spesa
+
+Ogni membro vede il proprio budget in **Overview**: l'importo residuo, l'importo speso e la data di azzeramento.
+
+Proprietari e amministratori dei workspace con più di un membro vedono anche **Usage**, che suddivide i costi per giorno,
+modello e persona. Il pulsante **Export usage** scarica in CSV i totali giornalieri degli ultimi 7, 30 o 90 giorni.
+
+## Automazione dei budget
+
+Usa l'[API dei budget](/console/api/budgets) per leggere il budget di ogni membro e impostare limiti personalizzati dai
+tuoi strumenti.

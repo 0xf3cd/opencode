@@ -1,0 +1,95 @@
+---
+title: "ค้นหาเว็บ"
+---
+
+เมื่อถามหาข้อมูลล่าสุด OpenCode สามารถค้นหาเว็บ อ่านผลลัพธ์ และใส่ลิงก์แหล่งที่มาไว้ในคำตอบได้
+
+```text
+Find the latest Bun release and summarize the changes.
+```
+
+การค้นหาครั้งแรกจะขอให้คุณอนุญาตการค้นหาเว็บและเลือกผู้ให้บริการ OpenCode จะจำตัวเลือกนี้ไว้ใช้ในเซสชันต่อ ๆ ไป
+
+## ผู้ให้บริการ
+
+OpenCode มีผู้ให้บริการค้นหาในตัว 5 ราย:
+
+| ผู้ให้บริการ | ID | ตัวแปรสภาพแวดล้อม |
+| --- | --- | --- |
+| Exa | `exa` | `EXA_API_KEY` |
+| Firecrawl | `firecrawl` | `FIRECRAWL_API_KEY` |
+| Parallel | `parallel` | `PARALLEL_API_KEY` |
+| Tavily | `tavily` | `TAVILY_API_KEY` |
+| TinyFish | `tinyfish` | `TINYFISH_API_KEY` (ไม่บังคับ) |
+
+เชื่อมต่อบัญชีจาก TUI ด้วยคำสั่ง `/connect` หรือตั้งค่าตัวแปรสภาพแวดล้อมของผู้ให้บริการก่อนเริ่ม OpenCode
+
+```bash
+$ TAVILY_API_KEY=your-key opencode
+```
+
+## การเลือก
+
+ระบุผู้ให้บริการใน `opencode.jsonc` เพื่อข้ามพรอมต์ให้เลือก
+
+```jsonc title="opencode.jsonc"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "websearch": {
+    "provider": "tavily",
+  },
+}
+```
+
+ใช้ `"random"` เพื่อให้เลือกผู้ให้บริการที่พร้อมใช้งานโดยอัตโนมัติ แต่ละเซสชันจะใช้ผู้ให้บริการที่เลือกไว้ต่อไปจนกว่าผู้ให้บริการนั้นจะถูกจำกัดอัตราการใช้งาน (rate limit)
+
+```jsonc title="opencode.jsonc"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "websearch": {
+    "provider": "random",
+  },
+}
+```
+
+## ขีดจำกัด
+
+เมื่อผู้ให้บริการตอบกลับด้วย HTTP 429 การเลือกแบบสุ่มจะลองค้นหาใหม่ด้วยผู้ให้บริการรายอื่นที่พร้อมใช้งาน ส่วนผู้ให้บริการที่ถูกจำกัดอัตราจะพักรอตามระยะเวลาใน `Retry-After` หรือ 60 วินาทีหากการตอบกลับไม่มีระยะเวลาที่ถูกต้อง
+
+```text
+Exa returns HTTP 429
+→ Exa enters cooldown
+→ OpenCode retries with another provider
+```
+
+หากผู้ให้บริการทุกรายอยู่ในช่วงพัก การค้นหาจะล้มเหลวทันที การย้ายเซสชันหรือรีสตาร์ตเซิร์ฟเวอร์ของเซสชันจะล้างผู้ให้บริการที่จำไว้ ส่วนช่วงพักจะใช้ร่วมกันระหว่างเซสชันใน workspace เดียวกัน
+
+## สิทธิ์
+
+การค้นหาเว็บใช้ action สิทธิ์ `websearch` และใช้คำค้นหาเป็น resource ตัวอย่างนี้ให้ถามก่อนทุกครั้งสำหรับการค้นหาที่ไม่ได้รับอนุญาตไว้อย่างชัดเจน
+
+```jsonc title="opencode.jsonc"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "permissions": [
+    {
+      "action": "websearch",
+      "resource": "*",
+      "effect": "ask",
+    },
+  ],
+}
+```
+
+ดูลำดับกฎและการจับคู่ได้ที่[สิทธิ์](/permissions)
+
+## ปิดใช้งาน
+
+ตั้งค่า `websearch` เป็น `false` เพื่อนำเครื่องมือค้นหาเว็บออกจากคำขอที่ส่งไปยังโมเดล
+
+```jsonc title="opencode.jsonc"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "websearch": false,
+}
+```

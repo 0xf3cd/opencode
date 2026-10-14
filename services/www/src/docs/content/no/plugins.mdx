@@ -1,0 +1,140 @@
+---
+title: "Plugins"
+---
+
+Legg til publiserte pakker, versjonerte pakker, pakker med scope eller lokale plugin-kataloger i `opencode.json(c)`.
+
+## Konfigurer
+
+```jsonc title="opencode.jsonc"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "plugins": [
+    "opencode-acme-plugin",
+    "opencode-acme-plugin@1.2.0",
+    "@acme/opencode-plugin",
+    "./plugins/local",
+    "../shared/plugin.ts",
+    "/absolute/path/plugin.ts",
+    "file:///home/me/plugins/local",
+    {
+      "package": "@acme/opencode-plugin",
+      "options": {
+        "agent": "reviewer",
+        "strict": true,
+      },
+    },
+  ],
+}
+```
+
+Relative stier løses opp fra konfigurasjonsfilen som inneholder oppføringen. Plugin-matriser fra gjeldende
+konfigurasjonsfiler brukes fra lavest til høyest prioritet, i stedet for å erstatte hverandre.
+
+```text
+~/.config/opencode/opencode.jsonc
+./opencode.jsonc
+./.opencode/opencode.jsonc
+```
+
+## Oppdag
+
+OpenCode laster også inn `.ts`- og `.js`-filer og plugin-pakkekataloger som ligger direkte i hver
+`.opencode/plugins/`-katalog som blir funnet.
+
+```text
+.opencode/
+└── plugins/
+    ├── concise.ts
+    ├── reviewer.js
+    └── acme-package/
+```
+
+Globale plugins bruker samme struktur for oppdagelse under konfigurasjonskatalogen til OpenCode.
+
+```text
+~/.config/opencode/plugins/
+```
+
+En `plugins/`-katalog ved siden av en `opencode.json(c)` i prosjektroten blir ikke oppdaget automatisk. Konfigurer filene
+der eksplisitt, eller flytt katalogen under `.opencode/`.
+
+```jsonc title="opencode.jsonc"
+{
+  "plugins": ["./plugins/local"]
+}
+```
+
+## Styr
+
+Plugin-oppføringer behandles i rekkefølge. Sett `-` foran en ID eller et jokertegn for å slå den av, bruk `*` for alle
+plugins, og bruk `.*` for å matche et ID-prefiks. En senere ID slår en plugin på igjen.
+
+```jsonc title="opencode.jsonc"
+{
+  "plugins": ["*", "-opencode.provider.*", "opencode.provider.openai", "-acme.reviewer"]
+}
+```
+
+To innebygde plugins ignorerer fjerning, slik at et repositorium ikke kan slå av håndhevingen av
+[policyer](/policies): `opencode.config.policy` og `opencode.provider.opencode`, som er Console-tilkoblingen som leverer
+organisasjonens policyer.
+
+## Administrer
+
+Installer, list opp, sjekk, oppdater eller fjern globale plugin-pakker med CLI-en.
+
+```sh
+opencode plugin add opencode-acme-plugin@1.2.0
+opencode plugin list
+opencode plugin list --builtin
+opencode plugin check
+opencode plugin update
+opencode plugin update opencode-acme-plugin
+opencode plugin remove opencode-acme-plugin@1.2.0
+```
+
+`plugin check` ser etter oppdateringer for plugin-pakker for serveren og for plugin-pakker som bare gjelder TUI-en.
+`plugin update` oppdaterer alle utdaterte pakker. Oppgi en konfigurert pakke for å sjekke eller oppdatere bare den
+pakken. Lokale plugins og pakker som er låst til en eksakt revisjon, hoppes over.
+
+Pakkeinstallasjon godtar npm-navn med versjoner, tagger eller versjonsintervaller, i tillegg til npm-kompatible
+Git-pakkespesifikasjoner. Git-repositorier kan bruke snarveier for vertstjenester, HTTPS eller SSH, inkludert private
+repositorier som er tilgjengelige via den eksisterende Git-legitimasjonen din.
+
+```sh
+opencode plugin add @acme/opencode-plugin@latest
+opencode plugin add github:acme/opencode-plugin
+opencode plugin add git+ssh://git@github.com/acme/opencode-plugin.git#main
+opencode plugin add 'github:acme/plugins#main::path:packages/opencode-plugin'
+```
+
+Grener, tagger, fullstendige commit-hasher og npms `::path:`-velgere for underkataloger i repositorier støttes.
+Konfigurer lokale stier direkte; `plugin add` godtar ikke tarballer eller npm-aliaser.
+
+## Last inn på nytt
+
+Endringer i overvåkede konfigurasjonskataloger lastes inn på nytt automatisk. Når serveren starter, lastes hurtigbufrede
+plugin-pakker inn umiddelbart, manglende pakker installeres i bakgrunnen, og npm- og Git-plugins som ikke er låst til en
+versjon, sjekkes for oppdateringer uten at den installerte pakken endres. Eksakte npm-versjoner og fullstendige
+Git-commit-hasher forblir låst. Endringer i lokale avhengigheter som ikke overvåkes, kan fortsatt kreve at du starter
+OpenCode på nytt.
+
+```sh
+touch .opencode/plugins/concise/index.ts
+opencode service restart
+```
+
+## Terminal
+
+Plugins som bare gjelder CLI-en, konfigureres separat og forblir aktive når du er koblet til en ekstern server.
+
+```json title="cli.json"
+{
+  "plugins": ["opencode-acme-cli"]
+}
+```
+
+<Card title="Lag en plugin" href="/build/plugins">
+  Lag plugins som legger til verktøy, hooks, integrasjoner, kommandoer, agenter og annen funksjonalitet.
+</Card>

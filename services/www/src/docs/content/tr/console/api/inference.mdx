@@ -1,0 +1,100 @@
+---
+title: "Çıkarım API'si"
+description: "OpenAI, Anthropic ve Gemini uyumlu modelleri tek bir kimlik doğrulama başlığıyla Console çıkarımı üzerinden çağırın."
+---
+
+Console çıkarımı (inference), OpenAI, Anthropic ve Gemini uyumlu API'leri `https://opencode.ai/inference` adresinden
+sunar. Modelin API ailesine karşılık gelen uç noktaya JSON biçiminde bir `POST` isteği gönderin.
+
+```bash
+curl -X POST "https://opencode.ai/inference/openai/v1/chat/completions" \
+  -H "Authorization: Bearer <token>" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "model": "kimi-k2.6",
+    "messages": [{ "role": "user", "content": "Say hi" }]
+  }'
+```
+
+## Kimlik doğrulama
+
+`<token>` yer tutucusunu, [Console'da](https://opencode.ai/console) oluşturulmuş bir [hizmet hesabı
+anahtarıyla](/console/api#service-accounts) değiştirin. Ücretli modeller bu başlığı gerektirir; ücretsiz sohbet
+modelleri başlık olmadan çağrılabilir.
+
+```text
+Authorization: Bearer <token>
+```
+
+## Uç noktalar
+
+| API | Yol |
+| ----------------------- | ----------------------- |
+| OpenAI Chat Completions | `/inference/openai/v1/chat/completions` |
+| OpenAI Responses | `/inference/openai/v1/responses` |
+| Anthropic Messages | `/inference/anthropic/v1/messages` |
+| Gemini | `/inference/google/v1beta/models/<model>:generateContent` |
+
+Her model tek bir API ailesi üzerinden sunulur. [Model uç noktaları](/console/models#endpoints) tablosuna bakın veya
+güncel listeyi alın:
+
+```bash
+curl https://opencode.ai/inference/v1/models
+```
+
+### OpenAI Chat Completions
+
+`kimi-k2.6`, `glm-5.1`, `minimax-m2.7` gibi açık modeller ve ücretsiz modeller Chat Completions API'sini kullanır.
+
+```bash
+curl -X POST "https://opencode.ai/inference/openai/v1/chat/completions" \
+  -H "Authorization: Bearer <token>" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "model": "glm-5.1",
+    "messages": [{ "role": "user", "content": "Say hi" }]
+  }'
+```
+
+### OpenAI Responses
+
+GPT modelleri Responses API'sini kullanır.
+
+```bash
+curl -X POST "https://opencode.ai/inference/openai/v1/responses" \
+  -H "Authorization: Bearer <token>" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "model": "gpt-5.5",
+    "input": "Say hi"
+  }'
+```
+
+### Anthropic Messages
+
+Claude ve Qwen modelleri Messages API'sini kullanır. `max_tokens` alanı zorunludur.
+
+```bash
+curl -X POST "https://opencode.ai/inference/anthropic/v1/messages" \
+  -H "Authorization: Bearer <token>" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "model": "claude-sonnet-4-6",
+    "max_tokens": 1024,
+    "messages": [{ "role": "user", "content": "Say hi" }]
+  }'
+```
+
+### Gemini
+
+Gemini modelleri, modeli ve yöntemi yolda alır. Yanıtı akış olarak almak için `:generateContent` yerine
+`:streamGenerateContent` kullanın.
+
+```bash
+curl -X POST "https://opencode.ai/inference/google/v1beta/models/gemini-3.1-pro:generateContent" \
+  -H "Authorization: Bearer <token>" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "contents": [{ "parts": [{ "text": "Say hi" }] }]
+  }'
+```

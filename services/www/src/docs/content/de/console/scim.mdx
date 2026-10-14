@@ -1,0 +1,96 @@
+---
+title: "Verzeichnissynchronisierung"
+description: "Mitglieder automatisch aus Okta, Microsoft Entra ID oder einem beliebigen SCIM-2.0-Identitätsanbieter zum Workspace hinzufügen und daraus entfernen."
+---
+
+Die Verzeichnissynchronisierung (SCIM 2.0) fügt Personen dem Workspace hinzu, wenn du sie in deinem Identitätsanbieter
+zuweist, und entzieht ihnen den Zugriff, wenn du die Zuweisung aufhebst. Rollen werden weiterhin in der Console
+verwaltet.
+
+```text
+https://opencode.ai/console/scim/v2
+```
+
+## Voraussetzungen
+
+- Richte [SSO](/console/sso) für den Workspace ein.
+- [Verifiziere](/console/sso#verify-email-domains) jede E-Mail-Domain, mit der sich deine Leute anmelden. Die
+  Verzeichnissynchronisierung fügt nur Personen mit einer verifizierten Domain hinzu; alle anderen lädst du unter
+  [Mitglieder](/console/members) ein.
+
+## Token erstellen
+
+1. Öffne **Settings › Security** und klicke unter **Directory sync** auf **Set up**.
+2. Kopiere die **SCIM base URL** und den Token. Der Token wird nur einmal angezeigt; bewahre ihn deshalb in einem
+   Secrets-Manager auf.
+
+Dein Identitätsanbieter sendet den Token bei jeder Anfrage mit.
+
+```text
+Authorization: Bearer <token>
+```
+
+## Identitätsanbieter verbinden
+
+### Okta
+
+1. Füge die App **SCIM 2.0 Test App (Header Auth)** hinzu.
+2. Setze die Basis-URL und gib unter **API Token** `Bearer ` gefolgt vom Token ein.
+3. Aktiviere **Create Users**, **Update User Attributes** und **Deactivate Users**. Lass **Import Groups** und die
+   Passwortsynchronisierung deaktiviert.
+
+### Microsoft Entra ID
+
+1. Öffne in deiner Unternehmensanwendung **Provisioning** und setze den Modus auf **Automatic**.
+2. Gib die Basis-URL als **Tenant URL** und den Token als **Secret Token** ein.
+3. Weise Benutzer und Gruppen zu und starte dann die Bereitstellung.
+
+### Andere Anbieter
+
+Verwende eine SCIM-2.0-App mit Token-Authentifizierung per Header, die auf die Basis-URL zeigt. Die Console unterstützt
+die Endpunkte `/Users` und `/Groups`.
+
+Weise zunächst eine einzelne Testperson zu. Nach der ersten Anfrage zeigt **Directory sync** den Status **Connected to
+your identity provider** an.
+
+## Was synchronisiert wird
+
+| In deinem Identitätsanbieter       | In der Console                                                                                     |
+| ---------------------------------- | -------------------------------------------------------------------------------------------------- |
+| Person zuweisen                    | Wird als **Member** hinzugefügt. Bestehende Mitglieder behalten ihre Rolle.                        |
+| Namen ändern                       | Profil wird aktualisiert.                                                                          |
+| Zuweisung aufheben oder deaktivieren | Zugriff wird gesperrt und als **Deactivated** angezeigt. Von der Person erstellte API-Schlüssel werden widerrufen. |
+| Erneut zuweisen                    | Zugriff wird wiederhergestellt. Widerrufene Schlüssel bleiben widerrufen.                          |
+| Löschen                            | Wird aus dem Workspace entfernt. Das Konto und andere Workspaces sind nicht betroffen.             |
+
+- Rollen und E-Mail-Adressen werden von der Verzeichnissynchronisierung nicht geändert.
+- Der letzte Owner kann weder deaktiviert noch gelöscht werden.
+- Workspaces mit einem [Go](/console/go)-Abonnement können über die Verzeichnissynchronisierung keine Mitglieder
+  hinzufügen.
+
+## Gruppen
+
+Übertrage Gruppen, um ihre Mitglieder zu taggen, etwa mit **Push Groups** in Okta oder über Gruppenzuweisungen in Entra.
+Weise die Personen zu, bevor du ihre Gruppen überträgst.
+
+```text
+Platform Admins  →  platform-admins
+```
+
+Jede Gruppe versieht ihre Mitglieder mit einem Tag, der nach der Gruppe benannt ist. Unter **Settings › Security ›
+Group tags** kannst du einen Tag umbenennen, mehrere Gruppen demselben Tag zuordnen oder das Taggen für eine Gruppe
+beenden. Wer eine Gruppe verlässt, verliert ihren Tag.
+
+## Token rotieren
+
+1. Klicke auf **New token** und hinterlege ihn in deinem Identitätsanbieter.
+2. Warte, bis beim neuen Token eine letzte Verwendung angezeigt wird.
+3. Widerrufe den alten Token.
+
+Ein widerrufener Token verhindert künftige Aktualisierungen, ändert aber nichts an bestehenden Mitgliedern. Wird die
+SSO-Verbindung gelöscht, werden alle Tokens widerrufen.
+
+## SSO und Verzeichnissynchronisierung
+
+Sobald ein Workspace einen Token ausgestellt hat, fügt SSO [Mitglieder nicht mehr automatisch hinzu](/console/sso#automatic-membership).
+Dann entscheidet das Verzeichnis, wer dazugehört – auch wenn der Token später widerrufen wird.

@@ -1,0 +1,130 @@
+---
+title: "Instantáneas"
+---
+
+Las instantáneas (snapshots) te permiten deshacer a la vez los cambios recientes de la conversación y de los archivos.
+Úsalas para revisar trabajo reciente, pero recurre a commits de Git o a copias de seguridad para todo lo importante.
+
+## Flujo de trabajo
+
+Ejecuta `/undo` después de una respuesta que quieras revisar. OpenCode prepara la reversión, restaura los archivos
+afectados y vuelve a colocar el prompt eliminado en el editor para que puedas modificarlo.
+
+```text
+/undo
+
+# Edit the restored prompt, then submit it again.
+Add validation without changing the public API.
+```
+
+Al enviar el prompt editado se confirma la reversión preparada. Antes de enviarlo, ejecuta `/redo` para cancelarla y
+recuperar la conversación y los archivos que tenías antes de `/undo`.
+
+```text
+/redo
+```
+
+La terminal también ofrece atajos predeterminados:
+
+| Acción | Comando | Atajo |
+| --- | --- | --- |
+| Preparar la reversión del mensaje anterior | `/undo` | `<leader>u` |
+| Cancelar la reversión preparada | `/redo` | `<leader>r` |
+
+También puedes seleccionar un mensaje anterior y elegir **Revert** para preparar una reversión hasta ese punto.
+
+## Captura
+
+En cada paso del modelo, OpenCode intenta tomar una instantánea justo antes de la llamada al modelo y otra cuando el paso
+termina con un éxito o un fallo registrado. El mensaje del asistente registra qué rutas cambiaron entre ambas instantáneas.
+
+```text
+before model step ── snapshot A
+model edits src/api.ts
+step finishes ────── snapshot B ── changed: src/api.ts
+```
+
+La captura se hace en la medida de lo posible. Si falta alguna de las dos instantáneas, la conversación continúa, pero es
+posible que los cambios de archivos de ese paso no se puedan restaurar.
+
+## Alcance
+
+Las instantáneas cubren el directorio activo de la sesión dentro de un worktree de Git. Por ejemplo, una sesión abierta en
+`packages/app` captura los archivos aptos bajo `packages/app`, pero no los cambios en otras partes del repositorio.
+
+| Contenido | Se captura | Ejemplo |
+| --- | --- | --- |
+| Archivos con seguimiento en el directorio activo | Sí | `packages/app/src/app.tsx` |
+| Archivos sin seguimiento no ignorados, de hasta 2 MiB cada uno | Sí | `packages/app/notes.txt` |
+| Archivos ignorados por Git | No | `packages/app/dist/app.js` |
+| Archivos sin seguimiento de más de 2 MiB | No | `packages/app/debug.log` |
+| Archivos fuera del directorio activo | No | `packages/server/src/index.ts` |
+| Metadatos de Git y otros efectos secundarios | No | commits, ramas, bases de datos o procesos |
+
+Las instantáneas del sistema de archivos requieren un repositorio Git. Fuera de uno, `/undo` puede revertir el historial
+de la conversación, pero no restaurar archivos.
+
+## Restaurar
+
+Una reversión restaura solo las rutas atribuidas a los pasos del asistente posteriores al punto de la conversación
+seleccionado. Cada ruta vuelve al estado que tenía antes del primer paso revertido; si esos pasos crearon un archivo que
+entonces no existía, se elimina.
+
+| Cronología | `src/api.ts` | `src/new.ts` |
+| --- | --- | --- |
+| Punto seleccionado | versión A | no existe |
+| Pasos posteriores del asistente | versión B | creado |
+| Tras la reversión | versión A | eliminado |
+
+Las rutas no atribuidas a esos pasos no se tocan. Los cambios actuales en una ruta afectada pueden sobrescribirse, así que
+revisa el resumen de restauración y `git diff` antes de continuar.
+
+```sh
+git diff --stat
+git diff
+```
+
+## Almacenamiento
+
+OpenCode guarda las instantáneas localmente en una base de datos de objetos de Git interna e independiente, dentro de su
+directorio de datos. La captura de instantáneas no crea commits, no mueve ramas ni modifica intencionadamente el índice
+de tu repositorio.
+
+```sh
+# Your repository remains an ordinary dirty worktree after capture.
+git status --short
+```
+
+Los objetos de las instantáneas pueden contener el contenido completo de los archivos con seguimiento y de los archivos
+sin seguimiento aptos. Trata el directorio de datos de OpenCode como datos locales sensibles.
+
+## Ajustes
+
+Las instantáneas están activadas de forma predeterminada. Asigna `false` a `snapshots` en tu
+[configuración](/config#snapshots) para dejar de capturar el sistema de archivos a partir de ese momento.
+
+```jsonc title="opencode.jsonc"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "snapshots": false,
+}
+```
+
+Desactivar las instantáneas no elimina las que ya están guardadas. La reversión de la conversación sigue disponible, pero
+sin un estado capturado del sistema de archivos no puede restaurar los cambios de archivos relacionados.
+
+## Seguridad
+
+Las instantáneas son una comodidad, no una transacción ni una copia de seguridad:
+
+- Los comandos de shell pueden modificar servicios, procesos, recursos de red, bases de datos, el estado de Git, salidas
+  ignoradas o archivos fuera del directorio activo. Restaurar una instantánea no revierte esos efectos.
+- El trabajo interrumpido o fallido puede dejar cambios si la captura falla o no hay un par de instantáneas utilizable.
+- Restaurar las rutas afectadas sobrescribe su contenido actual. Cancelar una reversión preparada también puede
+  sobrescribir ediciones posteriores.
+- OpenCode rechaza las reversiones mientras la sesión está en ejecución, pero los editores y comandos externos pueden
+  modificar el worktree entre la captura y la restauración.
+- Confirmar una reversión elimina mensajes de la vista activa de la conversación, no del historial persistente de la
+  sesión ni del almacenamiento de instantáneas existente. No es un borrado seguro.
+
+Haz commit o una copia de seguridad del trabajo importante antes de usar `/undo` en un worktree con cambios sin confirmar.

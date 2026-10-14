@@ -1,0 +1,228 @@
+---
+title: "RPC"
+---
+
+Los plugins pueden exponer métodos y eventos personalizados que se ejecutan en el servidor y que otros plugins o
+clientes pueden llamar.
+
+## Definir
+
+Usa `Rpc.define` para enumerar los métodos, errores y eventos del RPC.
+
+```ts title="src/rpc.ts"
+import { Rpc } from "@opencode/plugin/rpc"
+
+export const Acme = Rpc.define({
+  id: "acme",
+  methods: {
+    search: {
+      input: {
+        type: "object",
+        properties: { query: { type: "string" } },
+        required: ["query"],
+        additionalProperties: false,
+      },
+      output: {
+        type: "object",
+        properties: { text: { type: "string" } },
+        required: ["text"],
+        additionalProperties: false,
+      },
+      errors: {
+        not_found: {
+          type: "object",
+          properties: { query: { type: "string" } },
+          required: ["query"],
+          additionalProperties: false,
+        },
+      },
+    },
+  },
+  events: {
+    updated: {
+      schema: {
+        type: "object",
+        properties: {
+          itemID: { type: "string" },
+          text: { type: "string" },
+        },
+        required: ["itemID", "text"],
+        additionalProperties: false,
+      },
+    },
+  },
+})
+```
+
+### Validación
+
+Una definición de RPC describe la forma de la entrada y la salida de los métodos, los eventos y los errores. Admite dos
+formatos de esquema:
+
+- JSON Schema, sencillo y sin dependencias.
+- Cualquier validador compatible con Standard Schema:
+  - Zod
+  - Valibot
+  - ArkType
+
+### Entrada y salida
+
+Cada método puede definir un esquema `input` para su argumento y un esquema `output` para su valor de retorno. Omite
+cualquiera de los dos si el método no acepta o no devuelve ningún valor.
+
+```ts
+search: {
+  input: {
+    type: "object",
+    properties: { query: { type: "string" } },
+    required: ["query"],
+  },
+  output: {
+    type: "object",
+    properties: { text: { type: "string" } },
+    required: ["text"],
+  },
+}
+```
+
+En TypeScript, los valores de JSON Schema son de tipo `unknown`, así que acótalos antes de usarlos. Standard Schema
+infiere los tipos de entrada y salida.
+
+### Errores
+
+Añade un mapa `errors` a un método para los fallos esperados. Cada clave se convierte en el `type` del error y su esquema
+define los `data` del error.
+
+```ts
+errors: {
+  not_found: {
+    type: "object",
+    properties: { query: { type: "string" } },
+    required: ["query"],
+    additionalProperties: false,
+  },
+}
+```
+
+Los nombres de error que empiezan por `rpc.` están reservados para OpenCode.
+
+### Eventos
+
+Añade los eventos al mapa `events` de nivel superior. Cada evento tiene un esquema para los datos que se envían a los
+suscriptores.
+
+Los datos de un evento deben ser un objeto. Si no hay datos, usa un esquema de objeto vacío:
+
+```ts
+events: {
+  refreshed: {
+    schema: { type: "object", additionalProperties: false },
+  },
+}
+```
+
+Los valores escalares, los arrays, `null` y `undefined` no son datos de evento válidos.
+
+## Implementar
+
+Registra la implementación dentro de `setup`:
+
+```ts title="src/index.ts"
+import { Plugin } from "@opencode/plugin"
+import { Acme } from "./rpc.js"
+
+export default Plugin.define({
+  id: "acme-plugin",
+  async setup(ctx) {
+    const registration = await ctx.rpc.register(Acme, {
+      search: async (input, context) => {
+        const { query } = input as { query: string }
+        const text = await findText(query, { signal: context.signal })
+        if (!text) return context.error("not_found", "Result not found", { query })
+        return { text }
+      },
+    })
+
+    const acme = ctx.rpc(Acme)
+    const result = await acme.search({ query: "hello" })
+
+    await registration.events.emit("updated", { itemID: "item-1", text: "ready" })
+  },
+})
+```
+
+Una vez registrado el RPC, el mismo plugin puede llamarlo mediante `ctx.rpc(Acme)`.
+
+El segundo argumento incluye `signal` para la cancelación y `context.error(...)` para los errores declarados. Puedes
+devolver o lanzar el error.
+
+Un plugin puede registrar más de un RPC. Al desechar el registro (con `dispose`), el RPC se elimina.
+
+## Llamar
+
+Una vez registrado, el RPC se puede llamar por HTTP o desde otro plugin.
+
+### HTTP
+
+Crea un cliente de OpenCode y usa `client.rpc` para crear un subcliente para el RPC:
+
+```ts
+import { OpenCode } from "@opencode/client"
+import { Acme } from "opencode-acme-plugin/rpc"
+
+const client = OpenCode.make({
+  baseUrl: "http://localhost:4096",
+})
+
+const acme = client.rpc(Acme)
+const result = await acme.search({ query: "hello" })
+```
+
+### Plugin
+
+Los plugins ya disponen de un cliente de OpenCode. Por ejemplo, un plugin de la TUI puede crear el mismo subcliente RPC
+a partir de `context.client`:
+
+```ts title="src/tui.ts"
+import { Plugin } from "@opencode/plugin/tui"
+import { Acme } from "opencode-acme-plugin/rpc"
+
+export default Plugin.define({
+  id: "acme-tui",
+  async setup(context) {
+    const acme = context.client.rpc(Acme)
+    const result = await acme.search({ query: "hello" })
+    console.log(result)
+  },
+})
+```
+
+### Suscribirse
+
+Usa `events.on` para registrar un callback y cancela la suscripción cuando ya no necesites el listener:
+
+```ts
+const unsubscribe = acme.events.on("updated", (event) => {
+  console.log(event.type, event.location.directory, event.data.text)
+})
+
+unsubscribe()
+```
+
+Para obtener un iterable asíncrono, usa `events.subscribe("updated")`:
+
+```ts
+for await (const event of acme.events.subscribe("updated")) {
+  console.log(event.data.text)
+}
+```
+
+Las suscripciones a eventos son solo en vivo, así que los suscriptores desconectados se pierden los eventos.
+
+- Suscríbete con el nombre local, por ejemplo `updated`.
+- El tipo recibido lleva prefijo, por ejemplo `rpc.acme.updated`.
+- Cada evento incluye `data` y `location`.
+- Al descargar el plugin se cierran sus suscripciones.
+
+Los clientes externos reciben eventos de todas las ubicaciones, así que comprueba `event.location` cuando sea necesario.
+El plugin de servidor debe seguir configurado y en ejecución.

@@ -1,0 +1,127 @@
+---
+title: "Sağlayıcılar"
+description: "Kendi model sağlayıcı hesaplarınızı bir OpenCode Console çalışma alanına bağlayın ve üyelerin hangi modelleri kullanabileceğini seçin."
+---
+
+Anthropic, OpenAI veya AWS Bedrock gibi zaten ödeme yaptığınız sağlayıcı hesaplarını bağlayın ve modellerini çalışma
+alanındaki herkesle paylaşın. Console kimlik bilgisini saklar ve her sağlayıcıyı kendi ağ geçidi üzerinden sunar;
+böylece üyeler sağlayıcı anahtarını hiç görmeden modelleri kullanır. Aynı ağ geçidi,
+[Sağlayıcı API'si](/console/api/providers) aracılığıyla kendi araçlarınız için de kullanılabilir.
+
+Sahipler ve yöneticiler sağlayıcıları **Providers** sekmesinden yönetir. Üyeler `/connect` komutunu çalıştırdıktan
+sonra etkinleştirilmiş modelleri OpenCode'da kullanabilir.
+
+## Sağlayıcı bağlama
+
+1. **Providers** sekmesini açın ve **Connect Provider** düğmesine tıklayın.
+2. Katalogdan bir sağlayıcı seçin ve API anahtarını girin.
+3. İsterseniz **Test connection** düğmesine, ardından **Save** düğmesine tıklayın.
+
+Katalogda Anthropic, OpenAI, Google, xAI, DeepSeek, Mistral, Groq, OpenRouter ve daha pek çok sağlayıcı bulunur.
+Katalogdaki sağlayıcılar, modelleri önceden yapılandırılmış olarak gelir.
+
+### Bulut sağlayıcıları
+
+Bulut sağlayıcıları birkaç ek bilgi gerektirir.
+
+| Sağlayıcı | Gerekli bilgiler |
+| --------------------- | --------------------- |
+| Azure | Kaynak adı ve API anahtarı |
+| AWS Bedrock | Bölge ve API anahtarı |
+| Google Vertex AI | Bölge ve hizmet hesabı JSON'ı |
+| Cloudflare AI Gateway | Hesap ID'si, Gateway ID'si ve API token'ı |
+| Databricks | Çalışma alanı URL'si ve token |
+
+### Özel sağlayıcılar
+
+Başka herhangi bir uç noktayı bağlamak için **Add Custom Provider** düğmesine tıklayın, ardından modellerini **Add
+Model** ile ekleyin.
+
+| Alan | Açıklama |
+| ---------- | ---------- |
+| Base URL | Console'un istekleri ilettiği adres, örneğin `https://api.deepseek.com/v1`. |
+| Format | Chat Completions, Responses API, Anthropic Compatible veya Google Generative AI. |
+| Auth mode | Bearer, API anahtarı başlığı veya özel başlık. |
+| Credential | Console'un sağlayıcıya gönderdiği anahtar. |
+
+## Model seçme
+
+Modellerini görmek için bir sağlayıcıyı açın. Üyeler yalnızca etkinleştirilmiş modelleri kullanabilir.
+
+- Bir modeli açıp kapatmak için **Enabled** anahtarını kullanın.
+- Sağlayıcının gelecekte ekleyeceği modelleri etkinleştirmek için **New models** seçeneğini açın.
+
+## Modelleri düzenleme
+
+Düzenlemek için bir modele tıklayın. Değişiklikler paneli kapattığınızda kaydedilir.
+
+| Bölüm | Neleri değiştirebilirsiniz |
+| ------------- | ------------- |
+| General | Görünen ad, API ID'si, araç desteği, girdi ve çıktı türleri |
+| Variants | Kendi başlıklarına veya gövdesine sahip varyantlar |
+| Configuration | Varsayılan varyant, istek başlıkları ve gövdesi, token limitleri |
+| Cost Tiers | 1M token başına girdi, çıktı, önbellek okuma ve önbellek yazma fiyatları |
+
+### Özel fiyatlandırma
+
+Katalog modelleri, sağlayıcının liste fiyatıyla başlar. Pazarlıkla belirlenmiş bir fiyatınız varsa (örneğin OpenAI
+sözleşmenizdeki bir indirim), kullanım raporlarının ve [bütçelerin](/console/budgets) gerçekte ödediğiniz tutarla
+eşleşmesi için **Cost Tiers** altındaki fiyatları geçersiz kılın.
+
+| Alan | Liste fiyatı | Sizin fiyatınız |
+| ---------------- | ---------- | ---------- |
+| Input price | $2.50 | $2.00 |
+| Output price | $15.00 | $12.00 |
+| Cache read price | $0.25 | $0.20 |
+
+Değiştirdiğiniz fiyatlar sağlayıcı sayfasında vurgulanır. Liste fiyatına dönmek için bir alanda **Restore default
+value** seçeneğini veya modelde **⋯ › Restore...** seçeneğini kullanın.
+
+Bir model belirli bir bağlam boyutunun üzerinde daha fazla ücret alıyorsa (örneğin 200K token'ın üzerindeki istemler
+için) bir **Context** katmanı ekleyin.
+
+### Özel modeller
+
+Katalogda bulunmayan bir modeli **Display name** ve **Model ID** değerleriyle eklemek için **Add Model** düğmesine
+tıklayın. Mevcut bir modelin ayarlarından başlamak için o modelde **⋯ › Duplicate...** seçeneğini kullanın.
+
+## OpenCode modelleri
+
+**Models** sekmesi, Console'un sağladığı ve ücreti çalışma alanı kredisinden ödenen [modelleri](/console/models) yönetir.
+Bir sağlayıcı sayfası gibi çalışır:
+
+- Modelleri tek tek açın veya kapatın.
+- Çalışma alanında ücretsiz modelleri engellemek için **Free models** seçeneğini kapatın.
+- Yeni Console modellerini otomatik olarak etkinleştirmek için **New models** seçeneğini açın.
+
+Yalnızca kendi sağlayıcılarınızı kullanmak için sağlayıcının tamamını **⋯ › Disable** ile devre dışı bırakın.
+
+## OpenCode'da kullanma
+
+Üyeler `/connect` komutunu çalıştırıp çalışma alanını seçer. Etkinleştirilen her sağlayıcı, çalışma alanı adının
+ardından sağlayıcı adıyla görünür ve `/models` komutu bu sağlayıcının etkin modellerini listeler.
+
+```text
+Acme Inc. / Anthropic
+```
+
+OpenCode'u herkes için yalnızca çalışma alanının sağlayıcılarıyla sınırlamak üzere **Settings › General** altındaki
+**Managed providers only** seçeneğini açın.
+
+## Devre dışı bırakma veya kaldırma
+
+Sağlayıcının **⋯** menüsünü açın:
+
+- **Disable**, sağlayıcıyı ve modellerini üyelerden gizler, ancak ayarlarını korur.
+- **Remove...**, sağlayıcıyı ve modellerini siler. İletişim kutusu sağlayıcıyı son zamanlarda kimlerin kullandığını
+  gösterir ve **Disable instead** seçeneğini sunar.
+
+Bir anahtarı yenilemek için sağlayıcı sayfasındaki kimlik bilgisine tıklayın ve yeni anahtarı girin.
+
+## Faturalandırma
+
+Token'lar için sizi sağlayıcı faturalandırır; Console bunlar için kredi düşmez. Yine de Console her isteği ve modelin
+fiyatlandırmasına göre maliyetini kaydeder; böylece kullanım raporları ve [bütçeler](/console/budgets) bu kullanımı da
+içerir.
+
+Bir sağlayıcıyı OpenCode yerine kendi araçlarınızdan çağırmak için [Sağlayıcı API'sini](/console/api/providers) kullanın.

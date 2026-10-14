@@ -1,0 +1,515 @@
+---
+title: "設定"
+---
+
+在專案中建立 `opencode.jsonc` 即可設定 OpenCode。加入 schema 讓編輯器進行驗證，然後只設定你需要的選項。
+
+```jsonc title="opencode.jsonc"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "model": "anthropic/claude-sonnet-4-5",
+}
+```
+
+你也可以請 OpenCode 幫你更新這個檔案。
+
+## 格式
+
+OpenCode 支援 JSON 和 JSONC。需要註解或結尾逗號時，請使用 JSONC。
+
+```jsonc title="opencode.jsonc"
+{
+  "$schema": "https://opencode.ai/config.json",
+  // Use this model by default.
+  "model": "anthropic/claude-sonnet-4-5",
+}
+```
+
+## 位置
+
+受管理、套用於整台電腦的設定，請放在系統設定目錄中：
+
+| 平台 | 目錄                                    |
+| -------- | --------------------------------------- |
+| macOS    | `/Library/Application Support/opencode` |
+| Linux    | `/etc/opencode`                         |
+| Windows  | `%ProgramData%\opencode`                |
+
+系統目錄的運作方式和全域目錄相同。除了 `opencode.json(c)` 之外，它也會為這台電腦上的每位使用者載入 `agents/`、`commands/`、`skills/` 和 `plugins/`：
+
+```text
+/etc/opencode/
+├── opencode.json
+├── agents/review.md
+├── commands/release.md
+└── skills/deploy/SKILL.md
+```
+
+在 macOS 上，OpenCode 也會讀取 MDM 工具為 `ai.opencode.managed` 網域部署的受管理偏好設定。使用者專屬的設定描述檔會取代整台電腦共用的設定描述檔：
+
+```text
+/Library/Managed Preferences/<user>/ai.opencode.managed.plist
+/Library/Managed Preferences/ai.opencode.managed.plist
+```
+
+受管理的設定擁有最高優先順序，因此使用者和專案都無法覆寫其中設定的值，而受管理偏好設定又會覆寫系統目錄。不過，光靠設定無法阻止使用者新增供應商、MCP 伺服器、代理或外掛；若要強制執行限制，請在受管理設定中使用[原則](/policies#precedence)。
+
+適用於所有專案的使用者設定，請放在全域設定中：
+
+```text
+~/.config/opencode/opencode.json(c)
+```
+
+專案設定可以放在下列任一檔案中：
+
+```text
+/home/user/projects/my-app/opencode.json(c)
+/home/user/projects/my-app/.opencode/opencode.json(c)
+```
+
+OpenCode 會從目前目錄一路往上搜尋到檔案系統根目錄。它會先依照由遠到近的順序合併各目錄中直接放置的 `opencode.json(c)` 檔案，再以相同順序合併 `.opencode` 目錄中的檔案。也就是說，找到的每個 `.opencode` 設定都會覆寫每個直接放置的設定。除非你需要這種行為，否則請在整個目錄樹中統一使用其中一種形式。
+
+例如，從 `/home/user/projects/acme/packages/web` 啟動 OpenCode：
+
+```text
+/etc/opencode/opencode.json
+~/.config/opencode/opencode.json
+
+/home/user/projects/acme/
+├── opencode.json
+└── packages/
+    └── web/
+        ├── opencode.json
+        └── src/
+```
+
+OpenCode 會依照優先順序由低到高套用這些檔案：
+
+1. `~/.config/opencode/opencode.json`
+2. `/home/user/projects/acme/opencode.json`
+3. `/home/user/projects/acme/packages/web/opencode.json`
+4. `/etc/opencode/opencode.json`
+
+套件的設定會覆寫儲存庫設定中相同的設定項目，而儲存庫設定又會覆寫全域設定。系統設定則會覆寫以上所有設定。沒有衝突的設定都會保留。全域與專案檔案中的[原則](/policies#precedence)會以相反的順序評估，而系統原則的優先順序高於這些原則。
+
+## Schema
+
+完整的 OpenCode 設定 schema 位於 [opencode.ai/config.json](https://opencode.ai/config.json)。
+
+在設定檔中加入 `$schema` 欄位，即可在支援 JSON Schema 的編輯器中啟用驗證和自動完成：
+
+```json title="opencode.json"
+{
+  "$schema": "https://opencode.ai/config.json"
+}
+```
+
+可用的欄位、接受的值以及巢狀設定的結構，都以 schema 為準。
+
+### Shell
+
+設定終端機和 shell 工具使用的 shell。
+
+```jsonc
+{
+  "shell": "/bin/zsh",
+}
+```
+
+### 模型
+
+以 `provider/model` 格式設定預設模型。根層級的預設值目前不會保留 `#variant`；代理和指令中的模型參照則可以選擇變體。
+
+```jsonc
+{
+  "model": "anthropic/claude-sonnet-4-5",
+}
+```
+
+關於選擇模型和本機模型，請參閱[模型指南](/models)。
+
+### 代理
+
+選擇工作階段未明確指定代理時所使用的主代理。
+
+```jsonc
+{
+  "default_agent": "build",
+}
+```
+
+關於內建代理和自訂代理，請參閱[代理指南](/agents)。
+
+### 更新
+
+在全域設定中控制更新檢查。將 `update` 設為 `"disable"` 會略過檢查，設為 `"notify"` 會在安裝前先顯示可用的更新，設為 `"auto"` 則會自動安裝更新。省略時，`update` 預設為 `"notify"`。
+
+自動安裝不會重新啟動正在執行的伺服器。請手動重新啟動伺服器，讓已安裝的更新生效。專案層級的值會被忽略。
+
+```jsonc
+{
+  "update": "notify",
+}
+```
+
+### 分享
+
+設定工作階段分享原則。OpenCode 會接受這個欄位，但目前尚未支援工作階段分享。
+
+```jsonc
+{
+  "share": "manual",
+}
+```
+
+詳細資訊請參閱[分享指南](/sharing)。
+
+### 使用者名稱
+
+設定使用者名稱。OpenCode 會接受這個欄位，但不會在對話中顯示。
+
+```jsonc
+{
+  "username": "alice",
+}
+```
+
+### 權限
+
+定義有順序的規則，決定代理對符合的資源使用工具時，要允許、拒絕，還是先詢問。
+
+```jsonc
+{
+  "permissions": [
+    {
+      "action": "shell",
+      "resource": "git push *",
+      "effect": "ask",
+    },
+  ],
+}
+```
+
+關於規則比對和可用的動作，請參閱[權限指南](/permissions)。
+
+### 原則
+
+以有順序的陳述式允許或拒絕使用供應商、強制拒絕權限檢查，或封鎖 MCP 伺服器、技能或外掛。這些陳述式可由範圍更廣的設定覆寫。
+
+```jsonc
+{
+  "policies": [
+    { "action": "provider.use", "resource": "*", "effect": "deny" },
+    { "action": "provider.use", "resource": "anthropic", "effect": "allow" },
+    { "action": "tool.use", "resource": "shell:git push *", "effect": "deny" },
+  ],
+}
+```
+
+關於比對方式、各設定檔之間的優先順序，以及由 Console 管理的原則，請參閱[原則指南](/policies)。
+
+### 代理
+
+覆寫內建代理，或定義擁有專屬模型、指示、模式和權限的專用代理。
+
+```jsonc
+{
+  "agents": {
+    "reviewer": {
+      "description": "Review changes without editing files",
+      "mode": "subagent",
+      "system": "Focus on correctness, security, and missing tests.",
+      "permissions": [{ "action": "edit", "resource": "*", "effect": "deny" }],
+    },
+  },
+}
+```
+
+關於所有代理選項和以檔案定義的代理，請參閱[代理指南](/agents)。
+
+### 快照
+
+啟用或停用檔案系統快照，復原（undo）和還原（revert）功能會使用這些快照。
+
+```jsonc
+{
+  "snapshots": false,
+}
+```
+
+關於復原和重做的行為，請參閱[快照指南](/snapshots)。
+
+### 檔案監看
+
+忽略不應觸發檔案系統更新的檔案和目錄。
+
+```jsonc
+{
+  "watcher": {
+    "ignore": ["dist/**", "coverage/**"],
+  },
+}
+```
+
+### 格式化工具
+
+在 `write`、`edit` 或 `patch` 工具變更檔案後進行格式化。將 `formatter` 設為 `true` 即可啟用可用的內建格式化工具。
+
+```jsonc
+{
+  "formatter": true,
+}
+```
+
+關於內建和自訂格式化工具，請參閱[格式化工具指南](/formatters)。
+
+### 媒體
+
+控制 `read` 工具載入的過大圖片在傳送給模型之前，要如何縮小或拒絕。
+
+```jsonc
+{
+  "media": {
+    "image": {
+      "auto_resize": true,
+      "max_width": 2000,
+      "max_height": 2000,
+      "max_base64_bytes": 5242880,
+    },
+  },
+}
+```
+
+關於圖片處理和限制，請參閱[附件指南](/attachments)。
+
+### 輸出
+
+設定工具結果最多保留的行數和位元組數。
+
+```jsonc
+{
+  "tool_output": {
+    "max_lines": 2000,
+    "max_bytes": 51200,
+  },
+}
+```
+
+### 搜尋
+
+選擇 OpenCode 搜尋網頁的方式。使用 `"random"` 會自動選擇一個可用的供應商。
+
+```jsonc
+{
+  "websearch": {
+    "provider": "random",
+  },
+}
+```
+
+關於供應商、認證資訊、選擇方式、速率限制以及停用搜尋，請參閱[網頁搜尋指南](/websearch)。
+
+### MCP
+
+設定本機和遠端的 Model Context Protocol 伺服器。全域逾時可以由個別伺服器覆寫。
+
+```jsonc
+{
+  "mcp": {
+    "servers": {
+      "playwright": {
+        "type": "local",
+        "command": ["bunx", "@playwright/mcp"],
+      },
+    },
+  },
+}
+```
+
+關於遠端伺服器、OAuth、環境變數和逾時，請參閱 [MCP 指南](/mcp-servers)。
+
+### 上下文壓縮
+
+控制自動上下文壓縮，以及壓縮時要保留多少最近的上下文。
+
+```jsonc
+{
+  "compaction": {
+    "auto": true,
+    "keep": {
+      "tokens": 15000,
+    },
+    "buffer": 20000,
+  },
+}
+```
+
+預設仍使用本機摘要。你可以透過供應商或模型的原則，讓自動和手動請求都改用供應商原生的壓縮：
+
+```jsonc
+{
+  "providers": {
+    "openai": {
+      "settings": { "compaction": { "type": "native" } },
+      "models": {
+        "gpt-4.1": { "settings": { "compaction": { "type": "summary" } } },
+      },
+    },
+  },
+}
+```
+
+模型設定會覆寫供應商設定。自動壓縮會使用所選模型可用的輸入預算。供應商檢查點會將最近的使用者訊息保留在同一個 `compaction.keep.tokens` 預算內，這也是本機摘要保留結尾內容時使用的預算。在最上層設定 `compaction.auto: false` 會停用新的自動壓縮，但不會捨棄已建立的檢查點。關於預算計算和溢位復原，請參閱[上下文壓縮指南](/compaction)。
+
+### 工作階段預熱
+
+定期傳送暫時性請求，讓最近使用中的模型工作階段保持預熱。預熱預設為停用；設為 `true` 即可使用 4 分鐘的閒置間隔和 30 分鐘的使用中時段。
+
+```jsonc
+{
+  "warming": {
+    "prompt": "Do not perform any work. Reply with exactly: OK",
+    "interval": "4 minutes",
+    "duration": "30 minutes",
+  },
+}
+```
+
+關於請求行為、自訂方式和成本考量，請參閱[工作階段預熱指南](/warming)。
+
+### 技能
+
+新增 OpenCode 要搜尋代理技能的目錄或 URL。
+
+```jsonc
+{
+  "skills": ["./team-skills", "https://example.com/.well-known/skills/"],
+}
+```
+
+關於技能結構，以及如何自動探索 `.opencode/skills/` 底下的技能，請參閱[技能指南](/skills)。
+
+### 指令
+
+將可重複使用的斜線指令定義為具名的提示詞範本。
+
+```jsonc
+{
+  "commands": {
+    "review": {
+      "description": "Review the current changes",
+      "template": "Review the current diff for correctness and missing tests.",
+    },
+  },
+}
+```
+
+關於引數、模型、代理和以檔案定義的指令，請參閱[指令指南](/commands)。
+
+### 指示
+
+宣告額外的指示檔案、glob 模式或 URL。OpenCode 會接受這個欄位，但不會載入其中的項目；請使用 `AGENTS.md` 撰寫指示。
+
+```jsonc
+{
+  "instructions": ["CONTRIBUTING.md", "docs/guidelines/*.md"],
+}
+```
+
+關於專案指示和 `AGENTS.md`，請參閱[指示指南](/instructions)。
+
+### 參考目錄
+
+將本機目錄或 Git 儲存庫提供為具名的輔助上下文。
+
+```jsonc
+{
+  "references": {
+    "docs": {
+      "path": "../product-docs",
+      "description": "Product behavior and terminology",
+    },
+    "effect": {
+      "repository": "Effect-TS/effect",
+      "branch": "main",
+    },
+  },
+}
+```
+
+關於簡寫形式、可見性和路徑解析，請參閱[參考目錄指南](/references)。
+
+### Worktree
+
+設定新本機 worktree 的上層目錄。OpenCode 會在後面加上指定或自動產生的 worktree 名稱。
+
+```jsonc
+{
+  "worktree": {
+    "directory": "../worktrees",
+  },
+}
+```
+
+相對路徑會以專案已儲存的標準 checkout 為基準進行解析。全域設定和專案設定都適用此規則；絕對路徑會直接使用，而 `~/` 會解析為使用者的家目錄。
+
+例如，下列全域設定會將新的 worktree 放在每個專案各自的 `.lane/trees/` 目錄下：
+
+```jsonc
+{
+  "worktree": {
+    "directory": ".lane/trees",
+  },
+}
+```
+
+如果沒有這項設定，建立 worktree 時會使用伺服器資料目錄中的 `worktree/<first-six-project-ID-characters>`。建立和重新整理 worktree 時，會從專案已儲存的標準 checkout 載入設定，即使有其他 clone 共用同一個專案 ID 也是如此。變更這項設定不會移動現有的 worktree。
+
+Git 是內建的預設值。[外掛](/build/plugins#worktrees)註冊策略後，該策略會自動成為該外掛執行環境中的預設值。專案操作會使用標準 checkout 的執行環境。特定策略的選項屬於該外掛，而不是 `worktree` 設定物件。
+
+### 外掛
+
+從套件或本機外掛目錄載入外掛。當外掛接受選項時，請使用物件形式。
+
+```jsonc
+{
+  "plugins": [
+    "opencode-example-plugin",
+    {
+      "package": "./plugins/local",
+      "options": {
+        "enabled": true,
+      },
+    },
+  ],
+}
+```
+
+關於外掛的載入和設定，請參閱[外掛指南](/plugins)。
+
+### 供應商
+
+設定供應商，並新增或覆寫其模型、請求設定、標頭和模型變體。
+
+```jsonc
+{
+  "providers": {
+    "openai": {
+      "models": {
+        "gpt-5.2-custom": {
+          "modelID": "gpt-5.2",
+          "name": "GPT-5.2 Custom",
+          "limit": {
+            "context": 200000,
+            "output": 32000,
+          },
+        },
+      },
+    },
+  },
+}
+```
+
+供應商的 `settings.transport: "websocket"` 會為該供應商的工作階段選用 WebSocket。
+
+關於認證資訊、自訂端點、供應商套件、WebSocket 傳輸方式和模型設定，請參閱[供應商指南](/providers)。

@@ -1,0 +1,240 @@
+---
+title: "スキル"
+---
+
+スキルを作成すると、特定のタスク向けの再利用可能な指示をエージェントに与えられます。`.opencode/skills/<skill-id>` に `SKILL.md` ファイルを置き、どのような場合に使うかを `description` に記述します。
+
+```markdown title=".opencode/skills/git-release/SKILL.md"
+---
+name: Git Release
+description: Prepare release notes, version bumps, and GitHub releases
+---
+
+## Workflow
+
+1. Read `references/release-policy.md`.
+2. Summarize merged changes since the previous tag.
+3. Propose the version bump before changing files.
+4. Run `scripts/changelog.ts` only after the user approves the version.
+```
+
+OpenCode は、関連がある場合にこのスキルをモデルに提示します。すべてのスキルをすべてのプロンプトに追加するのではなく、エージェントが必要に応じて `skill` ツールでスキルの指示を読み込みます。
+
+## 作成
+
+関連するスクリプト、リファレンス、テンプレートは、`SKILL.md` と同じ場所に置きます。
+
+```text
+.opencode/skills/
+└── git-release/
+    ├── SKILL.md
+    ├── scripts/
+    │   └── changelog.ts
+    └── references/
+        └── release-policy.md
+```
+
+スキル内に記述したパスは、`SKILL.md` があるディレクトリを基準とする相対パスとして扱われます。補助ファイルに専用のベースディレクトリを持たせられるため、ディレクトリ形式をおすすめします。
+
+## 検出
+
+OpenCode は、次の場所を自動的に検索します。
+
+| 範囲 | 検索元 |
+| --------------------- | -------------------------------------- |
+| グローバル | `~/.config/opencode/skills`            |
+| グローバル（互換） | `~/.claude/skills`, `~/.agents/skills` |
+| プロジェクト | `.opencode/skills`                     |
+| プロジェクト（互換） | `.claude/skills`, `.agents/skills`     |
+
+プロジェクトの検索元については、カレントディレクトリからプロジェクトのルートまでを検索し、各階層で一致するディレクトリをすべて含めます。
+
+各検索元には、どちらの形式でも置けます。
+
+```text
+skills/
+├── review.md
+└── git-release/
+    └── SKILL.md
+```
+
+- Markdown ファイルは、`skills/review.md` のように検索元のルートに置く必要があります。
+- 名前が `SKILL.md` と完全に一致するファイルは、`skills/git-release/SKILL.md` のように任意の深さに置けます。
+
+## 検索元の追加
+
+ローカルディレクトリや HTTP カタログを追加するには、任意の `opencode.json` または `opencode.jsonc` の `skills` 配列を使用します。
+
+```jsonc title="opencode.jsonc"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "skills": [
+    "./team-skills",
+    "~/shared/opencode-skills",
+    "/opt/company-skills",
+    "https://example.com/opencode/skills/",
+  ],
+}
+```
+
+| 値 | 解決方法 |
+| ----- | ---------- |
+| 相対パス | 設定ファイルではなく、OpenCode の現在の作業ディレクトリを基準に解決 |
+| `~/` パス | 現在のユーザーのホームディレクトリを基準に解決 |
+| 絶対パス | 記述どおりに使用 |
+| `http://` または `https://` の URL | HTTP カタログとして読み込み |
+
+検出されたすべての設定ファイルのエントリが使われます。`skills` 配列は置き換えられるのではなく、結合されます。
+
+## カタログ
+
+HTTP カタログは、`index.json` ファイルを持つベース URL です。
+
+```json title="index.json"
+{
+  "skills": [
+    {
+      "name": "git-release",
+      "version": "3",
+      "files": ["git-release.md", "references/release-policy.md"]
+    }
+  ]
+}
+```
+
+このエントリの場合、OpenCode は各ファイルを `<base-url>/git-release/<file>` からダウンロードします。
+
+| ルール | 要件 |
+| ---- | ----------- |
+| パス | 安全な相対パスで、同一オリジンである必要があります |
+| エントリファイル | `SKILL.md` または `git-release.md` のような `<name>.md` を含めます |
+| 更新 | OpenCode がキャッシュを更新するように、ファイルを変更したら `version` を増やします |
+
+HTTP カタログでは、名前付きの Markdown 形式をおすすめします。ダウンロードした各スキルのディレクトリは検索元のルートになるため、`git-release.md` の ID は `git-release` になります。現在の V2 では、ルートレベルの `SKILL.md` の ID は文字どおり `SKILL` になります。
+
+## フロントマター
+
+フロントマターでは、スキルに名前を付け、表示される場所を制御します。
+
+```markdown title="SKILL.md"
+---
+name: Git Release
+description: Prepare a repository release
+metadata:
+  opencode/autoinvoke: false
+---
+
+Prepare the changelog, version bump, tag, and release notes.
+```
+
+| フィールド | 動作 |
+| ------------------------------ | ----------------------------------------------------------------- |
+| `name`                         | 表示名。デフォルトはパスから導出された ID |
+| `description`                  | モデルにスキルを提示する際に使う概要 |
+| `metadata.opencode/autoinvoke` | `false` にすると、モデルが利用できるスキルの一覧から除外されます |
+| `disable-model-invocation`     | `true` にすると、`opencode/autoinvoke: false` と同じ効果になります |
+
+実行時には、フロントマターはすべて省略可能です。モデルにスキルを検出させたい場合は、わかりやすい `description` を追加してください。説明のないスキルはモデルに提示されません。
+
+`opencode/autoinvoke: false` は、モデルが利用できるスキルの一覧からスキルを非表示にするだけです。スキルは登録されたままで、ID を指定して明示的に読み込むことはできます。`disable-model-invocation` と `opencode/autoinvoke` の両方が設定されている場合は、`opencode/autoinvoke` が優先されます。V2 は `license` や `compatibility` などの移植性のためのフィールドを受け付けますが、その内容は解釈しません。
+
+## ID
+
+スキル ID はファイルパスによって決まります。フロントマターの `name` は表示用のラベルにすぎません。
+
+| ファイル | ID |
+| --------------------------------- | ------------- |
+| `<source>/git-release.md`         | `git-release` |
+| `<source>/git-release/SKILL.md`   | `git-release` |
+| `<source>/teams/release/SKILL.md` | `release`     |
+
+ID は完全一致で照合され、大文字と小文字が区別されます。移植性のあるスキルにするには、1〜64 文字の一意な小文字のケバブケースの ID を使い、ディレクトリ名と揃えてください。
+
+```text
+^[a-z0-9]+(-[a-z0-9]+)*$
+```
+
+現在の V2 では、このパターン、1〜64 文字の推奨、`name` とディレクトリ名の一致、説明の最大長のいずれも強制されません。
+
+## 優先順位
+
+スキルは ID によって選択されます。2 つの検索元で `git-release` が定義されている場合、OpenCode は後から登録された検索元のスキルを読み込みます。
+
+```text
+~/.config/opencode/skills/git-release/SKILL.md  ← lower precedence
+.opencode/skills/git-release/SKILL.md           ← loaded
+```
+
+検索元は、優先順位の低いものから高いものの順に登録されます。
+
+1. 組み込みスキル
+2. `.claude/skills`（グローバルが先で、その後は最も遠い祖先ディレクトリからカレントディレクトリに向かう順）
+3. `.agents/skills`（グローバルが先で、その後は最も遠い祖先ディレクトリからカレントディレクトリに向かう順）
+4. `~/.config/opencode/skills`
+5. プロジェクトの `.opencode/skills`（プロジェクトのルートからカレントディレクトリに向かう順）
+6. 設定で明示した `skills` のエントリ（設定の優先順位と配列の順）
+
+以前のスキルを意図的にオーバーライドする場合を除き、ID の重複は避けてください。
+
+## 読み込み
+
+OpenCode はモデルのステップごとに、許可されたスキルのうち、説明があり、`opencode/autoinvoke` が `false` に設定されていないものを一覧表示します。一覧に含まれるのは ID、名前、説明だけで、Markdown の本文全体は含まれません。
+
+モデルは、正確な ID を指定して `skill` ツールを呼び出し、スキルを読み込みます。
+
+```json title="skill tool input"
+{
+  "id": "git-release"
+}
+```
+
+その後、OpenCode は次の処理を行います。
+
+1. その ID に対応する現在の定義を選択します。
+2. 選択されているエージェントの `skill` 権限を確認します。
+3. フロントマターを除いた Markdown の本文を会話に追加します。
+4. スキルのベースディレクトリと、補助ファイルのパスのサンプルを最大 10 件提供します。
+
+スキルを自分で読み込むには、プロンプト内で `@skill-id` のように指定します。
+
+補助ファイルの内容は自動的には読み込まれません。スキルの指示に従って、エージェントが必要に応じて読み込みます。ファイルのサンプルが提供されるのは、ディレクトリ形式の `SKILL.md` スキルだけです。単一の Markdown ファイルのスキルには、同じ場所にあるファイルの一覧は提供されません。
+
+## 権限
+
+`skill` アクションを使い、スキル ID をリソースとして指定します。ルールは順番に評価され、最後に一致したルールが適用されます。
+
+```jsonc title="opencode.jsonc"
+{
+  "permissions": [
+    { "action": "skill", "resource": "*", "effect": "allow" },
+    { "action": "skill", "resource": "internal-*", "effect": "deny" },
+    { "action": "skill", "resource": "experimental-*", "effect": "ask" },
+  ],
+}
+```
+
+| 効果 | 動作 |
+| ------ | -------- |
+| `allow` | 一致するスキルを提示し、承認なしで読み込みます |
+| `ask` | 一致するスキルを提示し、読み込む前に確認を求めます |
+| `deny` | 一致するスキルをモデルから隠し、読み込みを拒否します |
+
+特定のエージェントだけに適用するには、同じルールを `agents.<id>.permissions` の下に記述します。
+
+## トラブルシューティング
+
+たとえば、次のスキルの ID は `release` であり、フロントマターの名前の `Git Release` ではありません。
+
+```text
+.opencode/skills/release/SKILL.md
+                      └─ ID: release
+```
+
+スキルが見つからない場合や、誤った内容が読み込まれる場合は、次の点を確認してください。
+
+1. ファイルが、ルートレベルの `*.md` か、名前が `SKILL.md` と完全に一致するネストされたファイルのどちらかであることを確認します。
+2. フロントマターの `name` ではなく、パスから導出された ID（大文字と小文字を区別）を確認します。
+3. モデルにスキルを検出させたい場合は、`description` を追加します。
+4. `opencode/autoinvoke` と、選択されているエージェントの `skill` 権限を確認します。
+5. 同じ ID を定義している、後から登録される検索元がないかを確認します。
+6. HTTP カタログの場合は、`index.json`、同一オリジンのファイルパス、`version` が変更されていることを確認します。

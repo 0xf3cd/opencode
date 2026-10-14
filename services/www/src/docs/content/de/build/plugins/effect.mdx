@@ -1,0 +1,1588 @@
+---
+title: "Effect"
+---
+
+`@opencode/plugin/effect` ist die Effect-native Variante der OpenCode-Plugin-API. Ihre Kontextoperationen geben
+Effects oder Streams zurück, Callbacks geben Effects zurück, und die Lebensdauer eines Plugins wird durch einen `Scope`
+abgebildet.
+
+OpenCode stellt `effect` (einschließlich der exportierten Unterpfade `effect/*`) und `@opencode/plugin` zur Laufzeit
+bereit, wenn es Plugins und deren Abhängigkeiten aus `node_modules` lädt. Installiere sie für lokale Typprüfung und Tests
+als Peer- bzw. Dev-Abhängigkeiten, statt sie in dein Plugin zu bündeln.
+
+```sh
+bun add --peer @opencode/plugin effect
+```
+
+Exportiere ein Effect-Plugin aus `.opencode/plugins/`, damit es automatisch geladen wird.
+
+```ts title=".opencode/plugins/concise/index.ts"
+import { Plugin } from "@opencode/plugin/effect"
+import { Effect } from "effect"
+
+export default Plugin.define({
+  id: "example",
+  effect: (ctx) =>
+    Effect.gen(function* () {
+      const storage = ctx.storage
+      yield* storage.set("loaded", true)
+    }),
+})
+```
+
+Veröffentlichte Pakete und Plugin-Verzeichnisse außerhalb von `.opencode/plugins/` verwenden dieselbe
+`plugins`-Konfiguration wie andere Server-Plugins.
+
+```jsonc title="opencode.jsonc"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "plugins": [
+    "opencode-acme-effect-plugin",
+    "opencode-acme-effect-plugin@1.2.0",
+    "@acme/opencode-effect-plugin",
+    "./plugins/local-effect",
+    {
+      "package": "@acme/opencode-effect-plugin",
+      "options": { "agent": "reviewer", "strict": true },
+    },
+  ],
+}
+```
+
+Aktivierung, Paketauflösung und Vorrang der Konfiguration beschreibt [Plugins konfigurieren](/plugins).
+
+```ts title="plugins/local-effect/index.ts"
+import { Plugin } from "@opencode/plugin/effect"
+import { Effect } from "effect"
+
+export default Plugin.define({
+  id: "local-effect",
+  effect: (ctx) =>
+    Effect.gen(function* () {
+      yield* Effect.logInfo("Effect plugin loaded", { version: ctx.app.version })
+    }),
+})
+```
+
+## Lebenszyklus
+
+Die Funktion `effect` läuft, wenn das Plugin geladen wird. Ihr Scope wird geschlossen, wenn das Plugin neu geladen oder entladen
+wird. Registrierungen, Fibers mit Scope und Finalizer werden so gemeinsam freigegeben.
+
+```ts
+import { Plugin } from "@opencode/plugin/effect"
+import { Effect } from "effect"
+
+export default Plugin.define({
+  id: "lifecycle",
+  effect: (ctx) =>
+    Effect.gen(function* () {
+      yield* Effect.logInfo("loaded", { version: ctx.app.version })
+      yield* Effect.addFinalizer(() => Effect.logInfo("unloaded"))
+    }),
+})
+```
+
+Verwende für Hintergrundarbeit Fibers mit Scope. Der Scope des Plugins unterbricht die Fiber beim Aufräumen.
+
+```ts
+effect: (ctx) =>
+  Effect.gen(function* () {
+    const storage = ctx.storage
+    yield* Effect.repeat(
+      storage.set("heartbeat", { time: Date.now() }),
+      { schedule: Schedule.spaced("1 minute") },
+    ).pipe(Effect.forkScoped)
+  }),
+```
+
+### Kontext
+
+Der Kontext stellt den Effect-Client für den verbundenen OpenCode-Server bereit, dazu Transformationen, Hooks, Speicher,
+Neuladen und Optionen, die nur Plugins zur Verfügung stehen. Die privaten Core-Dienste von OpenCode stellt er nicht bereit.
+
+```ts
+effect: (ctx) =>
+  Effect.gen(function* () {
+    const plugins = ctx.plugin
+    const active = yield* plugins.list().pipe(Effect.orDie)
+    yield* Effect.logInfo("active plugins", { count: active.data.length })
+  }),
+```
+
+Die Plugin-Definition und der vollständige Kontext sind wie folgt deklariert.
+
+```ts
+interface Context {
+  readonly app: App
+  readonly location: Location.Info
+  readonly options: PluginOptions
+  readonly agent: AgentDomain
+  readonly aisdk: AISDKDomain
+  readonly command: CommandDomain
+  readonly event: EventDomain
+  readonly experimental: {
+    readonly terminal: Pick<ExperimentalApi<unknown>["persistentPty"], "read">
+  }
+  readonly integration: IntegrationDomain
+  readonly mcp: MCPDomain
+  readonly model: ModelDomain
+  readonly generate: GenerateApi<unknown>
+  readonly permission: PermissionDomain
+  readonly plugin: Pick<PluginApi<unknown>, "list">
+  readonly provider: ProviderDomain
+  readonly reference: ReferenceDomain
+  readonly rpc: RpcDomain
+  readonly session: SessionDomain
+  readonly shell: ShellDomain
+  readonly skill: SkillDomain
+  readonly storage: StorageDomain
+  readonly tool: ToolDomain
+  readonly vcs: VcsDomain
+  readonly websearch: WebSearchDomain
+  readonly worktree: WorktreeDomain
+}
+
+interface Plugin<R = Scope.Scope> {
+  readonly id: string
+  readonly effect: (context: Context) => Effect.Effect<void, never, R>
+}
+```
+
+### Optionen
+
+Übergib Optionen in `opencode.json(c)` mit der Objektform.
+
+```jsonc title="opencode.jsonc"
+{
+  "plugins": [
+    {
+      "package": "./plugins/company-effect",
+      "options": { "strict": true },
+    },
+  ],
+}
+```
+
+Lies Optionen aus `ctx.options`. Grenze unbekannte Werte vor der Verwendung ein.
+
+```ts title="plugins/company-effect/index.ts"
+import { Plugin } from "@opencode/plugin/effect"
+import { Effect } from "effect"
+
+export default Plugin.define({
+  id: "company",
+  effect: (ctx) =>
+    Effect.gen(function* () {
+      const strict = ctx.options.strict === true
+      yield* Effect.logInfo("company plugin configured", { strict })
+    }),
+})
+```
+
+## Transformationen
+
+Transformationen bearbeiten den Zustand synchron über einen Editor. OpenCode wendet Transformationen innerhalb jeder
+Domäne in der Reihenfolge ihrer Registrierung an. Quellen liefern zuerst Anbieter und unveränderliche Modelldefinitionen;
+Modelltransformationen bearbeiten danach die Kandidaten der aktiven Anbieter. Mit `yield*` auf die Registrierung bleibt
+sie an den Scope des Plugins gebunden.
+
+```ts title="plugins/models-effect/index.ts"
+import { Model, Plugin, Provider } from "@opencode/plugin/effect"
+import { Effect } from "effect"
+
+export default Plugin.define({
+  id: "company.models",
+  effect: (ctx) =>
+    Effect.gen(function* () {
+      const providerID = Provider.ID.make("acme")
+      const models = [{ ...Model.Info.default(providerID, Model.ID.make("reasoner")), name: "Acme Reasoner" }]
+      yield* ctx.provider.transform((editor) => {
+        editor.add({
+          info: {
+            ...Provider.Info.empty(providerID),
+            name: "Acme",
+            activation: "enabled",
+            package: "@opencode/ai/providers/openai-compatible",
+            settings: { baseURL: "http://127.0.0.1:8000/v1" },
+          },
+          models,
+        })
+      })
+    }),
+})
+```
+
+Eine Modelltransformation kann eine Richtlinie für die gesamte Kandidatensammlung der aktiven Anbieter durchsetzen.
+
+```ts title="plugins/model-budget-effect/index.ts"
+effect: (ctx) =>
+  Effect.gen(function* () {
+    yield* ctx.model.transform((editor) => {
+      editor
+        .list()
+        .filter((model) => model.cost.some((tier) => tier.output > 20))
+        .forEach((model) => {
+          editor.remove(model.providerID, model.id)
+        })
+    })
+  }),
+```
+
+Rufe `reload` auf, wenn sich externer Zustand ändert, den eine Transformation verwendet. Hier gibt `loadFromSource()`
+Einträge der Form `{ info: Provider.Info, models: readonly Model.Info[] }` zurück; ein Neuladen der Anbieter macht
+außerdem das gesamte Modellergebnis ungültig.
+
+```ts title="plugins/models-effect/index.ts"
+effect: (ctx) =>
+  Effect.gen(function* () {
+    const provider = ctx.provider
+    const source = { providers: yield* loadFromSource() }
+
+    yield* provider.transform((editor) => {
+      source.providers.forEach((provider) => editor.add(provider))
+    })
+
+    yield* Effect.repeat(
+      Effect.gen(function* () {
+        source.providers = yield* loadFromSource()
+        yield* provider.reload()
+      }),
+      { schedule: Schedule.spaced("1 minute") },
+    ).pipe(Effect.forkScoped)
+  }),
+```
+
+## API
+
+### Agent
+
+Lies alle Agenten oder rufe einen einzelnen über seine ID ab. Client-Antworten enthalten die aufgelöste Location und die
+Schema-Daten.
+
+```ts
+effect: (ctx) =>
+  Effect.gen(function* () {
+    const agent = ctx.agent
+    const agents = yield* agent.list().pipe(Effect.orDie)
+    const build = yield* agent.get({ agentID: Agent.ID.make("build") }).pipe(Effect.orDie)
+    yield* Effect.logInfo("agents", { count: agents.data.length, build: build.data.name })
+  }),
+```
+
+Transformiere Agenten oder lade sie neu.
+
+```ts
+effect: (ctx) =>
+  Effect.gen(function* () {
+    const agent = ctx.agent
+    yield* agent.transform((editor) => {
+      editor.default("build")
+      editor.update("build", (item) => (item.description = "Builds features and fixes bugs"))
+      editor.remove("legacy")
+    })
+    yield* agent.reload()
+  }),
+```
+
+Schema: [`Agent.Info`](/api#schema-Agent.Info).
+
+```ts
+interface AgentEditor {
+  list(): readonly Types.DeepMutable<Agent.Info>[]
+  get(id: string): Types.DeepMutable<Agent.Info> | undefined
+  default(id: string | undefined): void
+  update(id: string, update: (agent: Types.DeepMutable<Agent.Info>) => void): void
+  remove(id: string): void
+}
+
+interface AgentDomain extends AgentApi<unknown> {
+  readonly transform: Transform<AgentEditor>
+  readonly reload: () => Effect.Effect<void>
+}
+```
+
+### Anbieter
+
+Lies die verfügbaren Anbieter oder sieh dir die Metadaten eines Anbieters über seine ID an.
+
+```ts
+effect: (ctx) =>
+  Effect.gen(function* () {
+    const provider = ctx.provider
+    const providers = yield* provider.list().pipe(Effect.orDie)
+    const anthropic = yield* provider.get({ providerID: Provider.ID.make("anthropic") }).pipe(Effect.orDie)
+    yield* Effect.logInfo("providers", {
+      providers: providers.data.length,
+      anthropic: anthropic.data.name,
+    })
+  }),
+```
+
+Anbietertransformationen bearbeiten Anbietereinstellungen und Quelldefinitionen. Lesezugriffe im Editor schließen
+inaktive Anbieter ein und liefern unveränderliche Definitionen; `models.update` bearbeitet eine eigene Kopie eines
+Quellmodells.
+
+```ts
+effect: (ctx) =>
+  Effect.gen(function* () {
+    yield* ctx.provider.transform((editor) => {
+      editor.update("anthropic", (provider) => {
+        provider.headers = { ...provider.headers, "x-company": "engineering" }
+      })
+      editor.models.update("anthropic", "claude-sonnet-4-5", (model) => (model.name = "Team Sonnet"))
+      editor.models.remove("anthropic", "legacy-model")
+      editor.remove("legacy-provider")
+    })
+  }),
+```
+
+Ersetze den Bestand einer Quelle mit `models.set` und lade danach neu, sobald sich die erfassten Definitionen ändern.
+
+```ts
+effect: (ctx) =>
+  Effect.gen(function* () {
+    const provider = ctx.provider
+    const source = { models: yield* loadModels() }
+    yield* provider.transform((editor) => editor.models.set("acme", source.models))
+    source.models = yield* loadModels()
+    yield* provider.reload()
+  }),
+```
+
+Für kontospezifische Erkennung übergibst du die Verbindung, mit der der Bestand geladen wurde, als `sourceConnection`.
+Solange eine andere Verbindung ausgewählt ist, schließt OpenCode diesen Anbieter aus, bis dein Plugin seinen
+aktualisierten Bestand veröffentlicht.
+
+```ts
+const connection = yield * ctx.integration.connection.active("acme")
+if (!connection) return
+const inventory = yield * loadInventory(connection)
+yield *
+  ctx.provider.transform((editor) => {
+    editor.add({ info: inventory.provider, models: inventory.models, sourceConnection: connection })
+  })
+```
+
+Schemas: [`Provider.Info`](/api#schema-Provider.Info), [`Model.Info`](/api#schema-Model.Info).
+
+```ts
+interface ProviderRecord {
+  readonly provider: Provider.Info
+  readonly models: ReadonlyMap<string, Model.Info>
+  readonly sourceConnection?: ConnectionInfo
+}
+
+interface ProviderEditor {
+  list(): readonly ProviderRecord[]
+  get(providerID: string): ProviderRecord | undefined
+  add(input: { info: Provider.Info; models: readonly Model.Info[]; sourceConnection?: ConnectionInfo }): void
+  update(providerID: string, update: (provider: Types.DeepMutable<Provider.Info>) => void): void
+  remove(providerID: string): void
+  readonly models: {
+    set(providerID: string, models: readonly Model.Info[]): void
+    update(providerID: string, modelID: string, update: (model: Types.DeepMutable<Model.Info>) => void): void
+    remove(providerID: string, modelID: string): void
+  }
+}
+
+interface ProviderDomain extends ProviderApi<unknown> {
+  readonly transform: Transform<ProviderEditor>
+  readonly reload: () => Effect.Effect<void>
+}
+```
+
+### Modelle
+
+Lies die verfügbaren Modelle und die Standardauswahl.
+
+```ts
+effect: (ctx) =>
+  Effect.gen(function* () {
+    const model = ctx.model
+    const models = yield* model.list().pipe(Effect.orDie)
+    const selected = yield* model.default().pipe(Effect.orDie)
+    yield* Effect.logInfo("models", { count: models.data.length, selected: selected.data?.name })
+  }),
+```
+
+Modelltransformationen bearbeiten die gesamte Kandidatensammlung der aktiven Anbieter. Deaktivierte Kandidaten bleiben
+bearbeitbar, bis alle Transformationen abgeschlossen sind; `update` kann ein Modell nur unter einem verfügbaren Anbieter
+hinzufügen.
+
+```ts
+effect: (ctx) =>
+  Effect.gen(function* () {
+    yield* ctx.model.transform((editor) => {
+      editor.list("anthropic").forEach((model) => {
+        editor.update(model.providerID, model.id, (draft) => {
+          draft.enabled = draft.capabilities.tools
+        })
+      })
+      editor.default.set("anthropic", "claude-sonnet-4-5")
+      editor.remove("anthropic", "legacy-model")
+    })
+  }),
+```
+
+Callbacks bearbeiten rohe Modell-Überschreibungen. Die Standardwerte des Anbieters werden einmal eingemischt, wenn
+OpenCode das Ergebnis übernimmt; unveränderte Lesezugriffe verwenden dieses Ergebnis wieder. `editor.provider` liest
+unveränderliche Quelldefinitionen, einschließlich inaktiver Vorlagen, und nicht die Ausgabe der Modelltransformation.
+
+```ts
+effect: (ctx) =>
+  Effect.gen(function* () {
+    const model = ctx.model
+    yield* model.transform((editor) => {
+      const source = editor.provider.get("anthropic")?.models.get("claude-sonnet-4-5")
+      if (!source) return
+      editor.update("anthropic", source.id, (draft) => {
+        draft.limit.context = Math.min(draft.limit.context, source.limit.context)
+      })
+    })
+    yield* model.reload()
+  }),
+```
+
+Schema: [`Model.Info`](/api#schema-Model.Info).
+
+```ts
+interface ModelEditor {
+  list(providerID?: string): readonly Types.DeepMutable<Model.Info>[]
+  get(providerID: string, modelID: string): Types.DeepMutable<Model.Info> | undefined
+  update(providerID: string, modelID: string, update: (model: Types.DeepMutable<Model.Info>) => void): void
+  remove(providerID: string, modelID: string): void
+  readonly default: {
+    get(): { providerID: string; modelID: string } | undefined
+    set(providerID: string, modelID: string): void
+  }
+  readonly provider: {
+    list(): readonly ProviderRecord[]
+    get(providerID: string): ProviderRecord | undefined
+  }
+}
+
+interface ModelDomain extends ModelApi<unknown> {
+  readonly transform: Transform<ModelEditor>
+  readonly reload: () => Effect.Effect<void>
+}
+```
+
+### Befehle
+
+Lies die Befehle, die an der aktuellen Location verfügbar sind.
+
+```ts
+effect: (ctx) =>
+  Effect.gen(function* () {
+    const command = ctx.command
+    const commands = yield* command.list().pipe(Effect.orDie)
+    yield* Effect.logInfo("commands", { names: commands.data.map((item) => item.name) })
+  }),
+```
+
+Die Befehlstransformation kann derzeit nur Befehle hinzufügen. Ein Executor erhält die Sitzung, die Anhänge des Prompts
+und den Zustellmodus.
+
+```ts
+effect: (ctx) =>
+  Effect.gen(function* () {
+    const command = ctx.command
+    const session = ctx.session
+    yield* command.transform((editor) => {
+      editor.add({
+        name: "security-review",
+        description: "Review changes for security issues",
+        execute: (input) =>
+          session.prompt({
+            ...input.prompt,
+            sessionID: input.sessionID,
+            text: `Review these changes for security issues.\n\n${input.prompt.text}`,
+            delivery: input.delivery,
+          }).pipe(Effect.asVoid),
+      })
+    })
+    yield* command.reload()
+  }),
+```
+
+Schemas: [`Command.Info`](/api#schema-Command.Info),
+[`Session.Inbox.Delivery`](/api#schema-Session.Inbox.Delivery).
+
+```ts
+interface CommandInvocation {
+  readonly sessionID: Session.ID
+  readonly prompt: PromptInput.Prompt
+  readonly delivery: SessionInbox.Delivery
+}
+
+interface CommandDefinition {
+  readonly name: string
+  readonly description?: string
+  readonly execute: (input: CommandInvocation) => Effect.Effect<void, unknown>
+}
+
+interface CommandEditor {
+  add(definition: CommandDefinition): void
+}
+
+interface CommandDomain extends Pick<CommandApi<unknown>, "list"> {
+  readonly transform: Transform<CommandEditor>
+  readonly reload: () => Effect.Effect<void>
+}
+```
+
+### Integrationen
+
+Lies Integrationen und löse die aktiven Zugangsdaten auf, sofern vorhanden.
+
+```ts
+effect: (ctx) =>
+  Effect.gen(function* () {
+    const integration = ctx.integration
+    const integrations = yield* integration.list().pipe(Effect.orDie)
+    const github = yield* integration.get({ integrationID: Integration.ID.make("github") }).pipe(Effect.orDie)
+    const connection = yield* integration.connection.active("github")
+    const credential = connection ? yield* integration.connection.resolve(connection).pipe(Effect.orDie) : undefined
+    yield* Effect.logInfo("integration", {
+      count: integrations.data.length,
+      github: github.data.name,
+      credential: credential?.type,
+    })
+  }),
+```
+
+Verbinde dich mit einem Schlüssel oder führe einen OAuth-Versuch über die verbundene API durch.
+
+```ts
+effect: (ctx) =>
+  Effect.gen(function* () {
+    const integration = ctx.integration
+    const token = yield* Config.Redacted("GITHUB_TOKEN").pipe(Effect.orDie)
+    yield* integration.connect
+      .key({ integrationID: Integration.ID.make("github"), key: Redacted.value(token) })
+      .pipe(Effect.orDie)
+
+    const attempt = yield* integration.oauth
+      .connect({
+        integrationID: Integration.ID.make("acme"),
+        methodID: Integration.MethodID.make("oauth"),
+      })
+      .pipe(Effect.orDie)
+    const status = yield* integration.oauth
+      .status({
+        integrationID: Integration.ID.make("acme"),
+        attemptID: attempt.data.attemptID,
+      })
+      .pipe(Effect.orDie)
+    yield* Effect.logInfo("OAuth status", { status: status.data })
+  }),
+```
+
+Transformiere Integrationen und Authentifizierungsmethoden. Callbacks von OAuth-Methoden sind Effects und dürfen
+Ressourcen mit Scope belegen.
+
+```ts
+effect: (ctx) =>
+  Effect.gen(function* () {
+    const integration = ctx.integration
+    yield* integration.transform((editor) => {
+      editor.update("acme", (item) => (item.name = "Acme"))
+      editor.method.update({
+        integrationID: "acme",
+        method: { id: "device", type: "oauth", label: "Sign in with Acme" },
+        authorize: () =>
+          Effect.succeed({
+            mode: "code",
+            url: "https://acme.example/device",
+            instructions: "Enter the displayed code",
+            callback: (code) => exchangeCode(code),
+          }),
+      })
+    })
+    yield* integration.reload()
+  }),
+```
+
+Schemas: [`Integration.Info`](/api#schema-Integration.Info), [`Integration.Method`](/api#schema-Integration.Method),
+[`Connection.Info`](/api#schema-Connection.Info), [`Form.Answer`](/api#schema-Form.Answer).
+
+```ts
+type IntegrationOAuthAuthorization = {
+  readonly url: string
+  readonly instructions: string
+  readonly expiresAt?: number
+} & (
+  | { readonly mode: "auto"; readonly callback: Effect.Effect<Credential.OAuth, unknown> }
+  | { readonly mode: "code"; readonly callback: (code: string) => Effect.Effect<Credential.OAuth, unknown> }
+)
+
+type IntegrationOAuthMethodRegistration = {
+  readonly integrationID: string
+  readonly method: IntegrationOAuthMethod
+  readonly authorize: (answer: Form.Answer) => Effect.Effect<IntegrationOAuthAuthorization, unknown, Scope.Scope>
+  readonly refresh?: (credential: Credential.OAuth) => Effect.Effect<Credential.OAuth, unknown>
+  readonly label?: (credential: Credential.OAuth) => string | undefined
+}
+
+interface IntegrationEditor {
+  list(): readonly IntegrationRef[]
+  get(id: string): IntegrationRef | undefined
+  update(id: string, update: (integration: IntegrationRef) => void): void
+  remove(id: string): void
+  readonly method: {
+    list(integrationID: string): readonly IntegrationMethod[]
+    update(input: IntegrationMethodRegistration): void
+    remove(integrationID: string, method: IntegrationMethod): void
+  }
+}
+
+interface IntegrationDomain extends Omit<IntegrationApi<unknown>, "wellknown"> {
+  readonly transform: Transform<IntegrationEditor>
+  readonly reload: () => Effect.Effect<void>
+  readonly connection: {
+    readonly active: (integrationID: string) => Effect.Effect<ConnectionInfo | undefined>
+    readonly resolve: (connection: ConnectionInfo) => Effect.Effect<Credential.Value | undefined, unknown>
+  }
+}
+```
+
+### MCP
+
+Liste MCP-Server und ihren aktuellen Verbindungsstatus auf.
+
+```ts
+effect: (ctx) =>
+  Effect.gen(function* () {
+    const mcp = ctx.mcp
+    const servers = yield* mcp.list().pipe(Effect.orDie)
+    yield* Effect.logInfo("MCP servers", { count: servers.data.length })
+  }),
+```
+
+Plugins verwalten MCP-Server ausschließlich über Transformationen. Mit `editor.set` fügst du einen Server hinzu oder
+ersetzt ihn, mit `editor.update` änderst du seine Konfiguration und mit `editor.remove` entfernst du ihn. Die
+Konfiguration liest du mit `editor.list` und `editor.get`.
+
+```ts
+effect: (ctx) =>
+  Effect.gen(function* () {
+    const mcp = ctx.mcp
+    yield* mcp.transform((editor) => {
+      const servers = editor.list()
+      const docs = editor.get("docs")
+      editor.set("docs", { type: "remote", url: "https://mcp.example.com" })
+      editor.update("docs", (server) => (server.disabled = false))
+      editor.remove("legacy")
+    })
+  }),
+```
+
+Setze in einer Transformation `disabled: true`, um einen Server zu deaktivieren und zu trennen, oder `disabled: false`,
+um ihn zu aktivieren und OpenCode die Verbindung zu erlauben. OpenCode gleicht den Lebenszyklus der Server anhand der
+transformierten Konfiguration ab.
+
+Rufe `reload()` auf, nachdem sich externer Zustand geändert hat, den eine Transformation verwendet. Dadurch werden die
+Transformationen erneut angewendet und die Server abgeglichen.
+
+```ts
+effect: (ctx) =>
+  Effect.gen(function* () {
+    const mcp = ctx.mcp
+    yield* mcp.reload()
+  }),
+```
+
+Schemas: [`Mcp.Server`](/api#schema-Mcp.Server), [`Mcp.LocalConfigEncoded`](/api#schema-Mcp.LocalConfigEncoded),
+[`Mcp.RemoteConfigEncoded`](/api#schema-Mcp.RemoteConfigEncoded).
+
+```ts
+interface MCPEditor {
+  list(): readonly [string, Types.DeepMutable<Mcp.ServerConfig>][]
+  get(name: string): Types.DeepMutable<Mcp.ServerConfig> | undefined
+  set(name: string, config: Mcp.ServerConfig): void
+  update(name: string, update: (config: Types.DeepMutable<Mcp.ServerConfig>) => void): void
+  remove(name: string): void
+}
+
+interface MCPDomain extends Pick<McpApi<unknown>, "list"> {
+  readonly transform: Transform<MCPEditor>
+  readonly reload: () => Effect.Effect<void>
+}
+```
+
+### Plugins
+
+Liste aktive, fehlgeschlagene und aufgelöste Plugins an der aktuellen Location auf.
+
+```ts
+effect: (ctx) =>
+  Effect.gen(function* () {
+    const plugin = ctx.plugin
+    const plugins = yield* plugin.list().pipe(Effect.orDie)
+    yield* Effect.forEach(plugins.data, (item) => Effect.logInfo("plugin", item), { discard: true })
+  }),
+```
+
+Filtere die Schema-Werte in einer Effect-Pipeline, wenn nur aktive Plugins relevant sind.
+
+```ts
+effect: (ctx) =>
+  Effect.gen(function* () {
+    const plugin = ctx.plugin
+    const active = yield* plugin.list().pipe(
+      Effect.orDie,
+      Effect.map((result) => result.data.filter((item) => item.status === "active")),
+    )
+    yield* Effect.logInfo("active plugin count", { count: active.length })
+  }),
+```
+
+Schemas: [`Plugin.Info`](/api#schema-Plugin.Info), [`Plugin.Source`](/api#schema-Plugin.Source).
+
+```ts
+interface PluginApi<E = never> {
+  readonly list: PluginListOperation<E>
+}
+
+interface Context {
+  readonly plugin: PluginApi<unknown>
+}
+```
+
+### Referenzen
+
+Lies die Referenzen, die an der aktuellen Location verfügbar sind.
+
+```ts
+effect: (ctx) =>
+  Effect.gen(function* () {
+    const reference = ctx.reference
+    const references = yield* reference.list().pipe(Effect.orDie)
+    yield* Effect.logInfo("references", { count: references.data.length })
+  }),
+```
+
+Füge lokale und Git-Referenzen hinzu oder entferne sie und lade danach neu, sobald sich externer Zustand ändert.
+`get(name)` gibt die aktuell konfigurierte Quelle zurück oder `undefined`, wenn der Name nicht existiert.
+
+```ts
+effect: (ctx) =>
+  Effect.gen(function* () {
+    const reference = ctx.reference
+    yield* reference.transform((editor) => {
+      editor.add("handbook", { type: "local", path: "/workspace/docs/handbook" })
+      editor.add("standards", { type: "git", repository: "https://github.com/acme/standards", branch: "main" })
+      const handbook = editor.get("handbook")
+      editor.remove("legacy")
+    })
+    yield* reference.reload()
+  }),
+```
+
+Schemas: [`Reference.Info`](/api#schema-Reference.Info), [`Reference.LocalSource`](/api#schema-Reference.LocalSource),
+[`Reference.GitSource`](/api#schema-Reference.GitSource).
+
+```ts
+interface ReferenceEditor {
+  add(name: string, source: ReferenceLocalSource | ReferenceGitSource): void
+  remove(name: string): void
+  list(): readonly (readonly [string, ReferenceLocalSource | ReferenceGitSource])[]
+  get(name: string): ReferenceLocalSource | ReferenceGitSource | undefined
+}
+
+interface ReferenceDomain extends ReferenceApi<unknown> {
+  readonly transform: Transform<ReferenceEditor>
+  readonly reload: () => Effect.Effect<void>
+}
+```
+
+### Sitzungen
+
+Erstelle oder lies eine Sitzung und wähle dann den Agenten und das Modell für die weitere Arbeit aus.
+
+```ts
+effect: (ctx) =>
+  Effect.gen(function* () {
+    const session = ctx.session
+    const created = yield* session.create({ title: "Review" }).pipe(Effect.orDie)
+    const current = yield* session.get({ sessionID: created.id }).pipe(Effect.orDie)
+    yield* session.switchAgent({ sessionID: current.id, agent: Agent.ID.make("build") }).pipe(Effect.orDie)
+    yield* session
+      .switchModel({
+        sessionID: current.id,
+        model: { providerID: Provider.ID.make("anthropic"), id: Model.ID.make("claude-sonnet-4-5") },
+      })
+      .pipe(Effect.orDie)
+  }),
+```
+
+Sende Prompts, kurzlebige Generierungsanfragen, Befehle oder synthetische Nachrichten.
+
+```ts
+effect: (ctx) =>
+  Effect.gen(function* () {
+    const session = ctx.session
+    const created = yield* session.create({ title: "Automation" }).pipe(Effect.orDie)
+    yield* session.prompt({ sessionID: created.id, text: "Review the current changes" }).pipe(Effect.orDie)
+    const summary = yield* session
+      .generate({ sessionID: created.id, prompt: "Summarize this project" })
+      .pipe(Effect.orDie)
+    yield* session.command({ sessionID: created.id, command: "review", arguments: "--staged" }).pipe(Effect.orDie)
+    yield* session
+      .synthetic({ sessionID: created.id, text: `Summary generated: ${summary.text}`, resume: false })
+      .pipe(Effect.orDie)
+  }),
+```
+
+Entferne eine temporäre Sitzung mit `remove`. Das Entfernen stoppt eine laufende Ausführung und löscht untergeordnete
+Sitzungen rekursiv.
+
+```ts
+effect: (ctx) =>
+  Effect.gen(function* () {
+    const created = yield* ctx.session.create({ title: "Temporary worker" }).pipe(Effect.orDie)
+    yield* ctx.session.remove({ sessionID: created.id }).pipe(Effect.orDie)
+  }),
+```
+
+Fordere mit `compact` eine Kompaktierung an. Der Aufruf gibt den angenommenen Inbox-Eintrag zurück, keine fertige
+Zusammenfassung; standardmäßig läuft die Kompaktierung an der nächsten Schrittgrenze. Übergib `delivery: "queue"`, um
+stattdessen die Reihenfolge der Warteschlange einzuhalten.
+
+```ts
+effect: (ctx) =>
+  Effect.gen(function* () {
+    const created = yield* ctx.session.create({ title: "Review" }).pipe(Effect.orDie)
+    const compaction = yield* ctx.session.compact({ sessionID: created.id }).pipe(Effect.orDie)
+  }),
+```
+
+Schemas: [`Session.Info`](/api#schema-Session.Info), [`Model.Ref`](/api#schema-Model.Ref),
+[`Session.Inbox.User`](/api#schema-Session.Inbox.User),
+[`Session.Inbox.Synthetic`](/api#schema-Session.Inbox.Synthetic).
+
+```ts
+type SessionDomain = Pick<
+  SessionApi<unknown>,
+  | "create"
+  | "get"
+  | "remove"
+  | "switchAgent"
+  | "switchModel"
+  | "prompt"
+  | "generate"
+  | "command"
+  | "compact"
+  | "synthetic"
+  | "interrupt"
+  | "update"
+  | "move"
+  | "wait"
+  | "context"
+>
+```
+
+### Skills
+
+Lies die Skills an der aktuellen Location.
+
+```ts
+effect: (ctx) =>
+  Effect.gen(function* () {
+    const skill = ctx.skill
+    const skills = yield* skill.list()
+    yield* Effect.logInfo("skills", { ids: skills.data.map((item) => item.id) })
+  }),
+```
+
+Transformiere Skills und lade sie neu. Verwende für Branded Values die erneut exportierten Konstruktoren von Effect Schema.
+`get(id)` gibt den aktuellen Editor-Eintrag zurück oder `undefined`, wenn der Skill nicht existiert.
+
+```ts
+effect: (ctx) =>
+  Effect.gen(function* () {
+    const skill = ctx.skill
+    yield* skill.transform((editor) => {
+      editor.add(Skill.Info.make({
+        id: Skill.ID.make("review"),
+        name: Skill.Name.make("Review"),
+        description: "Review the current changes",
+        path: "/workspace/.opencode/skills/review/SKILL.md",
+        content: "Review the current changes for correctness and missing tests.",
+      }))
+      const review = editor.get("review")
+      editor.update("review", (item) => (item.autoinvoke = true))
+      editor.remove("legacy")
+    })
+    yield* skill.reload()
+  }),
+```
+
+Schema: [`Skill.Info`](/api#schema-Skill.Info).
+
+```ts
+interface SkillEditor {
+  list(): readonly Types.DeepMutable<Skill.Info>[]
+  get(id: string): Types.DeepMutable<Skill.Info> | undefined
+  add(skill: Skill.Info): void
+  update(id: string, update: (skill: Types.DeepMutable<Skill.Info>) => void): void
+  remove(id: string): void
+}
+
+interface SkillDomain extends SkillApi<unknown> {
+  readonly transform: Transform<SkillEditor>
+  readonly reload: () => Effect.Effect<void>
+}
+```
+
+### Speicher
+
+Speichere, lies und entferne dauerhafte JSON-Werte, die an die Plugin-ID gebunden sind.
+
+```ts
+effect: (ctx) =>
+  Effect.gen(function* () {
+    const storage = ctx.storage
+    yield* storage.set("settings", { strict: true })
+    const settings = yield* storage.get("settings")
+    yield* Effect.logInfo("settings", { settings })
+    yield* storage.remove("settings")
+  }),
+```
+
+Durchsuche Schlüssel nach Präfix, mit Cursor-basierter Paginierung.
+
+```ts
+effect: (ctx) =>
+  Effect.gen(function* () {
+    const storage = ctx.storage
+    const first = yield* storage.scan({ prefix: "cache/", limit: 100 })
+    const second = first.next
+      ? yield* storage.scan({ prefix: "cache/", after: first.next, limit: 100 })
+      : { entries: [] }
+    yield* Effect.logInfo("cache entries", { count: first.entries.length + second.entries.length })
+  }),
+```
+
+Der Speicher akzeptiert den JSON-Typ von Effect und gibt direkt Effects zurück.
+
+```ts
+interface StorageDomain {
+  readonly get: (key: string) => Effect.Effect<Schema.Json | undefined>
+  readonly set: (key: string, value: Schema.Json) => Effect.Effect<void>
+  readonly remove: (key: string) => Effect.Effect<void>
+  readonly scan: (options: StorageScanOptions) => Effect.Effect<StorageScanResult>
+}
+```
+
+### Tools
+
+Registriere typisierte Tools mit Effect `Schema`. Der Executor erhält die dekodierte Eingabe und gibt einen Effect mit
+typisierter Ausgabe, Anzeigeinhalt oder Metadaten zurück.
+
+Der Editor unterstützt `add`, `update` und `remove`. Der Transformations-Callback ist synchron: Er darf keinen Effect und
+kein Promise zurückgeben. Lade externe Daten vor dem Registrieren oder Neuladen. OpenCode spielt aktive Transformationen
+in Registrierungsreihenfolge auf einem frischen Editor erneut ab; bei gleichem effektivem Tool-Namen überschreibt eine
+spätere gültige Registrierung eine frühere.
+
+```ts
+effect: (ctx) =>
+  Effect.gen(function* () {
+    const tool = ctx.tool
+    yield* tool.transform((editor) => {
+      editor.namespace({
+        name: "acme",
+        description: "Customer account tools",
+      })
+      editor.add({
+        name: "greeting",
+        description: "Create a greeting",
+        input: Schema.Struct({ name: Schema.String }),
+        output: Schema.Struct({ greeting: Schema.String }),
+        options: { namespace: "acme", codemode: true },
+        execute: ({ name }, context) =>
+          Effect.gen(function* () {
+            yield* context.progress({ status: "greeting" })
+            return { output: { greeting: `Hello ${name}!` } }
+          }),
+      })
+    })
+  }),
+```
+
+Rufe `yield* ctx.tool.reload()` auf, nachdem du Quelldaten geändert hast, die der Callback erfasst. Beim Neuladen werden
+aktive Transformationen in unveränderter Reihenfolge erneut abgespielt; der Effect des Plugins läuft dabei nicht erneut.
+
+Tools haben eine `id` mit ihrem effektiven Namen, und `get()` gibt `undefined` zurück, wenn diese ID nicht vorhanden ist.
+Verwende `update` und `remove` mit dem effektiven Tool-Namen einschließlich Namespace (oben `acme_greeting`). Punkte in
+Namespaces und nicht unterstützte Zeichen in Tool-Namen werden zu `_`. Nicht vorhandene Namen werden ignoriert; um ein
+Tool zu erstellen, brauchst du `add` mit einer vollständigen Definition. Updates behalten Name und Namespace bei. Weise
+neue Schemas oder Optionen zu, um sie zu ersetzen, statt verschachtelte Werte zu verändern. Ungültige Updates werden
+protokolliert und lassen die vorherige Definition unverändert.
+
+```ts
+yield *
+  ctx.tool.transform((editor) => {
+    editor.update("acme_greeting", (tool) => {
+      tool.description = "Greet the user by name"
+    })
+    editor.remove("acme_obsolete")
+  })
+```
+
+Updates und Entfernungen werden zusammen mit Hinzufügungen in der richtigen Reihenfolge erneut abgespielt, auch nach
+einer Aktualisierung des MCP-Katalogs.
+
+`transform` gibt eine Registrierung mit Scope zurück. Mit `yield* registration.dispose` entfernst du ihre Transformation;
+der Zustand wird dann aus den übrigen Transformationen neu aufgebaut, sodass eine zuvor überschriebene Definition wieder
+zum Vorschein kommt. Die Freigabe ist idempotent, und das Schließen des Plugin-Scopes gibt dessen Registrierungen
+ebenfalls frei.
+
+Jede Modellanfrage erfasst einen Snapshot der Tools. Neuladen und Freigabe wirken sich auf künftige Snapshots aus, nicht
+auf die Definitionen oder Executors, die eine laufende Anfrage bereits erfasst hat. Executors, die veränderliche
+Plugin-Daten per Closure einschließen, sehen weiterhin deren aktuellen Stand; erfasse einen Wert innerhalb der
+Transformation, wenn er fest an diese Definition gebunden bleiben soll.
+
+Schemas: [`Tool.Content`](/api#schema-Tool.Content), [`Tool.TextContent`](/api#schema-Tool.TextContent),
+[`Tool.FileContent`](/api#schema-Tool.FileContent).
+
+```ts
+interface ToolEditor {
+  list(): readonly (Tool.Info & { readonly id: string })[]
+  get(id: string): (Tool.Info & { readonly id: string }) | undefined
+  namespace(namespace: { name: string; description: string }): void
+  add<Input extends Tool.ValueSchema<any>, Output extends Tool.ValueSchema<any> | undefined>(
+    tool: Tool.Info<Input, Output>,
+  ): void
+  update(id: string, update: (tool: Types.Mutable<Tool.Info>) => void): void
+  remove(id: string): void
+}
+
+interface ToolDomain {
+  readonly list: () => Effect.Effect<readonly (Tool.Info & { readonly id: string })[]>
+  readonly transform: Transform<ToolEditor>
+  readonly reload: () => Effect.Effect<void>
+}
+```
+
+### VCS
+
+Lies Repository-Informationen, den Status der Arbeitskopie oder Datei-Diffs.
+
+```ts
+effect: (ctx) =>
+  Effect.gen(function* () {
+    const vcs = ctx.vcs
+    const info = yield* vcs.get().pipe(Effect.orDie)
+    const branches = yield* vcs.branches({ search: "feature", limit: 10 }).pipe(Effect.orDie)
+    const changes = yield* vcs.status().pipe(Effect.orDie)
+    const diff = yield* vcs.diff({ mode: "working", context: 3 }).pipe(Effect.orDie)
+    yield* Effect.logInfo("vcs", { branch: info.data.branch.current, files: changes.data.length })
+  }),
+```
+
+Registriere über eine Transformation mit Scope einen Anbieter, der an eine Location gebunden ist. Anbieter, die zum
+erkannten Repository-Typ passen, werden automatisch ausgewählt; mit `editor.default.set` wählst du einen anderen Anbieter.
+
+```ts
+effect: (ctx) =>
+  Effect.gen(function* () {
+    const vcs = ctx.vcs
+    yield* vcs.transform((editor) => {
+      editor.add({
+        id: "custom",
+        name: "Custom VCS",
+        info: () => Effect.succeed({ branch: { current: "feature", default: "main" } }),
+        branches: (input) => readBranches(input),
+        status: (scope) => readStatus(scope.worktree),
+        diff: (input) => readDiff(input),
+      })
+      editor.default.set("custom")
+    })
+  }),
+```
+
+Anbieter-Callbacks erhalten die aktuelle Location, das Wurzelverzeichnis der Arbeitskopie, das kanonische
+Projektverzeichnis und optional den Repository-Speicher. Diff-Callbacks erhalten zusätzlich den gewählten Modus, den
+angeforderten Kontext und das Byte-Budget für die Ausgabe. Für die Repository-Erkennung verwendet OpenCode weiterhin
+seine integrierten Detektoren für Git und Mercurial.
+
+Anbieter können optional `init(scope)` implementieren, um ein Repository in `scope.worktree` anzulegen. Die
+Initialisierung wählt den Anbieter über seine ID aus (standardmäßig Git), nicht über den erkannten Repository-Typ.
+Registriere einen Anbieter mit `init` auch dann, wenn an der Location noch kein Repository existiert. OpenCode prüft vor
+dem Aufruf, ob das Verzeichnis existiert und noch kein Repository enthält, und erkennt das Projekt anschließend neu. Neue
+Repository-Formate benötigen über diesen Callback hinaus weiterhin Unterstützung bei der Erkennung.
+
+Schemas: [`Vcs.Info`](/api#schema-Vcs.Info), [`Vcs.FileStatus`](/api#schema-Vcs.FileStatus),
+[`FileDiff.Info`](/api#schema-FileDiff.Info).
+
+```ts
+interface VcsEditor {
+  add(definition: VcsDefinition): void
+  readonly default: {
+    get(): string | undefined
+    set(selection: string): void
+  }
+}
+
+interface VcsDomain extends Omit<VcsApi<unknown>, "init"> {
+  readonly transform: Transform<VcsEditor>
+  readonly reload: () => Effect.Effect<void>
+}
+
+interface VcsDefinition {
+  readonly init?: (scope: VcsScope) => Effect.Effect<void, unknown>
+  // Existing info, branches, status, and diff callbacks are required.
+}
+```
+
+### Websuche
+
+Liste Anbieter auf oder führe eine Suchanfrage über den ausgewählten Anbieter aus.
+
+```ts
+effect: (ctx) =>
+  Effect.gen(function* () {
+    const websearch = ctx.websearch
+    const providers = yield* websearch.providers().pipe(Effect.orDie)
+    const results = yield* websearch
+      .query({ query: "OpenCode plugins", providerID: WebSearch.ID.make("internal") })
+      .pipe(Effect.orDie)
+    yield* Effect.logInfo("websearch", { providers: providers.data.length, results: results.data.results.length })
+  }),
+```
+
+Registriere einen Effect-Executor und wähle den Standardanbieter. Setze den Standard auf `false`, um die Websuche zu
+deaktivieren.
+
+```ts
+effect: (ctx) =>
+  Effect.gen(function* () {
+    const websearch = ctx.websearch
+    yield* websearch.transform((editor) => {
+      editor.add({
+        id: "internal",
+        name: "Internal search",
+        execute: ({ query }) => searchInternal(query),
+      })
+      editor.default.set("internal")
+    })
+    yield* websearch.reload()
+  }),
+```
+
+Schemas: [`WebSearch.Provider`](/api#schema-WebSearch.Provider),
+[`WebSearch.Result`](/api#schema-WebSearch.Result).
+
+```ts
+interface WebSearchDefinition {
+  readonly id: string
+  readonly name: string
+  readonly execute: (input: WebSearch.ProviderInput) => Effect.Effect<readonly WebSearch.Result[], unknown>
+}
+
+interface WebSearchEditor {
+  add(definition: WebSearchDefinition): void
+  readonly default: {
+    get(): string | false | undefined
+    set(selection: string | false): void
+  }
+}
+
+interface WebSearchDomain extends WebsearchApi<unknown> {
+  readonly transform: Transform<WebSearchEditor>
+  readonly reload: () => Effect.Effect<void>
+}
+```
+
+### Events
+
+Das öffentliche Event-Abonnement des Servers ist ein Effect `Stream`. Forke seinen Konsumenten im Scope des Plugins,
+damit er automatisch unterbrochen wird.
+
+```ts
+effect: (ctx) =>
+  Effect.gen(function* () {
+    const event = ctx.event
+    yield* event.subscribe().pipe(
+      Stream.tap((item) => Effect.logDebug("OpenCode event", { type: item.type })),
+      Stream.runDrain,
+      Effect.forkScoped,
+    )
+  }),
+```
+
+Mit Stream-Operatoren wählst du Event-Typen aus und verarbeitest sie.
+
+```ts
+effect: (ctx) =>
+  Effect.gen(function* () {
+    const event = ctx.event
+    yield* event.subscribe().pipe(
+      Stream.filter((item) => item.type === "config.updated"),
+      Stream.runForEach(() => Effect.logInfo("configuration changed")),
+      Effect.forkScoped,
+    )
+  }),
+```
+
+Schema: [`V2EventEncoded`](/api#schema-V2EventEncoded).
+
+```ts
+type EventSubscribeOutput = OpenCodeEvent
+type EventSubscribeOperation<E = never> = () => Stream.Stream<EventSubscribeOutput, E>
+
+interface EventApi<E = never> {
+  readonly subscribe: EventSubscribeOperation<E>
+}
+
+interface EventDomain extends Pick<EventApi<unknown>, "subscribe"> {}
+```
+
+## Hooks
+
+Hooks greifen in laufende Operationen ein. Mehrere Plugins können denselben Hook registrieren; OpenCode führt sie in
+Plugin-Reihenfolge aus, sodass spätere Hooks die Änderungen früherer sehen. Registrierungen bleiben für die Dauer des
+Plugin-Scopes aktiv.
+
+```ts
+effect: (ctx) =>
+  Effect.gen(function* () {
+    const session = ctx.session
+    yield* session.hook("context", () => Effect.void)
+  }),
+```
+
+### Sitzungen
+
+Ändere die zusammengestellten Systemanweisungen, Nachrichten oder Tools unmittelbar bevor die Anfrage an das Modell geht.
+`context` läuft für die Agentenschleife; `compaction`, `generate` und `title` laufen für die entsprechenden
+Hilfsanfragen. `compaction` und `title` akzeptieren ein `result`, mit dem der Modellaufruf übersprungen wird.
+
+```ts
+effect: (ctx) =>
+  Effect.gen(function* () {
+    const session = ctx.session
+    yield* session.hook("context", (event) =>
+      Effect.sync(() => {
+        event.system.push({ type: "text", text: "Keep the review focused on correctness." })
+        delete event.tools.write
+      }),
+    )
+    yield* session.hook("compaction", (event) =>
+      Effect.map(summarize(event.messages), (summary) => {
+        event.result = { summary }
+      }),
+    )
+  }),
+```
+
+Ändere die Einstellungen der Modellanfrage und beschränke den Hook optional auf einen Anbieter. Das Event enthält dasselbe
+`kind` wie die HTTP-Hooks weiter unten.
+
+```ts
+effect: (ctx) =>
+  Effect.gen(function* () {
+    const session = ctx.session
+    yield* session.hook(
+      "model.request",
+      (event) => Effect.sync(() => (event.headers["x-plugin"] = "review")),
+      { providerID: "anthropic" },
+    )
+  }),
+```
+
+Ändere native Anfragen an den Anbieter oder seine Antworten. Deren Bodys sind Streams, die sich nur einmal lesen lassen;
+klone oder ersetze einen Body, bevor du ihn liest. Beide Hooks laufen für jede Anfrage, die eine Sitzung stellt;
+`event.kind` ist je nach auslösendem Ablauf `"primary"`, `"compaction"`, `"title"` oder `"generate"`.
+
+```ts
+effect: (ctx) =>
+  Effect.gen(function* () {
+    const session = ctx.session
+    yield* session.hook("http.request", (event) =>
+      Effect.sync(() => {
+        event.request.headers.set("x-session-id", event.sessionID)
+        if (event.kind === "title") event.request.headers.set("x-priority", "background")
+      }),
+    )
+    yield* session.hook("http.response", (event) =>
+      Effect.sync(() => {
+        event.response = new Response(event.response.body, {
+          status: event.response.status,
+          headers: { ...Object.fromEntries(event.response.headers), "x-plugin": "review" },
+        })
+      }),
+    )
+  }),
+```
+
+Anbieter, die über einen WebSocket streamen, verwenden pro Sitzung eine einzige Verbindung, daher sehen die HTTP-Hooks
+diesen Datenverkehr nie. Der experimentelle Hook `experimental.ws.handshake` läuft einmal pro Modellaufruf, bevor die
+Verbindung ausgewählt wird, und stellt `url` und `headers` der Verbindung bereit; ändert sich einer der beiden Werte, wird
+der Socket neu geöffnet. Für Anfragen, bei denen eine WebSocket-Route auf HTTP zurückgreift, laufen weiterhin die
+HTTP-Hooks.
+
+```ts
+effect: (ctx) =>
+  Effect.gen(function* () {
+    yield* ctx.session.hook(
+      "experimental.ws.handshake",
+      (event) =>
+        Effect.gen(function* () {
+          event.headers.authorization = `Bearer ${yield* mintToken(event.url)}`
+          delete event.headers["api-key"]
+        }),
+      { providerID: "azure" },
+    )
+  }),
+```
+
+`experimental.ws.send` und `experimental.ws.receive` stellen die Frames selbst bereit: `send` läuft, nachdem der Treiber
+des Anbieters einen ausgehenden Frame erstellt hat, `receive` läuft für jeden eingehenden Frame, bevor der Treiber ihn
+sieht. Was `frame` enthält, wenn der Hook zurückkehrt, wird so gesendet bzw. an den Treiber übergeben; OpenCode
+validiert es nicht.
+
+```ts
+effect: (ctx) =>
+  Effect.gen(function* () {
+    yield* ctx.session.hook(
+      "experimental.ws.send",
+      (event) =>
+        Effect.sync(() => {
+          const body = JSON.parse(event.frame)
+          if (body.type === "response.create") body.metadata = { ...body.metadata, session: event.sessionID }
+          event.frame = JSON.stringify(body)
+        }),
+      { providerID: "openai" },
+    )
+  }),
+```
+
+Überschreibe die Retry-Entscheidung bei einem Anbieterfehler oder ersetze ihre Verzögerung in Millisekunden. Der Hook
+läuft, nachdem OpenCode den Fehler klassifiziert und eine Richtlinie vorgeschlagen hat, aber bevor ein erneuter Versuch
+eingeplant wird. Wie OpenCode den nächsten Versuch intern ausführt, legt er nicht offen.
+
+```ts
+effect: (ctx) =>
+  Effect.gen(function* () {
+    yield* ctx.session.hook("retry", (event) =>
+      Effect.sync(() => {
+        if (event.error.status === 429) {
+          event.decision = { retry: true, delay: 10_000 }
+          return
+        }
+        if (event.error.type === "provider.invalid-request" && event.attempt === 2) {
+          event.decision = { retry: true, delay: 0 }
+          return
+        }
+        if (event.attempt >= 3) event.decision = { retry: false }
+      }),
+    )
+  }),
+```
+
+Die anfängliche `decision` ist die Richtlinie von OpenCode. Hooks können also einen normalerweise endgültigen
+Anbieterfehler wiederholbar machen oder einen vorgeschlagenen erneuten Versuch verhindern. Mehrere Hooks laufen in
+Registrierungsreihenfolge, und spätere Hooks sehen die aktuelle Entscheidung. Die integrierte maximale Anzahl an
+Versuchen bleibt eine harte Grenze. `attempt` ist der vorgeschlagene physische Versuch; die erste Anfrage ist Versuch
+`1`, der erste erneute Versuch also Versuch `2`. Ungültige Verzögerungen (`NaN`, unendlich oder negative Werte) greifen
+auf die berechnete Verzögerung zurück. Die Behandlung eines Kontextüberlaufs bleibt davon getrennt, weil sie die
+Unterhaltung kompaktiert, statt dieselbe Anfrage zu wiederholen.
+
+#### Referenz
+
+```ts
+interface SessionHooks {
+  readonly context: SessionContext
+  readonly compaction: SessionCompaction
+  readonly generate: SessionGenerate
+  readonly title: SessionTitle
+  readonly "model.request": SessionModelRequest
+  readonly "http.request": SessionHttpRequest
+  readonly "http.response": SessionHttpResponse
+  readonly "experimental.ws.handshake": SessionWebSocketHandshake
+  readonly "experimental.ws.send": SessionWebSocketSend
+  readonly "experimental.ws.receive": SessionWebSocketReceive
+  readonly retry: SessionRetry
+}
+
+type RetryDecision = { retry: false } | { retry: true; delay: number }
+
+interface SessionRetry {
+  readonly sessionID: string
+  readonly agent: string
+  readonly model: { providerID: string; id: string; variant?: string }
+  readonly error: { type: string; message: string; status?: number }
+  readonly attempt: number
+  decision: RetryDecision
+}
+
+interface SessionHookDomain {
+  readonly hook: ModelHooks<SessionHooks>
+}
+```
+
+### Shell
+
+Ändere Shell-Befehle, Arbeitsverzeichnisse, Timeouts, ausführbare Dateien oder Umgebungsvariablen vor der Ausführung.
+
+```ts
+effect: (ctx) =>
+  Effect.gen(function* () {
+    const shell = ctx.shell
+    yield* shell.hook("create.before", (event) =>
+      Effect.sync(() => {
+        if (event.command === "npm") event.command = "bun"
+        event.timeout = Math.min(event.timeout, 60_000)
+        event.env.COMPANY_ENV = "development"
+      }),
+    )
+  }),
+```
+
+#### Referenz
+
+```ts
+interface ShellCreateBefore {
+  command: string
+  cwd: string
+  timeout: number
+  shell: string
+  env: Record<string, string | undefined>
+}
+
+interface ShellHooks {
+  readonly "create.before": ShellCreateBefore
+}
+
+interface ShellHookDomain {
+  readonly hook: Hooks<ShellHooks>
+}
+```
+
+### Tools
+
+Before-Hooks können die Eingabe ersetzen oder mit `Tool.Error` fehlschlagen.
+
+```ts
+effect: (ctx) =>
+  Effect.gen(function* () {
+    const tool = ctx.tool
+    yield* tool.hook("execute.before", (event) =>
+      event.tool === "write"
+        ? Effect.fail(new Tool.Error({ message: "Writes are disabled" }))
+        : Effect.logDebug("tool input", { tool: event.tool, input: event.input }),
+    )
+  }),
+```
+
+After-Hooks können erfolgreiche Ergebnisse und Fehler untersuchen oder ersetzen.
+
+```ts
+effect: (ctx) =>
+  Effect.gen(function* () {
+    const tool = ctx.tool
+    yield* tool.hook("execute.after", (event) => {
+      if (event.status === "error") return Effect.logWarning("tool failed", { message: event.error.message })
+      return Effect.sync(() => {
+        event.result = { ...event.result, metadata: { observed: true } }
+      })
+    })
+  }),
+```
+
+#### Referenz
+
+```ts
+interface ToolHooks {
+  readonly "execute.before": ToolExecuteBefore
+  readonly "execute.after": ToolExecuteAfter
+}
+
+interface ToolFailures extends Record<keyof ToolHooks, unknown> {
+  readonly "execute.before": Tool.Error
+  readonly "execute.after": never
+}
+
+interface ToolHookDomain {
+  readonly hook: Hooks<ToolHooks, ToolFailures>
+}
+```
+
+Die gemeinsamen Registrierungstypen zeigen, welche Operationen den Plugin-Scope benötigen.
+
+```ts
+interface Registration {
+  readonly dispose: Effect.Effect<void>
+}
+
+type Hooks<Spec, Failures extends Record<keyof Spec, unknown> = Record<keyof Spec, never>> = <Name extends keyof Spec>(
+  name: Name,
+  callback: (input: Spec[Name]) => Effect.Effect<void, Failures[Name]>,
+) => Effect.Effect<Registration, never, Scope.Scope>
+
+type Transform<Input> = (callback: (input: Input) => void) => Effect.Effect<Registration, never, Scope.Scope>
+```
+
+## Veröffentlichen
+
+Ein Paket-Plugin verwendet denselben Default-Export wie ein lokales Effect-Plugin. Exportiere die Effect-Implementierung
+aus dem Haupteinstiegspunkt und deklariere `effect` als `peerDependency`.
+
+```json title="package.json"
+{
+  "name": "opencode-acme-effect-plugin",
+  "version": "1.0.0",
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "dependencies": {
+    "@opencode/plugin": "latest"
+  },
+  "peerDependencies": {
+    "effect": "^4.0.0"
+  }
+}
+```
+
+OpenCode leitet Importe von `effect`, den exportierten Unterpfaden `effect/*` und `@opencode/plugin` (auch Importe aus
+Abhängigkeiten in `node_modules` des Plugins) auf die Laufzeitinstanzen des Hosts um. So teilen sich Fibers, Logger und
+`Schema`-Parser eine einzige Laufzeitkopie.
+
+- Bündle `effect` nicht in das veröffentlichte Plugin-Artefakt. Wenn du einen Bundler verwendest, markiere `effect` und
+  `effect/*` als extern.
+- Plugins und ihre Abhängigkeiten aus `node_modules` laufen immer gegen die `effect`-Instanz des OpenCode-Releases auf
+  dem Host. Verwende `effect`-APIs und Modulpfade, die mit dem OpenCode-Release kompatibel sind, auf das du abzielst.
+  Abhängigkeiten, die auf einer anderen Hauptversion von `effect` basieren (etwa Effect 3), erhalten ebenfalls das
+  `effect` des Hosts und werden nicht unterstützt.
+- Es werden nur öffentliche Unterpfade von `effect` bereitgestellt. Ein Plugin, das eines der privaten
+  `internal`-Module von Effect importiert, lässt sich nicht laden; die Fehlermeldung nennt den Pfad.
+- Die kompilierte OpenCode-Binärdatei enthält nicht die Assets für Scalar und Swagger UI, die die Dokumentationsseiten der
+  Effect-HTTP-API verwenden. Stellt ein Plugin diese Seiten bereit, wird stattdessen ein Hinweis angezeigt.
+
+Der Einstiegspunkt des Pakets exportiert `Plugin.define` mit einer `effect`-Funktion.
+
+```ts title="src/index.ts"
+import { Plugin } from "@opencode/plugin/effect"
+import { Effect } from "effect"
+
+export default Plugin.define({
+  id: "acme.published",
+  effect: (ctx) =>
+    Effect.gen(function* () {
+      const storage = ctx.storage
+      yield* storage.set("installed", true)
+    }),
+})
+```
+
+Verwende Versionen, die mit dem OpenCode-Release kompatibel sind, auf das du abzielst, und teste das installierte Paket,
+nicht nur eine per Workspace verlinkte Kopie.
+
+```sh
+bun pm pack
+bun add ./opencode-acme-effect-plugin-1.0.0.tgz
+```
