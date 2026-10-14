@@ -23,7 +23,6 @@ import { Credential } from "./credential.js"
 import { State } from "./state.js"
 import { Bus } from "./bus.js"
 import { IntegrationConnection } from "./integration/connection.js"
-import { CredentialLock } from "./credential/lock.js"
 import { AppProcess } from "@opencode/util/process"
 import { ChildProcess } from "effect/process"
 import { Form } from "./form.js"
@@ -306,7 +305,6 @@ const layer = Layer.effect(
   Service,
   Effect.gen(function* () {
     const credentials = yield* Credential.Service
-    const locks = yield* CredentialLock.Service
     const bus = yield* Bus.Service
     const processes = yield* AppProcess.Service
     const scope = yield* Scope.Scope
@@ -731,7 +729,7 @@ const layer = Layer.effect(
           if (!credential) return undefined
           if (credential.value.type !== "oauth") return credential.value
           return yield* authorize(
-            locks.withLock(
+            credentials.lock(
               credential.id,
               Effect.gen(function* () {
                 // Another Location may have refreshed while this caller was reading the credential.
@@ -894,5 +892,5 @@ const layer = Layer.effect(
 export const node = makeLocationNode({
   service: Service,
   layer,
-  deps: [Credential.node, CredentialLock.node, Bus.node, AppProcess.node],
+  deps: [Credential.node, Bus.node, AppProcess.node],
 })

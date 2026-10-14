@@ -17,7 +17,6 @@ import { ManagedPolicy } from "@opencode/core/managed-policy"
 import { Config } from "@opencode/core/config"
 import { ConfigMcpPlugin } from "@opencode/core/config/plugin/mcp"
 import { Credential } from "@opencode/core/credential"
-import { CredentialLock } from "@opencode/core/credential/lock"
 import { AppNodeBuilder } from "@opencode/core/effect/app-node-builder"
 import { LayerNode } from "@opencode/util/effect/layer-node"
 import { Bus } from "@opencode/core/bus"
@@ -299,7 +298,6 @@ function resourceMcpLayer(
     Layer.provideMerge(Form.layer),
     Layer.provide(
       Layer.mergeAll(
-        CredentialLock.layer,
         overrides?.managed ? Layer.succeed(ManagedPolicy.Service, overrides.managed) : ManagedPolicy.layer,
         overrides?.entries
           ? Layer.succeed(
@@ -2011,7 +2009,6 @@ const shutdownIt = testEffect(
       Bus.node,
       Integration.node,
       Credential.node,
-      CredentialLock.node,
       Form.node,
       Environment.node,
       Location.node,

@@ -2,11 +2,11 @@ import { afterAll, describe, expect, test } from "bun:test"
 import { auth, refreshAuthorization, StreamableHTTPClientTransport } from "@modelcontextprotocol/client"
 import { ConfigMCP } from "@opencode/schema/config/mcp"
 import { Credential } from "@opencode/core/credential"
-import { CredentialLock } from "@opencode/core/credential/lock"
 import { Integration } from "@opencode/core/integration"
 import { McpClient } from "@opencode/core/mcp/client"
 import { McpOAuth } from "@opencode/core/mcp/oauth"
-import { Cause, Effect, Exit, ManagedRuntime, Schema } from "effect"
+import { Cause, Context, Effect, Exit, ManagedRuntime, Schema } from "effect"
+import { LayerNode } from "@opencode/util/effect/layer-node"
 import { hostEnvironmentLayer } from "./fixture/environment"
 
 const authServer = Bun.serve({ port: 0, fetch: () => new Response(null, { status: 404 }) })
@@ -14,8 +14,8 @@ afterAll(() => authServer.stop(true))
 
 const integrationID = Integration.ID.make("mcp_test")
 const methodID = Integration.MethodID.make("oauth")
-const lockRuntime = ManagedRuntime.make(CredentialLock.layer)
-afterAll(() => lockRuntime.dispose())
+const credentialRuntime = ManagedRuntime.make(LayerNode.compile(Credential.node))
+afterAll(() => credentialRuntime.dispose())
 
 const remote = (url: string) => new ConfigMCP.Remote({ type: "remote", url, oauth: { client_id: "client" } })
 
@@ -40,6 +40,10 @@ const memoryCredentials = (initial: Credential.Info[]) => {
   const rows = new Map(initial.map((row) => [row.id, row]))
   const unused = () => Effect.die("unused credential method")
   const service = Credential.Service.of({
+    lock: (id, operation) =>
+      credentialRuntime.contextEffect.pipe(
+        Effect.flatMap((context) => Context.get(context, Credential.Service).lock(id, operation)),
+      ),
     all: unused,
     create: unused,
     activate: unused,
@@ -56,7 +60,7 @@ const memoryCredentials = (initial: Credential.Info[]) => {
 }
 
 const connectProvider = (config: typeof ConfigMCP.Remote.Type, store: ReturnType<typeof memoryCredentials>) =>
-  lockRuntime.runPromise(
+  credentialRuntime.runPromise(
     McpOAuth.connectProvider({ config, integrationID }).pipe(Effect.provideService(Credential.Service, store.service)),
   )
 
