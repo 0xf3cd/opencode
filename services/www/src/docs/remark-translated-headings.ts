@@ -1,4 +1,4 @@
-import { readFileSync } from "node:fs"
+import { existsSync, readFileSync } from "node:fs"
 import path from "node:path"
 import { markdownHeadings } from "./lib/headings"
 
@@ -20,8 +20,11 @@ export default function remarkTranslatedHeadings(options: { content: string; loc
     const relative = path.relative(options.content, file.history[0] ?? "")
     const [locale, ...rest] = relative.split(path.sep)
     if (!locale || !options.locales.includes(locale) || rest.length === 0) return
+    // A translation left behind after its English page was removed or moved is never routed.
+    const source = path.join(options.content, ...rest)
+    if (!existsSync(source)) return
 
-    const english = markdownHeadings(readFileSync(path.join(options.content, ...rest), "utf8"))
+    const english = markdownHeadings(readFileSync(source, "utf8"))
     const headings = collect(tree)
     if (headings.map((heading) => heading.depth).join() !== english.map((heading) => heading.depth).join()) {
       console.warn(`[docs] ${relative} is outdated: its headings differ from English, so the English page is served`)

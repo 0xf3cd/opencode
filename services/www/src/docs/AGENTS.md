@@ -15,6 +15,7 @@
 - Translate a page by mirroring its English path under `content/<code>/`, for example `content/config.mdx` becomes `content/zh/config.mdx`. Untranslated pages fall back to English under the locale URL.
 - Keep links in translated pages identical to the English page, for example `/config`; the locale segment is added at render time.
 - Keep the English heading structure in translations: the same headings at the same levels, in the same order. `remark-translated-headings.ts` reuses the English heading IDs so `#anchor` links work in every locale.
+- Removing or moving an English page leaves its translations unused but does not break the build; delete or move them in the same change when convenient.
 - English changes may ship before translations. When an English page's heading structure changes, its translations are treated as outdated: the build warns, and the locale URL serves the English page until the translation is updated.
 - UI strings follow the website dictionaries: `i18n/en.ts` defines every key, and each locale spreads English and overrides its strings with `satisfies Dict`. Register new locales in `i18n/index.ts`. A locale's `<code>Nav` map translates header and sidebar labels by their English text from `lib/navigation.ts`.
 - Build all docs links with `docsHref(slug, locale)` or `localizeDocsHref` so readers stay in their language.
