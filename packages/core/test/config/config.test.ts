@@ -1341,7 +1341,7 @@ describe("Config", () => {
     ),
   )
 
-  it.live("substitutes an empty value for a missing file reference and recovers when it appears", () => {
+  it.live("removes values with unreadable file references and restores them when config reloads", () => {
     const output: Array<Record<string, unknown>> = []
     const logger = Logger.map(Logger.formatStructured, (entry) => {
       if (!Array.isArray(entry.message) || entry.message[0] !== "configuration file reference unavailable") return
@@ -1355,7 +1355,8 @@ describe("Config", () => {
           const global = path.join(tmp.path, "global")
           const project = path.join(tmp.path, "project")
           const file = path.join(global, "opencode.json")
-          const secret = path.join(global, "secrets", "firecrawl-key")
+          // Outside every config root, like ~/.secrets.
+          const secret = path.join(tmp.path, "secrets", "firecrawl-key")
           yield* Effect.promise(async () => {
             await fs.mkdir(global, { recursive: true })
             await fs.mkdir(project, { recursive: true })
@@ -1363,12 +1364,13 @@ describe("Config", () => {
               file,
               JSON.stringify({
                 username: "kept",
+                instructions: ["first.md", "{file:../secrets/firecrawl-key}", "last.md"],
                 mcp: {
                   servers: {
                     firecrawl: {
                       type: "remote",
                       url: "https://mcp.firecrawl.dev/v2/mcp",
-                      headers: { Authorization: "Bearer {file:secrets/firecrawl-key}" },
+                      headers: { Authorization: "Bearer {file:../secrets/firecrawl-key}", "X-Client": "opencode" },
                     },
                   },
                 },
@@ -1384,17 +1386,36 @@ describe("Config", () => {
               return server?.type === "remote" ? server.headers : undefined
             })
 
-            expect(Config.latest(yield* config.entries(), "username")).toBe("kept")
-            expect(yield* headers).toEqual({ Authorization: "Bearer " })
-            expect(output).toEqual([
-              {
-                source: file,
-                reference: "{file:secrets/firecrawl-key}",
-                path: secret,
-                reason: "NotFound",
-                action: "substituted empty value",
-              },
+            const entries = yield* config.entries()
+            expect(Config.latest(entries, "username")).toBe("kept")
+            expect(Config.latest(entries, "instructions")).toEqual(["first.md", "last.md"])
+            expect(yield* headers).toEqual({ "X-Client": "opencode" })
+            const unresolved = yield* config.unresolved!()
+            expect(Array.from(unresolved.keys())).toEqual(entries.filter((entry) => entry.type === "document"))
+            expect(Array.from(unresolved.values())).toEqual([
+              [
+                {
+                  path: ["instructions", 1],
+                  reference: "{file:../secrets/firecrawl-key}",
+                  file: secret,
+                  reason: "NotFound",
+                },
+                {
+                  path: ["mcp", "servers", "firecrawl", "headers", "Authorization"],
+                  reference: "{file:../secrets/firecrawl-key}",
+                  file: secret,
+                  reason: "NotFound",
+                },
+              ],
             ])
+            expect(output).toContainEqual({
+              source: file,
+              path: "$.mcp.servers.firecrawl.headers.Authorization",
+              reference: "{file:../secrets/firecrawl-key}",
+              file: secret,
+              reason: "NotFound",
+              action: "removed value",
+            })
 
             const changed = yield* bus
               .subscribe(Event.Updated)
@@ -1404,10 +1425,12 @@ describe("Config", () => {
               await fs.mkdir(path.dirname(secret), { recursive: true })
               await fs.writeFile(secret, "fc-key\n")
             })
-            yield* watcher.emit({ type: "update", path: secret })
+            // Referenced files are not watched; a config change picks the restored file up.
+            yield* watcher.emit({ type: "update", path: file })
 
             expect(yield* Fiber.join(changed)).toHaveLength(1)
-            expect(yield* headers).toEqual({ Authorization: "Bearer fc-key" })
+            expect(yield* headers).toEqual({ Authorization: "Bearer fc-key", "X-Client": "opencode" })
+            expect((yield* config.unresolved!()).size).toBe(0)
           }).pipe(Effect.provide(testLayer(project, global, project, undefined, Watcher.testLayer)))
         }),
       (tmp) => Effect.promise(() => tmp[Symbol.asyncDispose]()),

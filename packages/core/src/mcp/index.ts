@@ -77,6 +77,9 @@ const unavailable = (server: ServerName, status: Status) => {
 
 type ServerEntry = {
   readonly config: Mcp.ServerConfig
+  // A configuration problem, such as an unreadable {file:} reference. The server reports it as
+  // failed without connecting until its configuration changes.
+  readonly configError?: string
   status: Status
   readonly startup: Latch.Latch
   scope?: Scope.Closeable
@@ -98,14 +101,18 @@ const endpointLoads = KeyedMutex.makeUnsafe<string>()
 type Data = {
   servers: Map<ServerName, Types.DeepMutable<Mcp.ServerConfig>>
   removed: Set<ServerName>
+  failed: Map<ServerName, string>
 }
 
 export type Editor = {
   list: () => readonly [ServerName, Types.DeepMutable<Mcp.ServerConfig>][]
   get: (server: ServerName | string) => Types.DeepMutable<Mcp.ServerConfig> | undefined
+  /** Replaces a server's configuration and clears any failure recorded for it. */
   set: (server: ServerName | string, config: Mcp.ServerConfig) => void
   update: (server: ServerName | string, update: (config: Types.DeepMutable<Mcp.ServerConfig>) => void) => void
   remove: (server: ServerName | string) => void
+  /** Marks a configured server failed with a configuration error instead of connecting it. */
+  fail: (server: ServerName | string, error: string) => void
 }
 
 const cloneConfig = (config: Mcp.ServerConfig) => structuredClone(config) as Types.DeepMutable<Mcp.ServerConfig>
@@ -426,6 +433,12 @@ export const layer = (options?: Options) =>
 
       const startServer = (name: ServerName, entry: ServerEntry) =>
         Effect.gen(function* () {
+          if (entry.configError) {
+            entry.status = { status: "failed", error: entry.configError }
+            yield* Effect.logWarning("mcp connect failed", { server: name, status: entry.status })
+            yield* bus.publish(McpEvent.StatusChanged, { server: name })
+            return
+          }
           // Announce the handshake so connect() and credential reconnects don't show a stale
           // disabled/failed status for the duration of the connection attempt.
           entry.status = { status: "pending" }
@@ -499,11 +512,16 @@ export const layer = (options?: Options) =>
         if (entry.registration) yield* entry.registration.dispose
       })
 
-      const replaceServer = Effect.fnUntraced(function* (name: ServerName, serverConfig: Mcp.ServerConfig) {
+      const replaceServer = Effect.fnUntraced(function* (
+        name: ServerName,
+        serverConfig: Mcp.ServerConfig,
+        configError: string | undefined,
+      ) {
         const previous = entries.get(name)
         if (previous) yield* disposeServer(name, previous)
         const entry: ServerEntry = {
           config: serverConfig,
+          configError,
           status: { status: "pending" },
           startup: Latch.makeUnsafe(),
         }
@@ -531,21 +549,22 @@ export const layer = (options?: Options) =>
         yield* bus.publish(McpEvent.StatusChanged, { server: name })
       })
 
-      let applied: Map<ServerName, Mcp.ServerConfig> | undefined
+      let applied: Pick<Data, "servers" | "failed"> | undefined
       const overrides = new Map<ServerName, Mcp.ServerConfig | false>()
       const reconcileLock = Semaphore.makeUnsafe(1)
       const reconcile = Effect.fnUntraced(function* () {
-        const servers = state.get().servers
+        const { servers, failed } = state.get()
         if (!applied && entries.size === 0) {
           for (const [name, server] of servers) {
             entries.set(name, {
               config: server,
+              configError: failed.get(name),
               status: { status: "pending" },
               startup: Latch.makeUnsafe(),
             })
           }
           yield* Effect.forEach(entries, ([name, entry]) => register(name, entry), { discard: true })
-          applied = servers
+          applied = { servers, failed }
 
           // Initial connections stay asynchronous so one slow server does not block Location startup.
           for (const [name, entry] of entries) {
@@ -560,18 +579,18 @@ export const layer = (options?: Options) =>
           return
         }
 
-        const names = new Set([...(applied?.keys() ?? []), ...servers.keys()])
+        const names = new Set([...(applied?.servers.keys() ?? []), ...servers.keys()])
         for (const name of names) {
-          const previous = applied?.get(name)
+          const previous = applied?.servers.get(name)
           const updated = servers.get(name)
-          if (isDeepStrictEqual(previous, updated)) continue
+          if (isDeepStrictEqual(previous, updated) && applied?.failed.get(name) === failed.get(name)) continue
           if (!updated) {
             yield* removeServer(name).pipe(locks.withLock(name))
             continue
           }
-          yield* replaceServer(name, updated).pipe(locks.withLock(name))
+          yield* replaceServer(name, updated, failed.get(name)).pipe(locks.withLock(name))
         }
-        applied = servers
+        applied = { servers, failed }
       })
 
       // Bring a server online (or back to needs_auth) when its integration's credential changes, so an
@@ -605,6 +624,7 @@ export const layer = (options?: Options) =>
             ),
           ),
           removed: new Set(Array.from(overrides).flatMap(([name, config]) => (config === false ? [name] : []))),
+          failed: new Map(),
         }),
         editor: (editor) => ({
           list: () => Array.from(editor.servers),
@@ -613,13 +633,22 @@ export const layer = (options?: Options) =>
             const name = ServerName.make(server)
             if (editor.removed.has(name)) return
             editor.servers.set(name, cloneConfig(serverConfig))
+            editor.failed.delete(name)
           },
           update: (server, update) => {
             const current = editor.servers.get(ServerName.make(server))
             if (!current) return
             update(current)
           },
-          remove: (server) => editor.servers.delete(ServerName.make(server)),
+          remove: (server) => {
+            const name = ServerName.make(server)
+            editor.servers.delete(name)
+            editor.failed.delete(name)
+          },
+          fail: (server, error) => {
+            const name = ServerName.make(server)
+            if (editor.servers.has(name)) editor.failed.set(name, error)
+          },
         }),
         notify: () => State.reconcile(root, fork, () => reconcileLock.withPermit(reconcile())),
       })

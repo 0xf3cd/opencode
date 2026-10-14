@@ -709,6 +709,7 @@ describe("OpencodePlugin", () => {
                 set: (name, config) => configured.set(name, config),
                 update: () => {},
                 remove: (name) => configured.delete(name),
+                fail: () => {},
               }),
             )
             return Object.fromEntries(configured)

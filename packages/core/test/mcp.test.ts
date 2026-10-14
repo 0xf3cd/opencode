@@ -275,6 +275,7 @@ function resourceMcpLayer(
     managed?: ManagedPolicy.Interface
     policies?: readonly ConfigPolicy.Info[]
     entries?: Config.Interface["entries"]
+    unresolved?: Config.Interface["unresolved"]
     subscribe?: Bus.Interface["subscribe"]
     environment?: Layer.Layer<Environment.Service>
     published?: string[]
@@ -304,6 +305,7 @@ function resourceMcpLayer(
               Config.Service,
               Config.Service.of({
                 entries: overrides.entries,
+                unresolved: overrides.unresolved,
                 changes: () => Stream.never,
               }),
             )
@@ -1713,6 +1715,59 @@ testEffect(Layer.empty).live(
       expect(JSON.stringify(entries)).toBe(original)
     }),
 )
+
+it.live("fails only the servers whose winning config has an unreadable file reference", () => {
+  const remote = (headers?: Record<string, string>, disabled?: boolean) =>
+    new ConfigMCP.Remote({ type: "remote", url: "https://unused.example", oauth: false, headers, disabled })
+  const base = new Document({
+    type: "document",
+    info: new Info({
+      mcp: new ConfigMCP.Info({
+        servers: { resources: remote({}), legacy: remote(), overridden: remote({}) },
+      }),
+    }),
+  })
+  const override = new Document({
+    type: "document",
+    info: new Info({ mcp: new ConfigMCP.Info({ servers: { overridden: remote({ Authorization: "x" }, true) } }) }),
+  })
+  const reference = (path: readonly (string | number)[]) => ({
+    path: [...path],
+    reference: "{file:~/.secrets/key}",
+    file: "/home/user/.secrets/key",
+    reason: "NotFound",
+  })
+  const error = 'bad file reference "{file:~/.secrets/key}": /home/user/.secrets/key does not exist'
+  return Effect.gen(function* () {
+    const service = yield* Mcp.Service
+    expect(yield* settled(service)).toEqual({ status: "failed", error })
+    expect(yield* settled(service, "legacy")).toEqual({ status: "failed", error })
+    expect(yield* settled(service, "overridden")).toEqual({ status: "disabled" })
+
+    // Retrying cannot recover until configuration changes.
+    yield* service.connect("resources")
+    expect(yield* settled(service)).toEqual({ status: "failed", error })
+  }).pipe(
+    Effect.provide(
+      resourceMcpLayer("https://unused.example", undefined, undefined, {
+        entries: () => Effect.succeed([base, override]),
+        unresolved: () =>
+          Effect.succeed(
+            new Map([
+              [
+                base,
+                [
+                  reference(["mcp", "servers", "resources", "headers", "Authorization"]),
+                  reference(["mcp", "legacy", "headers", "Authorization"]),
+                  reference(["mcp", "servers", "overridden", "headers", "Authorization"]),
+                ],
+              ],
+            ]),
+          ),
+      }),
+    ),
+  )
+})
 
 testEffect(resourceMcpLayer(new ConfigMCP.Local({ type: "local", command: ["unused"], disabled: true }))).live(
   "manages live MCP servers entirely through scoped transforms",

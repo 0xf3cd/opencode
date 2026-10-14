@@ -42,6 +42,8 @@ export interface Interface {
   readonly changes: () => Stream.Stream<Watcher.Update>
   /** Updates supported global config fields while preserving unrelated JSONC content. */
   readonly update?: (patch: Patch) => Effect.Effect<void, FSUtil.Error>
+  /** Unreadable {file:} references per current document; each referencing value was removed from that document. */
+  readonly unresolved?: () => Effect.Effect<ReadonlyMap<Document, readonly ConfigVariable.Unresolved[]>>
 }
 
 export const Options = Schema.Struct({
@@ -137,13 +139,27 @@ export const layer = (options?: Options) =>
         })
       })
 
+      // Keyed by Document identity so a reload that keeps equal entries keeps their record too.
+      const unresolved = new WeakMap<Document, readonly ConfigVariable.Unresolved[]>()
+      const parseDocument = Effect.fnUntraced(function* (
+        substituted: ConfigVariable.Result,
+        source: string,
+        documentPath?: AbsolutePath,
+      ) {
+        const info = yield* parseInfo(substituted.text, source)
+        if (!info) return
+        const document = new Document(
+          documentPath ? { type: "document", path: documentPath, info } : { type: "document", info },
+        )
+        if (substituted.unresolved.length) unresolved.set(document, substituted.unresolved)
+        return document
+      })
+
       const loadFile = Effect.fnUntraced(function* (filepath: string) {
         const text = yield* fs.readFileStringSafe(filepath)
         if (text === undefined) return
         const substituted = yield* ConfigVariable.substitute({ type: "path", path: filepath, text })
-        const info = yield* parseInfo(substituted, filepath)
-        if (!info) return
-        return new Document({ type: "document", path: AbsolutePath.make(filepath), info })
+        return yield* parseDocument(substituted, filepath, AbsolutePath.make(filepath))
       })
 
       const loadWellknownEntry = Effect.fnUntraced(function* (entry: WellKnown.Entry) {
@@ -168,10 +184,7 @@ export const layer = (options?: Options) =>
             dir: entry.origin,
             text: JSON.stringify(config),
             env: variables,
-          }).pipe(
-            Effect.flatMap((text) => parseInfo(text, entry.origin)),
-            Effect.map((info) => (info ? new Document({ type: "document", info }) : undefined)),
-          ),
+          }).pipe(Effect.flatMap((substituted) => parseDocument(substituted, entry.origin))),
         ).pipe(Effect.map((documents) => documents.filter((document) => document !== undefined)))
       })
 
@@ -196,14 +209,14 @@ export const layer = (options?: Options) =>
           yield* Effect.logWarning("failed to convert managed preferences", { source: plist })
           return []
         }
-        const text = yield* ConfigVariable.substitute({
+        const substituted = yield* ConfigVariable.substitute({
           type: "virtual",
           source: plist,
           dir: path.dirname(plist),
           text: ConfigDiscovery.stripPreferenceMetadata(result.value.stdout.toString()),
         })
-        const info = yield* parseInfo(text, plist)
-        return info ? [new Document({ type: "document", path: plist, info })] : []
+        const document = yield* parseDocument(substituted, plist, plist)
+        return document ? [document] : []
       })
 
       const loadDirectory = Effect.fnUntraced(function* (directory: AbsolutePath) {
@@ -235,8 +248,8 @@ export const layer = (options?: Options) =>
                 dir: location.directory,
                 text: options.content,
               }).pipe(
-                Effect.flatMap((text) => parseInfo(text, "OPENCODE_CONFIG_CONTENT")),
-                Effect.map((info) => (info ? [new Document({ type: "document", info })] : [])),
+                Effect.flatMap((substituted) => parseDocument(substituted, "OPENCODE_CONFIG_CONTENT")),
+                Effect.map((document) => (document ? [document] : [])),
                 Effect.orDie,
               )
             : []
@@ -393,6 +406,14 @@ export const layer = (options?: Options) =>
           }),
         changes: () => Stream.fromPubSub(updates),
         update,
+        unresolved: Effect.fnUntraced(function* () {
+          return new Map(
+            configs.flatMap((entry) => {
+              const references = entry.type === "document" ? unresolved.get(entry) : undefined
+              return entry.type === "document" && references ? [[entry, references] as const] : []
+            }),
+          )
+        }),
       })
     }),
   )
@@ -401,7 +422,16 @@ export function configured(options?: Options) {
   return makeLocationNode({
     service: Service,
     layer: layer(options),
-    deps: [Watcher.node, Bus.node, FSUtil.node, Global.node, Location.node, Credential.node, WellKnown.node, AppProcess.node],
+    deps: [
+      Watcher.node,
+      Bus.node,
+      FSUtil.node,
+      Global.node,
+      Location.node,
+      Credential.node,
+      WellKnown.node,
+      AppProcess.node,
+    ],
   })
 }
 
