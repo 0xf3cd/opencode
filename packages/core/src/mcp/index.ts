@@ -14,7 +14,7 @@ import { Environment } from "../environment/index.js"
 import { Form } from "../form.js"
 import { Integration } from "../integration.js"
 import { KeyedMutex } from "../effect/keyed-mutex.js"
-import { CredentialRefresh } from "../credential/refresh.js"
+import { CredentialLock } from "../credential/lock.js"
 import { Location } from "../location.js"
 import { waitForAbort } from "@opencode/util/process"
 import { State } from "../state.js"
@@ -161,7 +161,7 @@ export const layer = (options?: Options) =>
       const forms = yield* Form.Service
       const integration = yield* Integration.Service
       const credentials = yield* Credential.Service
-      const refreshes = yield* CredentialRefresh.Service
+      const credentialLocks = yield* CredentialLock.Service
       const root = yield* Effect.scope
       const fork = yield* FiberSet.makeRuntime<never, void, never>()
 
@@ -226,7 +226,7 @@ export const layer = (options?: Options) =>
         if (entry.config.type !== "remote" || !entry.integrationID) return undefined
         const { McpOAuth } = yield* Effect.promise(() => import("./oauth.js"))
         return yield* McpOAuth.connectProvider({ config: entry.config, integrationID: entry.integrationID }).pipe(
-          Effect.provideService(CredentialRefresh.Service, refreshes),
+          Effect.provideService(CredentialLock.Service, credentialLocks),
           Effect.provideService(Credential.Service, credentials),
         )
       })
@@ -785,7 +785,7 @@ export function configured(options?: Options) {
       Form.node,
       Integration.node,
       Credential.node,
-      CredentialRefresh.node,
+      CredentialLock.node,
     ],
   })
 }

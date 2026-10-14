@@ -2,7 +2,7 @@ import { afterAll, describe, expect, test } from "bun:test"
 import { auth, refreshAuthorization, StreamableHTTPClientTransport } from "@modelcontextprotocol/client"
 import { ConfigMCP } from "@opencode/schema/config/mcp"
 import { Credential } from "@opencode/core/credential"
-import { CredentialRefresh } from "@opencode/core/credential/refresh"
+import { CredentialLock } from "@opencode/core/credential/lock"
 import { Integration } from "@opencode/core/integration"
 import { McpClient } from "@opencode/core/mcp/client"
 import { McpOAuth } from "@opencode/core/mcp/oauth"
@@ -14,8 +14,8 @@ afterAll(() => authServer.stop(true))
 
 const integrationID = Integration.ID.make("mcp_test")
 const methodID = Integration.MethodID.make("oauth")
-const refreshRuntime = ManagedRuntime.make(CredentialRefresh.layer)
-afterAll(() => refreshRuntime.dispose())
+const lockRuntime = ManagedRuntime.make(CredentialLock.layer)
+afterAll(() => lockRuntime.dispose())
 
 const remote = (url: string) => new ConfigMCP.Remote({ type: "remote", url, oauth: { client_id: "client" } })
 
@@ -56,7 +56,7 @@ const memoryCredentials = (initial: Credential.Info[]) => {
 }
 
 const connectProvider = (config: typeof ConfigMCP.Remote.Type, store: ReturnType<typeof memoryCredentials>) =>
-  refreshRuntime.runPromise(
+  lockRuntime.runPromise(
     McpOAuth.connectProvider({ config, integrationID }).pipe(Effect.provideService(Credential.Service, store.service)),
   )
 

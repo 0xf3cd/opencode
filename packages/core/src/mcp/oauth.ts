@@ -20,7 +20,7 @@ import { Cause, Deferred, Effect } from "effect"
 import type { ServerResponse } from "node:http"
 import { ConfigMCP } from "@opencode/schema/config/mcp"
 import { Credential } from "../credential.js"
-import { CredentialRefresh } from "../credential/refresh.js"
+import { CredentialLock } from "../credential/lock.js"
 import { OauthCallbackPage } from "../oauth/page.js"
 import type { Integration } from "../integration.js"
 import { ErrorSummary } from "../util/error-summary.js"
@@ -275,7 +275,7 @@ export const connectProvider = Effect.fnUntraced(function* (input: {
   readonly integrationID: Integration.ID
 }) {
   const credentials = yield* Credential.Service
-  const refreshes = yield* CredentialRefresh.Service
+  const locks = yield* CredentialLock.Service
   const run = Effect.runPromiseWith(yield* Effect.context())
   const found = (yield* credentials.list(input.integrationID)).at(-1)
   if (!found || found.value.type !== "oauth") return provider({ config: input.config, store: memoryStore() })
@@ -331,7 +331,7 @@ export const connectProvider = Effect.fnUntraced(function* (input: {
     ...oauthProvider,
     onUnauthorized: (context) =>
       run(
-        refreshes.run(
+        locks.withLock(
           id,
           Effect.gen(function* () {
             const current = yield* Effect.promise(read)

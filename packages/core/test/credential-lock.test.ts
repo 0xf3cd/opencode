@@ -2,10 +2,10 @@ import { expect } from "bun:test"
 import { Deferred, Effect, Fiber } from "effect"
 import { Credential } from "@opencode/schema/credential"
 import { Integration } from "@opencode/schema/integration"
-import { CredentialRefresh } from "@opencode/core/credential/refresh"
+import { CredentialLock } from "@opencode/core/credential/lock"
 import { testEffect } from "./lib/effect"
 
-const it = testEffect(CredentialRefresh.layer)
+const it = testEffect(CredentialLock.layer)
 const id = Credential.ID.make("cred_refresh")
 const value = Credential.OAuth.make({
   type: "oauth",
@@ -17,7 +17,7 @@ const value = Credential.OAuth.make({
 
 it.effect("shares failures but allows a later refresh", () =>
   Effect.gen(function* () {
-    const refreshes = yield* CredentialRefresh.Service
+    const locks = yield* CredentialLock.Service
     const entered = yield* Deferred.make<void>()
     const release = yield* Deferred.make<void>()
     const error = new Error("token endpoint unavailable")
@@ -28,28 +28,28 @@ it.effect("shares failures but allows a later refresh", () =>
       yield* Deferred.await(release)
       return yield* Effect.fail(error)
     })
-    const first = yield* refreshes.run(id, operation).pipe(Effect.flip, Effect.forkScoped)
+    const first = yield* locks.withLock(id, operation).pipe(Effect.flip, Effect.forkScoped)
     yield* Deferred.await(entered)
-    const second = yield* refreshes.run(id, operation).pipe(Effect.flip, Effect.forkScoped)
+    const second = yield* locks.withLock(id, operation).pipe(Effect.flip, Effect.forkScoped)
     yield* Effect.yieldNow
     yield* Deferred.succeed(release, undefined)
     expect(yield* Fiber.join(first)).toBe(error)
     expect(yield* Fiber.join(second)).toBe(error)
     expect(calls).toBe(1)
-    expect(yield* refreshes.run(id, Effect.succeed(value))).toEqual(value)
+    expect(yield* locks.withLock(id, Effect.succeed(value))).toEqual(value)
   }),
 )
 
 it.effect("refreshes different credentials independently", () =>
   Effect.gen(function* () {
-    const refreshes = yield* CredentialRefresh.Service
+    const locks = yield* CredentialLock.Service
     const entered = yield* Deferred.make<void>()
     const release = yield* Deferred.make<void>()
-    const first = yield* refreshes
-      .run(id, Deferred.succeed(entered, undefined).pipe(Effect.andThen(Deferred.await(release)), Effect.as(value)))
+    const first = yield* locks
+      .withLock(id, Deferred.succeed(entered, undefined).pipe(Effect.andThen(Deferred.await(release)), Effect.as(value)))
       .pipe(Effect.forkScoped)
     yield* Deferred.await(entered)
-    expect(yield* refreshes.run(Credential.ID.make("cred_other"), Effect.succeed(value))).toEqual(value)
+    expect(yield* locks.withLock(Credential.ID.make("cred_other"), Effect.succeed(value))).toEqual(value)
     yield* Deferred.succeed(release, undefined)
     yield* Fiber.join(first)
   }),

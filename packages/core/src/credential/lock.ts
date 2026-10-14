@@ -1,17 +1,18 @@
-export * as CredentialRefresh from "./refresh.js"
+export * as CredentialLock from "./lock.js"
 
 import { Context, Effect, Fiber, Layer } from "effect"
 import { Credential } from "@opencode/schema/credential"
 import { makeGlobalNode } from "@opencode/util/effect/app-node"
 
 export interface Interface {
-  readonly run: (
+  /** Concurrent callers for the same credential share the running operation's result, including failures. */
+  readonly withLock: (
     id: Credential.ID,
     operation: Effect.Effect<Credential.OAuth | undefined, unknown>,
   ) => Effect.Effect<Credential.OAuth | undefined, unknown>
 }
 
-export class Service extends Context.Service<Service, Interface>()("@opencode/CredentialRefresh") {}
+export class Service extends Context.Service<Service, Interface>()("@opencode/CredentialLock") {}
 
 export const layer = Layer.effect(
   Service,
@@ -20,12 +21,12 @@ export const layer = Layer.effect(
     const pending = new Map<Credential.ID, Fiber.Fiber<Credential.OAuth | undefined, unknown>>()
 
     return Service.of({
-      run: Effect.fn("CredentialRefresh.run")((id, operation) =>
+      withLock: Effect.fn("CredentialLock.withLock")((id, operation) =>
         Effect.uninterruptibleMask((restore) =>
           Effect.gen(function* () {
             const current = pending.get(id)
             if (current) return yield* restore(Fiber.join(current))
-            // The global scope owns the refresh, not the first Session or Location waiting for it.
+            // The global scope owns the operation, not the first Session or Location waiting for it.
             const fiber = yield* operation.pipe(
               Effect.ensuring(Effect.sync(() => pending.delete(id))),
               Effect.forkIn(scope),
