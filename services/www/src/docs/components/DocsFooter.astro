@@ -1,0 +1,67 @@
+---
+import { useI18n } from "../i18n"
+import { docsLocaleKeys, docsLocales, type DocsLocale } from "../lib/language"
+import { docsHref } from "../lib/navigation"
+
+interface Props {
+  locale: DocsLocale
+  currentSlug: string
+}
+
+const locale = Astro.props.locale
+const i18n = useI18n(locale)
+---
+
+<footer class="docs-footer" data-pagefind-ignore>
+  <details class="language-picker" data-language-picker>
+    <summary aria-label={`${i18n.t("nav.language")}: ${docsLocales[locale].label}`}>
+      <span>{docsLocales[locale].label}</span>
+      <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+        <path d="m6 15 6-6 6 6"></path>
+      </svg>
+    </summary>
+    <ul>
+      {
+        docsLocaleKeys.map((key) => (
+          <li>
+            <a
+              href={docsHref(Astro.props.currentSlug, key)}
+              data-locale={key}
+              hreflang={docsLocales[key].tag}
+              lang={docsLocales[key].tag}
+              aria-current={key === locale ? "true" : undefined}
+            >
+              {docsLocales[key].label}
+            </a>
+          </li>
+        ))
+      }
+    </ul>
+  </details>
+</footer>
+
+<script>
+  import { isDocsLocale, localeCookie } from "../lib/language"
+
+  const close = (except?: Element | null) =>
+    document.querySelectorAll<HTMLDetailsElement>("[data-language-picker][open]").forEach((picker) => {
+      if (picker !== except) picker.open = false
+    })
+
+  // Capture runs before the client router fetches the page, so the server sees the chosen locale.
+  document.addEventListener(
+    "click",
+    (event) => {
+      if (!(event.target instanceof Element)) return
+      const locale = event.target.closest<HTMLElement>("[data-language-picker] [data-locale]")?.dataset.locale
+      if (locale && isDocsLocale(locale)) document.cookie = localeCookie(locale)
+    },
+    true,
+  )
+  document.addEventListener("click", (event) => {
+    close(event.target instanceof Element ? event.target.closest("[data-language-picker]") : null)
+  })
+  document.addEventListener("keydown", (event) => {
+    if (event.key === "Escape") close()
+  })
+</script>

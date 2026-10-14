@@ -1,10 +1,15 @@
 ---
+import { useI18n } from "../i18n"
+import { defaultLocale, v1DocsHref, type DocsLocale } from "../lib/language"
 import { docsHref, docsSections, getDocsSection } from "../lib/navigation"
 
 interface Props {
+  locale: DocsLocale
   currentSlug: string
 }
 
+const locale = Astro.props.locale
+const i18n = useI18n(locale)
 const currentSlug = Astro.props.currentSlug
 const currentSection = getDocsSection(currentSlug)
 const searchEnabled = import.meta.env.PROD
@@ -12,28 +17,35 @@ const searchEnabled = import.meta.env.PROD
 
 <header class="site-header">
   <div class="header-inner">
-    <a class="brand" href={import.meta.env.BASE_URL} aria-label="OpenCode home">
+    <a
+      class="brand"
+      href={locale === defaultLocale ? import.meta.env.BASE_URL : docsHref("index", locale)}
+      aria-label={i18n.t("nav.home")}
+    >
       <img src={`${import.meta.env.BASE_URL}assets/logo-dark.svg`} alt="OpenCode" />
     </a>
-    <nav aria-label="Documentation sections">
+    <nav aria-label={i18n.t("nav.sections")}>
       {
         docsSections.map((section) => (
-          <a href={docsHref(section.landingSlug)} aria-current={currentSection.key === section.key ? "page" : undefined}>
-            {section.title}
+          <a
+            href={docsHref(section.landingSlug, locale)}
+            aria-current={currentSection.key === section.key ? "page" : undefined}
+          >
+            {i18n.nav(section.title)}
           </a>
         ))
       }
-      <a href="/docs">V1</a>
+      <a href={v1DocsHref(locale)}>V1</a>
     </nav>
     <div class="header-spacer"></div>
     {
       searchEnabled && (
-        <button class="search-trigger" type="button" data-search-open aria-label="Search documentation">
-          <span>Search</span><kbd>⌘K</kbd>
+        <button class="search-trigger" type="button" data-search-open aria-label={i18n.t("search.label")}>
+          <span>{i18n.t("search.button")}</span><kbd>⌘K</kbd>
         </button>
       )
     }
-    <a class="github-link" href="https://github.com/anomalyco/opencode" aria-label="OpenCode on GitHub">GitHub</a>
+    <a class="github-link" href="https://github.com/anomalyco/opencode" aria-label={i18n.t("nav.github")}>GitHub</a>
   </div>
 </header>
 
@@ -44,15 +56,17 @@ const searchEnabled = import.meta.env.PROD
       data-search-dialog
       data-pagefind-path={`${import.meta.env.BASE_URL}docs/pagefind/pagefind.js`}
       data-base-url={`${import.meta.env.BASE_URL}docs/`}
-      aria-label="Search documentation"
+      data-empty={i18n.t("search.empty")}
+      data-no-results={i18n.t("search.noResults")}
+      aria-label={i18n.t("search.label")}
     >
       <form method="dialog" class="search-bar">
         <span aria-hidden="true">&gt;</span>
-        <input data-search-input type="search" placeholder="Search docs" autocomplete="off" />
-        <button type="submit" aria-label="Close search">Esc</button>
+        <input data-search-input type="search" placeholder={i18n.t("search.placeholder")} autocomplete="off" />
+        <button type="submit" aria-label={i18n.t("search.close")}>Esc</button>
       </form>
       <div class="search-results" data-search-results>
-        <p>Start typing to search the documentation.</p>
+        <p>{i18n.t("search.empty")}</p>
       </div>
     </dialog>
   )
@@ -87,7 +101,9 @@ const searchEnabled = import.meta.env.PROD
       input.dataset.searchReady = "true"
       const query = input.value.trim()
       if (!query) {
-        results.innerHTML = "<p>Start typing to search the documentation.</p>"
+        const empty = document.createElement("p")
+        empty.textContent = dialog?.dataset.empty ?? ""
+        results.replaceChildren(empty)
         return
       }
 
@@ -111,10 +127,15 @@ const searchEnabled = import.meta.env.PROD
           return link
         }),
       )
-      if (!pages.length) results.innerHTML = "<p>No results found.</p>"
+      if (!pages.length) {
+        const empty = document.createElement("p")
+        empty.textContent = dialog.dataset.noResults ?? ""
+        results.replaceChildren(empty)
+      }
     })
   }
 
   setupSearch()
   document.addEventListener("astro:page-load", setupSearch)
 </script>
+

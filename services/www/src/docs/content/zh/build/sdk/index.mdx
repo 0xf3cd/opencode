@@ -1,0 +1,84 @@
+---
+title: "概览"
+---
+
+`@opencode/sdk` 可以将 OpenCode 直接托管在你的应用内部。与[网络客户端](/build/client)不同，它会组装出 OpenCode 服务器，并在内存中通过其 HTTP 路由器转发 API 调用。它不会开启 HTTP 监听，客户端与服务器之间也没有额外的网络跳转。
+
+如果要在 Cloudflare Durable Objects 中使用，请参阅 [Cloudflare 指南](/build/sdk/cloudflare)。
+
+安装 SDK：
+
+```sh
+bun add @opencode/sdk
+```
+
+## 创建宿主
+
+`OpenCode.create()` 返回一个需要显式管理所有权的宿主。使用 `await using` 来释放它的路由器、Location 服务、fiber 和作用域内的插件注册：
+
+```ts
+import { OpenCode } from "@opencode/sdk"
+
+await using opencode = await OpenCode.create()
+const session = await opencode.sessions.create({
+  location: { directory: "/workspace" },
+})
+
+await opencode.sessions.prompt({
+  sessionID: session.id,
+  text: "Review the current changes",
+})
+```
+
+如果运行环境不支持显式资源管理，请显式调用 `await opencode.close()`。
+
+嵌入式宿主与 `@opencode/client` 使用相同的 Promise 返回值、声明的错误、请求选项和 `AsyncIterable` 流。它暴露了完整的生成客户端，并为会话和事件分组额外提供了便捷别名 `sessions` 和 `events`。
+
+## Worktree
+
+worktree 操作需要提供 `projectID`。创建和刷新操作会从项目保存的规范检出目录（canonical checkout）加载配置和插件。列出操作只读取已保存的清单；移除操作会激活规范检出目录中的插件，并使用记录的策略执行，如果该策略不可用则会失败。
+
+```ts
+const projectID = session.projectID
+const worktree = await opencode.worktree.create({ projectID, name: "task" })
+await opencode.worktree.refresh({ projectID })
+await opencode.worktree.remove({ projectID, directory: worktree.directory, force: false })
+```
+
+刷新操作会使用所有可用策略，在已知的检出根目录中发现 worktree。你可以通过[插件的 worktree 转换](/build/plugins#worktrees)注册自定义策略。
+
+## 事件流
+
+```ts
+for await (const event of opencode.events.subscribe()) {
+  console.log(event.type)
+}
+```
+
+可以通过生成的请求选项传入 `AbortSignal`，或者直接退出迭代来取消响应体。
+
+## 自定义
+
+通过注册插件来自定义你的 OpenCode 实例。将插件传给 `OpenCode.create()`，即可在嵌入式宿主启动时自定义代理、模型、工具及其他行为：
+
+```ts
+import { Plugin } from "@opencode/plugin"
+import { OpenCode } from "@opencode/sdk"
+
+const plugin = Plugin.define({
+  id: "customize-agent",
+  async setup(ctx) {
+    await ctx.agent.transform((agents) => {
+      agents.update("build", (agent) => {
+        agent.description = "Builds features and fixes bugs for our team"
+      })
+    })
+  },
+})
+
+await using opencode = await OpenCode.create({ plugins: [plugin] })
+```
+
+启动后，调用 `await opencode.plugin(plugin)` 可以再注册其他插件。
+
+插件钩子、转换、工具以及完整的插件上下文，请参阅[完整的插件文档](/build/plugins)。

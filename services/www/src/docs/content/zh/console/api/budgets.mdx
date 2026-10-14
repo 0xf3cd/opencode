@@ -1,0 +1,92 @@
+---
+title: "预算 API"
+description: "读取工作区每位成员的实际每月预算，并管理每位成员的自定义预算。"
+---
+
+在集成中读取工作区每位成员的实际每月预算，并管理每位成员的自定义预算。
+
+## 快速开始
+
+在 [Console](https://opencode.ai/console) 中创建一个具有 **All** 权限的[服务账号](/console/api#service-accounts) API 密钥。仅限推理的密钥无法访问预算数据，也无法修改上限。
+
+```bash
+export CONSOLE_URL="https://opencode.ai/console"
+export SERVICE_API_KEY="oc_sk_..."
+```
+
+列出成员预算：
+
+```bash
+curl --fail-with-body \
+  "${CONSOLE_URL}/api/v1/budgets/members" \
+  --header "Authorization: Bearer ${SERVICE_API_KEY}" \
+  --header "Accept: application/json"
+```
+
+## 列出成员预算
+
+```text
+GET /api/v1/budgets/members
+```
+
+响应包含所有当前成员，按电子邮件排序。`source` 为 `custom` 的上限是成员级的覆盖设置；`source` 为 `default` 的上限继承自工作区默认值。如果上限和 `source` 均为 null，表示该成员不受限制。
+
+```json
+[
+  {
+    "user_id": "user_...",
+    "email": "alice@example.com",
+    "limit_micro_cents": "7525000000",
+    "spent_micro_cents": "1250000000",
+    "exceeded": false,
+    "resets_at": "2026-10-01T00:00:00.000Z",
+    "source": "custom",
+    "updated_at": "2026-09-03T12:00:00.000Z"
+  }
+]
+```
+
+响应中的金额字段是以微分（microcent）为单位的十进制字符串，以免集成损失精度。1 美元等于 100,000,000 微分。支出和重置时间戳均针对当前 UTC 自然月。如果成员没有自定义覆盖设置，`updated_at` 为 null。
+
+## 设置自定义预算
+
+```text
+PUT /api/v1/budgets/members/:user_id
+```
+
+为某个成员设置 $75.25 的每月预算：
+
+```bash
+curl --fail-with-body --request PUT \
+  "${CONSOLE_URL}/api/v1/budgets/members/user_..." \
+  --header "Authorization: Bearer ${SERVICE_API_KEY}" \
+  --header "Content-Type: application/json" \
+  --data '{"budget_dollars":75.25}'
+```
+
+`budget_dollars` 接受非负的美元金额，最多两位小数。该 PUT 请求是幂等的，返回 HTTP 204。请使用列表操作返回的成员 ID。
+
+## 恢复为工作区默认值
+
+```text
+DELETE /api/v1/budgets/members/:user_id
+```
+
+移除自定义覆盖设置：
+
+```bash
+curl --fail-with-body --request DELETE \
+  "${CONSOLE_URL}/api/v1/budgets/members/user_..." \
+  --header "Authorization: Bearer ${SERVICE_API_KEY}"
+```
+
+删除覆盖设置不会删除成员。之后该成员会继承工作区的默认预算；如果工作区没有默认预算，则不受限制。重复发送该请求是安全的，同样返回 HTTP 204。
+
+## 错误
+
+| 状态码 | 含义                                                     |
+| ------ | -------------------------------------------------------- |
+| `400`  | 成员 ID 或预算金额无效。                                 |
+| `401`  | 服务 API 密钥缺失、无效、已过期或已撤销。                |
+| `403`  | 该 API 密钥没有管理预算的权限。                          |
+| `404`  | 该成员不在 API 密钥所绑定的工作区中。                    |

@@ -2,7 +2,10 @@ import cloudflare from "@astrojs/cloudflare"
 import mdx from "@astrojs/mdx"
 import { unified } from "@astrojs/markdown-remark"
 import { defineConfig } from "astro/config"
+import { fileURLToPath } from "node:url"
+import { defaultLocale, docsLocaleKeys } from "./src/docs/lib/language"
 import remarkDocsLinks from "./src/docs/remark-links"
+import remarkTranslatedHeadings from "./src/docs/remark-translated-headings"
 
 const base = "/v2/"
 
@@ -13,7 +16,18 @@ export default defineConfig({
   adapter: cloudflare({ imageService: "passthrough" }),
   integrations: [mdx()],
   markdown: {
-    processor: unified({ remarkPlugins: [[remarkDocsLinks, { base }]] }),
+    processor: unified({
+      remarkPlugins: [
+        [remarkDocsLinks, { base }],
+        [
+          remarkTranslatedHeadings,
+          {
+            content: fileURLToPath(new URL("./src/docs/content", import.meta.url)),
+            locales: docsLocaleKeys.filter((locale) => locale !== defaultLocale),
+          },
+        ],
+      ],
+    }),
     shikiConfig: {
       themes: {
         light: "github-light",

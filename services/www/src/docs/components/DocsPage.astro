@@ -5,11 +5,16 @@ import Card from "./Card.astro"
 import CardGroup from "./CardGroup.astro"
 import CodeBlock from "./CodeBlock.astro"
 import CodeTabs from "./CodeTabs.astro"
+import DocsLink from "./DocsLink.astro"
 import PlanTabs from "./PlanTabs.astro"
 import DocsLayout from "../layouts/DocsLayout.astro"
+import type { DocsLocale } from "../lib/language"
 
 interface Props {
   entry: CollectionEntry<"docs">
+  locale: DocsLocale
+  slug: string
+  fallback: boolean
 }
 
 const entry = Astro.props.entry
@@ -19,9 +24,11 @@ const rendered = await render(entry)
 <DocsLayout
   title={entry.data.title}
   description={entry.data.description}
-  currentSlug={entry.id}
+  locale={Astro.props.locale}
+  currentSlug={Astro.props.slug}
+  fallback={Astro.props.fallback}
   headings={rendered.headings}
   showTableOfContents={entry.data.tableOfContents !== false}
 >
-  <rendered.Content components={{ Callout, Card, CardGroup, CodeBlock, CodeTabs, PlanTabs }} />
+  <rendered.Content components={{ a: DocsLink, Callout, Card, CardGroup, CodeBlock, CodeTabs, PlanTabs }} />
 </DocsLayout>

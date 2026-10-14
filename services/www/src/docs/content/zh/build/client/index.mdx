@@ -1,0 +1,137 @@
+---
+title: "JavaScript"
+---
+
+`@opencode/client` 是 OpenCode HTTP API 的 TypeScript 客户端。当你的应用需要通过网络连接 OpenCode 服务器时，就可以使用它。它的原生类型和方法与 [API 参考](/api)基于同一份契约生成，插件 RPC 的类型则来自导入的 RPC 定义。
+
+## 安装
+
+```sh
+bun add @opencode/client
+```
+
+## 创建客户端
+
+使用服务器 URL 创建客户端，然后调用按 API 资源分组的方法：
+
+```ts
+import { OpenCode } from "@opencode/client"
+
+const client = OpenCode.make({
+  baseUrl: "http://localhost:4096",
+})
+
+const session = await client.session.create({
+  location: { directory: "/workspace" },
+})
+
+await client.session.prompt({
+  sessionID: session.id,
+  text: "Review the current changes",
+})
+```
+
+## 请求头与请求选项
+
+通过 `headers` 向 `OpenCode.make` 传入默认的身份验证请求头或应用请求头。你也可以提供自定义的 `fetch` 实现。每个操作的最后一个参数是请求选项，可用于传入 `AbortSignal` 或单次请求的请求头。事件订阅是个例外：它只接受订阅者本地的取消信号，并使用基础客户端的请求头。
+
+```ts
+const client = OpenCode.make({
+  baseUrl: "https://opencode.example.com",
+  headers: {
+    authorization: `Bearer ${process.env.OPENCODE_TOKEN}`,
+  },
+})
+
+await client.session.list(undefined, {
+  signal: AbortSignal.timeout(10_000),
+})
+```
+
+## 事件流
+
+流式端点返回异步可迭代对象：
+
+```ts
+for await (const event of client.event.subscribe()) {
+  console.log(event.type)
+}
+```
+
+原生事件订阅者和 RPC 事件订阅者在每个客户端中共享同一个惰性连接。创建客户端、句柄或可迭代对象时不会建立事件连接，开始消费时才会建立。中断迭代或中止某个订阅者，只会结束对应的迭代器。最后一个订阅者离开时，连接才会关闭。共享的事件源会等待所有活跃订阅者接收完每个事件，因此消费者在执行耗时操作前应先自行缓冲。
+
+订阅只推送实时事件，不会重放，也不会自动重连。事件源失败时，当前订阅会全部结束，恢复后需要重新订阅。较晚加入的原生订阅者会收到当前的 `server.connected` 标记，但不会收到过去的业务事件。
+
+## 插件 RPC
+
+导入插件共享的契约，并将其传给 `client.rpc`：
+
+```ts
+import { OpenCode } from "@opencode/client"
+import { Acme } from "opencode-acme-plugin/rpc"
+
+const acme = client.rpc(Acme)
+const result = await acme.search(
+  { query: "hello" },
+  { location: { directory: "/workspace" }, signal: AbortSignal.timeout(10_000) },
+)
+
+const unsubscribe = acme.events.on("updated", (event) => {
+  console.log(event.type, event.location.directory, event.data.text)
+})
+```
+
+方法的第二个可选参数用于传入 `location`、`signal` 和 `headers`，与插件定义的输入相互独立。省略 location 时，遵循原生请求的默认规则：先使用基础客户端的 location 请求头，再回退到服务器的工作目录。创建子客户端时不会选定任何 location。
+
+方法会根据定义推断参数和返回值类型。schema 解析发生在契约边界上：调用方发送可接受的输入形式，处理函数接收解析后的值。Promise 客户端接受 Standard Schema 或普通 JSON Schema 定义，且不会在本地运行 schema 解析器：服务器返回的输出已经过解析和转换。Effect Schema 定义需要使用 Effect 客户端。
+
+与其他 Promise 客户端端点一样，方法声明的错误会使 Promise 被拒绝（reject），且捕获到的错误不带类型信息。带类型的子客户端会去掉通用的 HTTP RPC 错误包装。保留的 `rpc.*` 框架错误仍以普通 RPC 错误的形式出现，而与之无关的身份验证、传输和协议错误则保持其在客户端中的常规表示形式。
+
+RPC 订阅使用本地事件名称，并接收该 RPC 在所有位置上的事件。可以检查必有的 `event.location` 字段来过滤事件。`events.subscribe` 与原生的异步可迭代 API 一致：
+
+```ts
+for await (const event of acme.events.subscribe("updated")) {
+  console.log(event.data.text)
+}
+```
+
+`events.on` 是基于同一事件源的便捷封装，返回取消订阅函数；异步回调会按顺序依次等待执行。回调或事件源出错时会记录日志，并结束该监听器。原生订阅和带类型的订阅收到的都是相同的常规 `rpc.<rpcID>.<event>` 信封，事件数据直接是对象。实时订阅不会重放错过的事件。
+
+服务器端插件必须已配置并实现该 RPC；仅导入定义并不会注册它。定义和注册 API 请参阅[插件 RPC](/build/plugins/rpc)。任何 HTTP 客户端也都可以调用通用的 `POST /api/rpc/{rpcID}/{method}` 路由，发送 `{ "input": ... }` 并收到 `{ "output": ... }`。省略 input 或 output 字段表示没有值。
+
+## 本地后台服务
+
+客户端的主入口兼容浏览器，不包含本地进程管理功能。在 Node 应用中，可以从 `@opencode/client/service` 导入原生的 Promise 服务 API。
+
+- `Service.discover()` 返回一个健康的已注册端点，不会启动进程。
+- `Service.ensure()` 返回一个兼容的服务，必要时会启动一个新服务。
+- `Service.stop()` 停止当前注册的那个服务实例。
+- `Service.headers(endpoint)` 为客户端生成身份验证请求头。
+
+```ts
+import { OpenCode } from "@opencode/client"
+import { Service } from "@opencode/client/service"
+
+const endpoint = await Service.ensure()
+const client = OpenCode.make({
+  baseUrl: endpoint.url,
+  headers: Service.headers(endpoint),
+})
+
+const info = await client.server.info()
+```
+
+`Service.ensure()` 可以接收可选的注册文件、版本、服务命令和 `onStart` 回调。`version` 既可以是精确的版本值，也可以是一个判断兼容性的谓词函数：
+
+```ts
+const endpoint = await Service.ensure({
+  file: "/var/run/opencode/service.json",
+  version: (version) => version.startsWith("2."),
+  command: ["opencode", "serve", "--service"],
+  onStart(reason, previousVersion) {
+    console.log(reason, previousVersion)
+  },
+})
+```
+
+省略这些选项时，将使用标准的注册路径和 `opencode serve --service` 命令。

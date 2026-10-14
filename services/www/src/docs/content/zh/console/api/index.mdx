@@ -1,0 +1,156 @@
+---
+title: "API 概览"
+description: "使用服务账号密钥或用户令牌对 OpenCode Console API 进行身份验证。"
+---
+
+集成可以通过 Console API 读取工作区配置并管理预算。下文中的路径均相对于 Console 的基础 URL。
+
+```bash
+export CONSOLE_URL="https://opencode.ai/console"
+export SERVICE_API_KEY="oc_sk_..."
+
+curl --fail-with-body "${CONSOLE_URL}/api/v2/config" \
+  --header "Authorization: Bearer ${SERVICE_API_KEY}"
+```
+
+| API                                 | 端点                                       |
+| ----------------------------------- | ------------------------------------------ |
+| [推理](/console/api/inference)      | `https://opencode.ai/inference/...`        |
+| [提供商](/console/api/providers)    | `https://opencode.ai/inference/custom/...` |
+| [预算](/console/api/budgets)        | `/api/v1/budgets/members`                  |
+| [配置](#workspace-config)           | `GET /api/v2/config`                       |
+
+## 服务账号
+
+集成通过服务账号进行身份验证。服务账号是工作区中的非人类成员，拥有自己的 API 密钥、用量和[预算](/console/budgets#service-account-budgets)。所有者和管理员可以在 **Keys** 中管理服务账号。
+
+1. 打开 **Keys**，点击 **Add Service Account**，然后为它命名，例如 `CI Pipeline`。
+2. 打开该服务账号，点击 **Add API Key**。
+3. 填写 **Key name**，选择 **Permissions** 和可选的 **Expiry date**，然后点击 **Create key**。
+4. 复制密钥。密钥只会显示一次。
+
+```text
+oc_sk_1a2b3c4d5e6f_...
+```
+
+将密钥作为 Bearer 令牌发送。密钥绑定到一个工作区，因此无需发送工作区请求头。
+
+```text
+Authorization: Bearer oc_sk_...
+```
+
+### 权限
+
+| 权限           | 允许的操作                                                                                                  |
+| -------------- | ----------------------------------------------------------------------------------------------------------- |
+| Inference only | [推理](/console/api/inference)和[提供商](/console/api/providers)请求，以及 `GET /api/v2/config`。          |
+| All            | 上述所有操作，以及以管理员权限访问 Console API（管理模型除外）。                                           |
+
+有些操作始终需要有人登录 Console 才能执行，即使使用 **All** 密钥也不例外：邀请成员、修改角色、移除成员，以及创建或撤销密钥。
+
+### 撤销密钥
+
+打开服务账号，在 **API Keys** 中撤销密钥。移除服务账号会撤销其所有密钥。使用已撤销或已过期密钥的自动化任务会立即收到 HTTP `401`。
+
+## 用户令牌
+
+用户令牌以已登录用户的身份及其工作区角色执行操作。发送令牌时，需要同时通过 `x-org-id` 请求头指定工作区。
+
+```bash
+curl --fail-with-body "${CONSOLE_URL}/api/v2/config" \
+  --header "Authorization: Bearer ${USER_TOKEN}" \
+  --header "x-org-id: org_..."
+```
+
+通过[设备流程](#device-flow)获取的令牌会绑定到登录时选择的工作区，因此不需要该请求头。如果发送了不同的 `x-org-id`，会返回 `403`。
+
+## 设备流程
+
+OpenCode 使用 OAuth 设备授权许可（RFC 8628）登录。其他 CLI 也可以使用相同的流程。
+
+1. 请求设备代码。发送 `supports_org_scope=true` 可以将令牌绑定到某个工作区。
+
+   ```bash
+   curl --fail-with-body "${CONSOLE_URL}/auth/device/code" \
+     --data "client_id=my-cli" \
+     --data "supports_org_scope=true"
+   ```
+
+   响应中包含 `device_code`、`user_code`、`verification_uri_complete`、`expires_in`（600 秒）和 `interval`（5 秒）。
+
+2. 在浏览器中打开 `verification_uri_complete`。它是一个相对于 `https://opencode.ai` 的路径，例如 `/console/device?user_code=...`。用户登录、选择工作区并批准授权。
+
+3. 每隔 `interval` 秒，使用相同的 `client_id` 轮询令牌。
+
+   ```bash
+   curl --fail-with-body "${CONSOLE_URL}/auth/device/token" \
+     --data "grant_type=urn:ietf:params:oauth:grant-type:device_code" \
+     --data "device_code=..." \
+     --data "client_id=my-cli"
+   ```
+
+   在用户批准之前，响应为 `400`，并带有 `authorization_pending`。成功后会返回 `access_token`、`refresh_token`、`expires_in` 和 `org_id`。
+
+4. 在访问令牌过期前刷新令牌。工作区绑定会保留。
+
+   ```bash
+   curl --fail-with-body "${CONSOLE_URL}/auth/device/token" \
+     --data "grant_type=refresh_token" \
+     --data "refresh_token=..." \
+     --data "client_id=my-cli"
+   ```
+
+每个刷新令牌只能使用一次。重复使用旧的刷新令牌会撤销整个会话。
+
+## 工作区配置
+
+`GET /api/v2/config` 以 OpenCode V2 [配置](/config)格式返回工作区可用的提供商和模型。OpenCode 会在 `/connect` 之后加载它。
+
+```bash
+curl --fail-with-body "${CONSOLE_URL}/api/v2/config" \
+  --header "Authorization: Bearer ${SERVICE_API_KEY}"
+```
+
+```json
+{
+  "providers": {
+    "opencode": {
+      "name": "OpenCode",
+      "env": ["OPENCODE_CONSOLE_TOKEN"],
+      "package": "aisdk:@ai-sdk/openai-compatible",
+      "settings": {
+        "baseURL": "https://opencode.ai/inference/openai/v1",
+        "apiKey": "{env:OPENCODE_CONSOLE_TOKEN}"
+      },
+      "headers": { "x-opencode-org-id": "org_..." },
+      "models": {
+        "kimi-k2.6": { "name": "Kimi K2.6" }
+      }
+    }
+  }
+}
+```
+
+| 字段                    | 说明                                                                   |
+| ----------------------- | ---------------------------------------------------------------------- |
+| `providers`             | Console、Go 和已接入的提供商，每个都包含其网关设置和模型。             |
+| `websearch`             | 托管[网页搜索](/console/websearch)，启用后对成员提供。                 |
+| `mcp`                   | Console MCP 服务器，对成员提供。                                       |
+| `experimental.policies` | 工作区[策略](/policies#console)语句。                                  |
+
+所有密钥权限级别和成员角色都可以读取该配置。
+
+## 错误
+
+错误以 JSON 格式返回，其中 `_tag` 字段表示错误名称。
+
+```json
+{ "_tag": "Forbidden" }
+```
+
+| 状态码 | 含义                                                                             |
+| ------ | -------------------------------------------------------------------------------- |
+| `400`  | `OrgRequired`：发送用户令牌时未提供 `x-org-id`。                                 |
+| `401`  | 凭据缺失、无效、已过期或已撤销。                                                 |
+| `403`  | 工作区不匹配、缺少权限，或者使用 **Inference only** 密钥访问了 Console 端点。    |
+| `404`  | 工作区不存在或已被删除。                                                         |

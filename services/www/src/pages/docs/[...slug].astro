@@ -1,12 +1,13 @@
 ---
-import { getEntry } from "astro:content"
 import DocsPage from "../../docs/components/DocsPage.astro"
+import { parseDocsPath } from "../../docs/lib/language"
+import { getDocsPage } from "../../docs/lib/pages"
 
 export const prerender = false
 
-const slug = Astro.params.slug || "index"
-const entry = (await getEntry("docs", slug)) ?? (await getEntry("docs", `${slug}/index`))
-if (!entry) return new Response("Not found", { status: 404, headers: { "Cache-Control": "no-store" } })
+const path = parseDocsPath(Astro.params.slug ?? "")
+const page = await getDocsPage(path.locale, path.slug)
+if (!page) return new Response("Not found", { status: 404, headers: { "Cache-Control": "no-store" } })
 
 const headers = {
   "Cache-Control": "public, max-age=300, stale-while-revalidate=3600",
@@ -15,7 +16,7 @@ const headers = {
 
 const accept = Astro.request.headers.get("accept") ?? ""
 if (accept.includes("text/markdown") || accept.includes("text/x-markdown")) {
-  return new Response(`# ${entry.data.title}\n\n${entry.body ?? ""}`, {
+  return new Response(`# ${page.entry.data.title}\n\n${page.entry.body ?? ""}`, {
     headers: { ...headers, "Content-Type": "text/markdown; charset=utf-8" },
   })
 }
@@ -23,4 +24,4 @@ if (accept.includes("text/markdown") || accept.includes("text/x-markdown")) {
 Object.entries(headers).forEach(([name, value]) => Astro.response.headers.set(name, value))
 ---
 
-<DocsPage entry={entry} />
+<DocsPage {...page} />

@@ -1,22 +1,30 @@
 ---
+import { useI18n } from "../i18n"
+import type { DocsLocale } from "../lib/language"
 import { docsHref, type DocsNavGroup } from "../lib/navigation"
 
 interface Props {
+  locale: DocsLocale
   groups: DocsNavGroup[]
   currentSlug: string
 }
+
+const i18n = useI18n(Astro.props.locale)
 ---
 
-<nav class="docs-sidebar" aria-label="Documentation">
+<nav class="docs-sidebar" aria-label={i18n.t("nav.sidebar")}>
   {
     Astro.props.groups.map((group) => (
       <section>
-        {group.title && <h2>{group.title}</h2>}
+        {group.title && <h2>{i18n.nav(group.title)}</h2>}
         <ul>
           {group.items.map((item) => (
             <li>
-              <a href={docsHref(item.slug)} aria-current={item.slug === Astro.props.currentSlug ? "page" : undefined}>
-                {item.title}
+              <a
+                href={docsHref(item.slug, Astro.props.locale)}
+                aria-current={item.slug === Astro.props.currentSlug ? "page" : undefined}
+              >
+                {i18n.nav(item.title)}
               </a>
             </li>
           ))}

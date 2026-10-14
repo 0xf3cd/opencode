@@ -9,6 +9,17 @@
 - Do not add a documentation frontend framework; this folder owns the UI directly.
 - Keep internal Markdown links docs-root-relative, for example `/config`; `remark-links.ts` applies the site and docs base paths.
 
+## Translations
+
+- Locales are registered in `lib/language.ts` and use the opencode.ai website codes, such as `zh`. The code is the URL segment, the `content/<code>/` folder, and the `i18n/<code>.ts` file name. English is the default locale and has no URL segment.
+- Translate a page by mirroring its English path under `content/<code>/`, for example `content/config.mdx` becomes `content/zh/config.mdx`. Untranslated pages fall back to English under the locale URL.
+- Keep links in translated pages identical to the English page, for example `/config`; the locale segment is added at render time.
+- Keep the English heading structure in translations: the same headings at the same levels, in the same order. `remark-translated-headings.ts` reuses the English heading IDs so `#anchor` links work in every locale.
+- English changes may ship before translations. When an English page's heading structure changes, its translations are treated as outdated: the build warns, and the locale URL serves the English page until the translation is updated.
+- UI strings follow the website dictionaries: `i18n/en.ts` defines every key, and each locale spreads English and overrides its strings with `satisfies Dict`. Register new locales in `i18n/index.ts`. A locale's `<code>Nav` map translates header and sidebar labels by their English text from `lib/navigation.ts`.
+- Build all docs links with `docsHref(slug, locale)` or `localizeDocsHref` so readers stay in their language.
+- Language detection follows the website's `/data` proxy and runs in `../middleware.ts` on every request: URL prefix, then the shared `oc_locale` cookie, then `Accept-Language`. Unprefixed pages redirect to the preferred locale before the cache lookup, and the cache is keyed by the locale-specific URL. Do not re-enable Workers Cache in `wrangler.jsonc`; it would serve cached pages before the locale redirect runs.
+
 ## Writing Style
 
 - Keep prose sections brief and focused on one idea. Prefer one to three sentences over large paragraphs.

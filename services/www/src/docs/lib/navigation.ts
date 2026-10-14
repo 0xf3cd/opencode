@@ -1,3 +1,5 @@
+import { defaultLocale, localizeDocsHref, type DocsLocale } from "./language"
+
 export interface DocsNavItem {
   title: string
   slug: string
@@ -166,9 +168,9 @@ export const docsSections: DocsSection[] = [
   },
 ]
 
-export function docsHref(slug: string, anchor?: string) {
+export function docsHref(slug: string, locale: DocsLocale = defaultLocale) {
   const path = slug === "index" ? "" : `${slug.replace(/\/index$/, "")}/`
-  return `${import.meta.env.BASE_URL}docs/${path}${anchor ? `#${anchor}` : ""}`
+  return localizeDocsHref(`${import.meta.env.BASE_URL}docs/${path}`, locale)
 }
 
 export function getDocsSection(slug: string) {

@@ -1,0 +1,95 @@
+---
+title: "推理 API"
+description: "通过 Console 推理服务，使用同一个身份验证请求头调用兼容 OpenAI、Anthropic 和 Gemini 的模型。"
+---
+
+Console 推理服务在 `https://opencode.ai/inference` 下提供兼容 OpenAI、Anthropic 和 Gemini 的 API。请根据模型所属的 API 系列，向对应的端点发送 JSON `POST` 请求。
+
+```bash
+curl -X POST "https://opencode.ai/inference/openai/v1/chat/completions" \
+  -H "Authorization: Bearer <token>" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "model": "kimi-k2.6",
+    "messages": [{ "role": "user", "content": "Say hi" }]
+  }'
+```
+
+## 身份验证
+
+将 `<token>` 替换为在 [Console](https://opencode.ai/console) 中创建的[服务账号密钥](/console/api#service-accounts)。付费模型必须携带该请求头；免费的对话模型可以不带它直接调用。
+
+```text
+Authorization: Bearer <token>
+```
+
+## 端点
+
+| API                     | 路径                                                      |
+| ----------------------- | --------------------------------------------------------- |
+| OpenAI Chat Completions | `/inference/openai/v1/chat/completions`                   |
+| OpenAI Responses        | `/inference/openai/v1/responses`                          |
+| Anthropic Messages      | `/inference/anthropic/v1/messages`                        |
+| Gemini                  | `/inference/google/v1beta/models/<model>:generateContent` |
+
+每个模型只通过一个 API 系列提供服务。请参阅[模型端点](/console/models#endpoints)表格，或获取实时列表：
+
+```bash
+curl https://opencode.ai/inference/v1/models
+```
+
+### OpenAI Chat Completions
+
+`kimi-k2.6`、`glm-5.1`、`minimax-m2.7` 等开源模型以及免费模型使用 Chat Completions API。
+
+```bash
+curl -X POST "https://opencode.ai/inference/openai/v1/chat/completions" \
+  -H "Authorization: Bearer <token>" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "model": "glm-5.1",
+    "messages": [{ "role": "user", "content": "Say hi" }]
+  }'
+```
+
+### OpenAI Responses
+
+GPT 模型使用 Responses API。
+
+```bash
+curl -X POST "https://opencode.ai/inference/openai/v1/responses" \
+  -H "Authorization: Bearer <token>" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "model": "gpt-5.5",
+    "input": "Say hi"
+  }'
+```
+
+### Anthropic Messages
+
+Claude 和 Qwen 模型使用 Messages API，并且必须提供 `max_tokens`。
+
+```bash
+curl -X POST "https://opencode.ai/inference/anthropic/v1/messages" \
+  -H "Authorization: Bearer <token>" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "model": "claude-sonnet-4-6",
+    "max_tokens": 1024,
+    "messages": [{ "role": "user", "content": "Say hi" }]
+  }'
+```
+
+### Gemini
+
+Gemini 模型在路径中指定模型和方法。将 `:generateContent` 替换为 `:streamGenerateContent` 即可流式返回响应。
+
+```bash
+curl -X POST "https://opencode.ai/inference/google/v1beta/models/gemini-3.1-pro:generateContent" \
+  -H "Authorization: Bearer <token>" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "contents": [{ "parts": [{ "text": "Say hi" }] }]
+  }'
+```

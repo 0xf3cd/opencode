@@ -1,17 +1,21 @@
 ---
 import type { MarkdownHeading } from "astro"
+import { useI18n } from "../i18n"
+import type { DocsLocale } from "../lib/language"
 
 interface Props {
+  locale: DocsLocale
   headings: MarkdownHeading[]
 }
 
+const i18n = useI18n(Astro.props.locale)
 const headings = Astro.props.headings.filter((heading) => heading.depth === 2 || heading.depth === 3)
 ---
 
 {
   headings.length > 0 && (
-    <nav class="docs-toc" aria-label="On this page">
-      <h2>On this page</h2>
+    <nav class="docs-toc" aria-label={i18n.t("page.toc")}>
+      <h2>{i18n.t("page.toc")}</h2>
       <ul>
         {headings.map((heading) => (
           <li class={heading.depth === 3 ? "nested" : undefined}>

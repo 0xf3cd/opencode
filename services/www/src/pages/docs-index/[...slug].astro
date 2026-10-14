@@ -1,21 +1,23 @@
 ---
-import { getCollection, type CollectionEntry } from "astro:content"
 import DocsPage from "../../docs/components/DocsPage.astro"
+import { defaultLocale } from "../../docs/lib/language"
+import { getDocsPages } from "../../docs/lib/pages"
 
-interface Props {
-  entry: CollectionEntry<"docs">
-}
+type Props = Awaited<ReturnType<typeof getDocsPages>>[number]
 
 export async function getStaticPaths() {
-  return (await getCollection("docs")).map((entry) => ({
+  return (await getDocsPages()).map((page) => ({
     params: {
-      slug: entry.id === "index" ? undefined : entry.id.replace(/\/index$/, ""),
+      slug:
+        [page.locale === defaultLocale ? "" : page.locale, page.slug.replace(/(^|\/)index$/, "")]
+          .filter(Boolean)
+          .join("/") || undefined,
     },
-    props: { entry },
+    props: page,
   }))
 }
 
 export const prerender = true
 ---
 
-<DocsPage entry={Astro.props.entry} />
+<DocsPage {...Astro.props} />

@@ -1,29 +1,40 @@
 ---
 import type { MarkdownHeading } from "astro"
 import { ClientRouter } from "astro:transitions"
+import DocsFooter from "../components/DocsFooter.astro"
 import DocsHeader from "../components/DocsHeader.astro"
 import DocsSidebar from "../components/DocsSidebar.astro"
 import DocsTableOfContents from "../components/DocsTableOfContents.astro"
-import { getDocsSection } from "../lib/navigation"
+import { useI18n } from "../i18n"
+import { docsLocales, type DocsLocale } from "../lib/language"
+import { docsHref, getDocsSection } from "../lib/navigation"
 import "../styles/global.css"
 
 interface Props {
   title: string
   description?: string
+  locale: DocsLocale
   currentSlug: string
+  fallback?: boolean
   headings: MarkdownHeading[]
   showTableOfContents?: boolean
   fullWidth?: boolean
 }
 
+const locale = Astro.props.locale
+const i18n = useI18n(locale)
 const section = getDocsSection(Astro.props.currentSlug)
 const fullWidth = Astro.props.fullWidth ?? false
-const description = Astro.props.description ?? `${Astro.props.title} documentation for OpenCode.`
-const canonical = new URL(Astro.url.pathname, "https://opencode.ai").href
+const description = Astro.props.description ?? i18n.t("page.description", { title: Astro.props.title })
+// Untranslated pages point search engines at the English original.
+const canonical = new URL(
+  Astro.props.fallback ? docsHref(Astro.props.currentSlug) : Astro.url.pathname,
+  "https://opencode.ai",
+).href
 ---
 
 <!doctype html>
-<html lang="en">
+<html lang={docsLocales[locale].tag}>
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
@@ -35,28 +46,42 @@ const canonical = new URL(Astro.url.pathname, "https://opencode.ai").href
     <title>{Astro.props.title} | OpenCode</title>
   </head>
   <body>
-    <a class="skip-link" href="#docs-content">Skip to content</a>
-    <DocsHeader currentSlug={Astro.props.currentSlug} />
+    <a class="skip-link" href="#docs-content">{i18n.t("nav.skip")}</a>
+    <DocsHeader locale={locale} currentSlug={Astro.props.currentSlug} />
     {
       fullWidth ? (
         <main id="docs-content" class="full-width-content">
           <slot />
+          <DocsFooter locale={locale} currentSlug={Astro.props.currentSlug} />
         </main>
       ) : (
         <>
           <details class="mobile-navigation">
-            <summary>{section.title} navigation</summary>
-            <DocsSidebar groups={section.groups} currentSlug={Astro.props.currentSlug} />
+            <summary>{i18n.t("nav.mobile", { section: i18n.nav(section.title) })}</summary>
+            <DocsSidebar locale={locale} groups={section.groups} currentSlug={Astro.props.currentSlug} />
           </details>
           <div class="docs-frame">
             <aside class="sidebar-column">
-              <DocsSidebar groups={section.groups} currentSlug={Astro.props.currentSlug} />
+              <DocsSidebar locale={locale} groups={section.groups} currentSlug={Astro.props.currentSlug} />
             </aside>
             <main id="docs-content">
-              <article class="prose" data-pagefind-body data-pagefind-meta={`title:${Astro.props.title}`}>
+              <article
+                class="prose"
+                lang={Astro.props.fallback ? docsLocales.en.tag : undefined}
+                data-pagefind-body
+                data-pagefind-meta={`title:${Astro.props.title}`}
+                data-heading-anchor-label={i18n.t("page.headingAnchor")}
+              >
                 <h1>
                   {Astro.props.title}
-                  <button type="button" aria-label="Copy page as Markdown" data-copy-markdown data-pagefind-ignore>
+                  <button
+                    type="button"
+                    aria-label={i18n.t("page.copyMarkdown")}
+                    data-copy-markdown
+                    data-label={i18n.t("page.copyMarkdown")}
+                    data-copied-label={i18n.t("page.copied")}
+                    data-pagefind-ignore
+                  >
                     <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true">
                       <rect x="8" y="8" width="13" height="13" rx="2" />
                       <path d="M16 8V5a2 2 0 0 0-2-2H5a2 2 0 0 0-2 2v9a2 2 0 0 0 2 2h3" />
@@ -68,9 +93,14 @@ const canonical = new URL(Astro.url.pathname, "https://opencode.ai").href
                 </h1>
                 <slot />
               </article>
+              <DocsFooter locale={locale} currentSlug={Astro.props.currentSlug} />
             </main>
             <aside class="toc-column">
-              {Astro.props.showTableOfContents !== false && <DocsTableOfContents headings={Astro.props.headings} />}
+              {
+                Astro.props.showTableOfContents !== false && (
+                  <DocsTableOfContents locale={locale} headings={Astro.props.headings} />
+                )
+              }
             </aside>
           </div>
         </>
@@ -83,7 +113,8 @@ const canonical = new URL(Astro.url.pathname, "https://opencode.ai").href
           const anchor = document.createElement("a")
           anchor.className = "heading-anchor"
           anchor.href = `#${heading.id}`
-          anchor.setAttribute("aria-label", `Link to ${heading.textContent ?? "section"}`)
+          const label = heading.closest(".prose")?.dataset.headingAnchorLabel ?? "Link to {{heading}}"
+          anchor.setAttribute("aria-label", label.replace("{{heading}}", heading.textContent ?? ""))
           anchor.textContent = "#"
           heading.append(anchor)
         }
@@ -98,10 +129,10 @@ const canonical = new URL(Astro.url.pathname, "https://opencode.ai").href
         const button = event.target.closest<HTMLButtonElement>("[data-copy-markdown]")
         if (!button) return
         button.dataset.copied = "true"
-        button.setAttribute("aria-label", "Copied")
+        button.setAttribute("aria-label", button.dataset.copiedLabel ?? "")
         window.setTimeout(() => {
           delete button.dataset.copied
-          button.setAttribute("aria-label", "Copy page as Markdown")
+          button.setAttribute("aria-label", button.dataset.label ?? "")
         }, 1500)
         const response = await fetch(window.location.href, { headers: { Accept: "text/markdown" } })
         if (!response.ok) return
