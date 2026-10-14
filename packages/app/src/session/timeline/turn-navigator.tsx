@@ -55,8 +55,9 @@ export function TurnNavigator(props: TurnNavigatorProps) {
       limit: turnPageLimit,
       ...(cursor ? { cursor } : { order: "asc" as const }),
     })
-    const turns = page.data.flatMap((message) =>
-      message.type === "user" ? [[message.id, promptPreview(message)] as [string, string]] : [],
+
+    const turns = page.data.flatMap((message): [string, string][] =>
+      message.type === "user" ? [[message.id, promptPreview(message)]] : [],
     )
 
     if (page.data.length < turnPageLimit || !page.cursor.next) return turns
@@ -77,6 +78,7 @@ export function TurnNavigator(props: TurnNavigatorProps) {
         .catch(() => [])
         .then((turns) => setState("index", new Map(turns)))
     }, railDelay)
+
     onCleanup(() => clearTimeout(timer))
   })
 
@@ -96,6 +98,7 @@ export function TurnNavigator(props: TurnNavigatorProps) {
 
 function TurnRail(props: TurnNavigatorProps & { index?: Map<string, string>; root: HTMLDivElement }) {
   const sdk = useServerSDK()
+
   // Fetched replies by user message ID; null while loading or when the turn has no reply text.
   const [state, setState] = createStore<{
     hover?: { id: string; top: number; position: number }
@@ -121,12 +124,14 @@ function TurnRail(props: TurnNavigatorProps & { index?: Map<string, string>; roo
     setState("replies", id, null)
     const list = turns()
     const next = list[list.indexOf(id) + 1] ?? props.revertMessageID()
+
     const page = await sdk.api.message.list({
       sessionID: props.sessionID,
       type: "assistant",
       limit: 1,
-      ...(next ? { before: next } : {}),
+      before: next,
     })
+
     const message = page.data[0]
 
     if (message?.type !== "assistant" || message.id < id) return
@@ -218,6 +223,7 @@ function TurnRail(props: TurnNavigatorProps & { index?: Map<string, string>; roo
               const distance = Math.abs(index() - state.hover.position)
 
               if (distance >= hoverRadius) return 0
+
               return (1 + Math.cos((distance / hoverRadius) * Math.PI)) / 2
             })
 

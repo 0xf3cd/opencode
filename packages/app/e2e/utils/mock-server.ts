@@ -75,8 +75,6 @@ export interface MockServerConfig {
     items: SessionMessageInfo[]
     cursor?: string
   }
-  // The session's whole transcript for type-filtered message lists; without it they list nothing.
-  messageIndex?: (sessionID: string) => SessionMessageInfo[]
   vcs?: { current: string; default: string }
   // Initializes the mock project's VCS; without a handler this mutation answers 501.
   onVcsInit?: (input: { directory: string; provider?: string }) => void
@@ -1376,13 +1374,16 @@ function mockHandlers(
             const [order, offset] = token?.startsWith("typed:")
               ? [token.split(":")[1], Number(token.split(":")[2])]
               : [ctx.query.order ?? "desc", 0]
-            const transcript = config.messageIndex?.(ctx.params.sessionID) ?? []
+
+            const transcript = config.pageMessages(ctx.params.sessionID, Number.MAX_SAFE_INTEGER).items
+
             const end = ctx.query.before
               ? Math.max(
                   0,
                   transcript.findIndex((item) => item.id === ctx.query.before),
                 )
               : transcript.length
+
             const typed = transcript.slice(0, end).filter((item) => item.type === type)
             const ordered = order === "asc" ? typed : typed.toReversed()
             const limit = ctx.query.limit ?? 50

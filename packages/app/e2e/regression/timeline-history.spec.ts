@@ -72,6 +72,13 @@ test.describe("timeline history", () => {
   })
 
   test("navigates every turn, highlights visible turns, and previews unloaded replies on hover", async ({ page }) => {
+    const replies = [
+      "Response number 0\n\nEarlier reply remains visible.\n\nMore of the same reply.",
+      ["Response number 1", ...Array.from({ length: 45 }, () => "A long reply for the reading-only fallback.")].join(
+        "\n\n",
+      ),
+    ]
+
     const messages = Array.from({ length: 40 }, (_, index) => {
       const value = String(index).padStart(4, "0")
       const id = `msg_0${value}_turn_a_user`
@@ -96,15 +103,7 @@ test.describe("timeline history", () => {
             {
               id: `prt_0${value}_turn_text`,
               type: "text",
-              text:
-                index === 0
-                  ? "Response number 0\n\nEarlier reply remains visible.\n\nMore of the same reply."
-                  : index === 1
-                    ? [
-                        "Response number 1",
-                        ...Array.from({ length: 45 }, () => "A long reply for the reading-only fallback."),
-                      ].join("\n\n")
-                    : `Response number ${index}`,
+              text: replies[index] ?? `Response number ${index}`,
             },
           ],
           {
@@ -115,6 +114,7 @@ test.describe("timeline history", () => {
         ),
       ]
     }).flat()
+
     const loads: (string | undefined)[] = []
     await setupTimeline(page, {
       sessionMessages: messages,
@@ -179,7 +179,7 @@ test.describe("timeline history", () => {
     const longReplyID = renderedPartID("prt_00001_turn_text")
     const longReply = page.locator(`[data-timeline-part-id="${longReplyID}"]`)
     await expect
-      .poll(() => longReply.evaluate((element) => element.offsetHeight))
+      .poll(() => longReply.evaluate((element) => element.getBoundingClientRect().height))
       .toBeGreaterThan(await timelineScroller(page).evaluate((element) => element.clientHeight))
     await timelineScroller(page).evaluate((scroller, id) => {
       const reply = scroller.querySelector(`[data-timeline-part-id="${id}"]`)
@@ -279,6 +279,7 @@ test.describe("timeline history", () => {
       const roots: { sessionID: string; messageID: string }[] = []
       const sequence: string[] = []
       const messages = rootHistory()
+      // SAFETY: rootHistory() always ends with its in-progress assistant reply.
       const last = messages.at(-1) as SessionMessageAssistant
       await page.addInitScript(installVisibilityProbe)
 
@@ -329,7 +330,7 @@ test.describe("timeline history", () => {
       const completed = {
         ...last,
         time: { ...last.time, completed: last.time.created + 15_000 },
-        ...(scenario.error ? { error: scenario.error } : {}),
+        error: scenario.error,
       }
 
       const message = messageUpdated(completed)
@@ -374,16 +375,16 @@ test.describe("timeline history", () => {
     })
   }
 
-  for (const shape of ["assistant-only", "mixed"] as const) {
-    test(`renders the ${shape} tail before parent hydration and preserves it afterward`, async ({ page }) => {
-      const session = { ...fixture.sessions[0]!, id: `ses_hydration_${shape}` }
+  for (const kind of ["assistant-only", "mixed"] as const) {
+    test(`renders the ${kind} tail before parent hydration and preserves it afterward`, async ({ page }) => {
+      const session = { ...fixture.sessions[0]!, id: `ses_hydration_${kind}` }
 
       // Compact's initial 40 and the next 20 begin with an assistant; page three supplies its parent.
       const messages = Array.from({ length: 61 }, (_, index): SessionMessageInfo => {
         const id = `msg_hydration_${index}`
         const time = { created: 1700000000000 + index * 1_000 }
 
-        if (index === 0 || (shape === "mixed" && index === 59))
+        if (index === 0 || (kind === "mixed" && index === 59))
           return { id, type: "user", time, text: `Prompt ${index}` }
 
         return {
@@ -454,7 +455,7 @@ test.describe("timeline history", () => {
         await expectReadyTail()
         await expect(orphan).toHaveAttribute("data-message-id", "msg_hydration_21")
 
-        if (shape === "mixed")
+        if (kind === "mixed")
           await expect(
             page.locator('[data-timeline-row="UserMessage"][data-message-id="msg_hydration_59"]'),
           ).toBeInViewport()
@@ -592,6 +593,16 @@ function rootHistory() {
 // visible element (with exactly `text`, when set).
 type ProbeFinal = { attached: string[]; visible: { selector: string; text?: string }[] }
 
+type ProbeState = {
+  armed: boolean
+  hidden: boolean
+  parts: string[]
+  final?: ProbeFinal
+  settled: boolean
+  arm(): string[]
+  settle(final: ProbeFinal): void
+}
+
 // Samples every painted frame and records whether any part that was visible when armed disappeared. After `settle`,
 // it also records (`settled`) the first sample that shows the final state, so `hidden` then covers that frame.
 function installVisibilityProbe() {
@@ -624,11 +635,10 @@ function installVisibilityProbe() {
       .flatMap((part) => (part.dataset.timelinePartId ? [part.dataset.timelinePartId] : []))
   }
 
-  const state = {
+  const state: ProbeState = {
     armed: false,
     hidden: false,
-    parts: [] as string[],
-    final: undefined as ProbeFinal | undefined,
+    parts: [],
     settled: false,
     // Returns the parts that must stay visible.
     arm() {

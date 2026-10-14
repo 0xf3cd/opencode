@@ -515,15 +515,19 @@ export function createTimelineVirtualizer(input: Input) {
     const top = viewport.top + header
     const bottom = viewport.top + viewport.height
     const list = rows()
+
     const visible = virtualizer.getVirtualItems().flatMap((item) => {
       if (item.end <= top || item.start >= bottom) return []
       const row = list[item.index]
 
       if (!row || Predicate.isTagged(row, "TurnGap") || Predicate.isTagged(row, "TurnDivider")) return []
+
       return [{ item, row }]
     })
+
     const root = listRoot()
     let rootTop: number | undefined
+
     const prompts = visible.flatMap((entry) => {
       if (!Predicate.isTagged(entry.row, "UserMessage")) return []
 
@@ -548,6 +552,7 @@ export function createTimelineVirtualizer(input: Input) {
         ? [entry.row.userMessageID]
         : []
     })
+
     const ids = new Set(prompts.length ? prompts : visible[0] ? [visible[0].row.userMessageID] : [])
 
     if (
@@ -608,6 +613,7 @@ export function createTimelineVirtualizer(input: Input) {
         : -1
 
       const promptIndex = rows().findIndex((row) => Predicate.isTagged(row, "UserMessage") && row.userMessageID === id)
+
       const index =
         partIndex >= 0 ? partIndex : promptIndex >= 0 ? promptIndex : input.projection.messageRowIndex().get(id)
 
@@ -1019,6 +1025,7 @@ export function createTimelineVirtualizer(input: Input) {
     })
 
     while (cache.size > 16) cache.delete(cache.keys().next().value!)
+
     if (visibleTurnsFrame !== undefined) cancelAnimationFrame(visibleTurnsFrame)
     coldPending = false
     contentObserver?.disconnect()
