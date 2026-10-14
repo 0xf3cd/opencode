@@ -244,6 +244,11 @@ export function createHomeSessionsController(home: HomeController) {
 
     if (!conn || !ctx) return false
     const ids = sessionTreeIDs(ctx.data.session.list(), session.id)
+    // session.deleted clears the local hide mutation before the refetch lands,
+    // so the cached index must drop the row now or it briefly reappears.
+    queryClient.setQueryData<SessionInfo[]>(["home-sessions", conn], (current) =>
+      current?.filter((item) => item.id !== session.id),
+    )
 
     return ctx.data.session
       .remove(session.id)
