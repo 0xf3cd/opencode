@@ -298,6 +298,10 @@ export function createTimelineVirtualizer(input: Input) {
       return rows().length > 0 ? topOffset() : 0
     },
     paddingEnd: 64,
+    // Revealed rows start below the sticky title, whose height includes its 16px fade inset.
+    get scrollPaddingStart() {
+      return input.showHeader() ? headerBarHeight + 16 : 0
+    },
     get rangeExtractor() {
       return rangeExtractor()
     },
@@ -603,11 +607,13 @@ export function createTimelineVirtualizer(input: Input) {
           )
         : -1
 
-      const index = partIndex >= 0 ? partIndex : input.projection.messageRowIndex().get(id)
+      const promptIndex = rows().findIndex((row) => Predicate.isTagged(row, "UserMessage") && row.userMessageID === id)
+      const index =
+        partIndex >= 0 ? partIndex : promptIndex >= 0 ? promptIndex : input.projection.messageRowIndex().get(id)
 
       if (index === undefined) return
       prepareNavigation()
-      virtualizer.scrollToIndex(index, { align: "center" })
+      virtualizer.scrollToIndex(index, { align: partIndex >= 0 ? "center" : "start" })
     })
     input.setScrollToEnd?.(() => {
       if (!active() || !listRoot()?.isConnected) return
