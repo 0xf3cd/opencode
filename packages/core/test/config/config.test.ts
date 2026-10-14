@@ -1355,8 +1355,7 @@ describe("Config", () => {
           const global = path.join(tmp.path, "global")
           const project = path.join(tmp.path, "project")
           const file = path.join(global, "opencode.json")
-          // Outside every config root, like ~/.secrets, so only the reference watch can observe it.
-          const secret = path.join(tmp.path, "secrets", "firecrawl-key")
+          const secret = path.join(global, "secrets", "firecrawl-key")
           yield* Effect.promise(async () => {
             await fs.mkdir(global, { recursive: true })
             await fs.mkdir(project, { recursive: true })
@@ -1369,7 +1368,7 @@ describe("Config", () => {
                     firecrawl: {
                       type: "remote",
                       url: "https://mcp.firecrawl.dev/v2/mcp",
-                      headers: { Authorization: "Bearer {file:../secrets/firecrawl-key}" },
+                      headers: { Authorization: "Bearer {file:secrets/firecrawl-key}" },
                     },
                   },
                 },
@@ -1387,18 +1386,15 @@ describe("Config", () => {
 
             expect(Config.latest(yield* config.entries(), "username")).toBe("kept")
             expect(yield* headers).toEqual({ Authorization: "Bearer " })
-            expect(output).toContainEqual({
-              source: file,
-              reference: "{file:../secrets/firecrawl-key}",
-              path: secret,
-              reason: "NotFound",
-              action: "substituted empty value",
-            })
-            expect(yield* watcher.subscriptions()).toContainEqual({
-              path: path.dirname(secret),
-              type: "entries",
-              names: ["firecrawl-key"],
-            })
+            expect(output).toEqual([
+              {
+                source: file,
+                reference: "{file:secrets/firecrawl-key}",
+                path: secret,
+                reason: "NotFound",
+                action: "substituted empty value",
+              },
+            ])
 
             const changed = yield* bus
               .subscribe(Event.Updated)

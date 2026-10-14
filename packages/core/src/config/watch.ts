@@ -5,8 +5,7 @@ import { FSUtil } from "@opencode/util/fs-util"
 import type { Watcher } from "../filesystem/watcher.js"
 import type { ConfigDiscovery } from "./discovery.js"
 
-/** References are resolved {file:} paths; each gets a parent watch so creation, edits, and deletion reload config. */
-export function plan(sources: ConfigDiscovery.Sources, references: readonly string[] = []) {
+export function plan(sources: ConfigDiscovery.Sources) {
   const directories = [
     ...(sources.system?.present ? [sources.system.path] : []),
     ...(sources.global ? [sources.global] : []),
@@ -19,7 +18,6 @@ export function plan(sources: ConfigDiscovery.Sources, references: readonly stri
     ...sources.claude,
     ...sources.agents,
     ...(sources.explicit ? [sources.explicit] : []),
-    ...references,
   ]
   // Keep a parent watch for each root so deletion/recreation is observable.
   const parents = Map.groupBy(
