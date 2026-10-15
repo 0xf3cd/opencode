@@ -48,7 +48,8 @@ jobs:
             echo "app=true" >> "$GITHUB_OUTPUT"
             exit 0
           fi
-          bun x turbo@2.10.2 ls --affected --filter=@opencode/app --output=json > affected.json
+          # Storybook hosts the component tests, but no app package depends on it.
+          bun x turbo@2.10.2 ls --affected --filter=@opencode/app --filter=@opencode/storybook --output=json > affected.json
           bun -e 'const result = await Bun.file("affected.json").json(); console.log(`app=${result.packages.count > 0}`)' >> "$GITHUB_OUTPUT"
 
   unit:
