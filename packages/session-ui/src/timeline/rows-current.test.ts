@@ -1176,43 +1176,6 @@ describe("current session timeline rows", () => {
     ])
   })
 
-  test("merges consecutive executions, including failures, into one group keyed by the first", () => {
-    const groups = (detail?: (typeof timelinePresets)[number]["value"]) =>
-      Timeline.constructSessionMessageRows(
-        storyDocument([
-          storyTool("first", "execute", "completed", {}),
-          storyTool("second", "execute", "completed", {}),
-          storyTool("failed", "execute", "completed", {}, { metadata: { error: true } }),
-          storyTool("third", "execute", "running", {}),
-          { type: "text", text: "Boundary" },
-          storyTool("alone", "execute", "completed", {}),
-        ]).messages,
-        false,
-        { type: "busy" },
-        undefined,
-        true,
-        false,
-        undefined,
-        detail,
-      ).rows.flatMap((row) =>
-        Predicate.isTagged(row, "AssistantPart")
-          ? [
-              [
-                row.group.type,
-                ...(row.group.type === "part" ? [row.group.ref] : row.group.refs).map((ref) => ref.partID),
-              ],
-            ]
-          : [],
-      )
-
-    expect(groups()).toEqual([
-      ["execute", "first", "second", "failed", "third"],
-      ["part", expect.stringContaining("text")],
-      ["part", "alone"],
-    ])
-    expect(groups(timelinePresets[0]!.value)).toEqual(groups())
-  })
-
   test("keeps active and background work standalone when no group precedes them", () => {
     const source: SessionMessageInfo[] = [
       { id: "msg_user", type: "user", text: "work", time: { created: 1 } },

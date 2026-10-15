@@ -184,7 +184,7 @@ export const ExecuteCode = {
   render: () => (
     <CurrentSessionTimelineStory
       title="Execute code"
-      description="Consecutive Code Mode executions merge into one list of the tools their scripts called."
+      description="Each Code Mode execution lists the tools its script called."
       document={executeCodeDocument}
       width="786px"
       shellToolDefaultOpen
@@ -196,7 +196,7 @@ export const ExecuteGrouped = {
   render: () => (
     <CurrentSessionTimelineStory
       title="Execute grouped"
-      description="Collapsed executions inside a tool group still merge into one list of the tools their scripts called."
+      description="Executions inside a tool group open by default to the tools their scripts called."
       document={executeCodeDocument}
       width="786px"
     />

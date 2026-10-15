@@ -4,7 +4,6 @@ import type { SessionUserActions, SessionUserAttachmentReference, SessionUserCom
 import { AssistantReasoningContent, AssistantTextContent, CurrentUserMessageDisplay } from "./message-content"
 import {
   CurrentContextToolGroup,
-  CurrentExecuteToolGroup,
   CurrentFileToolGroup,
   CurrentReadToolGroup,
   ToolDisplay,
@@ -106,10 +105,6 @@ export function SessionAssistantContent(props: {
 
 export function SessionContextToolGroup(props: ComponentProps<typeof CurrentContextToolGroup>) {
   return <CurrentContextToolGroup {...props} />
-}
-
-export function SessionExecuteToolGroup(props: ComponentProps<typeof CurrentExecuteToolGroup>) {
-  return <CurrentExecuteToolGroup {...props} />
 }
 
 export function SessionReadToolGroup(props: ComponentProps<typeof CurrentReadToolGroup>) {

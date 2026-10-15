@@ -15,7 +15,6 @@ import { TimelineSeparator } from "../components/timeline-separator"
 import {
   SessionAssistantContent,
   SessionContextToolGroup,
-  SessionExecuteToolGroup,
   SessionFileToolGroup,
   SessionReadToolGroup,
   SessionShellMessage,
@@ -244,7 +243,7 @@ export function createSessionTimelineRowRenderer(input: {
             }
             reasoningOpen={(id) => input.disclosure.value(id)}
             onReasoningOpenChange={(id, open) => input.disclosure.set(id, open)}
-            toolDefaultOpen={(tool) => (input.timelineDetail ? contentDefaultOpen(tool) : false)}
+            toolDefaultOpen={(tool) => (input.timelineDetail || tool.name === "execute" ? contentDefaultOpen(tool) : false)}
             toolOpen={(id) => input.disclosure.value(`${row().group.key}:tool:${id}`)}
             onToolOpenChange={(id, open) => input.disclosure.set(`${row().group.key}:tool:${id}`, open)}
             fileOpen={(path) =>
@@ -281,37 +280,6 @@ export function createSessionTimelineRowRenderer(input: {
         <SessionReadToolGroup
           tools={tools()}
           open={input.disclosure.value(row().group.key)}
-          onOpenChange={(open) => input.disclosure.set(row().group.key, open)}
-          onSizeChange={onSizeChange}
-        />
-      )
-    }
-
-    if (row().group.type === "execute") {
-      const tools = createMemo(() => {
-        const group = row().group
-
-        if (group.type !== "execute") return []
-        const contents = indexGroupContents(group.refs)
-
-        return group.refs.flatMap((ref) => {
-          const content = contents.get(ref.messageID)?.get(ref.partID)
-
-          return content?.type === "tool" ? [content] : []
-        })
-      })
-
-      const defaultOpen = createMemo(() => {
-        const tool = tools()[0]
-
-        return tool ? contentDefaultOpen(tool) : undefined
-      })
-
-      return (
-        <SessionExecuteToolGroup
-          tools={tools()}
-          defaultOpen={defaultOpen()}
-          open={input.disclosure.value(row().group.key) ?? defaultOpen()}
           onOpenChange={(open) => input.disclosure.set(row().group.key, open)}
           onSizeChange={onSizeChange}
         />
@@ -414,6 +382,8 @@ export function createSessionTimelineRowRenderer(input: {
   }
 
   function contentDefaultOpen(item: SessionMessageAssistant["content"][number]) {
+    if (item.type === "tool" && item.name === "execute") return true
+
     if (input.timelineDetail) {
       const category = timelineCategory(item)
 

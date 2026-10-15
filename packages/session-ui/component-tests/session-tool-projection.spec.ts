@@ -47,22 +47,22 @@ story("renders every tool error outcome without leaking hidden tools", async ({ 
   for (const name of names) await expect(timeline.locator(`[data-timeline-part-id="tool_error_${name}"]`)).toBeVisible()
 })
 
-story("keeps a failed execute inline with its neighbours' calls", async ({ mount }) => {
+story("lists a failed execute's calls and keeps its error under the failed call", async ({ mount }) => {
   const timeline = await mount("current-session-terminal-work--execute-failed")
-  // Adjacent executions merge into one list, so each merged run counts once.
-  await timeline.getByRole("button", { name: /^Used 3 / }).click()
-  const merged = timeline.locator('[data-timeline-part-ids="tool_execute_search,tool_execute_failed_url"]')
-  const call = merged.locator('[data-slot="execute-tool-call"]')
+  await timeline.getByRole("button", { name: /^Used 5 / }).click()
+  const failed = timeline.locator('[data-timeline-part-id="tool_execute_failed_url"]')
+  const call = failed.locator('[data-slot="execute-tool-call"]')
+  // Executions open by default, so the calls show without expanding the row.
   await expect(call).toHaveText([/browser\.tabs\.open/])
   await expect(call).toHaveAttribute("data-status", "error")
   await expect(timeline.locator('[data-kind="tool-error-card"]')).toHaveCount(0)
 
   // The runtime error stays collapsed under the failed call until it is expanded.
-  const error = merged.locator('[data-slot="execute-tool-error"]')
+  const error = failed.locator('[data-slot="execute-tool-error"]')
   await expect(error).toHaveCount(0)
   await call.click()
   await expect(call).toHaveAttribute("aria-expanded", "true")
-  await expect(merged.locator('[data-slot="execute-tool-call-input"]')).toContainText(
+  await expect(failed.locator('[data-slot="execute-tool-call-input"]')).toContainText(
     "url:file:///C:/tmp/opencode/throne-of-glass-luke.html",
   )
   await expect(error).toContainText(
