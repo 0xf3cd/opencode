@@ -96,6 +96,22 @@ jobs:
           git config --global user.email "bot@opencode.ai"
           git config --global user.name "opencode"
 
+      # Linux replays Turbo tasks from the runner's remote cache, Windows has none. Weekly keys bound how far the cache
+      # grows and how old a replayed entry can be. Manual runs skip it so they execute every task.
+      - name: Get Turbo cache week
+        if: runner.os == 'Windows'
+        id: turbo-week
+        run: echo "week=$(date -u +%G-W%V)" >> "$GITHUB_OUTPUT"
+
+      - name: Restore Turbo cache
+        if: runner.os == 'Windows' && github.event_name != 'workflow_dispatch'
+        id: turbo-cache
+        uses: actions/cache/restore@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.3.0
+        with:
+          path: .turbo/cache
+          key: turbo-${{ runner.os }}-${{ steps.turbo-week.outputs.week }}-${{ github.sha }}
+          restore-keys: turbo-${{ runner.os }}-${{ steps.turbo-week.outputs.week }}-
+
       - name: Run unit tests
         timeout-minutes: 20
         run: |
@@ -109,6 +125,13 @@ jobs:
           OPENCODE_EXPERIMENTAL_DISABLE_FILEWATCHER: ${{ runner.os == 'Windows' && 'true' || 'false' }}
           TURBO_SCM_BASE: ${{ github.event_name == 'pull_request' && format('{0}^1', github.sha) || github.event.before }}
           TURBO_SCM_HEAD: ${{ github.sha }}
+
+      - name: Save Turbo cache
+        if: runner.os == 'Windows' && github.event_name == 'push'
+        uses: actions/cache/save@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.3.0
+        with:
+          path: .turbo/cache
+          key: ${{ steps.turbo-cache.outputs.cache-primary-key }}
 
       - name: Verify published codemode package
         if: runner.os == 'Linux'
