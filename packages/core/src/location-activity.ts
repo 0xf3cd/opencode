@@ -2,6 +2,7 @@ export * as LocationActivity from "./location-activity.js"
 
 import { Clock, Context, Duration, Effect, Layer, Option, RcMap, Schema } from "effect"
 import { Bus } from "./bus.js"
+import { Config } from "./config.js"
 import { Form } from "./form.js"
 import { Location } from "./location.js"
 import { LocationServiceMap } from "./location-service-map.js"
@@ -24,12 +25,12 @@ export function layer(options: { readonly timeToLive?: Duration.Input; readonly 
       const locations = yield* LocationServiceMap.Service
       const execution = yield* SessionExecution.Service
       const sessions = yield* SessionStore.Service
-      const timeToLive = Duration.toMillis(options.timeToLive ?? "60 minutes")
-      const entries = new Map<string, { readonly ref: Location.Ref; expiresAt: number }>()
+      const timeToLive = Duration.fromInputUnsafe(options.timeToLive ?? "60 minutes")
+      const entries = new Map<string, { readonly ref: Location.Ref; touchedAt: number }>()
       const key = (ref: Location.Ref) => `${LocationServiceMap.canonical(ref).directory}\0${ref.workspaceID ?? ""}`
       const touch = (ref: Location.Ref) =>
         Effect.sync(() => {
-          entries.set(key(ref), { ref, expiresAt: clock.currentTimeMillisUnsafe() + timeToLive })
+          entries.set(key(ref), { ref, touchedAt: clock.currentTimeMillisUnsafe() })
         })
 
       const unsubscribe = yield* bus.listen((event) => {
@@ -50,30 +51,41 @@ export function layer(options: { readonly timeToLive?: Duration.Input; readonly 
           if (!cached.has(id)) entries.delete(id)
         }
         const now = clock.currentTimeMillisUnsafe()
-        const expired = Array.from(entries.values()).filter((entry) => entry.expiresAt <= now)
+        const expired = yield* Effect.filter(Array.from(entries.values()), (entry) =>
+          locations.contextEffectOption(entry.ref).pipe(
+            Effect.flatMap(
+              Option.match({
+                onNone: () => Effect.succeed(false),
+                onSome: (context) =>
+                  Effect.gen(function* () {
+                    const config = Context.get(context, Config.Service)
+                    const configured = (yield* config.entries())
+                      .flatMap((item) =>
+                        item.type === "document" && item.info.experimental?.location_idle_timeout
+                          ? [item.info.experimental.location_idle_timeout]
+                          : [],
+                      )
+                      .at(-1)
+                    if (entry.touchedAt + Duration.toMillis(configured ?? timeToLive) > now) return false
+                    // A pending question or permission prompt is waiting on a human, not idle.
+                    const forms = Context.get(context, Form.Service)
+                    const permission = Context.get(context, Permission.Service)
+                    if ((yield* forms.list()).length === 0 && (yield* permission.list()).length === 0) return true
+                    yield* touch(entry.ref)
+                    return false
+                  }),
+              }),
+            ),
+            Effect.scoped,
+            Effect.orElseSucceed(() => false),
+          ),
+        )
         if (expired.length === 0) return
         const active = yield* Effect.forEach(yield* execution.active, (sessionID) => sessions.get(sessionID))
         yield* Effect.forEach(
           expired,
           (entry) =>
             Effect.gen(function* () {
-              // A pending question or permission prompt is waiting on a human, not idle.
-              const waiting = yield* locations.contextEffectOption(entry.ref).pipe(
-                Effect.flatMap(
-                  Option.match({
-                    onNone: () => Effect.succeed(false),
-                    onSome: (context) =>
-                      Effect.gen(function* () {
-                        const forms = Context.get(context, Form.Service)
-                        const permission = Context.get(context, Permission.Service)
-                        return (yield* forms.list()).length > 0 || (yield* permission.list()).length > 0
-                      }),
-                  }),
-                ),
-                Effect.scoped,
-                Effect.orElseSucceed(() => false),
-              )
-              if (waiting) return yield* touch(entry.ref)
               const owners = active.flatMap((session) =>
                 session && key(session.location) === key(entry.ref) ? [session] : [],
               )

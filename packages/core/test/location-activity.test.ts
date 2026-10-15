@@ -6,6 +6,7 @@ import { AppNodeBuilder } from "@opencode/core/effect/app-node-builder"
 import { LayerNode } from "@opencode/util/effect/layer-node"
 import { makeGlobalNode } from "@opencode/util/effect/app-node"
 import { Bus } from "@opencode/core/bus"
+import { Config } from "@opencode/core/config"
 import { Database } from "@opencode/core/database/database"
 import { Form } from "@opencode/core/form"
 import { Location } from "@opencode/core/location"
@@ -22,21 +23,30 @@ import { SessionRunner } from "@opencode/core/session/runner/index"
 import { SessionTable } from "@opencode/core/session/sql"
 import { SessionStore } from "@opencode/core/session/store"
 import { Workspace } from "@opencode/core/workspace"
+import { Document, type Entry, Info } from "@opencode/schema/config"
+import { ConfigExperimental } from "@opencode/schema/config/experimental"
 import { testEffect } from "./lib/effect"
 
 // Keep real execution ownership, location caching, forms, and eviction. The fixture
 // runner asks a question instead of making a model request, then keeps working
-// after it is answered. Permission prompts come from `pendingPermissions`.
+// after it is answered. Permission prompts come from `pendingPermissions` and
+// config documents from `configEntries`.
 const pendingPermissions: Permission.Request[] = []
+const configEntries: Entry[] = []
 const locations = Layer.effect(
   LocationServiceMap.Service,
   Effect.gen(function* () {
     const bus = yield* Bus.Service
     const map = yield* LayerMap.make(
       (ref: Location.Ref) =>
-        // The fixture only exercises these four Location services.
+        // The fixture only exercises these five Location services.
         // oxlint-disable-next-line typescript-eslint/no-unsafe-type-assertion
         Layer.mergeAll(
+          Layer.succeed(
+            Config.Service,
+            // oxlint-disable-next-line typescript-eslint/no-unsafe-type-assertion
+            { entries: () => Effect.sync(() => [...configEntries]) } as unknown as Config.Interface,
+          ),
           Layer.succeed(
             Permission.Service,
             // oxlint-disable-next-line typescript-eslint/no-unsafe-type-assertion
@@ -299,6 +309,37 @@ describe("LocationActivity eviction", () => {
         expect((yield* Fiber.join(running))._tag).toBe("Failure")
         expect(interrupted).toEqual([{ sessionID, reason: "inactivity" }])
         expect(Array.from(yield* RcMap.keys(map.rcMap))).toEqual([])
+      }),
+    )
+  }
+
+  for (const timeout of ["10 minutes", "Infinity"] as const) {
+    it.effect(`honors experimental.location_idle_timeout (${timeout})`, () =>
+      Effect.gen(function* () {
+        const map = yield* LocationServiceMap.Service
+        const ref = LocationServiceMap.canonical({ directory: AbsolutePath.make("/configured") })
+        yield* Effect.addFinalizer(() => Effect.sync(() => (configEntries.length = 0)))
+        configEntries.push(
+          new Document({
+            type: "document",
+            info: new Info({
+              experimental: new ConfigExperimental.Info({ location_idle_timeout: Duration.fromInputUnsafe(timeout) }),
+            }),
+          }),
+        )
+        yield* Location.Service.pipe(Effect.provide(map.get(ref)), Effect.scoped)
+
+        // The first sweep starts the location's clock.
+        yield* TestClock.adjust("1 minute")
+        yield* TestClock.adjust("9 minutes")
+        expect(Array.from(yield* RcMap.keys(map.rcMap))).toEqual([ref])
+        yield* TestClock.adjust("1 minute")
+        if (timeout === "10 minutes") {
+          expect(Array.from(yield* RcMap.keys(map.rcMap))).toEqual([])
+          return
+        }
+        yield* TestClock.adjust("3 hours")
+        expect(Array.from(yield* RcMap.keys(map.rcMap))).toEqual([ref])
       }),
     )
   }
