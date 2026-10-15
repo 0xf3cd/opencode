@@ -10,7 +10,7 @@ if (url.protocol !== "http:") throw new Error("E2E fixtures require an http:// a
 
 const built = !!process.env.CI || process.env.PLAYWRIGHT_BUILD === "1"
 
-// Production connects to its own origin, so fixture URLs must match the preview server.
+// Production connects to its own origin, so fixture URLs must match the static server.
 if (built) {
   process.env.PLAYWRIGHT_SERVER_HOST = url.hostname
   process.env.PLAYWRIGHT_SERVER_PORT = url.port || "80"
@@ -21,7 +21,7 @@ const serverHost = process.env.PLAYWRIGHT_SERVER_HOST ?? "127.0.0.1"
 const serverPort = process.env.PLAYWRIGHT_SERVER_PORT ?? "4096"
 
 const command = built
-  ? `bun run build && bun run serve -- --host 127.0.0.1 --port ${port} --strictPort`
+  ? `bun run build && bun e2e/utils/serve.ts --host 127.0.0.1 --port ${port}`
   : `bun run dev -- --host 127.0.0.1 --port ${port} --strictPort`
 
 const workers = Number(process.env.PLAYWRIGHT_WORKERS ?? (process.env.CI ? 5 : 0)) || undefined
