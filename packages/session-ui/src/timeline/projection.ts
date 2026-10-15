@@ -856,7 +856,7 @@ function groupContent(
   detail?: TimelineDetail,
 ): PartGroup[] {
   const groups: PartGroup[] = []
-  let adjacent: { type: "context" | "file" | "read"; refs: PartRef[]; tools: boolean } | undefined
+  let adjacent: { type: "context" | "file" | "read" | "execute"; refs: PartRef[]; tools: boolean } | undefined
 
   const flush = () => {
     const current = adjacent
@@ -864,7 +864,8 @@ function groupContent(
 
     if (!first) return
 
-    if (!current.tools && !detail) {
+    // A lone execution keeps its part row so a following one merges into the same group key.
+    if ((!current.tools && !detail) || (current.type === "execute" && current.refs.length === 1)) {
       groups.push(
         ...current.refs.map((ref) => ({ type: "part" as const, key: `part:${ref.messageID}:${ref.partID}`, ref })),
       )
@@ -929,6 +930,20 @@ function contentGroupType(
 }
 
 function toolGroupType(
+  content: Extract<Content, { type: "tool" }>,
+  shellExpanded: boolean,
+  editExpanded: boolean,
+  hasContextGroup: boolean,
+  detail?: TimelineDetail,
+) {
+  const type = separateToolGroupType(content, shellExpanded, editExpanded, hasContextGroup, detail)
+
+  if (type || content.name !== "execute") return type
+
+  return "execute"
+}
+
+function separateToolGroupType(
   content: Extract<Content, { type: "tool" }>,
   shellExpanded: boolean,
   editExpanded: boolean,

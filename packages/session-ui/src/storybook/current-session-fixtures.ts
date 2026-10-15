@@ -544,9 +544,23 @@ export const executeCodeDocument = document([
         name: "execute",
         offset: 52_300,
         args: {
-          code: 'const greeting = "Code Mode execute completed"\nreturn { greeting, timestamp: new Date().toISOString() }',
+          code: 'const tab = await tools.browser.tabs.open({ url: "http://localhost:4399" })\nconst usage = await tools.opencode_console.get_usage({ range: "24h" })\nreturn { tab: tab.id, cost: usage.cost_usd }',
         },
-        output: '{\n  "greeting": "Code Mode execute completed",\n  "timestamp": "2026-08-17T09:01:43.590Z"\n}',
+        output: '{\n  "tab": "tab_4f1c",\n  "cost": 0.42\n}',
+        metadata: {
+          toolCalls: [
+            { tool: "browser.tabs.open", status: "completed", input: { url: "http://localhost:4399" } },
+            { tool: "opencode_console.get_usage", status: "completed", input: { range: "24h" } },
+          ],
+        },
+      }),
+      completedTool({
+        id: "tool_execute_followup",
+        name: "execute",
+        offset: 52_600,
+        args: { code: "return await tools.browser.tabs.list()" },
+        output: "[]",
+        metadata: { toolCalls: [{ tool: "browser.tabs.list", status: "completed" }] },
       }),
     ],
   }),

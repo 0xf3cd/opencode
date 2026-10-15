@@ -15,6 +15,7 @@ import { TimelineSeparator } from "../components/timeline-separator"
 import {
   SessionAssistantContent,
   SessionContextToolGroup,
+  SessionExecuteToolGroup,
   SessionFileToolGroup,
   SessionReadToolGroup,
   SessionShellMessage,
@@ -280,6 +281,37 @@ export function createSessionTimelineRowRenderer(input: {
         <SessionReadToolGroup
           tools={tools()}
           open={input.disclosure.value(row().group.key)}
+          onOpenChange={(open) => input.disclosure.set(row().group.key, open)}
+          onSizeChange={onSizeChange}
+        />
+      )
+    }
+
+    if (row().group.type === "execute") {
+      const tools = createMemo(() => {
+        const group = row().group
+
+        if (group.type !== "execute") return []
+        const contents = indexGroupContents(group.refs)
+
+        return group.refs.flatMap((ref) => {
+          const content = contents.get(ref.messageID)?.get(ref.partID)
+
+          return content?.type === "tool" ? [content] : []
+        })
+      })
+
+      const defaultOpen = createMemo(() => {
+        const tool = tools()[0]
+
+        return tool ? contentDefaultOpen(tool) : undefined
+      })
+
+      return (
+        <SessionExecuteToolGroup
+          tools={tools()}
+          defaultOpen={defaultOpen()}
+          open={input.disclosure.value(row().group.key) ?? defaultOpen()}
           onOpenChange={(open) => input.disclosure.set(row().group.key, open)}
           onSizeChange={onSizeChange}
         />

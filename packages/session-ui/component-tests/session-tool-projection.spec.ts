@@ -47,16 +47,22 @@ story("renders every tool error outcome without leaking hidden tools", async ({ 
   for (const name of names) await expect(timeline.locator(`[data-timeline-part-id="tool_error_${name}"]`)).toBeVisible()
 })
 
-story("expands a failed execute to its full code and error", async ({ mount }) => {
+story("keeps a failed execute inline with its neighbours' calls", async ({ mount }) => {
   const timeline = await mount("current-session-terminal-work--execute-failed")
-  await timeline.getByRole("button", { name: /^Used 5 / }).click()
-  const failed = timeline.locator('[data-timeline-part-id="tool_execute_failed_url"]')
-  await failed.getByRole("button", { name: /Invalid browser URL/ }).click()
-  await expect(failed.locator('[data-slot="tool-error-card-subtitle"]')).toContainText(
-    "const shot = await tools.browser.screenshot({ tabID: tab.id, fullPage: true });",
-  )
-  await expect(failed.locator('[data-slot="card-description"]')).toContainText(
+  // Adjacent executions merge into one list, so each merged run counts once.
+  await timeline.getByRole("button", { name: /^Used 3 / }).click()
+  const merged = timeline.locator('[data-timeline-part-ids="tool_execute_search,tool_execute_failed_url"]')
+  const call = merged.locator('[data-slot="execute-tool-call"]')
+  await expect(call).toHaveText([/browser\.tabs\.open/])
+  await expect(merged.locator('[data-slot="execute-tool-error"]')).toContainText(
     "The connected server must be able to reach the address; localhost refers to that server.",
+  )
+  await expect(timeline.locator('[data-kind="tool-error-card"]')).toHaveCount(0)
+
+  await call.click()
+  await expect(call).toHaveAttribute("aria-expanded", "true")
+  await expect(merged.locator('[data-slot="execute-tool-call-input"]')).toContainText(
+    "url:file:///C:/tmp/opencode/throne-of-glass-luke.html",
   )
 })
 
