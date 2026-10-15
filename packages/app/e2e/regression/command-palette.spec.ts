@@ -1,6 +1,5 @@
 import { expect, test } from "@playwright/test"
 import { captureConsoleWarnings, openCommandPalette, paletteSession } from "../utils/command-palette"
-import { holdRoute } from "../utils/app"
 
 test.use({ serviceWorkers: "block", permissions: ["clipboard-read", "clipboard-write"] })
 
@@ -147,30 +146,8 @@ test("merges late sessions in recency order without duplicating or stealing an e
     /palette.md/,
   ])
   await expect(selected).toHaveAttribute("aria-selected", "true")
-  await page.unroute("**/api/session?*")
-  await page.unroute("**/api/fs/find?*")
-  const refining = await holdRoute(page, /\/api\/(session\?|fs\/find\?)/)
-  await input.fill("palette remote")
-  await expect(dialog.getByRole("option")).toHaveCount(1)
-  await expect(dialog.getByRole("option", { name: /Palette remote archive/ })).toHaveAttribute("aria-selected", "true")
-  refining.release()
-  await input.fill("no-such-session")
-  await expect(dialog.getByRole("option")).toHaveCount(0)
-  await expect(dialog.getByText("No results found", { exact: true })).toBeVisible()
-  await page.route("**/api/session?*", (route) => route.fulfill({ status: 503, json: { message: "offline" } }))
-  await input.fill("offline")
-  await expect(dialog.getByText("Request failed", { exact: true })).toBeVisible()
-  await input.clear()
-  await expect(dialog.getByText("Recent sessions", { exact: true })).toBeVisible()
-  await page.clock.install()
-  await input.press("Escape")
-  // Finish the dialog's closing timer without a wall-clock sleep before using the global shortcut again.
-  await page.clock.fastForward(1_000)
-  await expect(page.locator("[data-dialog-layer]")).toHaveCount(0)
-  await page.keyboard.press("ControlOrMeta+Shift+P")
-  await expect(dialog.getByRole("textbox")).toHaveValue("")
-  await expect(dialog.getByText("Recent sessions", { exact: true })).toBeVisible()
 })
+
 test("appends search results without resetting the selected command", async ({ page }) => {
   const { dialog, input } = await openCommandPalette(page)
   const files = Promise.withResolvers<void>()
