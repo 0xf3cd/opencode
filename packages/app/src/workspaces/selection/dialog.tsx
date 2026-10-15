@@ -119,10 +119,7 @@ export function DirectoryPickerDialog(props: DirectoryPickerDialogProps) {
 
   const home = createMemo(
     () =>
-      sync.data.path.home ||
-      inferHomeDirectory(sync.data.path.directory) ||
-      inferHomeDirectory(fallbackPath.latest?.directory ?? "") ||
-      inferHomeDirectory(props.location?.directory ?? ""),
+      sync.data.path.home || inferHomeDirectory(props.location?.directory ?? ""),
   )
 
   const subtitle = createMemo(() => (ServerConnection.local(props.server) ? undefined : serverName(props.server)))
@@ -215,14 +212,17 @@ export function DirectoryPickerDialog(props: DirectoryPickerDialogProps) {
     return value ? shortenPickerRecentPath(value, home()) : ""
   })
 
-  async function load(path: string, generation: number) {
+  async function load(path: string, generation: number, priority: "user" | "background" = "user") {
     const key = path.replace(/\/+$/, "")
     setState("error", false)
     const absolute = absoluteTreePath(state.root, key)
+    const existing = listings.get(key)
+
+    if (existing && priority === "user") loads.promote(`${generation}:${key}`)
 
     const request =
-      listings.get(key) ??
-      loads.schedule(`${generation}:${key}`, "user", () => {
+      existing ??
+      loads.schedule(`${generation}:${key}`, priority, () => {
         if (!activeTreeNavigation(generation, navigation)) return Promise.resolve(undefined)
         const current = location()
 
@@ -263,6 +263,13 @@ export function DirectoryPickerDialog(props: DirectoryPickerDialogProps) {
 
     if (newlyDiscoveredRepo) {
       tree?.setComposition(tree.getComposition())
+    }
+
+    // Preloading the root's folders makes their first expand instant and finds git repos for the badge.
+    if (!key && priority === "user") {
+      for (const node of nodes) {
+        if (node.type === "directory" && node.name !== ".git") void load(node.name, generation, "background")
+      }
     }
 
     return true
