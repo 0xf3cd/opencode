@@ -2042,25 +2042,35 @@ function ExecuteTool(props: Omit<BasicToolProps, "icon" | "trigger" | "children"
     >
       <div data-component="execute-tool-calls">
         <Index each={props.runs}>
-          {(run) => (
-            <>
-              <Index each={run().calls}>{(call) => <ExecuteCallRow call={call()} />}</Index>
-              <Show when={run().error}>{(error) => <ExecuteErrorRow error={error()} />}</Show>
-            </>
-          )}
+          {(run) => {
+            // A runtime failure belongs to the call that raised it; scripts can also fail outside any call.
+            const owner = createMemo(() => run().calls.findLastIndex((call) => call.status === "error"))
+
+            return (
+              <>
+                <Index each={run().calls}>
+                  {(call, index) => <ExecuteCallRow call={call()} error={index === owner() ? run().error : undefined} />}
+                </Index>
+                <Show when={owner() === -1 && run().error}>{(error) => <ExecuteCallRow error={error()} />}</Show>
+              </>
+            )
+          }}
         </Index>
       </div>
     </BasicTool>
   )
 }
 
-function ExecuteCallRow(props: { call: ExecuteToolCall }) {
+function ExecuteCallRow(props: { call?: ExecuteToolCall; error?: string }) {
   const [open, setOpen] = createSignal(false)
-  const args = createMemo(() => executeToolCallArgs(props.call))
-  const input = createMemo(() => Object.entries(props.call.input ?? {}))
+  const args = createMemo(() => (props.call ? executeToolCallArgs(props.call) : []))
+  const input = createMemo(() => Object.entries(props.call?.input ?? {}))
+  const failed = () => !props.call || props.call.status === "error"
+  const expandable = () => input().length > 0 || !!props.error
+  const summary = () => (props.call ? args().join(", ") : props.error?.split("\n", 1)[0])
 
   const toggle = () => {
-    if (input().length === 0 || window.getSelection()?.toString()) return
+    if (!expandable() || window.getSelection()?.toString()) return
     setOpen((value) => !value)
   }
 
@@ -2068,12 +2078,12 @@ function ExecuteCallRow(props: { call: ExecuteToolCall }) {
     <div data-slot="execute-tool-call-item">
       <div
         data-slot="execute-tool-call"
-        data-status={props.call.status}
+        data-status={failed() ? "error" : props.call?.status}
         data-expanded={open() ? "true" : undefined}
         dir="ltr"
-        role={input().length > 0 ? "button" : undefined}
-        tabIndex={input().length > 0 ? 0 : undefined}
-        aria-expanded={input().length > 0 ? open() : undefined}
+        role={expandable() ? "button" : undefined}
+        tabIndex={expandable() ? 0 : undefined}
+        aria-expanded={expandable() ? open() : undefined}
         onClick={toggle}
         onKeyDown={(event) => {
           if (event.key !== "Enter" && event.key !== " ") return
@@ -2081,69 +2091,51 @@ function ExecuteCallRow(props: { call: ExecuteToolCall }) {
           toggle()
         }}
       >
-        <Show when={props.call.status === "error"} fallback={<span data-slot="execute-tool-call-marker">›</span>}>
-          <span data-slot="execute-tool-call-marker">
+        <span data-slot="execute-tool-call-marker">
+          <Show when={failed()}>
             <Icon name="outline-hexagonal-warning" size="small" />
-          </span>
-        </Show>
-        <span data-slot="execute-tool-call-name">
-          <TextShimmer text={props.call.tool} active={props.call.status === "running"} />
+          </Show>
         </span>
-        <Show when={!open() && args().length > 0}>
-          <span data-slot="execute-tool-call-args" title={args().join(", ")}>
-            [{args().join(", ")}]
+        <Show when={props.call}>
+          {(call) => (
+            <span data-slot="execute-tool-call-name">
+              <TextShimmer text={call().tool} active={call().status === "running"} />
+            </span>
+          )}
+        </Show>
+        <Show when={!open() && summary()}>
+          {(text) => (
+            <span data-slot="execute-tool-call-args" title={text()}>
+              {props.call ? `[${text()}]` : text()}
+            </span>
+          )}
+        </Show>
+        <Show when={expandable()}>
+          <span data-slot="execute-tool-call-arrow">
+            <Icon name="fill-triangle-down" size="small" />
           </span>
         </Show>
       </div>
       <Show when={open()}>
-        <dl data-slot="execute-tool-call-input" dir="ltr">
-          <For each={input()}>
-            {([key, value]) => (
-              <div data-slot="execute-tool-call-input-entry">
-                <dt>{key}:</dt>
-                <dd>{typeof value === "string" ? value : JSON.stringify(value, null, 2)}</dd>
-              </div>
-            )}
-          </For>
-        </dl>
-      </Show>
-    </div>
-  )
-}
-
-function ExecuteErrorRow(props: { error: string }) {
-  const i18n = useI18n()
-  const [open, setOpen] = createSignal(false)
-
-  const toggle = () => {
-    if (window.getSelection()?.toString()) return
-    setOpen((value) => !value)
-  }
-
-  return (
-    <div data-slot="execute-tool-call-item">
-      <div
-        data-slot="execute-tool-call"
-        data-status="error"
-        data-expanded={open() ? "true" : undefined}
-        dir="ltr"
-        role="button"
-        tabIndex={0}
-        aria-expanded={open()}
-        onClick={toggle}
-        onKeyDown={(event) => {
-          if (event.key !== "Enter" && event.key !== " ") return
-          event.preventDefault()
-          toggle()
-        }}
-      >
-        <span data-slot="execute-tool-call-marker">›</span>
-        <span data-slot="execute-tool-error-label">{i18n.t("ui.toolErrorCard.failed")}</span>
-      </div>
-      <Show when={open()}>
-        <div data-slot="execute-tool-error" dir="ltr">
-          {props.error}
-        </div>
+        <Show when={input().length > 0}>
+          <dl data-slot="execute-tool-call-input" dir="ltr">
+            <For each={input()}>
+              {([key, value]) => (
+                <div data-slot="execute-tool-call-input-entry">
+                  <dt>{key}:</dt>
+                  <dd>{typeof value === "string" ? value : JSON.stringify(value, null, 2)}</dd>
+                </div>
+              )}
+            </For>
+          </dl>
+        </Show>
+        <Show when={props.error}>
+          {(error) => (
+            <div data-slot="execute-tool-error" dir="ltr">
+              {error()}
+            </div>
+          )}
+        </Show>
       </Show>
     </div>
   )

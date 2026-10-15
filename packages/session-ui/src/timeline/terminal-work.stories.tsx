@@ -207,7 +207,7 @@ export const ExecuteFailed = {
   render: () => (
     <CurrentSessionTimelineStory
       title="Execute failed"
-      description="Failed Code Mode executions name the failed call and keep the full error message behind a collapsed row."
+      description="Failed Code Mode executions mark the failed call, which expands to show its input and the full error message."
       document={storyDocument([
         storyTool(
           "tool_execute_search",
