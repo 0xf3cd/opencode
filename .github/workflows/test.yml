@@ -25,7 +25,7 @@ jobs:
     name: affected packages
     runs-on: blacksmith-4vcpu-ubuntu-2404
     outputs:
-      app: ${{ steps.packages.outputs.app }}
+      e2e: ${{ steps.packages.outputs.app == 'true' && github.ref_name != 'dev' && github.head_ref != 'dev' }}
     steps:
       - name: Checkout repository
         uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4.3.1
@@ -186,9 +186,10 @@ jobs:
           bun run script/build-node.ts --single --skip-install --outdir=dist/node
           bun run script/service-smoke.ts --node
 
-  e2e:
-    name: e2e (${{ matrix.settings.name }})
+  e2e-suite:
+    name: e2e (${{ matrix.settings.name }}, ${{ matrix.suite.id }})
     needs: affected
+    if: needs.affected.outputs.e2e == 'true'
     strategy:
       fail-fast: false
       matrix:
@@ -197,40 +198,43 @@ jobs:
             host: blacksmith-4vcpu-ubuntu-2404
           - name: windows
             host: blacksmith-4vcpu-windows-2025
+        # Playwright splits whole spec files across shards by test count, not duration. Every app-N
+        # entry must use the same total, and the entries must cover 1..total. The service worker suite
+        # reuses shard 2's production build; the component suites run once per OS in their own leg.
+        suite:
+          - id: app-1
+            shard: 1/2
+          - id: app-2
+            shard: 2/2
+          - id: components
     runs-on: ${{ matrix.settings.host }}
     env:
-      E2E_ENABLED: ${{ needs.affected.outputs.app == 'true' && github.ref_name != 'dev' && github.head_ref != 'dev' }}
       PLAYWRIGHT_BROWSERS_PATH: ${{ github.workspace }}/.playwright-browsers
     defaults:
       run:
         shell: bash
     steps:
       - name: Checkout repository
-        if: env.E2E_ENABLED == 'true'
         uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4.3.1
         with:
           token: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Setup Node
-        if: env.E2E_ENABLED == 'true'
         uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
         with:
           # Playwright 1.59 hangs while extracting Chromium with Node 24.16.
           node-version: "24.15"
 
       - name: Setup Bun
-        if: env.E2E_ENABLED == 'true'
         uses: ./.github/actions/setup-bun
 
       - name: Read Playwright version
-        if: env.E2E_ENABLED == 'true'
         id: playwright-version
         run: |
           version=$(node -e 'console.log(require("./package.json").workspaces.catalog["@playwright/test"])')
           echo "version=$version" >> "$GITHUB_OUTPUT"
 
       - name: Cache Playwright browsers
-        if: env.E2E_ENABLED == 'true'
         id: playwright-cache
         uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.3.0
         with:
@@ -238,47 +242,47 @@ jobs:
           key: ${{ runner.os }}-${{ runner.arch }}-playwright-${{ steps.playwright-version.outputs.version }}-chromium
 
       - name: Install Playwright system dependencies
-        if: env.E2E_ENABLED == 'true' && runner.os == 'Linux'
+        if: runner.os == 'Linux'
         working-directory: packages/app
         run: bunx playwright install-deps chromium
 
       - name: Install Playwright browsers
-        if: env.E2E_ENABLED == 'true' && steps.playwright-cache.outputs.cache-hit != 'true'
+        if: steps.playwright-cache.outputs.cache-hit != 'true'
         working-directory: packages/app
         run: bunx playwright install chromium
 
       - name: Run app e2e tests against production build
-        if: env.E2E_ENABLED == 'true'
-        run: bun --cwd packages/app test:e2e:built
+        if: matrix.suite.shard
+        run: bun --cwd packages/app test:e2e:built --shard=${{ matrix.suite.shard }}
         env:
           CI: true
-        timeout-minutes: 30
+        timeout-minutes: 15
 
       - name: Verify service worker precaching and upgrades
-        if: env.E2E_ENABLED == 'true'
+        if: matrix.suite.shard == '2/2'
         working-directory: packages/app
         run: bunx playwright test --config e2e/service-worker/playwright.config.ts
         timeout-minutes: 5
 
       - name: Run session UI component tests
-        if: ${{ !cancelled() && env.E2E_ENABLED == 'true' }}
+        if: ${{ !cancelled() && !matrix.suite.shard }}
         run: bun --cwd packages/session-ui test:components
         env:
           CI: true
         timeout-minutes: 15
 
       - name: Run app component tests
-        if: ${{ !cancelled() && env.E2E_ENABLED == 'true' }}
+        if: ${{ !cancelled() && !matrix.suite.shard }}
         run: bun --cwd packages/app test:components
         env:
           CI: true
         timeout-minutes: 15
 
       - name: Upload Playwright artifacts
-        if: always() && env.E2E_ENABLED == 'true'
+        if: always()
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
-          name: playwright-${{ matrix.settings.name }}-${{ github.run_attempt }}
+          name: playwright-${{ matrix.settings.name }}-${{ matrix.suite.id }}-${{ github.run_attempt }}
           if-no-files-found: ignore
           retention-days: 7
           path: |
@@ -288,3 +292,24 @@ jobs:
             packages/session-ui/component-tests/playwright-report
             packages/app/component-tests/test-results
             packages/app/component-tests/playwright-report
+
+  # Branch rules require one e2e check per OS. These keep those names and pass only when every
+  # leg above passed, or when no leg was needed; a failing leg on either OS fails both checks.
+  e2e:
+    name: e2e (${{ matrix.os }})
+    needs: [affected, e2e-suite]
+    if: ${{ !cancelled() }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [linux, windows]
+    runs-on: blacksmith-4vcpu-ubuntu-2404
+    steps:
+      - name: Check browser test results
+        env:
+          AFFECTED: ${{ needs.affected.result }}
+          SUITES: ${{ needs.e2e-suite.result }}
+          EXPECTED: ${{ needs.affected.outputs.e2e == 'true' && 'success' || 'skipped' }}
+        run: |
+          echo "affected packages: $AFFECTED, browser test legs: $SUITES (expected $EXPECTED)"
+          test "$AFFECTED" = success && test "$SUITES" = "$EXPECTED"
