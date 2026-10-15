@@ -67,7 +67,7 @@ export default defineMain({
       },
       resolve: {
         // Storybook declares @tanstack/solid-query itself, so dedupe resolves one copy under both bun linkers. A path
-        // into app/node_modules exists only with the isolated linker; Windows CI installs hoisted.
+        // into app/node_modules exists only with the isolated linker, not in a hoisted install.
         dedupe: ["solid-js", "solid-js/web", "@solidjs/meta", "@tanstack/solid-query"],
         alias: [
           { find: "@solidjs/router", replacement: path.resolve(mocks, "solid-router.tsx") },
