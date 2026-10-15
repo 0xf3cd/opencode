@@ -1,9 +1,11 @@
 export * as LocationActivity from "./location-activity.js"
 
-import { Clock, Context, Duration, Effect, Layer, RcMap, Schema } from "effect"
+import { Clock, Context, Duration, Effect, Layer, Option, RcMap, Schema } from "effect"
 import { Bus } from "./bus.js"
+import { Form } from "./form.js"
 import { Location } from "./location.js"
 import { LocationServiceMap } from "./location-service-map.js"
+import { Permission } from "./permission.js"
 import { SessionEvent } from "./session/event.js"
 import { SessionExecution } from "./session/execution.js"
 import { SessionStore } from "./session/store.js"
@@ -55,6 +57,23 @@ export function layer(options: { readonly timeToLive?: Duration.Input; readonly 
           expired,
           (entry) =>
             Effect.gen(function* () {
+              // A pending question or permission prompt is waiting on a human, not idle.
+              const waiting = yield* locations.contextEffectOption(entry.ref).pipe(
+                Effect.flatMap(
+                  Option.match({
+                    onNone: () => Effect.succeed(false),
+                    onSome: (context) =>
+                      Effect.gen(function* () {
+                        const forms = Context.get(context, Form.Service)
+                        const permission = Context.get(context, Permission.Service)
+                        return (yield* forms.list()).length > 0 || (yield* permission.list()).length > 0
+                      }),
+                  }),
+                ),
+                Effect.scoped,
+                Effect.orElseSucceed(() => false),
+              )
+              if (waiting) return yield* touch(entry.ref)
               const owners = active.flatMap((session) =>
                 session && key(session.location) === key(entry.ref) ? [session] : [],
               )
