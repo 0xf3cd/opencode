@@ -52,13 +52,20 @@ story("keeps a failed execute inline with its neighbours' calls", async ({ mount
   // Adjacent executions merge into one list, so each merged run counts once.
   await timeline.getByRole("button", { name: /^Used 3 / }).click()
   const merged = timeline.locator('[data-timeline-part-ids="tool_execute_search,tool_execute_failed_url"]')
-  const call = merged.locator('[data-slot="execute-tool-call"]')
-  await expect(call).toHaveText([/browser\.tabs\.open/])
-  await expect(merged.locator('[data-slot="execute-tool-error"]')).toContainText(
-    "The connected server must be able to reach the address; localhost refers to that server.",
-  )
+  const rows = merged.locator('[data-slot="execute-tool-call"]')
+  await expect(rows).toHaveText([/browser\.tabs\.open/, /Failed/])
   await expect(timeline.locator('[data-kind="tool-error-card"]')).toHaveCount(0)
 
+  // The runtime error stays collapsed until its row is expanded.
+  const error = merged.locator('[data-slot="execute-tool-error"]')
+  await expect(error).toHaveCount(0)
+  await rows.nth(1).click()
+  await expect(rows.nth(1)).toHaveAttribute("aria-expanded", "true")
+  await expect(error).toContainText(
+    "The connected server must be able to reach the address; localhost refers to that server.",
+  )
+
+  const call = rows.first()
   await call.click()
   await expect(call).toHaveAttribute("aria-expanded", "true")
   await expect(merged.locator('[data-slot="execute-tool-call-input"]')).toContainText(

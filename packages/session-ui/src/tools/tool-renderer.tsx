@@ -2045,13 +2045,7 @@ function ExecuteTool(props: Omit<BasicToolProps, "icon" | "trigger" | "children"
           {(run) => (
             <>
               <Index each={run().calls}>{(call) => <ExecuteCallRow call={call()} />}</Index>
-              <Show when={run().error}>
-                {(error) => (
-                  <div data-slot="execute-tool-error" dir="ltr">
-                    {error()}
-                  </div>
-                )}
-              </Show>
+              <Show when={run().error}>{(error) => <ExecuteErrorRow error={error()} />}</Show>
             </>
           )}
         </Index>
@@ -2112,6 +2106,44 @@ function ExecuteCallRow(props: { call: ExecuteToolCall }) {
             )}
           </For>
         </dl>
+      </Show>
+    </div>
+  )
+}
+
+function ExecuteErrorRow(props: { error: string }) {
+  const i18n = useI18n()
+  const [open, setOpen] = createSignal(false)
+
+  const toggle = () => {
+    if (window.getSelection()?.toString()) return
+    setOpen((value) => !value)
+  }
+
+  return (
+    <div data-slot="execute-tool-call-item">
+      <div
+        data-slot="execute-tool-call"
+        data-status="error"
+        data-expanded={open() ? "true" : undefined}
+        dir="ltr"
+        role="button"
+        tabIndex={0}
+        aria-expanded={open()}
+        onClick={toggle}
+        onKeyDown={(event) => {
+          if (event.key !== "Enter" && event.key !== " ") return
+          event.preventDefault()
+          toggle()
+        }}
+      >
+        <span data-slot="execute-tool-call-marker">›</span>
+        <span data-slot="execute-tool-error-label">{i18n.t("ui.toolErrorCard.failed")}</span>
+      </div>
+      <Show when={open()}>
+        <div data-slot="execute-tool-error" dir="ltr">
+          {props.error}
+        </div>
       </Show>
     </div>
   )
