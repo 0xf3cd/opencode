@@ -223,13 +223,15 @@ jobs:
             host: blacksmith-4vcpu-windows-2025
         # Playwright splits whole spec files across shards by test count, not duration. Every app-N
         # entry must use the same total, and the entries must cover 1..total. The service worker suite
-        # reuses shard 2's production build; the component suites run once per OS in their own leg.
+        # reuses shard 2's production build. Each component suite runs once per OS in its own leg, so the
+        # two suites' Storybook servers and test time are not added up on one runner.
         suite:
           - id: app-1
             shard: 1/2
           - id: app-2
             shard: 2/2
-          - id: components
+          - id: session-ui-components
+          - id: app-components
     runs-on: ${{ matrix.settings.host }}
     env:
       PLAYWRIGHT_BROWSERS_PATH: ${{ github.workspace }}/.playwright-browsers
@@ -288,14 +290,14 @@ jobs:
         timeout-minutes: 5
 
       - name: Run session UI component tests
-        if: ${{ !cancelled() && !matrix.suite.shard }}
+        if: matrix.suite.id == 'session-ui-components'
         run: bun --cwd packages/session-ui test:components
         env:
           CI: true
         timeout-minutes: 15
 
       - name: Run app component tests
-        if: ${{ !cancelled() && !matrix.suite.shard }}
+        if: matrix.suite.id == 'app-components'
         run: bun --cwd packages/app test:components
         env:
           CI: true
