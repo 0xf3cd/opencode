@@ -49,7 +49,8 @@ story("renders every tool error outcome without leaking hidden tools", async ({ 
 
 story("lists a failed execute's calls and keeps its error under the failed call", async ({ mount }) => {
   const timeline = await mount("current-session-terminal-work--execute-failed")
-  await timeline.getByRole("button", { name: /^Used 5 / }).click()
+  // Executions count their calls: 1 (no calls) + 1 + 3 + 1, plus the shell.
+  await timeline.getByRole("button", { name: /^Used 7 / }).click()
   const failed = timeline.locator('[data-timeline-part-id="tool_execute_failed_url"]')
   const call = failed.locator('[data-slot="execute-tool-call"]')
   // Executions open by default, so the calls show without expanding the row.
@@ -181,7 +182,7 @@ story("opens an execution's code and output from its View code action", async ({
 
 story("shows a failed execution's error in place of its output", async ({ mount }) => {
   const timeline = await mount("current-session-terminal-work--execute-failed")
-  await timeline.getByRole("button", { name: /^Used 5 / }).click()
+  await timeline.getByRole("button", { name: /^Used 7 / }).click()
   await timeline
     .locator('[data-timeline-part-id="tool_execute_failed_url"]')
     .getByRole("button", { name: "View code" })

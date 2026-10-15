@@ -506,7 +506,14 @@ export function CurrentContextToolGroup(props: {
     }
 
     const title = names() || i18n.plural("ui.messagePart.context.thought", thoughts)
-    const count = props.parts.filter((part) => part.type === "tool" || part.type === "shell").length || thoughts
+    // Like the TUI, an execution counts the calls its script made, or itself before it makes any.
+    const count =
+      props.parts.reduce((total, part) => {
+        if (part.type === "tool" && part.name === "execute")
+          return total + Math.max(1, executeToolCalls(currentToolMetadata(part)).length)
+
+        return part.type === "tool" || part.type === "shell" ? total + 1 : total
+      }, 0) || thoughts
     const text = i18n.plural("ui.messagePart.tools.used", count, { tools: title })
     const index = text.indexOf(title)
     const before = text.slice(0, index).trim()
