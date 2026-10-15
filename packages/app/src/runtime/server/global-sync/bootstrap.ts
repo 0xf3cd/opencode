@@ -102,7 +102,10 @@ export async function bootstrapGlobal(input: {
 }) {
   const slow = [
     () => input.queryClient.fetchQuery(loadGlobalConfigQuery(input.scope)),
-    () => input.queryClient.fetchQuery(loadPathQuery(input.scope, null, input.serverAPI.location)),
+    () =>
+      input.queryClient
+        .fetchQuery(loadPathQuery(input.scope, null, input.serverAPI.location))
+        .then((data) => input.setGlobalStore("path", data)),
     () =>
       loadProjects({
         scope: input.scope,
@@ -119,6 +122,15 @@ function projectID(directory: string, projects: Project[]) {
   return projects.find((project) => project.worktree === directory || project.sandboxes?.includes(directory))?.id
 }
 
+export function inferHomeDirectory(path: string) {
+  const normalized = path.replaceAll("\\", "/")
+  const match = /^(\/Users\/[^/]+|\/home\/[^/]+|\/root|[A-Za-z]:\/Users\/[^/]+)(?=\/|$)/.exec(normalized)
+
+  if (!match) return ""
+
+  return path.includes("\\") ? match[1]!.replaceAll("/", "\\") : match[1]!
+}
+
 export const loadPathQuery = (scope: ServerScope, directory: string | null, api: LocationApi) =>
   queryOptions<Path>({
     queryKey: [scope, directory, "path"],
@@ -128,7 +140,7 @@ export const loadPathQuery = (scope: ServerScope, directory: string | null, api:
         config: "",
         worktree: location.project.directory,
         directory: location.directory,
-        home: "",
+        home: inferHomeDirectory(location.directory) || inferHomeDirectory(location.project.directory),
       })),
   })
 
