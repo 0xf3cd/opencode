@@ -12,7 +12,8 @@ import { ServerConnection } from "@/runtime/server/registry"
 import { useGlobal, useServerCtx } from "@/runtime/server/runtime"
 import { SessionTabAvatarView } from "@/shell/layout/session-tab-avatar"
 import { compareSessionTime } from "@/shell/layout/helpers"
-import { loadHomeSessionIndex, mergeHomeSessionIndex } from "@/home/sessions/index"
+import { mergeHomeSessionIndex } from "@/home/sessions/index"
+import { homeSessionsQuery } from "@/home/sessions/queries"
 import { listClosedTabs, type ClosedTab } from "@/shell/tabs/closed"
 import { sessionIDHasOpenTab, useTabs } from "@/shell/tabs/tabs"
 import { sessionTabTitle } from "./tab-title"
@@ -52,16 +53,8 @@ export function RecentlyClosedTabsMenu(props: {
       const ctx = global.serverCtx(ServerConnection.key(conn))
 
       return {
-        queryKey: ["home-sessions", conn] as const,
+        ...homeSessionsQuery(conn, ctx),
         enabled: state.open && recent().length < 10 && ctx?.sdk.connection.status() === "connected",
-        queryFn: ({ signal }: { signal: AbortSignal }) =>
-          loadHomeSessionIndex(
-            (input, options) => global.ensureServerCtx(conn).sdk.api.session.list(input, options),
-            signal,
-          ),
-        retry: false,
-        staleTime: 30_000,
-        select: (items: Awaited<ReturnType<typeof loadHomeSessionIndex>>) => () => items,
       }
     }),
   }))
