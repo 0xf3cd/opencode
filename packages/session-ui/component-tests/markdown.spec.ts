@@ -285,6 +285,7 @@ story("spaces link icons and matches link, code URL, and icon colors", async ({ 
   await expect(code).toHaveCSS("color", color)
   await expect(code).toHaveCSS("padding-inline-start", "0px")
   await expect(markdown.locator(".markdown-link-favicon")).toHaveCount(2)
+
   for (const favicon of await markdown.locator(".markdown-link-favicon").all()) {
     await expect(favicon).toHaveCSS("margin-inline-end", "5px")
     await expect(favicon).toHaveCSS("margin-inline-start", "2px")
