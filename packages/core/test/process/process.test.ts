@@ -10,6 +10,8 @@ import { LayerNode } from "@opencode/util/effect/layer-node"
 import { AppProcess } from "@opencode/util/process"
 import { testEffect } from "../lib/effect"
 
+// Every test spawns a real child, so all of them use the live clock. The spawner's 1s post-exit capture deadline
+// never fires under TestClock, and a child whose close event arrives late would hang until the test timeout.
 const it = testEffect(LayerNode.compile(AppProcess.node))
 
 const NODE = process.execPath
@@ -31,7 +33,7 @@ const waitForFile = (file: string) =>
 
 describe("AppProcess", () => {
   describe("run", () => {
-    it.effect(
+    it.live(
       "captures stdout and exit code zero",
       Effect.gen(function* () {
         const svc = yield* AppProcess.Service
@@ -54,14 +56,15 @@ describe("AppProcess", () => {
       }),
     )
 
-    it.effect(
+    it.live(
       "captures stdout and stderr in emission order",
       Effect.gen(function* () {
         const svc = yield* AppProcess.Service
         const script = [
           'process.stdout.write("out 1\\n")',
-          'setTimeout(() => process.stderr.write("err 1\\n"), 10)',
-          'setTimeout(() => process.stdout.write("out 2\\n"), 20)',
+          // Gaps wide enough that a busy test machine still reads each write before the next one.
+          'setTimeout(() => process.stderr.write("err 1\\n"), 100)',
+          'setTimeout(() => process.stdout.write("out 2\\n"), 200)',
         ].join(";")
         const result = yield* svc.run(cmd("-e", script), { combineOutput: true })
         expect(result.output?.toString("utf8")).toBe("out 1\nerr 1\nout 2\n")
@@ -70,7 +73,7 @@ describe("AppProcess", () => {
       }),
     )
 
-    it.effect(
+    it.live(
       "non-zero exit returns RunResult; caller can require success",
       Effect.gen(function* () {
         const svc = yield* AppProcess.Service
@@ -79,7 +82,7 @@ describe("AppProcess", () => {
       }),
     )
 
-    it.effect(
+    it.live(
       "requireSuccess fails on non-zero exit",
       Effect.gen(function* () {
         const svc = yield* AppProcess.Service
@@ -92,7 +95,7 @@ describe("AppProcess", () => {
       }),
     )
 
-    it.effect(
+    it.live(
       "requireSuccess succeeds on exit 0",
       Effect.gen(function* () {
         const svc = yield* AppProcess.Service
@@ -101,7 +104,7 @@ describe("AppProcess", () => {
       }),
     )
 
-    it.effect(
+    it.live(
       "requireExitIn allowlists multiple exit codes",
       Effect.gen(function* () {
         const svc = yield* AppProcess.Service
@@ -116,7 +119,7 @@ describe("AppProcess", () => {
       }),
     )
 
-    it.effect(
+    it.live(
       "truncates stdout when maxOutputBytes is set",
       Effect.gen(function* () {
         const svc = yield* AppProcess.Service
@@ -129,7 +132,7 @@ describe("AppProcess", () => {
       }),
     )
 
-    it.effect(
+    it.live(
       "truncates stderr when maxErrorBytes is set",
       Effect.gen(function* () {
         const svc = yield* AppProcess.Service
@@ -142,7 +145,7 @@ describe("AppProcess", () => {
       }),
     )
 
-    it.effect(
+    it.live(
       "result includes command description",
       Effect.gen(function* () {
         const svc = yield* AppProcess.Service
@@ -197,7 +200,7 @@ describe("AppProcess", () => {
   })
 
   describe("inherited platform methods", () => {
-    it.effect(
+    it.live(
       "string returns stdout as string",
       Effect.gen(function* () {
         const svc = yield* AppProcess.Service
@@ -206,7 +209,7 @@ describe("AppProcess", () => {
       }),
     )
 
-    it.effect(
+    it.live(
       "lines returns the platform's array of lines",
       Effect.gen(function* () {
         const svc = yield* AppProcess.Service
@@ -219,7 +222,7 @@ describe("AppProcess", () => {
   describe("run with stdin option", () => {
     const echoStdin = "process.stdin.on('data', c => process.stdout.write(c))"
 
-    it.effect(
+    it.live(
       "feeds a string to stdin and returns it on stdout",
       Effect.gen(function* () {
         const svc = yield* AppProcess.Service
@@ -229,7 +232,7 @@ describe("AppProcess", () => {
       }),
     )
 
-    it.effect(
+    it.live(
       "feeds a Uint8Array to stdin",
       Effect.gen(function* () {
         const svc = yield* AppProcess.Service
@@ -240,7 +243,7 @@ describe("AppProcess", () => {
       }),
     )
 
-    it.effect(
+    it.live(
       "feeds a Stream of Uint8Array chunks to stdin",
       Effect.gen(function* () {
         const svc = yield* AppProcess.Service
@@ -252,7 +255,7 @@ describe("AppProcess", () => {
       }),
     )
 
-    it.effect(
+    it.live(
       "completes correctly with empty input",
       Effect.gen(function* () {
         const svc = yield* AppProcess.Service
@@ -262,7 +265,7 @@ describe("AppProcess", () => {
       }),
     )
 
-    it.effect(
+    it.live(
       "carries existing Command options like env",
       Effect.gen(function* () {
         const svc = yield* AppProcess.Service
@@ -275,7 +278,7 @@ describe("AppProcess", () => {
       }),
     )
 
-    it.effect(
+    it.live(
       "carries existing Command options like cwd",
       Effect.gen(function* () {
         const svc = yield* AppProcess.Service
