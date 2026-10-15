@@ -35,6 +35,9 @@ const connect = Effect.fn("BackgroundService.connect")(function* (mode: "initial
   const desktopCli = yield* DesktopCli.Service
   const runFork = Effect.runForkWith(yield* Effect.context<FileSystem.FileSystem | Path.Path>())
   const isolated = !app.isPackaged && process.env.OPENCODE_DESKTOP_ISOLATED_SERVER === "1"
+  // Onboarding tests run against a fresh temporary root and an in-memory database, so no other
+  // service can share their state and the fixed port would only collide with a regular dev service.
+  const port = !app.isPackaged && process.env.OPENCODE_TEST_ONBOARDING === "1" ? 0 : 0x0c0c
   const cli = yield* desktopCli.resolve
   const version = mode === "initial" ? cli.version : undefined
 
@@ -54,7 +57,7 @@ const connect = Effect.fn("BackgroundService.connect")(function* (mode: "initial
         ...cli.command,
         "serve",
         "--service",
-        ...(isolated ? ["--hostname", "0.0.0.0", "--port", String(0x0c0c)] : []),
+        ...(isolated ? ["--hostname", "0.0.0.0", "--port", String(port)] : []),
       ],
       onStart: (reason, previousVersion) =>
         runFork(Effect.logInfo("v2 CLI background service starting", { reason, previousVersion })),
