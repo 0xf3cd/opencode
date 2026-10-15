@@ -19,7 +19,6 @@ export default function SessionBtwPanel(props: { btw: BtwModel; session: Mounted
   const chat = () => props.btw.entry(props.session, props.id)
   const question = () => chat()?.question
   const answer = () => chat()?.answer
-  const fallback = () => props.btw.selection(props.session)
   // A new token for each question/answer, so the copied mark clears when the text changes.
   const shownQuestion = createMemo(on(question, () => ({})))
   const shownAnswer = createMemo(on(answer, () => ({})))
@@ -30,13 +29,13 @@ export default function SessionBtwPanel(props: { btw: BtwModel; session: Mounted
   const numfmt = createMemo(() => new Intl.NumberFormat(i18n.locale()))
 
   const agentLabel = createMemo(() => {
-    const agent = chat()?.agent ?? fallback().agent
+    const agent = chat()?.agent
 
     return agent ? agent[0]?.toUpperCase() + agent.slice(1) : ""
   })
 
   const modelLabel = createMemo(() => {
-    const model = chat()?.model ?? fallback().model
+    const model = chat()?.model
 
     if (!model) return ""
     const ref = props.session.directory ? { directory: props.session.directory } : undefined

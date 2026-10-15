@@ -57,6 +57,7 @@ export function createBtw(ctx: SetupContext<typeof Btw>) {
     const store = saved(session)
     const controller = new AbortController()
     const started = Date.now()
+    const current = selection(session)
     controllers.set(id, controller)
     setRequests("pending", (list) => [...list, id])
 
@@ -69,7 +70,6 @@ export function createBtw(ctx: SetupContext<typeof Btw>) {
         .then((result) => {
           if (ctx.signal.aborted || controller.signal.aborted) return
           const duration = Math.max(0, Date.now() - started)
-          const current = selection(session)
 
           store.update((draft) => {
             const chat = draft.chats.find((item) => item.id === id)
@@ -131,7 +131,6 @@ export function createBtw(ctx: SetupContext<typeof Btw>) {
     saved,
     pending,
     entry,
-    selection,
     question: (session: MountedSession, id: string) => entry(session, id)?.question,
     answer: (session: MountedSession, id: string) => entry(session, id)?.answer,
     error: (session: MountedSession, id: string) => {
