@@ -59,7 +59,10 @@ export default defineConfig({
     baseURL,
     trace: "on-first-retry",
     screenshot: "only-on-failure",
-    video: "retain-on-failure",
+    // CI retries failures, so the retry records the video; local runs have no retries.
+    video: process.env.CI ? "on-first-retry" : "retain-on-failure",
+    // The PWA worker precaches the whole build in every test; e2e/service-worker covers it.
+    serviceWorkers: "block",
   },
   projects: [
     {
