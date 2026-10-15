@@ -26,6 +26,8 @@ const command = built
 
 const workers = Number(process.env.PLAYWRIGHT_WORKERS ?? (process.env.CI ? 5 : 0)) || undefined
 
+const touchScroll = /mobile-timeline-scroll\.spec\.ts/
+
 export default defineConfig({
   testDir: "./e2e",
   testIgnore: [
@@ -64,10 +66,22 @@ export default defineConfig({
     // The PWA worker precaches the whole build in every test; e2e/service-worker covers it.
     serviceWorkers: "block",
   },
+  // The touch-scroll project exists only for scheduling: in the chromium project, mobile-timeline-scroll
+  // is one long serial group that ends up running alone on a single worker. Projects queue in
+  // declaration order, so this one runs the file's tests after every chromium group, spread across all
+  // workers. `--project chromium`, UI mode and the VS Code extension's default first-project selection
+  // therefore skip the file.
   projects: [
     {
       name: "chromium",
       use: { ...devices["Desktop Chrome"] },
+      grepInvert: touchScroll,
+    },
+    {
+      name: "chromium-touch-scroll",
+      use: { ...devices["Desktop Chrome"] },
+      grep: touchScroll,
+      fullyParallel: true,
     },
   ],
 })
