@@ -19,6 +19,8 @@ export function componentConfig(directory: string) {
       url: baseURL,
       reuseExistingServer: !process.env.CI,
       timeout: 120_000,
+      // Vite reports dependency re-optimization ("optimized dependencies changed. reloading") on stdout; keep it in logs.
+      stdout: "pipe",
     },
     use: {
       baseURL,
