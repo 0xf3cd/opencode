@@ -676,9 +676,15 @@ function HomeProjectRow(
   })
 
   return (
+    // The sortable wrapper is the keyboard reorder stop; its ring sits above the row so the selected row cannot cover it.
     <div
       ref={sortable.ref}
-      class="group/project relative flex h-7 min-w-0 items-center rounded-[6px]"
+      class={`
+        group/project relative flex h-7 min-w-0 items-center rounded-[6px] focus-visible:outline-none
+        focus-visible:after:pointer-events-none focus-visible:after:absolute focus-visible:after:inset-0
+        focus-visible:after:rounded-[inherit] focus-visible:after:shadow-[inset_0_0_0_2px_var(--v2-border-border-focus)]
+        focus-visible:after:content-['']
+      `}
       classList={{ "z-10": sortable.isDragSource() }}
       data-home-row
       data-dimmed={serverUnreachable()}
