@@ -257,7 +257,6 @@ export function resolveThemeVariant(variant: ThemeVariant, isDark: boolean): Res
   tokens["border-base"] = colors.compact ? borderTone(0.22, 0.16) : neutralAlpha[6]
   tokens["border-hover"] = colors.compact ? borderTone(0.28, 0.2) : neutralAlpha[7]
   tokens["border-active"] = colors.compact ? borderTone(0.34, 0.24) : neutralAlpha[8]
-  tokens["border-selected"] = withAlpha(interactive[8], isDark ? 0.9 : 0.99)
   tokens["border-disabled"] = colors.compact ? borderTone(0.18, 0.12) : neutralAlpha[7]
   tokens["border-weak-base"] = colors.compact ? borderTone(0.1, 0.08) : neutralAlpha[isDark ? 5 : 4]
   tokens["border-strong-base"] = colors.compact ? borderTone(0.34, 0.24) : neutralAlpha[isDark ? 7 : 6]
