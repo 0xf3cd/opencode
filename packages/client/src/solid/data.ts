@@ -1560,7 +1560,7 @@ export function createData(config: CreateDataInput) {
         if (fresh) track(creating, id, request)
         return { id, request }
       },
-      compact(input: { sessionID: string; model?: ModelRef }) {
+      compact(input: { sessionID: string; model?: ModelRef; instructions?: string }) {
         const active = compacting.get(input.sessionID)
         if (active) return active.request
         // A known pending control ID may be consumed while setup waits. Propose
@@ -1574,7 +1574,7 @@ export function createData(config: CreateDataInput) {
             time: { created: Date.now() },
             type: "compaction",
             delivery: "steer",
-            payload: {},
+            payload: { instructions: input.instructions },
           })
         }
         // Compaction admission can coalesce onto a different ID. Retire the
@@ -1583,7 +1583,7 @@ export function createData(config: CreateDataInput) {
         const observed = new Set<string>()
         const request = sendAdmission(input.sessionID, async () => {
           if (input.model) await api().session.switchModel({ sessionID: input.sessionID, model: input.model })
-          return api().session.compact({ sessionID: input.sessionID, id })
+          return api().session.compact({ sessionID: input.sessionID, id, instructions: input.instructions })
         })
           .then((item) => {
             batch(() => {
