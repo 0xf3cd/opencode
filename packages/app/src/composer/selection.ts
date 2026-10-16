@@ -32,9 +32,7 @@ export function createComposerControls(input: { model?: ModelSelection } = {}) {
       model: {
         selection,
         // A model the catalog no longer offers still names its provider.
-        provider:
-          selection.current()?.provider ??
-          (key && (providers.all().get(key.providerID) ?? { id: key.providerID, name: key.providerID })),
+        providerName: key && (providers.all().get(key.providerID)?.name ?? key.providerID),
         paid: providers.paid().length > 0,
         // The session's model applies only to its agent, so resolve agents before showing a model.
         loading:
