@@ -25,7 +25,7 @@ test("a catalog refresh cannot replace an existing session's model", async ({ pa
   })
 
   const control = page.locator('[data-action="composer-model"]')
-  await expect(control).toHaveText("OpenCode/Alpha")
+  await expect(control).toHaveText("OpenCode / Alpha")
   await view.editor.fill("Keep my selected model")
 
   catalog.current = provider(beta)
@@ -38,7 +38,7 @@ test("a catalog refresh cannot replace an existing session's model", async ({ pa
       data: {},
     },
   ])
-  await expect(control).toHaveText("OpenCode/alpha (unavailable)")
+  await expect(control).toHaveText("OpenCode / alpha (unavailable)")
   await view.editor.press("Enter")
   await expect(page.getByText("Select an agent and model", { exact: true })).toBeVisible()
   await expect(view.editor).toHaveText("Keep my selected model")
@@ -55,7 +55,7 @@ test("a catalog refresh cannot replace an existing session's model", async ({ pa
       data: {},
     },
   ])
-  await expect(control).toHaveText("OpenCode/Alpha")
+  await expect(control).toHaveText("OpenCode / Alpha")
   await expect(page.getByRole("button", { name: "Choose model variant", exact: true })).toHaveText("high")
   await view.editor.press("Enter")
   await expect.poll(() => prompts.length).toBe(1)
@@ -71,13 +71,13 @@ test("a catalog refresh cannot replace an existing session's model", async ({ pa
       data: {},
     },
   ])
-  await expect(control).toHaveText("OpenCode/alpha (unavailable)")
+  await expect(control).toHaveText("OpenCode / alpha (unavailable)")
   await control.click()
   await page
     .getByRole("dialog", { name: "Select model" })
     .getByRole("button", { name: "Beta Free", exact: true })
     .click()
-  await expect(control).toHaveText("OpenCode/Beta")
+  await expect(control).toHaveText("OpenCode / Beta")
   await view.editor.fill("Use the replacement I chose")
   await view.editor.press("Enter")
   await expect.poll(() => prompts.length).toBe(2)
@@ -111,7 +111,7 @@ test("an existing session's model waits for its agent instead of showing a fallb
   // The recent model must not stand in for the session's model while its agent is unresolved.
   await expect(control).toBeHidden()
   agents.resolve()
-  await expect(control).toHaveText("OpenCode/Alpha")
+  await expect(control).toHaveText("OpenCode / Alpha")
 })
 
 async function draft(page: Page) {

@@ -86,7 +86,7 @@ function ComposerModelControl(props: {
           {(name) => (
             <>
               <span class="max-w-[50%] shrink-0 truncate text-v2-text-text-faint">{name()}</span>
-              <span class="shrink-0 text-v2-text-text-faint">/</span>
+              <span class="shrink-0 whitespace-pre text-v2-text-text-faint">{" / "}</span>
             </>
           )}
         </Show>
