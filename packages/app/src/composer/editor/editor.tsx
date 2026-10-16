@@ -331,13 +331,12 @@ export function ComposerEditor(props: ComposerEditorProps) {
               onShell={props.controller.openShell}
             />
           </div>
-          {/* Inline padding traded from the margins keeps control focus rings inside the scroll clip. */}
           <div
             ref={controlsViewport}
             data-slot="composer-controls"
             data-overflow-start={overflow.start}
             data-overflow-end={overflow.end}
-            class="me-2 h-full min-w-0 flex-1 overflow-x-auto overscroll-x-contain px-1 no-scrollbar"
+            class="ms-1 me-3 h-full min-w-0 flex-1 overflow-x-auto overscroll-x-contain no-scrollbar"
             onScroll={updateOverflow}
             aria-hidden={state.mode === "shell"}
             inert={state.mode === "shell" ? true : undefined}
