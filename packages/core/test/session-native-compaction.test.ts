@@ -211,11 +211,12 @@ const setup = Effect.fnUntraced(function* (options: { endpoint?: boolean } = {})
     }
   })
   // Opens the compaction's message as the runner does when it delivers `/compact`.
-  const compact = Effect.gen(function* () {
+  const compactWith = Effect.fnUntraced(function* (instructions?: string) {
     const inputID = SessionMessage.ID.create()
     yield* bus.publish(SessionEvent.Compaction.Started, { sessionID, reason: "manual", recent: "", inputID })
-    return yield* compaction.compact({ reason: "manual", context: yield* load, inputID })
+    return yield* compaction.compact({ reason: "manual", context: yield* load, inputID, instructions })
   })
+  const compact = compactWith()
   const checkpoint = Effect.gen(function* () {
     const messages = (yield* load).messages
     const last = messages.findLast((message) => message.type === "compaction" && message.status === "completed")
@@ -229,6 +230,7 @@ const setup = Effect.fnUntraced(function* (options: { endpoint?: boolean } = {})
   })
   return {
     compact,
+    compactWith,
     // An automatic compaction that skips the "is it due" check, which a context this small never passes.
     overflow: Effect.gen(function* () {
       return yield* compaction.compact({ reason: "overflow", context: yield* load })
@@ -330,6 +332,21 @@ it.live(
     }),
   15000,
 )
+
+for (const endpoint of [false, true])
+  it.live(`manual instructions are the last message the provider compacts (endpoint: ${endpoint})`, () =>
+    Effect.gen(function* () {
+      const fixture = yield* setup({ endpoint })
+      yield* fixture.prompt("Original user")
+      expect(yield* fixture.compactWith("Keep only the parser work")).toEqual({ status: "completed" })
+      const input = (fixture.bodies[0] as { input: unknown[] }).input
+      expect(JSON.stringify(input.at(endpoint ? -1 : -2))).toContain(
+        "Additional instructions for this summary:\\nKeep only the parser work",
+      )
+      if (!endpoint) expect(input.at(-1)).toEqual({ type: "compaction_trigger" })
+      expect(JSON.stringify((yield* fixture.checkpoint).messages)).not.toContain("Keep only the parser work")
+    }),
+  )
 
 it.live("manual and automatic endpoint compaction keep the provider replacement unchanged", () =>
   Effect.gen(function* () {

@@ -96,6 +96,8 @@ type Streamed = {
   readonly providerState?: SessionMessage.ProviderState
 }
 
+const instructionsSection = (instructions: string) => `Additional instructions for this summary:\n${instructions}`
+
 const NOTHING_TO_COMPACT: Failure = { error: { type: "compaction.unavailable", message: "Nothing to compact yet" } }
 /** After each "too long" rejection, the next attempt aims at this share of the first rejected request's size. */
 const SHRINK_STEPS = [0.7, 0.5, 0.35]
@@ -153,7 +155,7 @@ export const buildPrompt = (update: boolean, legacy = false, instructions?: stri
     "Summarize only what the user and the assistant said and did. Leave out instructions and setup the assistant was given rather than told by the user: repository conventions, instruction files such as AGENTS.md, and environment details like the session ID. The next agent receives current versions of all of these separately.",
     SUMMARY_TEMPLATE,
     SUMMARY_RULES,
-    ...(instructions?.trim() ? [`Additional instructions for this summary:\n${instructions.trim()}`] : []),
+    ...(instructions?.trim() ? [instructionsSection(instructions.trim())] : []),
     "Do not continue the task or call tools.",
     "Return only the structured summary in the requested format. Do not include a preamble, explanation, or other commentary.",
   ]
@@ -385,7 +387,14 @@ export const layer = Layer.effect(
         return unsupported(`Native compaction is not supported for ${request.model.provider}/${request.model.route.id}`)
       }
 
-      return yield* deliver(trigger, prepared, "", budget, send)
+      // The provider writes the checkpoint itself, so manual instructions reach it as the last message of the window.
+      const instructions = trigger.reason === "manual" ? trigger.instructions?.trim() : undefined
+      const request = instructions
+        ? LLMRequest.update(prepared.request, {
+            messages: [...prepared.request.messages, Message.user(instructionsSection(instructions))],
+          })
+        : prepared.request
+      return yield* deliver(trigger, { ...prepared, request }, "", budget, send)
     })
 
     /**
