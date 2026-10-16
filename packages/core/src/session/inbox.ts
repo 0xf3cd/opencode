@@ -205,7 +205,7 @@ export const make = Effect.fn("SessionInbox.make")(function* () {
     readonly id: SessionMessage.ID
     readonly sessionID: SessionSchema.ID
     readonly delivery: Delivery
-    readonly focus?: string
+    readonly instructions?: string
   }) {
     return yield* serialized(
       input.sessionID,
@@ -222,7 +222,7 @@ export const make = Effect.fn("SessionInbox.make")(function* () {
         return yield* admit({
           id: input.id,
           sessionID: input.sessionID,
-          item: { type: "compaction", payload: { focus: input.focus }, delivery: Delivery.make(input.delivery) },
+          item: { type: "compaction", payload: { instructions: input.instructions }, delivery: Delivery.make(input.delivery) },
         })
       }),
     )

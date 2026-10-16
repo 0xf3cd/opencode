@@ -162,13 +162,13 @@ test("compaction update prompt rewrites legacy checkpoints only when asked", () 
   expect(SessionCompaction.buildPrompt(false, true)).not.toContain(rewrite)
 })
 
-test("compaction prompt includes the focus section only when focus is given", () => {
+test("compaction prompt includes additional instructions only when given", () => {
   for (const update of [false, true]) {
     expect(SessionCompaction.buildPrompt(update, false, "Keep only the parser work")).toContain(
-      "<focus>\nKeep only the parser work\n</focus>",
+      "Additional instructions for this summary:\nKeep only the parser work",
     )
     expect(SessionCompaction.buildPrompt(update, false, "  ")).toBe(SessionCompaction.buildPrompt(update))
-    expect(SessionCompaction.buildPrompt(update)).not.toContain("<focus>")
+    expect(SessionCompaction.buildPrompt(update)).not.toContain("Additional instructions")
   }
 })
 

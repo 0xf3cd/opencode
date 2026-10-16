@@ -58,8 +58,8 @@ export type Trigger =
       readonly reason: "manual"
       readonly context: SessionContext.Loaded
       readonly inputID: SessionMessage.ID
-      /** Extra guidance from the user for this summary. */
-      readonly focus?: string
+      /** Extra user instructions for this summary. */
+      readonly instructions?: string
     }
 
 export type Outcome =
@@ -148,12 +148,12 @@ const SUMMARY_RULES = `Rules:
 - Preserve consequential workflow state, including whether changes are uncommitted, committed, pushed, under review, or merged.
 - Do not mention the summary process or that context was compacted.`
 
-export const buildPrompt = (update: boolean, legacy = false, focus?: string) => {
+export const buildPrompt = (update: boolean, legacy = false, instructions?: string) => {
   const shared = [
     "Summarize only what the user and the assistant said and did. Leave out instructions and setup the assistant was given rather than told by the user: repository conventions, instruction files such as AGENTS.md, and environment details like the session ID. The next agent receives current versions of all of these separately.",
     SUMMARY_TEMPLATE,
     SUMMARY_RULES,
-    ...(focus?.trim() ? [focusSection(focus.trim())] : []),
+    ...(instructions?.trim() ? [`Additional instructions for this summary:\n${instructions.trim()}`] : []),
     "Do not continue the task or call tools.",
     "Return only the structured summary in the requested format. Do not include a preamble, explanation, or other commentary.",
   ]
@@ -181,11 +181,6 @@ export const buildPrompt = (update: boolean, legacy = false, focus?: string) => 
     ...shared,
   ].join("\n\n")
 }
-
-const focusSection = (focus: string) => `The user gave this guidance for this summary. Use it to decide what to emphasize, condense, or leave out, but keep the required format:
-<focus>
-${focus}
-</focus>`
 
 const NUDGE =
   "The previous response did not fill in the required summary template. Do not call tools. Return the summary as text using the exact section headings from the template."
@@ -294,7 +289,7 @@ export const layer = Layer.effect(
       const prompt = buildPrompt(
         previous !== undefined,
         previous?.summary.includes(LEGACY_HEADING) ?? false,
-        trigger.reason === "manual" ? trigger.focus : undefined,
+        trigger.reason === "manual" ? trigger.instructions : undefined,
       )
       const headings = SUMMARY_TEMPLATE.split("\n").filter((line) => line.startsWith("##"))
       const filled = (text: string) => text.split("\n").some((line) => headings.includes(line.trim()))

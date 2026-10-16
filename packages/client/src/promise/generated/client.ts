@@ -803,7 +803,7 @@ export function make(options: ClientOptions) {
           {
             method: "POST",
             path: `/api/session/${encodeURIComponent(input.sessionID)}/compact`,
-            body: { id: input["id"], delivery: input["delivery"], focus: input["focus"] },
+            body: { id: input["id"], delivery: input["delivery"], instructions: input["instructions"] },
             successStatus: 200,
             declaredStatuses: [400, 401, 404, 409],
             empty: false,
