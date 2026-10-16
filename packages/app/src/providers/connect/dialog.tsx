@@ -222,7 +222,7 @@ export const DialogConnectProvider: Component<{
 }
 
 // Same groups and order as the TUI's integration list.
-const POPULAR = ["opencode-go", "opencode", "openai", "github-copilot", "anthropic", "google"]
+const POPULAR = ["opencode", "opencode-go", "openai", "github-copilot", "anthropic", "google"]
 
 function ProviderPicker(props: { directory?: string; onSelect: (provider: string) => void; onPrepare?: () => void }) {
   const integrations = useIntegrations(() => props.directory)
