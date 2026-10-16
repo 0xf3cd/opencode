@@ -437,7 +437,12 @@ export const SessionHandler = HttpApiBuilder.group(Api, "server.session", (handl
         Effect.fn(function* (ctx) {
           return {
             data: yield* session
-              .compact({ sessionID: ctx.params.sessionID, id: ctx.payload.id, delivery: ctx.payload.delivery })
+              .compact({
+                sessionID: ctx.params.sessionID,
+                id: ctx.payload.id,
+                delivery: ctx.payload.delivery,
+                focus: ctx.payload.focus,
+              })
               .pipe(
                 Effect.catchTag("Session.NotFoundError", missingSession),
                 Effect.catchTag("Session.CompactionConflictError", (error) =>

@@ -502,6 +502,7 @@ export const makeSessionGroup = <I extends HttpApiMiddleware.AnyId, S, FormI ext
         payload: Schema.Struct({
           id: SessionMessage.ID.pipe(Schema.optional),
           delivery: SessionInbox.Delivery.pipe(Schema.optional),
+          focus: Schema.String.pipe(Schema.optional),
         }),
         success: Schema.Struct({ data: SessionInbox.Compaction }),
         error: [ConflictError, SessionNotFoundError],

@@ -162,6 +162,16 @@ test("compaction update prompt rewrites legacy checkpoints only when asked", () 
   expect(SessionCompaction.buildPrompt(false, true)).not.toContain(rewrite)
 })
 
+test("compaction prompt includes the focus section only when focus is given", () => {
+  for (const update of [false, true]) {
+    expect(SessionCompaction.buildPrompt(update, false, "Keep only the parser work")).toContain(
+      "<focus>\nKeep only the parser work\n</focus>",
+    )
+    expect(SessionCompaction.buildPrompt(update, false, "  ")).toBe(SessionCompaction.buildPrompt(update))
+    expect(SessionCompaction.buildPrompt(update)).not.toContain("<focus>")
+  }
+})
+
 test("compaction prompts prohibit task execution", () => {
   for (const update of [false, true])
     expect(SessionCompaction.buildPrompt(update)).toContain("Do not continue the task or call tools")
