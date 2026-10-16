@@ -47,6 +47,7 @@ export const Plugin = define({
         ConfigProvider.Info,
         {
           readonly providerID: string
+          readonly previousPackage?: string
           readonly models: ReadonlyMap<string, { readonly inherit: boolean; readonly base?: Model.Info }>
         }
       >(),
@@ -58,6 +59,7 @@ export const Plugin = define({
         const current = providers.get(providerID)
         const source = providers.get(item.canonical ?? current?.provider.canonical ?? providerID)
         const changed = item.canonical !== undefined && item.canonical !== current?.provider.canonical
+        const previousPackage = source?.provider.package
         providers.update(providerID, (provider) => {
           if (changed && source && source.provider !== provider)
             Object.assign(provider, structuredClone(source.provider), {
@@ -88,7 +90,7 @@ export const Plugin = define({
             if (item.settings?.baseURL !== undefined && model.settings) delete model.settings.baseURL
           })
         }
-        next.set(item, { providerID, models: definitions })
+        next.set(item, { providerID, previousPackage, models: definitions })
       }
       for (const [item, definition] of next) {
         for (const [id, config] of Object.entries(item.models ?? {})) {
@@ -182,6 +184,16 @@ export const Plugin = define({
                 }),
               ]
             })
+        }
+        // Models that take their package from the provider inherit variants spelled for its previous package.
+        const providerPackage = models.provider.get(providerID)?.provider.package
+        if (item.package === undefined || providerPackage === definition.previousPackage) continue
+        for (const model of models.list(providerID)) {
+          if (model.package !== undefined || model.variants.length === 0) continue
+          if (item.models?.[model.id]?.variants !== undefined) continue
+          models.update(providerID, model.id, (draft) => {
+            draft.variants = [...Variant.resolve({ ...draft, package: providerPackage })]
+          })
         }
       }
     })

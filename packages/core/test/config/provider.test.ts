@@ -831,6 +831,41 @@ describe("ConfigProviderPlugin.Plugin", () => {
       expect(model.time.released).toBe(Date.UTC(2026, 1, 3))
       expect(model.capabilities.temperature).toBe(false)
       expect(model.compatibility?.reasoningField).toBe("reasoning_content")
+
+  it.effect("respells inherited variants when config changes the provider package", () =>
+    Effect.gen(function* () {
+      const providers = yield* Provider.Service
+      const models = yield* Model.Service
+      const providerID = Provider.ID.make("zai")
+      const chatVariant = {
+        id: Model.VariantID.make("low"),
+        settings: { thinking: { type: "enabled", clear_thinking: false }, reasoningEffort: "low" },
+      }
+      yield* providers.transform((editor) => {
+        editor.update(providerID, (provider) => {
+          provider.package = "@opencode/ai/providers/zai/chat"
+        })
+        editor.models.update(providerID, Model.ID.make("glm-5.3"), (model) => {
+          model.variants = [chatVariant]
+        })
+        editor.models.update(providerID, Model.ID.make("glm-pinned"), (model) => {
+          model.package = "@opencode/ai/providers/zai/chat"
+          model.variants = [chatVariant]
+        })
+      })
+      yield* addPlugin([
+        new Document({
+          type: "document",
+          info: decode({ providers: { zai: { package: "@opencode/ai/providers/anthropic" } } }),
+        }),
+      ])
+
+      const inherited = required(yield* models.get(providerID, Model.ID.make("glm-5.3")))
+      expect(inherited.variants.find((variant) => variant.id === "low")).toEqual({
+        id: Model.VariantID.make("low"),
+        settings: { effort: "low", thinking: { type: "adaptive", display: "summarized" } },
+      })
+      expect(required(yield* models.get(providerID, Model.ID.make("glm-pinned"))).variants).toEqual([chatVariant])
     }),
   )
 
