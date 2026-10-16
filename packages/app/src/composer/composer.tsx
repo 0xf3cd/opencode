@@ -23,6 +23,17 @@ export function Composer(props: {
   const dialog = useDialog()
   const command = useCommand()
   const language = useLanguage()
+  const modelName = () => {
+    const selection = props.model.model.selection
+    const model = selection.current()
+
+    if (model) return model.name
+    const key = selection.key()
+
+    if (key) return language.t("dialog.model.unavailable", { model: key.modelID })
+
+    return language.t("dialog.model.select.title")
+  }
 
   return (
     <div class="flex flex-col gap-3">
@@ -44,8 +55,8 @@ export function Composer(props: {
             title={language.t("command.model.choose")}
             keybind={command.keybindParts("model.choose")}
             model={props.model.model.selection}
-            provider={props.model.model.selection.current()?.provider}
-            modelName={props.model.model.selection.current()?.name ?? language.t("dialog.model.select.title")}
+            provider={props.model.model.provider}
+            modelName={modelName()}
             onClose={props.model.restoreFocus}
             onUnpaidClick={() => dialog.show(() => <DialogSelectModelUnpaid model={props.model.model.selection} />)}
           />
@@ -80,6 +91,11 @@ function ComposerModelControl(props: {
         )}
       </Show>
       <span class="truncate leading-4">{props.modelName}</span>
+      <Show when={props.provider}>
+        {(provider) => (
+          <span class="max-w-[50%] shrink-0 truncate leading-4 text-v2-text-text-faint">{provider().name}</span>
+        )}
+      </Show>
       <span class="-ml-0.5 -mr-1 flex shrink-0">
         <Icon name="chevron-down" />
       </span>
@@ -107,7 +123,7 @@ function ComposerModelControl(props: {
               data-control-type="dialog"
               variant="ghost-muted"
               size="normal"
-              class="min-w-0 max-w-[220px] justify-start ![font-weight:440] group"
+              class="min-w-0 max-w-[320px] justify-start ![font-weight:440] group"
               classList={{ "animate-in fade-in": shouldAnimate() }}
               style={{ height: "28px" }}
               onClick={props.onUnpaidClick}
@@ -125,7 +141,7 @@ function ComposerModelControl(props: {
                 variant="ghost-muted"
                 size="normal"
                 style={{ height: "28px" }}
-                class="min-w-0 max-w-[220px] justify-start ![font-weight:440] group"
+                class="min-w-0 max-w-[320px] justify-start ![font-weight:440] group"
                 classList={{ "animate-in fade-in": shouldAnimate() }}
                 data-action="composer-model"
                 data-control-type={mobile() ? "drawer" : "popover"}

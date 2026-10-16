@@ -1,6 +1,6 @@
 import { expect, test, type Locator, type Page } from "@playwright/test"
-import { NO_PROVIDER, T0, provider } from "../utils/app"
-import { openDraft, openSession } from "../utils/workspace"
+import { NO_PROVIDER, T0, provider, sessionHref } from "../utils/app"
+import { mockWorkspace, openDraft, openSession } from "../utils/workspace"
 
 test.use({ permissions: ["clipboard-read", "clipboard-write"] })
 
@@ -25,7 +25,7 @@ test("a catalog refresh cannot replace an existing session's model", async ({ pa
   })
 
   const control = page.locator('[data-action="composer-model"]')
-  await expect(control).toHaveText("Alpha")
+  await expect(control).toHaveText(/^Alpha\s*OpenCode$/)
   await view.editor.fill("Keep my selected model")
 
   catalog.current = provider(beta)
@@ -38,7 +38,7 @@ test("a catalog refresh cannot replace an existing session's model", async ({ pa
       data: {},
     },
   ])
-  await expect(control).toHaveText("Select model")
+  await expect(control).toHaveText(/^alpha \(unavailable\)\s*OpenCode$/)
   await view.editor.press("Enter")
   await expect(page.getByText("Select an agent and model", { exact: true })).toBeVisible()
   await expect(view.editor).toHaveText("Keep my selected model")
@@ -55,7 +55,7 @@ test("a catalog refresh cannot replace an existing session's model", async ({ pa
       data: {},
     },
   ])
-  await expect(control).toHaveText("Alpha")
+  await expect(control).toHaveText(/^Alpha\s*OpenCode$/)
   await expect(page.getByRole("button", { name: "Choose model variant", exact: true })).toHaveText("high")
   await view.editor.press("Enter")
   await expect.poll(() => prompts.length).toBe(1)
@@ -71,13 +71,13 @@ test("a catalog refresh cannot replace an existing session's model", async ({ pa
       data: {},
     },
   ])
-  await expect(control).toHaveText("Select model")
+  await expect(control).toHaveText(/^alpha \(unavailable\)\s*OpenCode$/)
   await control.click()
   await page
     .getByRole("dialog", { name: "Select model" })
     .getByRole("button", { name: "Beta Free", exact: true })
     .click()
-  await expect(control).toHaveText("Beta")
+  await expect(control).toHaveText(/^Beta\s*OpenCode$/)
   await view.editor.fill("Use the replacement I chose")
   await view.editor.press("Enter")
   await expect.poll(() => prompts.length).toBe(2)
@@ -85,6 +85,33 @@ test("a catalog refresh cannot replace an existing session's model", async ({ pa
     { model: { id: "alpha", providerID: "opencode", variant: "high" } },
     { model: { id: "beta", providerID: "opencode" } },
   ])
+})
+
+test("an existing session's model waits for its agent instead of showing a fallback", async ({ page }) => {
+  const sessionID = "ses_agent_pending"
+  await mockWorkspace(page, {
+    name: "AgentPending",
+    sessions: [{ id: sessionID, agent: "build", model: { id: "alpha", providerID: "opencode" } }],
+    provider: provider({ id: "alpha", name: "Alpha" }, { id: "beta", name: "Beta" }),
+    seed: { storage: { "opencode.global.dat:model": { recent: [{ providerID: "opencode", modelID: "beta" }] } } },
+  })
+  const agents = Promise.withResolvers<void>()
+  await page.route(/\/api\/agent(\?|$)/, async (route) => {
+    await agents.promise
+    await route.fallback()
+  })
+  const catalog = ["/api/model", "/api/provider", "/api/config"].map((path) =>
+    page.waitForResponse((response) => new URL(response.url()).pathname === path),
+  )
+  await page.goto(sessionHref(sessionID))
+  await Promise.all(catalog)
+  await expect(page.locator('[data-component="composer-editor"]')).toBeEditable()
+
+  const control = page.locator('[data-action="composer-model"]')
+  // The recent model must not stand in for the session's model while its agent is unresolved.
+  await expect(control).toBeHidden()
+  agents.resolve()
+  await expect(control).toHaveText(/^Alpha\s*OpenCode$/)
 })
 
 async function draft(page: Page) {

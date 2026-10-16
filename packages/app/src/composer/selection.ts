@@ -18,6 +18,9 @@ export function createComposerControls(input: { model?: ModelSelection } = {}) {
   const providers = useProviders(() => sdk().directory)
 
   return createMemo<ComposerControls>(() => {
+    const selection = input.model ?? local.model
+    const key = selection.key()
+
     return {
       agents: {
         available: normalizeAgentList(data.location.agent.list({ directory: sdk().directory }) ?? []),
@@ -27,11 +30,16 @@ export function createComposerControls(input: { model?: ModelSelection } = {}) {
         select: local.agent.set,
       },
       model: {
-        selection: input.model ?? local.model,
+        selection,
+        // A model the catalog no longer offers still names its provider.
+        provider:
+          selection.current()?.provider ??
+          (key && (providers.all().get(key.providerID) ?? { id: key.providerID, name: key.providerID })),
         paid: providers.paid().length > 0,
+        // The session's model applies only to its agent, so resolve agents before showing a model.
         loading:
-          !(input.model ?? local.model).ready() ||
-          (local.agent.visible() && data.location.agent.list({ directory: sdk().directory }) === undefined) ||
+          !selection.ready() ||
+          data.location.agent.list({ directory: sdk().directory }) === undefined ||
           !providers.ready(),
       },
     }
@@ -78,14 +86,18 @@ export function createComposerModelSelection(input: {
       return modelID ? [{ providerID: provider.id, modelID }] : []
     })[0]
 
-  const current = () => {
+  const key = () => {
     if (!configuredModel.ready()) return
 
-    const key = [prompt.model.current(), input.agent()?.model, configuredModel(), recent(), fallback()].find(
+    return [prompt.model.current(), input.agent()?.model, configuredModel(), recent(), fallback()].find(
       (item): item is ModelKey => !!item && valid(item),
     )
+  }
 
-    return key ? models.find(key) : undefined
+  const current = () => {
+    const item = key()
+
+    return item ? models.find(item) : undefined
   }
 
   const recentModels = createMemo(() =>
@@ -99,6 +111,7 @@ export function createComposerModelSelection(input: {
     trackSessionCommit: local.model.trackSessionCommit,
     remembered: () => Object.fromEntries(Object.entries(remembered).map(([name, model]) => [name, { model }])),
     ready: Object.assign(() => models.ready() && configuredModel.ready(), { promise: models.ready.promise }),
+    key,
     current,
     recent: recentModels,
     list: models.list,
