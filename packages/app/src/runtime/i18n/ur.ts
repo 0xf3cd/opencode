@@ -137,7 +137,6 @@ export const dict = {
   "dialog.provider.search.placeholder": "فراہم کنندگان کو تلاش کریں۔",
   "dialog.provider.empty": "کوئی فراہم کنندہ نہیں ملا",
   "dialog.provider.group.popular": "مقبول",
-  "dialog.provider.group.other": "دیگر",
   "dialog.provider.custom.label": "حسب ضرورت OpenAI سے ہم آہنگ فراہم کنندہ",
   "dialog.provider.tag.recommended": "تجویز کردہ",
   "dialog.provider.opencode.note": "کیوریٹ شدہ ماڈلز بشمول Claude، GPT، Gemini اور مزید",
@@ -159,10 +158,7 @@ export const dict = {
   "dialog.provider.viewAll": "مزید فراہم کنندگان دکھائیں۔",
   "provider.connect.title": "\u2068{{provider}}\u2069 سے منسلک ہوں",
   "provider.connect.title.anthropicProMax": "Anthropic کے ساتھ لاگ ان کریں",
-  "provider.connect.selectMethod": "\u2068{{provider}}\u2069 کے لیے لاگ ان کا طریقہ منتخب کریں۔",
   "provider.connect.method.apiKey": "API کلید",
-  "provider.connect.method.browser": "براؤزر",
-  "provider.connect.method.headless": "ہیڈ لیس",
   "provider.connect.status.inProgress": "اجازت حاصل کی جا رہی ہے…",
   "provider.connect.status.waiting": "اجازت کا انتظار ہے…",
   "provider.connect.status.failed": "اجازت حاصل نہیں ہو سکی: \u2068{{error}}\u2069",
@@ -778,7 +774,6 @@ export const dict = {
   "settings.timeline.category.notices": "اطلاعات",
   "settings.timeline.category.tools": "دیگر ٹولز",
 
-  "provider.connect.error.unsupportedFields": "اس توثیقی فارم میں غیر معاون خانے ہیں",
   "settings.about.writtenByNames": "\u2068{{names}}\u2069 کی تحریر",
   "settings.about.illustratedByNames": "\u2068{{names}}\u2069 کی تصاویر",
   "settings.workspaces.deleteAll.warning":

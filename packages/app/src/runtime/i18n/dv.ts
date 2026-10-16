@@ -132,7 +132,6 @@ export const dict = {
   "dialog.provider.search.placeholder": "ޕްރޮވައިޑަރުން ހޯދުން",
   "dialog.provider.empty": "އެއްވެސް ޕްރޮވައިޑަރެއް ނުފެނެއެވެ",
   "dialog.provider.group.popular": "މަޝްހޫރު",
-  "dialog.provider.group.other": "އެހެން",
   "dialog.provider.custom.label": "ކަސްޓަމް OpenAI އާއި އެއްގޮތްވާ ޕްރޮވައިޑަރެއް",
   "dialog.provider.tag.recommended": "ލަފާދެވިފައިވުން",
   "dialog.provider.opencode.note":
@@ -155,10 +154,7 @@ export const dict = {
   "dialog.provider.viewAll": "އިތުރު ޕްރޮވައިޑަރުން ދައްކާށެވެ",
   "provider.connect.title": "\u2068{{provider}}\u2069 ގުޅުވާށެވެ",
   "provider.connect.title.anthropicProMax": "Anthropic އާއެކު ލޮގިން ވާށެވެ",
-  "provider.connect.selectMethod": "\u2068{{provider}}\u2069 އަށް ލޮގިން މެތޯޑް ހޮވާށެވެ.",
   "provider.connect.method.apiKey": "API ކީ އެވެ",
-  "provider.connect.method.browser": "ބްރައުޒާ އެވެ",
-  "provider.connect.method.headless": "އިންޓަފޭސް ނެތި",
   "provider.connect.status.inProgress": "ހުއްދަ ދިނުމުގެ މަސައްކަތް ކުރިއަށްދާ…",
   "provider.connect.status.waiting": "ހުއްދައަށް އިންތިޒާރު ކުރަމުން…",
   "provider.connect.status.failed": "ހުއްދަ ދިނުން ނާކާމިޔާބު: \u2068{{error}}\u2069",
@@ -789,7 +785,6 @@ export const dict = {
   "settings.timeline.category.notices": "ނޯޓިސްތައް",
   "settings.timeline.category.tools": "އެހެން ޓޫލްތައް",
 
-  "provider.connect.error.unsupportedFields": "މި އޮތެންޓިކޭޝަން ފޯމުގައި ސަޕޯޓް ނުކުރާ ފީލްޑްތައް ހުރެއެވެ",
   "settings.about.writtenByNames": "ލިޔުނީ \u2068{{names}}\u2069",
   "settings.about.illustratedByNames": "ކުރެހީ \u2068{{names}}\u2069",
   "settings.workspaces.deleteAll.warning":

@@ -125,7 +125,6 @@ export const dict = {
     "Esto eliminará permanentemente los espacios de trabajo {{count}} sin sesiones vinculadas.",
   "settings.workspaces.deleteAll.warning":
     "Se conservarán los espacios de trabajo con cambios sin fusionar, sesiones vinculadas o ubicaciones activas.",
-  "provider.connect.error.unsupportedFields": "Este formulario de autenticación contiene campos no compatibles",
   "settings.about.writtenByNames": "Escrito por {{names}}",
   "settings.about.illustratedByNames": "Ilustrado por {{names}}",
   "home.projects.all": "Todos los proyectos",
@@ -363,7 +362,6 @@ export const dict = {
   "dialog.provider.search.placeholder": "Buscar proveedores",
   "dialog.provider.empty": "No se encontraron proveedores",
   "dialog.provider.group.popular": "Populares",
-  "dialog.provider.group.other": "Otros",
   "dialog.provider.custom.label": "Proveedor personalizado compatible con OpenAI",
   "dialog.provider.tag.recommended": "Recomendado",
   "dialog.provider.opencode.note": "Selección de modelos como Claude, GPT, Gemini y otros",
@@ -388,10 +386,7 @@ export const dict = {
   "dialog.provider.viewAll": "Ver más proveedores",
 
   "provider.connect.title": "Conectar {{provider}}",
-  "provider.connect.selectMethod": "Seleccionar método de inicio de sesión para {{provider}}.",
   "provider.connect.method.apiKey": "Clave API",
-  "provider.connect.method.browser": "Navegador",
-  "provider.connect.method.headless": "Sin navegador",
   "provider.connect.status.inProgress": "Autorización en progreso…",
   "provider.connect.status.waiting": "Esperando autorización…",
   "provider.connect.status.failed": "Autorización fallida: {{error}}",

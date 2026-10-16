@@ -134,7 +134,6 @@ export const dict = {
   "dialog.provider.search.placeholder": "অনুসন্ধান প্রদানকারী",
   "dialog.provider.empty": "কোন প্রদানকারী পাওয়া যায়নি",
   "dialog.provider.group.popular": "জনপ্রিয়",
-  "dialog.provider.group.other": "অন্যান্য",
   "dialog.provider.custom.label": "কাস্টম OpenAI-সামঞ্জস্যপূর্ণ প্রদানকারী",
   "dialog.provider.tag.recommended": "প্রস্তাবিত",
   "dialog.provider.opencode.note": "Claude, GPT, Gemini এবং আরও অনেক কিছু সহ কিউরেট করা মডেল",
@@ -155,10 +154,7 @@ export const dict = {
   "dialog.model.unpaid.viewMoreProviders": "আরও 70+ প্রদানকারী দেখুন",
   "dialog.provider.viewAll": "আরো প্রদানকারী দেখান",
   "provider.connect.title": "{{provider}} সংযোগ করুন",
-  "provider.connect.selectMethod": "{{provider}} এর জন্য লগইন পদ্ধতি নির্বাচন করুন।",
   "provider.connect.method.apiKey": "API কী",
-  "provider.connect.method.browser": "ব্রাউজার",
-  "provider.connect.method.headless": "মাথাবিহীন",
   "provider.connect.status.inProgress": "অনুমোদন চলছে…",
   "provider.connect.status.waiting": "অনুমোদনের জন্য অপেক্ষা করা হচ্ছে…",
   "provider.connect.status.failed": "অনুমোদন ব্যর্থ হয়েছে: {{error}}",
@@ -771,7 +767,6 @@ export const dict = {
   "settings.timeline.category.notices": "বিজ্ঞপ্তি",
   "settings.timeline.category.tools": "অন্যান্য টুল",
 
-  "provider.connect.error.unsupportedFields": "এই প্রমাণীকরণ ফর্মে অসমর্থিত ফিল্ড রয়েছে",
   "settings.about.writtenByNames": "লিখেছেন {{names}}",
   "settings.about.illustratedByNames": "অলংকরণ করেছেন {{names}}",
   "settings.workspaces.deleteAll.warning":

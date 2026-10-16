@@ -46,7 +46,9 @@ export const DialogSelectModelUnpaid: Component<{ model?: ModelState }> = (props
     void import("@/providers/connect/dialog").then((x) => {
       const controller = x.useProviderConnectController()
       controller.select(provider)
-      void dialog.show(() => <x.DialogConnectProvider controller={controller} directory={directory()} />)
+      void dialog.show(() => (
+        <x.DialogConnectProvider controller={controller} directory={directory()} selection={model} />
+      ))
     })
   }
 
@@ -66,7 +68,7 @@ export const DialogSelectModelUnpaid: Component<{ model?: ModelState }> = (props
       const buttons = Array.from(listEl.querySelectorAll<HTMLButtonElement>("button"))
 
       if (buttons.length === 0) return
-      const index = buttons.indexOf(document.activeElement as HTMLButtonElement)
+      const index = buttons.findIndex((button) => button === document.activeElement)
 
       const next =
         index < 0 ? (e.key === "ArrowDown" ? 0 : buttons.length - 1) : index + (e.key === "ArrowDown" ? 1 : -1)

@@ -136,7 +136,6 @@ export const dict = {
   "dialog.provider.search.placeholder": "پرووائیڈراں نوں لبھو",
   "dialog.provider.empty": "کوئی پرووائیڈر نئیں لبھیا",
   "dialog.provider.group.popular": "مشہور",
-  "dialog.provider.group.other": "ہور",
   "dialog.provider.custom.label": "من پسند OpenAI نال رلدا پرووائیڈر",
   "dialog.provider.tag.recommended": "سفارش کیتی",
   "dialog.provider.opencode.note": "Claude، GPT، Gemini تے ہور سمیت کیوریٹڈ ماڈل",
@@ -158,10 +157,7 @@ export const dict = {
   "dialog.provider.viewAll": "ہور پرووائیڈر وکھاؤ",
   "provider.connect.title": "\u2068{{provider}}\u2069 نال جڑو",
   "provider.connect.title.anthropicProMax": "Anthropic دے نال لاگ ان کرو",
-  "provider.connect.selectMethod": "\u2068{{provider}}\u2069 لئی لاگ ان دا طریقہ منتخب کرو۔",
   "provider.connect.method.apiKey": "API کلید",
-  "provider.connect.method.browser": "براؤزر",
-  "provider.connect.method.headless": "ہیڈلیس",
   "provider.connect.status.inProgress": "اختیار دیندے پئے آں…",
   "provider.connect.status.waiting": "اختیار ملن دی اڈیک اے…",
   "provider.connect.status.failed": "اختیار نئیں مل سکیا: \u2068{{error}}\u2069",
@@ -777,7 +773,6 @@ export const dict = {
   "settings.timeline.category.notices": "اطلاعاں",
   "settings.timeline.category.tools": "ہور ٹول",
 
-  "provider.connect.error.unsupportedFields": "ایس تصدیقی فارم وچ غیر معاون خانے نیں",
   "settings.about.writtenByNames": "\u2068{{names}}\u2069 نے لکھیا",
   "settings.about.illustratedByNames": "\u2068{{names}}\u2069 نے تصویراں بݨائیاں",
   "settings.workspaces.deleteAll.warning":

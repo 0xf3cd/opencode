@@ -145,7 +145,6 @@ export const dict = {
   "dialog.provider.search.placeholder": "搜尋提供者",
   "dialog.provider.empty": "找不到提供者",
   "dialog.provider.group.popular": "熱門",
-  "dialog.provider.group.other": "其他",
   "dialog.provider.custom.label": "自訂 OpenAI 相容提供者",
   "dialog.provider.tag.recommended": "推薦",
   "dialog.provider.opencode.note": "精選模型，包含 Claude、GPT、Gemini 等等",
@@ -172,10 +171,7 @@ export const dict = {
 
   "provider.connect.title": "連線 {{provider}}",
   "provider.connect.title.anthropicProMax": "登入 Anthropic",
-  "provider.connect.selectMethod": "選擇 {{provider}} 的登入方式。",
   "provider.connect.method.apiKey": "API 金鑰",
-  "provider.connect.method.browser": "瀏覽器",
-  "provider.connect.method.headless": "無頭模式",
   "provider.connect.status.inProgress": "正在授權…",
   "provider.connect.status.waiting": "等待授權…",
   "provider.connect.status.failed": "授權失敗: {{error}}",
@@ -817,7 +813,6 @@ export const dict = {
   "settings.timeline.category.notices": "通知",
   "settings.timeline.category.tools": "其他工具",
 
-  "provider.connect.error.unsupportedFields": "此驗證表單包含不支援的欄位",
   "settings.about.writtenByNames": "作者：{{names}}",
   "settings.about.illustratedByNames": "插圖由{{names}}",
   "server.action.authenticate": "驗證",

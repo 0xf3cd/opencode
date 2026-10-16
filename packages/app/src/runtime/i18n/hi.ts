@@ -135,7 +135,6 @@ export const dict = {
   "dialog.provider.search.placeholder": "प्रोवाइडर खोजें",
   "dialog.provider.empty": "कोई प्रोवाइडर नहीं मिला",
   "dialog.provider.group.popular": "लोकप्रिय",
-  "dialog.provider.group.other": "अन्य",
   "dialog.provider.custom.label": "कस्टम OpenAI-संगत प्रोवाइडर",
   "dialog.provider.tag.recommended": "अनुशंसित",
   "dialog.provider.opencode.note": "Claude, GPT, Gemini और अधिक सहित क्यूरेटेड मॉडल",
@@ -156,10 +155,7 @@ export const dict = {
   "dialog.model.unpaid.viewMoreProviders": "70+ अधिक प्रोवाइडर देखें",
   "dialog.provider.viewAll": "और प्रोवाइडर दिखाएँ",
   "provider.connect.title": "{{provider}} कनेक्ट करें",
-  "provider.connect.selectMethod": "{{provider}} के लिए लॉगिन विधि चुनें।",
   "provider.connect.method.apiKey": "API कुंजी",
-  "provider.connect.method.browser": "ब्राउज़र",
-  "provider.connect.method.headless": "हेडलेस मोड",
   "provider.connect.status.inProgress": "प्राधिकरण प्रगति पर है…",
   "provider.connect.status.waiting": "प्राधिकरण की प्रतीक्षा हो रही है…",
   "provider.connect.status.failed": "प्राधिकरण विफल: {{error}}",
@@ -771,7 +767,6 @@ export const dict = {
   "settings.timeline.category.notices": "सूचनाएँ",
   "settings.timeline.category.tools": "अन्य टूल",
 
-  "provider.connect.error.unsupportedFields": "इस प्रमाणीकरण फ़ॉर्म में असमर्थित फ़ील्ड हैं",
   "settings.about.writtenByNames": "{{names}} द्वारा लिखित",
   "settings.about.illustratedByNames": "{{names}} द्वारा चित्रित",
   "settings.workspaces.deleteAll.warning":

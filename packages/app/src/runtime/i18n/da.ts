@@ -112,7 +112,6 @@ export const dict = {
   "workspace.delete.location": "Beliggenhed",
   "settings.workspaces.deleteAll.warning":
     "Arbejdsområder med ikke-flettede ændringer, tilknyttede sessioner eller aktive placeringer bevares.",
-  "provider.connect.error.unsupportedFields": "Denne godkendelsesformular indeholder felter, der ikke understøttes",
   "settings.about.writtenByNames": "Skrevet af {{names}}",
   "settings.about.illustratedByNames": "Illustreret af {{names}}",
   "home.projects.all": "Alle projekter",
@@ -276,7 +275,6 @@ export const dict = {
   "dialog.provider.search.placeholder": "Søg udbydere",
   "dialog.provider.empty": "Ingen udbydere fundet",
   "dialog.provider.group.popular": "Populære",
-  "dialog.provider.group.other": "Andre",
   "dialog.provider.custom.label": "Brugerdefineret OpenAI-kompatibel udbyder",
   "dialog.provider.tag.recommended": "Anbefalet",
   "dialog.provider.opencode.note": "Udvalgte modeller inklusive Claude, GPT, Gemini og flere",
@@ -301,10 +299,7 @@ export const dict = {
   "dialog.provider.viewAll": "Vis flere udbydere",
 
   "provider.connect.title": "Forbind {{provider}}",
-  "provider.connect.selectMethod": "Vælg loginmetode for {{provider}}.",
   "provider.connect.method.apiKey": "API-nøgle",
-  "provider.connect.method.browser": "Browser",
-  "provider.connect.method.headless": "Browserløs",
   "provider.connect.status.inProgress": "Godkendelse i gang…",
   "provider.connect.status.waiting": "Venter på godkendelse…",
   "provider.connect.status.failed": "Godkendelse mislykkedes: {{error}}",

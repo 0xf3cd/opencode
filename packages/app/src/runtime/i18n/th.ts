@@ -141,7 +141,6 @@ export const dict = {
   "dialog.provider.search.placeholder": "ค้นหาผู้ให้บริการ",
   "dialog.provider.empty": "ไม่พบผู้ให้บริการ",
   "dialog.provider.group.popular": "ยอดนิยม",
-  "dialog.provider.group.other": "อื่น ๆ",
   "dialog.provider.custom.label": "ผู้ให้บริการแบบกำหนดเองที่เข้ากันได้กับ OpenAI",
   "dialog.provider.tag.recommended": "แนะนำ",
   "dialog.provider.opencode.note": "โมเดลที่คัดสรร รวมถึง Claude, GPT, Gemini และอื่น ๆ",
@@ -168,10 +167,7 @@ export const dict = {
 
   "provider.connect.title": "เชื่อมต่อ {{provider}}",
   "provider.connect.title.anthropicProMax": "เข้าสู่ระบบ Anthropic",
-  "provider.connect.selectMethod": "เลือกวิธีการเข้าสู่ระบบสำหรับ {{provider}}",
   "provider.connect.method.apiKey": "คีย์ API",
-  "provider.connect.method.browser": "เบราว์เซอร์",
-  "provider.connect.method.headless": "ไม่ใช้เบราว์เซอร์",
   "provider.connect.status.inProgress": "กำลังอนุญาต…",
   "provider.connect.status.waiting": "รอการอนุญาต…",
   "provider.connect.status.failed": "การอนุญาตล้มเหลว: {{error}}",
@@ -828,7 +824,6 @@ export const dict = {
   "settings.timeline.category.notices": "ประกาศ",
   "settings.timeline.category.tools": "เครื่องมืออื่นๆ",
 
-  "provider.connect.error.unsupportedFields": "แบบฟอร์มการตรวจสอบสิทธิ์นี้มีฟิลด์ที่ไม่รองรับ",
   "settings.about.writtenByNames": "เขียนโดย {{names}}",
   "settings.about.illustratedByNames": "ภาพประกอบโดย {{names}}",
   "server.action.authenticate": "ตรวจสอบสิทธิ์",

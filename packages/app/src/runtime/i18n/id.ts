@@ -142,7 +142,6 @@ export const dict = {
   "dialog.provider.search.placeholder": "Cari penyedia",
   "dialog.provider.empty": "Penyedia tidak ditemukan",
   "dialog.provider.group.popular": "Populer",
-  "dialog.provider.group.other": "Lainnya",
   "dialog.provider.custom.label": "Penyedia kustom yang kompatibel dengan OpenAI",
   "dialog.provider.tag.recommended": "Direkomendasikan",
   "dialog.provider.opencode.note": "Model pilihan, termasuk Claude, GPT, Gemini, dan lainnya",
@@ -169,10 +168,7 @@ export const dict = {
 
   "provider.connect.title": "Hubungkan {{provider}}",
   "provider.connect.title.anthropicProMax": "Masuk dengan Anthropic",
-  "provider.connect.selectMethod": "Pilih metode masuk untuk {{provider}}.",
   "provider.connect.method.apiKey": "Kunci API",
-  "provider.connect.method.browser": "Peramban",
-  "provider.connect.method.headless": "Headless",
   "provider.connect.status.inProgress": "Otorisasi sedang berlangsung…",
   "provider.connect.status.waiting": "Menunggu otorisasi…",
   "provider.connect.status.failed": "Otorisasi gagal: {{error}}",
@@ -838,7 +834,6 @@ export const dict = {
   "settings.timeline.category.notices": "Pemberitahuan",
   "settings.timeline.category.tools": "Alat lainnya",
 
-  "provider.connect.error.unsupportedFields": "Formulir autentikasi ini berisi bidang yang tidak didukung",
   "settings.about.writtenByNames": "Ditulis oleh {{names}}",
   "settings.about.illustratedByNames": "Diilustrasikan oleh {{names}}",
   "server.action.authenticate": "Autentikasikan",

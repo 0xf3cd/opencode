@@ -114,7 +114,6 @@ export const dict = {
   "workspace.delete.location": "Beliggenhet",
   "settings.workspaces.deleteAll.warning":
     "Arbeidsområder med usammenslåtte endringer, tilknyttede økter eller aktive plasseringer beholdes.",
-  "provider.connect.error.unsupportedFields": "Dette autentiseringsskjemaet inneholder felt som ikke støttes",
   "settings.about.writtenByNames": "Skrevet av {{names}}",
   "settings.about.illustratedByNames": "Illustrert av {{names}}",
   "home.projects.all": "Alle prosjekter",
@@ -343,7 +342,6 @@ export const dict = {
   "dialog.provider.search.placeholder": "Søk etter leverandører",
   "dialog.provider.empty": "Ingen leverandører funnet",
   "dialog.provider.group.popular": "Populære",
-  "dialog.provider.group.other": "Andre",
   "dialog.provider.custom.label": "Egendefinert OpenAI-kompatibel leverandør",
   "dialog.provider.tag.recommended": "Anbefalt",
   "dialog.provider.opencode.note": "Utvalgte modeller inkludert Claude, GPT, Gemini og mer",
@@ -368,10 +366,7 @@ export const dict = {
   "dialog.provider.viewAll": "Vis flere leverandører",
 
   "provider.connect.title": "Koble til {{provider}}",
-  "provider.connect.selectMethod": "Velg innloggingsmetode for {{provider}}.",
   "provider.connect.method.apiKey": "API-nøkkel",
-  "provider.connect.method.browser": "Nettleser",
-  "provider.connect.method.headless": "Uten nettleser",
   "provider.connect.status.inProgress": "Autorisering pågår…",
   "provider.connect.status.waiting": "Venter på autorisering…",
   "provider.connect.status.failed": "Autorisering mislyktes: {{error}}",

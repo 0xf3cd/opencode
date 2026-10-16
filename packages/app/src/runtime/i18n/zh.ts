@@ -162,7 +162,6 @@ export const dict = {
   "dialog.provider.search.placeholder": "搜索提供商",
   "dialog.provider.empty": "未找到提供商",
   "dialog.provider.group.popular": "热门",
-  "dialog.provider.group.other": "其他",
   "dialog.provider.custom.label": "自定义 OpenAI 兼容提供商",
   "dialog.provider.tag.recommended": "推荐",
   "dialog.provider.opencode.note": "精选模型，包括 Claude、GPT、Gemini 等",
@@ -188,10 +187,7 @@ export const dict = {
 
   "provider.connect.title": "连接 {{provider}}",
   "provider.connect.title.anthropicProMax": "登录 Anthropic",
-  "provider.connect.selectMethod": "选择 {{provider}} 的登录方式。",
   "provider.connect.method.apiKey": "API 密钥",
-  "provider.connect.method.browser": "浏览器",
-  "provider.connect.method.headless": "无头模式",
   "provider.connect.status.inProgress": "正在授权…",
   "provider.connect.status.waiting": "等待授权…",
   "provider.connect.status.failed": "授权失败：{{error}}",
@@ -825,7 +821,6 @@ export const dict = {
   "settings.timeline.category.notices": "注意事项",
   "settings.timeline.category.tools": "其他工具",
 
-  "provider.connect.error.unsupportedFields": "此身份验证表单包含不受支持的字段",
   "settings.about.writtenByNames": "作者：{{names}}",
   "settings.about.illustratedByNames": "插图由{{names}}",
   "server.action.authenticate": "验证",
