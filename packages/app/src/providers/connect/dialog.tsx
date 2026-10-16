@@ -32,7 +32,6 @@ import { ServerConnection } from "@/runtime/server/registry"
 import { useProviders } from "@/providers/catalog/providers"
 import { consoleProviderGroup, consoleProviderName } from "@/providers/catalog/console"
 import { useIntegrations } from "@/providers/catalog/integrations"
-import { CustomProviderForm } from "@/providers/credentials/dialog"
 import { ProviderModelGroup, ProviderModelIcon } from "@/providers/models/provider-group"
 import type { ModelSelection } from "@/providers/models/selection"
 import { decode64 } from "@/runtime/persistence/base64"
@@ -58,8 +57,6 @@ import { useProviderAccountActions } from "@/settings/providers/account-actions"
 import { IconButton } from "@opencode/ui/icon-button"
 import { Menu } from "@opencode/ui/menu"
 import "./models.css"
-
-const CUSTOM_ID = "_custom"
 
 export function useProviderConnectController() {
   const [store, setStore] = createStore<{ selected?: string }>({})
@@ -121,13 +118,7 @@ export const DialogConnectProvider: Component<{
   function Content() {
     return (
       <Switch>
-        <Match when={controller.selected() === CUSTOM_ID}>
-          <CustomProviderForm autofocus={false} />
-        </Match>
-        <Match
-          keyed
-          when={controller.selected() && controller.selected() !== CUSTOM_ID ? controller.selected() : undefined}
-        >
+        <Match keyed when={controller.selected()}>
           {(provider) => (
             <ProviderConnection
               provider={provider}
@@ -235,48 +226,30 @@ function ProviderPicker(props: { directory?: string; onSelect: (provider: string
     filter: "",
   })
 
-  type Row = {
-    id: string
-    name: string
-    integration?: IntegrationInfo
-  }
-
-  const all = createMemo<Row[]>(() => {
-    language.locale()
+  const all = createMemo(() => {
     const query = store.filter.trim().toLowerCase()
 
-    const values: Row[] = [
-      { id: CUSTOM_ID, name: language.t("dialog.provider.custom.label") },
-      ...integrations.list().map((integration) => ({ id: integration.id, name: integration.name, integration })),
-    ]
+    if (!query) return integrations.list()
 
-    if (!query) return values
-
-    return values.filter((row) => `${row.id} ${row.name}`.toLowerCase().includes(query))
+    return integrations.list().filter((row) => `${row.id} ${row.name}`.toLowerCase().includes(query))
   })
 
   const mcp = createMemo(() =>
     all()
-      .filter((row) => row.integration?.metadata?.source === "mcp")
+      .filter((row) => row.metadata?.source === "mcp")
       .toSorted((a, b) => a.name.localeCompare(b.name)),
   )
 
   const popular = createMemo(() =>
     all()
-      .filter((row) => row.integration?.metadata?.source !== "mcp" && POPULAR.includes(row.id))
+      .filter((row) => row.metadata?.source !== "mcp" && POPULAR.includes(row.id))
       .toSorted((a, b) => POPULAR.indexOf(a.id) - POPULAR.indexOf(b.id)),
   )
 
   const services = createMemo(() =>
     all()
-      .filter((row) => row.integration?.metadata?.source !== "mcp" && !POPULAR.includes(row.id))
-      .toSorted((a, b) => {
-        if (a.id === CUSTOM_ID) return -1
-
-        if (b.id === CUSTOM_ID) return 1
-
-        return a.name.localeCompare(b.name)
-      }),
+      .filter((row) => row.metadata?.source !== "mcp" && !POPULAR.includes(row.id))
+      .toSorted((a, b) => a.name.localeCompare(b.name)),
   )
 
   const groups = () => [
@@ -286,8 +259,7 @@ function ProviderPicker(props: { directory?: string; onSelect: (provider: string
   ]
 
   // An integration that only reads environment variables has nothing to connect from here.
-  const disabled = (row: Row) =>
-    !!row.integration && connectMethods(row.integration).length === 0 && providerAccounts(row.integration).length === 0
+  const disabled = (row: IntegrationInfo) => connectMethods(row).length === 0 && providerAccounts(row).length === 0
 
   const rows = createMemo(() => [...mcp(), ...popular(), ...services()].filter((row) => !disabled(row)))
 
@@ -350,7 +322,7 @@ function ProviderPicker(props: { directory?: string; onSelect: (provider: string
                   </div>
                   <For each={group.items()}>
                     {(provider) => {
-                      const connections = () => provider.integration?.connections ?? []
+                      const connections = () => provider.connections
                       const status = () => connections()[0]?.status
 
                       const summary = () => {
@@ -390,11 +362,6 @@ function ProviderPicker(props: { directory?: string; onSelect: (provider: string
                           >
                             {provider.name}
                           </span>
-                          <Show when={provider.id === CUSTOM_ID}>
-                            <span class="flex h-4 shrink-0 items-center rounded-xs border-[0.5px] border-v2-border-border-base bg-v2-background-bg-layer-03 px-1 text-[11px] font-[530] leading-none tracking-[0.05px] text-v2-text-text-muted">
-                              {language.t("settings.providers.tag.custom")}
-                            </span>
-                          </Show>
                           <Show when={disabled(provider)}>
                             <span class="min-w-0 truncate font-[440] text-v2-text-text-faint">
                               {language.t("dialog.provider.environmentOnly")}
