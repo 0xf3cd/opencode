@@ -331,12 +331,13 @@ export function ComposerEditor(props: ComposerEditorProps) {
               onShell={props.controller.openShell}
             />
           </div>
+          {/* Inline padding traded from the margins keeps control focus rings inside the scroll clip. */}
           <div
             ref={controlsViewport}
             data-slot="composer-controls"
             data-overflow-start={overflow.start}
             data-overflow-end={overflow.end}
-            class="ms-1 me-3 h-full min-w-0 flex-1 overflow-x-auto overscroll-x-contain no-scrollbar"
+            class="me-2 h-full min-w-0 flex-1 overflow-x-auto overscroll-x-contain px-1 no-scrollbar"
             onScroll={updateOverflow}
             aria-hidden={state.mode === "shell"}
             inert={state.mode === "shell" ? true : undefined}
@@ -631,7 +632,7 @@ export function ComposerAttachments(props: {
                 <button
                   type="button"
                   onClick={() => props.onCommentRemove?.(comment)}
-                  class="absolute -top-1 -end-1 size-4 rounded-full bg-v2-icon-icon-muted outline-solid outline-1 outline-v2-icon-icon-contrast flex items-center justify-center hover-reveal group-hover:opacity-100"
+                  class="absolute -top-1 -end-1 size-4 rounded-full bg-v2-icon-icon-muted outline-solid outline-1 outline-v2-icon-icon-contrast flex items-center justify-center hover-reveal group-hover:opacity-100 focus-visible:opacity-100 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-v2-border-border-focus"
                   aria-label={props.removeLabel}
                 >
                   <Icon name="outline-xmark" class="text-v2-icon-icon-contrast" />
@@ -660,7 +661,7 @@ export function ComposerAttachments(props: {
                 <button
                   type="button"
                   onClick={() => props.onFileRemove?.(file)}
-                  class="absolute -top-1 -end-1 size-4 rounded-full bg-v2-icon-icon-muted outline-solid outline-1 outline-v2-icon-icon-contrast flex items-center justify-center hover-reveal group-hover:opacity-100"
+                  class="absolute -top-1 -end-1 size-4 rounded-full bg-v2-icon-icon-muted outline-solid outline-1 outline-v2-icon-icon-contrast flex items-center justify-center hover-reveal group-hover:opacity-100 focus-visible:opacity-100 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-v2-border-border-focus"
                   aria-label={props.removeLabel}
                 >
                   <Icon name="outline-xmark" class="text-v2-icon-icon-contrast" />
@@ -708,7 +709,7 @@ export function ComposerAttachments(props: {
                 <button
                   type="button"
                   onClick={() => props.onAttachmentRemove(attachment)}
-                  class="absolute -top-1 -end-1 size-4 rounded-full bg-v2-icon-icon-muted outline-solid outline-1 outline-v2-icon-icon-contrast flex items-center justify-center hover-reveal group-hover:opacity-100"
+                  class="absolute -top-1 -end-1 size-4 rounded-full bg-v2-icon-icon-muted outline-solid outline-1 outline-v2-icon-icon-contrast flex items-center justify-center hover-reveal group-hover:opacity-100 focus-visible:opacity-100 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-v2-border-border-focus"
                   aria-label={props.removeLabel}
                 >
                   <Icon name="outline-xmark" class="text-v2-icon-icon-contrast" />
@@ -730,7 +731,7 @@ export function ComposerAttachments(props: {
                 <button
                   type="button"
                   onClick={() => props.onUploadCancel?.(upload)}
-                  class="absolute -top-1 -end-1 size-4 rounded-full bg-v2-icon-icon-muted outline-solid outline-1 outline-v2-icon-icon-contrast flex items-center justify-center hover-reveal group-hover:opacity-100"
+                  class="absolute -top-1 -end-1 size-4 rounded-full bg-v2-icon-icon-muted outline-solid outline-1 outline-v2-icon-icon-contrast flex items-center justify-center hover-reveal group-hover:opacity-100 focus-visible:opacity-100 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-v2-border-border-focus"
                   aria-label={i18n.t("ui.promptInput.cancelUpload")}
                 >
                   <Icon name="outline-xmark" class="text-v2-icon-icon-contrast" />
@@ -1034,7 +1035,7 @@ export function ComposerEditorPopover(props: {
               type="button"
               data-suggestion-id={item.id}
               data-active={props.activeID === item.id ? "" : undefined}
-              class="flex h-7 w-full shrink-0 items-center gap-2 rounded-md px-2 py-1 text-start hover:bg-v2-overlay-simple-overlay-hover"
+              class="flex h-7 w-full shrink-0 items-center gap-2 rounded-md px-2 py-1 text-start hover:bg-v2-overlay-simple-overlay-hover focus-visible:bg-v2-overlay-simple-overlay-hover focus-visible:outline-none"
               classList={{ "bg-v2-overlay-simple-overlay-hover": props.activeID === item.id }}
               onPointerMove={() => props.onActiveChange(item)}
               onClick={() => props.onSelect(item)}

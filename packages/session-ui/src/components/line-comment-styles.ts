@@ -46,14 +46,6 @@ export const lineCommentStyles = `
   color: var(--white);
 }
 
-[data-component="line-comment"] [data-slot="line-comment-button"]:focus {
-  outline: none;
-}
-
-[data-component="line-comment"] [data-slot="line-comment-button"]:focus-visible {
-  box-shadow: var(--shadow-xs-border-focus);
-}
-
 [data-component="line-comment"] [data-slot="line-comment-popover"] {
   position: absolute;
   top: calc(100% + 4px);
@@ -171,7 +163,7 @@ export const lineCommentStyles = `
 
 [data-component="line-comment"] [data-slot="line-comment-textarea"]:focus {
   outline: none;
-  box-shadow: var(--shadow-xs-border-select);
+  border-color: var(--v2-border-border-focus);
 }
 
 [data-component="line-comment"] [data-slot="line-comment-mention-list"] {
@@ -200,8 +192,10 @@ export const lineCommentStyles = `
   text-align: left;
 }
 
-[data-component="line-comment"] [data-slot="line-comment-mention-item"][data-active] {
-  background: var(--surface-raised-base-hover);
+[data-component="line-comment"] [data-slot="line-comment-mention-item"][data-active],
+[data-component="line-comment"] [data-slot="line-comment-mention-item"]:focus-visible {
+  background: var(--v2-overlay-simple-overlay-hover);
+  outline: none;
 }
 
 [data-component="line-comment"] [data-slot="line-comment-mention-path"] {

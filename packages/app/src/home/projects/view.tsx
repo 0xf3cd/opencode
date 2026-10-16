@@ -98,7 +98,7 @@ export function HomeProjectsView(props: HomeProjectsViewProps) {
         <Popover.Trigger
           data-component="home-projects-dropdown"
           aria-label={props.language.t("home.projects")}
-          class="flex h-10 w-full min-w-0 items-center gap-2 rounded-[6px] bg-v2-background-bg-base px-1.5 text-start text-v2-text-text-base outline-none hover:bg-v2-background-bg-layer-01"
+          class="flex h-10 w-full min-w-0 items-center gap-2 rounded-[6px] bg-v2-background-bg-base px-1.5 text-start text-v2-text-text-base hover:bg-v2-background-bg-layer-01"
         >
           <Show when={selected()} fallback={<Icon name="folder" size="small" />}>
             {(project) => <HomeProjectAvatar project={project()} />}
@@ -173,7 +173,7 @@ function HomeProjectsPanel(props: HomeProjectsViewProps) {
         props.dropdown
           ? "flex max-h-[min(60dvh,calc(var(--kb-popper-content-available-height)-12px))] min-h-0 min-w-0 flex-col overflow-hidden"
           : `
-        mt-6 flex min-h-0 min-w-0 flex-col gap-4 overflow-hidden
+        mt-5 flex min-h-0 min-w-0 flex-col gap-4 overflow-hidden pt-1
         lg:sticky lg:top-14 lg:mt-14 lg:h-[calc(100cqh-56px)] lg:self-start lg:pt-[52px]
       `
       }
@@ -819,8 +819,7 @@ function HomeProjectNavButton(props: JSX.ButtonHTMLAttributes<HTMLButtonElement>
         hover:bg-v2-background-bg-layer-01 hover:text-v2-text-text-base
         data-[selected]:bg-v2-background-bg-layer-03 data-[selected]:text-v2-text-text-base
         data-[selected]:hover:bg-v2-background-bg-layer-03
-        focus-visible:bg-v2-background-bg-layer-01 focus-visible:text-v2-text-text-base focus-visible:outline-none
-        focus-visible:[box-shadow:inset_0_0_0_0.5px_var(--v2-border-border-muted)]
+        focus-visible:outline-offset-[-2px]
         ${local.class ?? ""}
       `}
       classList={local.classList}
