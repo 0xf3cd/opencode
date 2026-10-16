@@ -37,6 +37,8 @@ import { useMarkdown } from "../context/markdown"
 import { getDirectory, getFilename } from "@opencode/util/path"
 import { checksum } from "@opencode/util/encode"
 import { Tooltip } from "@opencode/ui/tooltip"
+import { useDialog } from "@opencode/ui/context/dialog"
+import { Dialog, DialogBody, DialogHeader, DialogTitle } from "@opencode/ui/dialog"
 import { IconButton } from "@opencode/ui/icon-button"
 import { TextShimmer } from "@opencode/ui/text-shimmer"
 import { changedFileDiff, patchFileGroups } from "../components/apply-patch-file"
@@ -1916,9 +1918,11 @@ ToolRegistry.register({
   name: "execute",
   render(props) {
     const i18n = useI18n()
+    const dialog = useDialog()
     const pending = () => props.status === "streaming" || props.status === "running"
     const calls = createMemo(() => executeToolCalls(props.metadata))
     const subtitle = createMemo(() => executeToolSubtitle(calls()))
+    const code = createMemo(() => (toolInput(props.input).code ?? "").trimEnd())
 
     // Like the TUI, only a runtime failure shows its output; a failed nested call is marked on its row.
     const error = createMemo(() => {
@@ -1933,6 +1937,20 @@ ToolRegistry.register({
     const owner = createMemo(() => calls().findLastIndex((call) => call.status === "error"))
 
     const sawPending = pending()
+
+    // The script is complete once the call leaves streaming, so the dialog can show it while it runs.
+    const viewable = () => props.status !== "streaming" && !!code()
+
+    const openDetails = () =>
+      dialog.show(() => (
+        <ExecuteDetails
+          code={code()}
+          output={stripAnsi(props.output ?? "").replace(/\r\n?/g, "\n").trim()}
+          error={error()}
+          calls={calls().length}
+          status={props.status}
+        />
+      ))
 
     return (
       <BasicTool
@@ -1952,6 +1970,20 @@ ToolRegistry.register({
             </div>
           </div>
         )}
+        action={
+          viewable() ? (
+            <Tooltip value={i18n.t("ui.tool.execute.viewCode")} placement="top">
+              <IconButton
+                icon={<Icon name="code-slash" size="small" />}
+                size="normal"
+                variant="ghost"
+                aria-label={i18n.t("ui.tool.execute.viewCode")}
+                aria-haspopup="dialog"
+                onClick={openDetails}
+              />
+            </Tooltip>
+          ) : undefined
+        }
       >
         <div data-component="execute-tool-calls">
           <Index each={calls()}>
@@ -1963,6 +1995,122 @@ ToolRegistry.register({
     )
   },
 })
+
+const decodeJson = Schema.decodeUnknownOption(Schema.fromJsonString(Schema.Unknown))
+
+function ExecuteDetails(props: { code: string; output: string; error?: string; calls: number; status?: string }) {
+  const i18n = useI18n()
+  const fileComponent = useFileComponent()
+  const lines = (text: string) => i18n.plural("ui.tool.execute.lines", text.split("\n").length)
+
+  return (
+    <Dialog fit containerClass="!w-[min(calc(100vw_-_32px),720px)] max-h-[calc(100vh_-_92px)]">
+      <DialogHeader>
+        <div data-slot="execute-details-title">
+          <DialogTitle>{i18n.t("ui.tool.execute")}</DialogTitle>
+          <span data-slot="execute-details-status" data-status={props.error ? "error" : props.status}>
+            {props.error
+              ? i18n.t("ui.toolErrorCard.failed")
+              : props.status === "running"
+                ? i18n.t("ui.tool.execute.running")
+                : i18n.t("ui.tool.execute.completed")}
+          </span>
+          <span data-slot="execute-details-meta">{i18n.plural("ui.tool.execute.calls", props.calls)}</span>
+        </div>
+      </DialogHeader>
+      <DialogBody class="min-h-0 flex-none overflow-y-auto">
+        <div data-component="execute-details">
+          <ExecuteDetailsSection
+            label={i18n.t("ui.tool.execute.code")}
+            meta={lines(props.code)}
+            copy={props.code}
+            copyLabel={i18n.t("ui.tool.execute.copyCode")}
+          >
+            <Dynamic
+              component={fileComponent}
+              mode="text"
+              file={{ name: "execute.js", contents: props.code, cacheKey: checksum(props.code) }}
+              overflow="scroll"
+            />
+          </ExecuteDetailsSection>
+          <Show
+            when={props.error}
+            fallback={
+              <Show when={props.output}>
+                {(output) => (
+                  <ExecuteDetailsSection
+                    label={i18n.t("ui.tool.execute.output")}
+                    meta={lines(output())}
+                    copy={output()}
+                    copyLabel={i18n.t("ui.tool.execute.copyOutput")}
+                  >
+                    <Dynamic
+                      component={fileComponent}
+                      mode="text"
+                      file={{
+                        // Code Mode returns structured results as JSON; highlight those, leave anything else plain.
+                        name: Option.isSome(decodeJson(output())) ? "output.json" : "output.txt",
+                        contents: output(),
+                        cacheKey: checksum(output()),
+                      }}
+                      overflow="scroll"
+                    />
+                  </ExecuteDetailsSection>
+                )}
+              </Show>
+            }
+          >
+            {(error) => (
+              <ExecuteDetailsSection
+                label={i18n.t("ui.tool.execute.error")}
+                copy={error()}
+                copyLabel={i18n.t("ui.toolErrorCard.copyError")}
+              >
+                <pre data-slot="execute-details-error">{error()}</pre>
+              </ExecuteDetailsSection>
+            )}
+          </Show>
+        </div>
+      </DialogBody>
+    </Dialog>
+  )
+}
+
+function ExecuteDetailsSection(props: {
+  label: string
+  meta?: string
+  copy: string
+  copyLabel: string
+  children: JSX.Element
+}) {
+  const i18n = useI18n()
+  const [copied, setCopied] = createSignal(false)
+
+  const copy = async () => {
+    if (!(await writeClipboard(props.copy))) return
+    setCopied(true)
+    setTimeout(() => setCopied(false), 2000)
+  }
+
+  return (
+    <section data-slot="execute-details-section">
+      <header data-slot="execute-details-section-header">
+        <span data-slot="execute-details-section-label">{props.label}</span>
+        <Show when={props.meta}>{(meta) => <span data-slot="execute-details-section-meta">{meta()}</span>}</Show>
+        <Tooltip value={copied() ? i18n.t("ui.message.copied") : props.copyLabel} placement="top">
+          <IconButton
+            icon={<Icon name={copied() ? "check" : "outline-copy"} size="small" />}
+            size="normal"
+            variant="ghost-muted"
+            aria-label={copied() ? i18n.t("ui.message.copied") : props.copyLabel}
+            onClick={copy}
+          />
+        </Tooltip>
+      </header>
+      <div data-slot="execute-details-source">{props.children}</div>
+    </section>
+  )
+}
 
 function ExecuteCallRow(props: { call?: ExecuteToolCall; error?: string }) {
   const [open, setOpen] = createSignal(false)

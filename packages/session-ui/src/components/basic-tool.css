@@ -170,6 +170,52 @@
   }
 }
 
+/* The action sits on the trigger's line as a sibling, since buttons cannot nest inside the trigger button. */
+[data-component="collapsible"].tool-collapsible[data-has-action="true"] {
+  flex-direction: row;
+  flex-wrap: wrap;
+  align-items: center;
+  column-gap: 2px;
+
+  > [data-slot="collapsible-trigger"] {
+    flex: 0 1 auto;
+    width: auto;
+    min-width: 0;
+    /* Leave room for the action so a long collapsed subtitle truncates instead of wrapping it. */
+    max-width: calc(100% - 26px);
+
+    /* The trigger now sizes to its content, so the content's room for the arrow would clip the title. */
+    [data-slot="basic-tool-tool-trigger-content"] {
+      max-width: none;
+    }
+  }
+
+  > [data-slot="collapsible-content"] {
+    flex-basis: 100%;
+  }
+}
+
+[data-slot="basic-tool-action"] {
+  display: inline-flex;
+  align-items: center;
+  flex-shrink: 0;
+  opacity: 0;
+  transition: opacity 0.15s ease;
+}
+
+[data-slot="collapsible-trigger"]:hover + [data-slot="basic-tool-action"],
+[data-slot="collapsible-trigger"]:focus-visible + [data-slot="basic-tool-action"],
+[data-slot="basic-tool-action"]:hover,
+[data-slot="basic-tool-action"]:focus-within {
+  opacity: 1;
+}
+
+@media (hover: none) {
+  [data-slot="basic-tool-action"] {
+    opacity: 1;
+  }
+}
+
 [data-component="collapsible"].tool-collapsible[data-compact="true"] > [data-slot="collapsible-trigger"] {
   height: 28px;
 

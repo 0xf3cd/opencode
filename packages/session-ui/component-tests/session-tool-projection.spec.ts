@@ -165,3 +165,30 @@ story("combines adjacent edit calls and repeated files into one group", async ({
   await expect(group.locator('[data-scope="apply-patch"] button')).toContainText("+2")
   await expect(group.locator('[data-scope="apply-patch"] button')).toHaveAttribute("aria-expanded", "true")
 })
+
+story("opens an execution's code and output from its View code action", async ({ mount }) => {
+  const timeline = await mount("current-session-terminal-work--execute-code")
+  await timeline.getByRole("button", { name: "View code" }).first().click()
+  const dialog = timeline.page().getByRole("dialog")
+  await expect(dialog.getByRole("heading", { name: "Execute" })).toBeVisible()
+  await expect(dialog).toContainText("Completed")
+  await expect(dialog).toContainText("2 calls")
+  await expect(dialog).toContainText('const tab = await tools.browser.tabs.open({ url: "http://localhost:4399" })')
+  await expect(dialog).toContainText('"tab": "tab_4f1c"')
+  await expect(dialog.getByRole("button", { name: "Copy code" })).toBeVisible()
+  await expect(dialog.getByRole("button", { name: "Copy output" })).toBeVisible()
+})
+
+story("shows a failed execution's error in place of its output", async ({ mount }) => {
+  const timeline = await mount("current-session-terminal-work--execute-failed")
+  await timeline.getByRole("button", { name: /^Used 5 / }).click()
+  await timeline
+    .locator('[data-timeline-part-id="tool_execute_failed_url"]')
+    .getByRole("button", { name: "View code" })
+    .click()
+  const dialog = timeline.page().getByRole("dialog")
+  await expect(dialog).toContainText("Failed")
+  await expect(dialog).toContainText("Invalid browser URL.")
+  await expect(dialog.getByRole("button", { name: "Copy error" })).toBeVisible()
+  await expect(dialog.getByRole("button", { name: "Copy output" })).toHaveCount(0)
+})
