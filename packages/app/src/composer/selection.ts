@@ -10,12 +10,30 @@ import { useModels } from "@/providers/models/models"
 import { cycleModelVariant, getConfiguredAgentVariant, resolveModelVariant } from "@/providers/models/variant"
 import { useComposerState } from "./persistence"
 import { useConfiguredModel } from "@/providers/models/configured"
+import { consoleProviderGroup, consoleProviderName } from "@/providers/catalog/console"
 
 export function createComposerControls(input: { model?: ModelSelection } = {}) {
   const local = useLocal()
   const sdk = useWorkspaceLocation()
   const data = useData()
   const providers = useProviders(() => sdk().directory)
+  const canonical = (provider: { id: string; canonical?: string }) =>
+    provider.canonical ?? provider.id.replace(/^console-/, "")
+
+  // Like the model picker, a Console-managed provider drops its "Workspace / " prefix unless the
+  // same provider is also connected directly and the workspace is what tells them apart.
+  const providerName = (providerID: string) => {
+    const provider = providers.all().get(providerID)
+
+    if (!provider) return providerID
+    const all = [...providers.all().values()]
+    const managed = consoleProviderGroup(all)
+
+    if (!managed?.providers.includes(provider)) return provider.name
+    const direct = all.some((item) => !managed.providers.includes(item) && canonical(item) === canonical(provider))
+
+    return direct ? provider.name : consoleProviderName(managed, provider.name)
+  }
 
   return createMemo<ComposerControls>(() => {
     const selection = input.model ?? local.model
@@ -32,7 +50,7 @@ export function createComposerControls(input: { model?: ModelSelection } = {}) {
       model: {
         selection,
         // A model the catalog no longer offers still names its provider.
-        providerName: key && (providers.all().get(key.providerID)?.name ?? key.providerID),
+        providerName: key && providerName(key.providerID),
         paid: providers.paid().length > 0,
         // The session's model applies only to its agent, so resolve agents before showing a model.
         loading:

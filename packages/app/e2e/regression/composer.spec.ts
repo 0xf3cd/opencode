@@ -114,6 +114,34 @@ test("an existing session's model waits for its agent instead of showing a fallb
   await expect(control).toHaveText("OpenCode / Alpha")
 })
 
+test("names a Console-managed provider without its workspace unless a direct connection shares it", async ({
+  page,
+}) => {
+  const sessions = [
+    { id: "ses_managed_root", model: { id: "alpha", providerID: "opencode" } },
+    { id: "ses_managed_openai", model: { id: "gpt", providerID: "console-openai" } },
+  ]
+  const managed = { integrationID: "opencode" }
+  await openSession(page, {
+    name: "ManagedProvider",
+    sessions: sessions.map((session) => ({ ...session, agent: "build" })),
+    provider: {
+      all: [
+        { ...managed, id: "opencode", name: "Anomaly / OpenCode", models: { alpha: { id: "alpha", name: "Alpha" } } },
+        { ...managed, id: "console-openai", name: "Anomaly / OpenAI", models: { gpt: { id: "gpt", name: "GPT" } } },
+        { id: "openai", name: "OpenAI", models: { gpt: { id: "gpt", name: "GPT" } } },
+      ],
+      connected: ["opencode", "console-openai", "openai"],
+      default: {},
+    },
+  })
+
+  const control = page.locator('[data-action="composer-model"]')
+  await expect(control).toHaveText("OpenCode / Alpha")
+  await page.goto(sessionHref(sessions[1]!.id))
+  await expect(control).toHaveText("Anomaly / OpenAI / GPT")
+})
+
 async function draft(page: Page) {
   const { editor } = await openDraft(page, { name: "ComposerDraft", provider: NO_PROVIDER })
   await editor.click()
