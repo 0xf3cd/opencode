@@ -154,7 +154,9 @@ export const lineCommentStyles = `
   padding: 8px;
   border-radius: var(--radius-md);
   background: var(--surface-base);
-  border: 1px solid var(--border-base);
+  /* The border is drawn by an inset shadow; the transparent border keeps the textarea's size. */
+  border: 1px solid transparent;
+  box-shadow: inset 0 0 0 1px var(--border-base);
   color: var(--text-strong);
   font-family: var(--font-family-sans);
   font-size: var(--font-size-small);
@@ -163,7 +165,7 @@ export const lineCommentStyles = `
 
 [data-component="line-comment"] [data-slot="line-comment-textarea"]:focus {
   outline: none;
-  border-color: var(--v2-border-border-focus);
+  box-shadow: inset 0 0 0 1px var(--v2-border-border-focus);
 }
 
 [data-component="line-comment"] [data-slot="line-comment-mention-list"] {

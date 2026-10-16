@@ -12,10 +12,9 @@
     gap: 8px;
     width: 280px;
     height: 28px;
+    position: relative;
     border: 0;
     border-radius: 6px;
-    outline: 1px solid transparent;
-    outline-offset: 0;
     background:
       linear-gradient(180deg, var(--v2-alpha-light-6) 0%, var(--v2-alpha-light-2) 100%), var(--v2-background-bg-base);
     box-shadow: var(--v2-elevation-button-neutral);
@@ -23,8 +22,19 @@
     align-self: stretch;
     transition:
       background 85ms ease-out,
-      outline-color 85ms ease-out,
       box-shadow 85ms ease-out;
+  }
+
+  /* The field border is an inset shadow on an overlay: it is never clipped, takes no space, and neither the field's
+     content nor a consumer's box-shadow can cover it. */
+  [data-component="text-input-v2"]::after {
+    content: "";
+    position: absolute;
+    inset: 0;
+    border-radius: inherit;
+    box-shadow: inset 0 0 0 1px transparent;
+    pointer-events: none;
+    transition: box-shadow 85ms ease-out;
   }
 
   [data-component="text-input-v2"][data-appearance="large"] {
@@ -38,13 +48,19 @@
   }
 
   [data-component="text-input-v2"]:where(:focus-within):not([data-disabled], [data-invalid]) {
-    outline-color: var(--v2-border-border-focus);
     box-shadow: none;
   }
 
+  [data-component="text-input-v2"]:where(:focus-within):not([data-disabled], [data-invalid])::after {
+    box-shadow: inset 0 0 0 1px var(--v2-border-border-focus);
+  }
+
   [data-component="text-input-v2"]:where([data-invalid]):not([data-disabled]) {
-    outline-color: var(--v2-state-fg-danger);
     box-shadow: none;
+  }
+
+  [data-component="text-input-v2"]:where([data-invalid]):not([data-disabled])::after {
+    box-shadow: inset 0 0 0 1px var(--v2-state-fg-danger);
   }
 
   [data-component="text-input-v2"]:where([data-disabled]) {
