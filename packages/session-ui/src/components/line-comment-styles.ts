@@ -154,7 +154,6 @@ export const lineCommentStyles = `
   padding: 8px;
   border-radius: var(--radius-md);
   background: var(--surface-base);
-  /* The border is drawn by an inset shadow; the transparent border keeps the textarea's size. */
   border: 1px solid transparent;
   box-shadow: inset 0 0 0 1px var(--border-base);
   color: var(--text-strong);

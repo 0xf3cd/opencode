@@ -676,7 +676,7 @@ function HomeProjectRow(
   })
 
   return (
-    // The sortable wrapper is the keyboard reorder stop; its ring sits above the row so the selected row cannot cover it.
+    // The selected row would cover the reorder handle's own outline.
     <div
       ref={sortable.ref}
       class={`
