@@ -492,7 +492,10 @@ function MessageTimelineView(
                           classList={{ "max-w-[45%] shrink-0": !!parentID() }}
                           onClick={openTitleEditor}
                         >
-                          {childTitle()}
+                          {/* Gives the click-to-rename heading a keyboard stop; its click reaches the heading's handler. */}
+                          <button type="button" class="block max-w-full truncate rounded-[2px] text-start">
+                            {childTitle()}
+                          </button>
                         </h1>
                       }
                     >
