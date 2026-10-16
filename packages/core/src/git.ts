@@ -700,13 +700,24 @@ const layer = Layer.effect(
           return yield* attemptCapture(input).pipe(
             Effect.catch((error) =>
               Effect.gen(function* () {
-                if (!(yield* isIndexUnreadable(input.repository))) return yield* error
-                yield* Effect.logWarning("rebuilding unreadable snapshot index", {
-                  directory: input.repository.gitDirectory,
-                  message: error.message,
-                })
-                yield* rebuildIndex(input.repository, input.ignores)
-                return yield* attemptCapture(input)
+                if (yield* isIndexUnreadable(input.repository)) {
+                  yield* Effect.logWarning("rebuilding unreadable snapshot index", {
+                    directory: input.repository.gitDirectory,
+                    message: error.message,
+                  })
+                  yield* rebuildIndex(input.repository, input.ignores)
+                  return yield* attemptCapture(input)
+                }
+                if (error.cause !== undefined) return yield* error
+                // On Windows, Git exits with "Permission denied" when another process is writing the same loose
+                // object at that moment. Objects are content-addressed, so a retry finds the winner's copy in place.
+                return yield* attemptCapture(input).pipe(
+                  Effect.retry({
+                    times: 2,
+                    schedule: Schedule.spaced("50 millis"),
+                    while: (retried) => retried.cause === undefined,
+                  }),
+                )
               }),
             ),
           )
