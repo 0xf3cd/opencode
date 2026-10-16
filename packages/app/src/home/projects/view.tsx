@@ -202,7 +202,7 @@ function HomeProjectsPanel(props: HomeProjectsViewProps) {
           </Show>
         </div>
       </Show>
-      <ScrollView data-slot="home-projects-scroll" class="min-h-0 min-w-0 shrink">
+      <ScrollView data-slot="home-projects-scroll" class="min-h-0 min-w-0 shrink rounded-[6px]">
         <Show when={props.dropdown && props.servers.length === 1}>
           <HomeProjectNavButton
             type="button"

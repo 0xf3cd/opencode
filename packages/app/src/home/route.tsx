@@ -32,7 +32,7 @@ export function Home() {
         </div>
       </Show>
       <ScrollView
-        class="min-h-0 flex-1 [container-type:size]"
+        class="min-h-0 flex-1 rounded-[inherit] [container-type:size]"
         thumbContainer={scroll.viewport.thumbTrack()}
         thumbHoverTarget={scroll.viewport.hoverTarget()}
         viewportRef={scroll.viewport.setViewport}
