@@ -609,8 +609,8 @@ function HomeSessionRow(
                 disabled={editor()?.renaming ?? false}
                 class={`
                 -mx-1 block min-w-0 overflow-hidden rounded-[4px] px-1 text-ellipsis whitespace-nowrap text-v2-text-text-base
-                [font-weight:530] field-sizing-content outline-none focus:outline-none focus-visible:outline-none
-                focus:shadow-[inset_0_0_0_1px_var(--v2-border-border-focus)]
+                [font-weight:530] field-sizing-content outline-none focus:outline-1 focus:outline-solid
+                focus:outline-transparent focus:-outline-offset-1 focus:shadow-[inset_0_0_0_1px_var(--v2-border-border-focus)]
                  ${showProjectName() ? "max-w-[min(70%,480px)] flex-[0_1_auto]" : "flex-[1_1_auto]"}
               `}
                 style={{ "text-align": "start" }}

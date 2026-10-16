@@ -229,7 +229,7 @@ function HomeProjectsPanel(props: HomeProjectsViewProps) {
           fallback={
             <Show when={props.servers[0]}>
               {(server) => (
-                <div class={props.dropdown ? "" : "pr-3"}>
+                <div class={props.dropdown ? "" : "pe-3"}>
                   <Show
                     when={props.projects.length > 0}
                     fallback={<HomeProjectEmpty {...props} server={server()} items={props.recentlyClosed} />}
@@ -253,7 +253,7 @@ function HomeProjectsPanel(props: HomeProjectsViewProps) {
             </Show>
           }
         >
-          <div class={`flex min-w-0 flex-col ${props.dropdown ? "gap-1" : "gap-4 pr-3"}`}>
+          <div class={`flex min-w-0 flex-col ${props.dropdown ? "gap-1" : "gap-4 pe-3"}`}>
             <For each={props.servers}>
               {(item) => {
                 const projects = () => props.projectsForServer(item)
@@ -680,7 +680,7 @@ function HomeProjectRow(
     <div
       ref={sortable.ref}
       class={`
-        group/project relative flex h-7 min-w-0 items-center rounded-[6px] focus-visible:outline-none
+        group/project relative flex h-7 min-w-0 items-center rounded-[6px] focus-visible:outline-transparent focus-visible:outline-offset-[-2px]
         focus-visible:after:pointer-events-none focus-visible:after:absolute focus-visible:after:inset-0
         focus-visible:after:rounded-[inherit] focus-visible:after:shadow-[inset_0_0_0_2px_var(--v2-border-border-focus)]
         focus-visible:after:content-['']

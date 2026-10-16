@@ -155,6 +155,7 @@ export const lineCommentStyles = `
   border-radius: var(--radius-md);
   background: var(--surface-base);
   border: 1px solid transparent;
+  background-clip: padding-box;
   box-shadow: inset 0 0 0 1px var(--border-base);
   color: var(--text-strong);
   font-family: var(--font-family-sans);
