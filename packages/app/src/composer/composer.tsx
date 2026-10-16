@@ -81,11 +81,11 @@ function ComposerModelControl(props: {
 
   const content = () => (
     <>
-      <span class="flex min-w-0 leading-4">
+      <span class="flex min-w-0 whitespace-nowrap leading-4">
         <Show when={props.providerName}>
           {(name) => (
             <>
-              <span class="max-w-[50%] shrink-0 truncate text-v2-text-text-faint">{name()}</span>
+              <span class="shrink-0 text-v2-text-text-faint">{name()}</span>
               <span class="shrink-0 whitespace-pre text-v2-text-text-faint">{" / "}</span>
             </>
           )}
@@ -119,7 +119,7 @@ function ComposerModelControl(props: {
               data-control-type="dialog"
               variant="ghost-muted"
               size="normal"
-              class="min-w-0 max-w-[320px] justify-start ![font-weight:440]"
+              class="min-w-0 max-w-[60cqw] justify-start ![font-weight:440]"
               classList={{ "animate-in fade-in": shouldAnimate() }}
               style={{ height: "28px" }}
               onClick={props.onUnpaidClick}
@@ -137,7 +137,7 @@ function ComposerModelControl(props: {
                 variant="ghost-muted"
                 size="normal"
                 style={{ height: "28px" }}
-                class="min-w-0 max-w-[320px] justify-start ![font-weight:440]"
+                class="min-w-0 max-w-[60cqw] justify-start ![font-weight:440]"
                 classList={{ "animate-in fade-in": shouldAnimate() }}
                 data-action="composer-model"
                 data-control-type={mobile() ? "drawer" : "popover"}
