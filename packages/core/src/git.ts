@@ -368,6 +368,22 @@ const layer = Layer.effect(
     })
 
     /**
+     * On Windows, Git exits non-zero instead of reusing a loose object that another process is finalizing at the
+     * same moment. Objects are content-addressed, so one of at most two retries finds that copy in place. Only a Git
+     * exit is retried, never a failure to start Git, and other platforms fail on the first attempt.
+     */
+    const retryConcurrentObjectWrite = <A, R>(effect: Effect.Effect<A, OperationError, R>) =>
+      process.platform === "win32"
+        ? effect.pipe(
+            Effect.retry({
+              times: 2,
+              schedule: Schedule.spaced("50 millis"),
+              while: (error) => error.cause === undefined,
+            }),
+          )
+        : effect
+
+    /**
      * A new store is initialized in a temporary sibling directory and renamed into
      * place, so processes racing to create the same store never observe or write a
      * half-initialized one; the loser discards its copy and adopts the winner's.
@@ -505,11 +521,13 @@ const layer = Layer.effect(
         { concurrency: 8 },
       )).filter((item): item is RelativePath => item !== undefined)
       if (added.length)
-        yield* repositoryOperation(
-          "refresh",
-          input.repository,
-          ["update-index", "--add", "--remove", "--replace", "-z", "--stdin"],
-          { stdin: [...added, ...embedded].join("\0") + "\0", index: input.index },
+        yield* retryConcurrentObjectWrite(
+          repositoryOperation(
+            "refresh",
+            input.repository,
+            ["update-index", "--add", "--remove", "--replace", "-z", "--stdin"],
+            { stdin: [...added, ...embedded].join("\0") + "\0", index: input.index },
+          ),
         )
       return { skipped }
     })
@@ -561,7 +579,9 @@ const layer = Layer.effect(
     })
 
     const writeTree = Effect.fn("Git.tree.write")(function* (repository: Repository, index?: string) {
-      const tree = (yield* repositoryOperation("write_tree", repository, ["write-tree"], { index })).text.trim()
+      const tree = (yield* retryConcurrentObjectWrite(
+        repositoryOperation("write_tree", repository, ["write-tree"], { index }),
+      )).text.trim()
       if (/^[0-9a-f]{40,64}$/.test(tree)) return TreeID.make(tree)
       return yield* new OperationError({
         operation: "write_tree",
@@ -700,24 +720,13 @@ const layer = Layer.effect(
           return yield* attemptCapture(input).pipe(
             Effect.catch((error) =>
               Effect.gen(function* () {
-                if (yield* isIndexUnreadable(input.repository)) {
-                  yield* Effect.logWarning("rebuilding unreadable snapshot index", {
-                    directory: input.repository.gitDirectory,
-                    message: error.message,
-                  })
-                  yield* rebuildIndex(input.repository, input.ignores)
-                  return yield* attemptCapture(input)
-                }
-                if (error.cause !== undefined) return yield* error
-                // On Windows, Git exits with "Permission denied" when another process is writing the same loose
-                // object at that moment. Objects are content-addressed, so a retry finds the winner's copy in place.
-                return yield* attemptCapture(input).pipe(
-                  Effect.retry({
-                    times: 2,
-                    schedule: Schedule.spaced("50 millis"),
-                    while: (retried) => retried.cause === undefined,
-                  }),
-                )
+                if (!(yield* isIndexUnreadable(input.repository))) return yield* error
+                yield* Effect.logWarning("rebuilding unreadable snapshot index", {
+                  directory: input.repository.gitDirectory,
+                  message: error.message,
+                })
+                yield* rebuildIndex(input.repository, input.ignores)
+                return yield* attemptCapture(input)
               }),
             ),
           )
