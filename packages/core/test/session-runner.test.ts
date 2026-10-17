@@ -87,6 +87,7 @@ import { Expected } from "./lib/session-message"
 import { permissionLayer } from "./lib/permission"
 import { agentHost, modelHost, host, noProviders } from "./plugin/host"
 import { CodeModeInstructions } from "@opencode/core/codemode/instructions"
+import GenUIPlugin from "@opencode/plugin-genui"
 
 const emptyCodeMode = `${CodeModeInstructions.render({ total: 0, shown: 0, namespaces: [] })}\n\n`
 type ToolBarrier = {
@@ -1200,6 +1201,28 @@ describe("SessionRunnerLLM", () => {
 
     expect(s.requests).toHaveLength(1)
     expect(yield* s.messages).toMatchObject([{ id: message.id, type: "user", text: "Run automatically" }])
+  })
+
+  scenario("runs one model request with system guidance when a prompt enables GenUI", function* (s) {
+    const hooks = yield* PluginHooks.Service
+    const registered = Effect.succeed({ dispose: Effect.void })
+    yield* GenUIPlugin.effect(
+      host({
+        session: {
+          hook: (name, callback) => hooks.register("session", name, callback),
+          synthetic: s.session.synthetic,
+        },
+        tool: { ...host().tool, transform: () => registered },
+        skill: { ...host().skill, transform: () => registered },
+      }),
+    )
+    const message = yield* s.session.prompt({ sessionID, text: "hi", metadata: { genui: true } })
+    yield* s.session.wait(sessionID)
+
+    expect(s.requests).toHaveLength(1)
+    expect(s.requests[0]?.system.map((part) => part.text)).toContainEqual(expect.stringContaining("genui_render"))
+    expect(userTexts(s.requests[0]!)).toEqual(["hi"])
+    expect(yield* s.messages).toMatchObject([{ id: message.id, type: "user", text: "hi" }])
   })
 
   scenario("runs a follow-up when synthetic input arrives during an active continuation", function* (s) {

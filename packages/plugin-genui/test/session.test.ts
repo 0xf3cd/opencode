@@ -14,9 +14,9 @@ import { GenUISession } from "../src/session"
 
 const sessionID = Session.ID.make("ses_genui_test")
 
-/** Registers the plugin's session hooks against stubs, recording the reminders it persists. */
+/** Registers the plugin's session hooks against stubs. */
 const run = async () => {
-  const persisted: string[] = []
+  const synthetics: string[] = []
   const hooks: {
     prompt?: (input: SessionPrompt) => Effect.Effect<void>
     context?: (input: SessionContext) => Effect.Effect<void>
@@ -29,7 +29,7 @@ const run = async () => {
       return Effect.succeed({ dispose: Effect.void })
     },
     synthetic: (input) => {
-      persisted.push(input.text)
+      synthetics.push(input.text)
       return Effect.succeed(
         SessionInbox.Synthetic.make({
           id: SessionMessage.ID.make("msg_genui_test"),
@@ -68,44 +68,45 @@ const run = async () => {
     await Effect.runPromise(hooks.context?.(request) ?? Effect.void)
     return request
   }
-  return { persisted, prompt, context }
+  return { synthetics, prompt, context }
 }
 
 describe("GenUISession", () => {
-  test("offers the render tool and tells the agent once while the app shows generated UI", async () => {
+  test("adds the system part and offers the render tool without mutating messages or enqueuing synthetics", async () => {
     const plugin = await run()
     await plugin.prompt({ genui: true })
-    const first = await plugin.context([Message.user("Show me the build")])
+    const initial = [Message.user("Show me the build")]
+    const first = await plugin.context([...initial])
 
     expect(Object.keys(first.tools)).toEqual([GenUI.RENDER_TOOL, "read"])
-    expect(plugin.persisted).toHaveLength(1)
-    expect(first.messages.map((message) => message.content[0]?.type === "text" && message.content[0].text)).toEqual([
-      plugin.persisted[0],
-      "Show me the build",
-    ])
-
-    const second = await plugin.context([Message.user(plugin.persisted[0] ?? ""), Message.user("Again")])
-    expect(plugin.persisted).toHaveLength(1)
-    expect(second.messages).toHaveLength(2)
+    expect(first.system.map((part) => part.text)).toEqual([expect.stringContaining(GenUI.RENDER_TOOL)])
+    expect(first.system[0]?.text).not.toContain("<system-reminder>")
+    expect(first.messages).toEqual(initial)
+    expect(plugin.synthetics).toEqual([])
   })
 
-  test("hides the render tool and says so once a prompt comes without generated UI", async () => {
+  test("hides the render tool and adds no system part when a prompt comes without generated UI", async () => {
     const plugin = await run()
     await plugin.prompt({ genui: true })
     await plugin.context([Message.user("hi")])
     await plugin.prompt({ genui: false })
-    const request = await plugin.context([Message.user(plugin.persisted[0] ?? ""), Message.user("Text only now")])
+    const initial = [Message.user("Text only now")]
+    const request = await plugin.context([...initial])
 
     expect(Object.keys(request.tools)).toEqual(["read"])
-    expect(plugin.persisted).toHaveLength(2)
-    expect(plugin.persisted[1]).toContain("no longer available")
+    expect(request.system).toEqual([])
+    expect(request.messages).toEqual(initial)
+    expect(plugin.synthetics).toEqual([])
   })
 
-  test("never offers the render tool to a session the app has not prompted, such as a subagent", async () => {
+  test("never offers the render tool or system part to a session the app has not prompted, such as a subagent", async () => {
     const plugin = await run()
-    const request = await plugin.context([Message.user("Search the repo")])
+    const initial = [Message.user("Search the repo")]
+    const request = await plugin.context([...initial])
 
     expect(Object.keys(request.tools)).toEqual(["read"])
-    expect(plugin.persisted).toEqual([])
+    expect(request.system).toEqual([])
+    expect(request.messages).toEqual(initial)
+    expect(plugin.synthetics).toEqual([])
   })
 })
