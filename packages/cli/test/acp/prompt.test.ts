@@ -269,7 +269,7 @@ describe("acp prompt turns over the wire", () => {
         kind: "compact",
         sessionID: session.sessionId,
         id: expect.stringMatching(/^msg_/),
-        instructions: "keep only the parser work",
+        guidance: "keep only the parser work",
       },
     ])
     expect(
@@ -278,7 +278,7 @@ describe("acp prompt turns over the wire", () => {
       sessionUpdate: "available_commands_update",
       availableCommands: [
         { name: "review", description: "Review changes" },
-        { name: "compact", description: "Compact the session", input: { hint: "optional instructions for the summary" } },
+        { name: "compact", description: "Compact the session", input: { hint: "optional guidance for the summary" } },
       ],
     })
   })

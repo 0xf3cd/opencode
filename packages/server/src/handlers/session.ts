@@ -441,7 +441,7 @@ export const SessionHandler = HttpApiBuilder.group(Api, "server.session", (handl
                 sessionID: ctx.params.sessionID,
                 id: ctx.payload.id,
                 delivery: ctx.payload.delivery,
-                instructions: ctx.payload.instructions,
+                guidance: ctx.payload.guidance,
               })
               .pipe(
                 Effect.catchTag("Session.NotFoundError", missingSession),

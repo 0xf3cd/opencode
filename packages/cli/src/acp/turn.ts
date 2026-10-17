@@ -238,7 +238,7 @@ export const make = Effect.fnUntraced(function* (input: {
     }
     if (prompt.start.type === "compaction") {
       yield* input.client.session
-        .compact({ sessionID, id: prompt.start.id, instructions: prompt.slash?.args || undefined })
+        .compact({ sessionID, id: prompt.start.id, guidance: prompt.slash?.args || undefined })
         .pipe(Effect.catch(ACPClient.classify))
       return
     }

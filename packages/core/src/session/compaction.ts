@@ -58,8 +58,8 @@ export type Trigger =
       readonly reason: "manual"
       readonly context: SessionContext.Loaded
       readonly inputID: SessionMessage.ID
-      /** Extra user instructions for this summary. */
-      readonly instructions?: string
+      /** Extra user guidance for this summary. */
+      readonly guidance?: string
     }
 
 export type Outcome =
@@ -148,12 +148,12 @@ const SUMMARY_RULES = `Rules:
 - Preserve consequential workflow state, including whether changes are uncommitted, committed, pushed, under review, or merged.
 - Do not mention the summary process or that context was compacted.`
 
-export const buildPrompt = (update: boolean, legacy = false, instructions?: string) => {
+export const buildPrompt = (update: boolean, legacy = false, guidance?: string) => {
   const shared = [
     "Summarize only what the user and the assistant said and did. Leave out instructions and setup the assistant was given rather than told by the user: repository conventions, instruction files such as AGENTS.md, and environment details like the session ID. The next agent receives current versions of all of these separately.",
     SUMMARY_TEMPLATE,
     SUMMARY_RULES,
-    ...(instructions?.trim() ? [`Additional instructions for this summary:\n${instructions.trim()}`] : []),
+    ...(guidance?.trim() ? [`Additional guidance for this summary:\n${guidance.trim()}`] : []),
     "Do not continue the task or call tools.",
     "Return only the structured summary in the requested format. Do not include a preamble, explanation, or other commentary.",
   ]
@@ -289,7 +289,7 @@ export const layer = Layer.effect(
       const prompt = buildPrompt(
         previous !== undefined,
         previous?.summary.includes(LEGACY_HEADING) ?? false,
-        trigger.reason === "manual" ? trigger.instructions : undefined,
+        trigger.reason === "manual" ? trigger.guidance : undefined,
       )
       const headings = SUMMARY_TEMPLATE.split("\n").filter((line) => line.startsWith("##"))
       const filled = (text: string) => text.split("\n").some((line) => headings.includes(line.trim()))

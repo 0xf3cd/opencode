@@ -963,7 +963,7 @@ export function Session(props: {
         void data.session
           .compact({
             sessionID: route.sessionID,
-            instructions: input?.trim() || undefined,
+            guidance: input?.trim() || undefined,
             model: selection
               ? {
                   providerID: selection.providerID,

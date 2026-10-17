@@ -9,7 +9,7 @@ import { ACPError } from "./error"
 export const builtinCommands = new Map([
   [
     "compact",
-    { description: "Compact the session", hint: "optional instructions for the summary", start: "compaction" as const },
+    { description: "Compact the session", hint: "optional guidance for the summary", start: "compaction" as const },
   ],
 ])
 

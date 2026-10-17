@@ -234,14 +234,14 @@ test.each(["first", "second"])(
   },
 )
 
-test("/compact sends the text after the command as compaction instructions", async () => {
+test("/compact sends the text after the command as compaction guidance", async () => {
   await using state = await tmpdir()
   const setup = await createTestRenderer({ width: 100, height: 30, useThread: false, kittyKeyboard: true })
   setup.renderer.start()
   const ready = Promise.withResolvers<void>()
   const compacted = Promise.withResolvers<unknown>()
   const events = createEventStream()
-  const sessionID = "ses_compact_instructions"
+  const sessionID = "ses_compact_guidance"
   const location = { directory, project: { id: "project", directory, canonical: directory } }
   const calls = createFetch(async (url, request) => {
     if (url.pathname === `/api/session/${sessionID}`)
@@ -249,7 +249,7 @@ test("/compact sends the text after the command as compaction instructions", asy
         data: {
           id: sessionID,
           projectID: "project",
-          title: "Compact instructions fixture",
+          title: "Compact guidance fixture",
           model: { providerID: "demo", id: "model" },
           location: { directory },
           cost: 0,
@@ -275,7 +275,7 @@ test("/compact sends the text after the command as compaction instructions", asy
           sessionID,
           type: "compaction",
           time: { created: 10 },
-          payload: { instructions: body.instructions },
+          payload: { guidance: body.guidance },
           delivery: "steer",
         },
       })
@@ -300,7 +300,7 @@ test("/compact sends the text after the command as compaction instructions", asy
     await setup.waitForFrame((frame) => frame.includes("Demo Model"))
     await setup.mockInput.typeText("/compact Keep only the parser work")
     setup.mockInput.pressEnter()
-    expect(await compacted.promise).toMatchObject({ instructions: "Keep only the parser work" })
+    expect(await compacted.promise).toMatchObject({ guidance: "Keep only the parser work" })
   } finally {
     setup.renderer.destroy()
     await task
