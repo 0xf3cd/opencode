@@ -1,4 +1,5 @@
 import { Resource } from "@opencode/console-resource"
+import { inferenceHeaders } from "./inference-ip"
 
 const paths: Record<string, string | undefined> = {
   "POST /zen/v1/chat/completions": "/openai/v1/chat/completions",
@@ -36,14 +37,12 @@ export async function proxyInference(request: Request) {
   destination.search = url.search
   destination.hash = ""
 
-  const forwarded = new Request(destination, request)
+  const forwarded = new Request(destination, new Request(request, { headers: inferenceHeaders(request) }))
   for (const name of ["host", "content-length"]) forwarded.headers.delete(name)
   // Keyless requests must reach new inference without credentials; `public` is not an API key there.
   const anonymous = !key || key === "public"
   if (anonymous) for (const name of ["authorization", "x-api-key", "x-goog-api-key"]) forwarded.headers.delete(name)
   if (!anonymous) forwarded.headers.set("authorization", `Bearer ${key}`)
-  const ip = request.headers.get("cf-connecting-ip")
-  if (ip) forwarded.headers.set("x-real-ip", ip)
   const requestID = request.headers.get("x-opencode-request-id") ?? request.headers.get("x-opencode-request")
   if (requestID) forwarded.headers.set("x-opencode-request-id", requestID)
 

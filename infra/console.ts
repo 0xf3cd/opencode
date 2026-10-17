@@ -64,7 +64,12 @@ new sst.cloudflare.x.SolidStart("Console", {
           if (migrationDomain)
             args.bindings = $resolve(args.bindings).apply((bindings) => [
               ...(bindings ?? []),
-              { type: "service", name: "INFERENCE", service: `opencode-inference-${$app.stage}` },
+              {
+                type: "service",
+                name: "INFERENCE",
+                service: `opencode-inference-${$app.stage}`,
+                entrypoint: "LegacyIngress",
+              },
             ])
         },
       },
