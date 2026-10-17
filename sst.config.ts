@@ -11,6 +11,8 @@ export default $config({
         input.stage === "beta"
           ? {}
           : {
+              // WorkersScript service bindings gained named entrypoints after the default 6.13 provider.
+              cloudflare: "6.15.0",
               aws: {
                 version: "7.30.0",
                 region: "us-east-1",
