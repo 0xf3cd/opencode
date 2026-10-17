@@ -391,33 +391,29 @@ export default function Download() {
             </li>
             <li>
               <Faq question={i18n.t("home.faq.q2")}>
-                {i18n.t("home.faq.a2.before")} <a href={language.route("/docs")}>{i18n.t("home.faq.a2.link")}</a>.
+                {i18n.t("home.faq.a2.before")} <a href="/v2/docs">{i18n.t("home.faq.a2.link")}</a>.
               </Faq>
             </li>
             <li>
               <Faq question={i18n.t("home.faq.q3")}>
-                {i18n.t("download.faq.a3.beforeLocal")}{" "}
-                <a href={language.route("/docs/providers/#lm-studio")} target="_blank">
-                  {i18n.t("download.faq.a3.localLink")}
-                </a>{" "}
-                {i18n.t("download.faq.a3.afterLocal.beforeZen")}{" "}
+                {i18n.t("home.faq.a3.p1")} {i18n.t("home.faq.a3.p2.beforeZen")}{" "}
                 <A href={language.route("/zen")}>{i18n.t("nav.zen")}</A>
-                {i18n.t("download.faq.a3.afterZen")}
+                {i18n.t("home.faq.a3.p2.afterZen")} {i18n.t("home.faq.a3.p3")} {i18n.t("home.faq.a3.p4.beforeLocal")}{" "}
+                <a href="/v2/docs/providers/#runtimes" target="_blank">
+                  {i18n.t("home.faq.a3.p4.localLink")}
+                </a>
+                .
               </Faq>
             </li>
             <li>
               <Faq question={i18n.t("home.faq.q5")}>
                 {i18n.t("home.faq.a5.beforeDesktop")}{" "}
                 <a href={language.route("/download")}>{i18n.t("home.faq.a5.desktop")}</a> {i18n.t("home.faq.a5.and")}{" "}
-                <a href={language.route("/docs/cli/#web")}>{i18n.t("home.faq.a5.web")}</a>!
+                <a href="/v2/docs/cli/web/">{i18n.t("home.faq.a5.web")}</a>!
               </Faq>
             </li>
             <li>
-              <Faq question={i18n.t("home.faq.q6")}>
-                {i18n.t("download.faq.a5.p1")} {i18n.t("download.faq.a5.p2.beforeZen")}{" "}
-                <A href={language.route("/zen")}>{i18n.t("nav.zen")}</A>
-                {i18n.t("download.faq.a5.p2.afterZen")}
-              </Faq>
+              <Faq question={i18n.t("home.faq.q6")}>{i18n.t("home.faq.a6")}</Faq>
             </li>
             <li>
               <Faq question={i18n.t("home.faq.q7")}>

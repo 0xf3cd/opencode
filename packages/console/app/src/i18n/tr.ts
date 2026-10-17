@@ -366,18 +366,6 @@ export const dict = {
   "download.platform.linuxDeb": "Linux (.deb)",
   "download.platform.linuxRpm": "Linux (.rpm)",
 
-  "download.faq.a3.beforeLocal":
-    "Tam olarak değil, ama muhtemelen. OpenCode'u ücretli bir sağlayıcıya bağlamak istiyorsanız bir AI aboneliği gerekir, ancak",
-  "download.faq.a3.localLink": "yerel modeller",
-  "download.faq.a3.afterLocal.beforeZen": "ile ücretsiz çalışabilirsiniz. Kullanıcıları",
-  "download.faq.a3.afterZen":
-    " kullanmaya teşvik ediyoruz, ancak OpenCode OpenAI, Anthropic, xAI vb. gibi tüm popüler sağlayıcılarla çalışır.",
-
-  "download.faq.a5.p1": "OpenCode %100 ücretsizdir.",
-  "download.faq.a5.p2.beforeZen":
-    "Ek maliyetler, bir model sağlayıcısına olan aboneliğinizden gelir. OpenCode herhangi bir model sağlayıcısıyla çalışır, ancak",
-  "download.faq.a5.p2.afterZen": " kullanmanızı öneririz.",
-
   "enterprise.title": "OpenCode | Kurumunuz için kurumsal çözümler",
   "enterprise.meta.description": "Kurumsal çözümler için OpenCode ile iletişime geçin",
   "enterprise.hero.title": "Kodunuz size aittir",

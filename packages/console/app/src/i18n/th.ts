@@ -360,17 +360,6 @@ export const dict = {
   "download.platform.linuxDeb": "Linux (.deb)",
   "download.platform.linuxRpm": "Linux (.rpm)",
 
-  "download.faq.a3.beforeLocal":
-    "ไม่จำเป็นเสมอไป แต่อาจจะต้องมี คุณจะต้องมีการสมัครสมาชิก AI หากต้องการเชื่อมต่อ OpenCode กับผู้ให้บริการที่มีค่าใช้จ่าย แม้ว่าคุณจะสามารถทำงานกับ",
-  "download.faq.a3.localLink": "โมเดล Local",
-  "download.faq.a3.afterLocal.beforeZen": "ได้ฟรี แม้ว่าเราจะแนะนำให้ผู้ใช้ใช้งาน",
-  "download.faq.a3.afterZen": ", OpenCode ก็ทำงานร่วมกับผู้ให้บริการยอดนิยมทั้งหมด เช่น OpenAI, Anthropic, xAI เป็นต้น",
-
-  "download.faq.a5.p1": "OpenCode ใช้งานได้ฟรี 100%",
-  "download.faq.a5.p2.beforeZen":
-    "ค่าใช้จ่ายเพิ่มเติมใดๆ จะมาจากการสมัครสมาชิกของคุณกับผู้ให้บริการโมเดล แม้ว่า OpenCode จะทำงานร่วมกับผู้ให้บริการโมเดลใดก็ได้ แต่เราแนะนำให้ใช้",
-  "download.faq.a5.p2.afterZen": "",
-
   "enterprise.title": "OpenCode | โซลูชันระดับองค์กรสำหรับองค์กรของคุณ",
   "enterprise.meta.description": "ติดต่อ OpenCode สำหรับโซลูชันระดับองค์กร",
   "enterprise.hero.title": "โค้ดของคุณเป็นของคุณ",

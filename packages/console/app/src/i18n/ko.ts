@@ -354,17 +354,6 @@ export const dict = {
   "download.platform.linuxDeb": "Linux (.deb)",
   "download.platform.linuxRpm": "Linux (.rpm)",
 
-  "download.faq.a3.beforeLocal":
-    "꼭 그렇지는 않지만, 아마도 필요할 것입니다. OpenCode를 유료 제공자에 연결하려면 AI 구독이 필요할 수 있습니다. 하지만",
-  "download.faq.a3.localLink": "로컬 모델",
-  "download.faq.a3.afterLocal.beforeZen": "은 무료로 사용할 수 있습니다. 우리는",
-  "download.faq.a3.afterZen": " 사용을 권장하지만, OpenCode는 OpenAI, Anthropic, xAI 등 모든 인기 제공자와 작동합니다.",
-
-  "download.faq.a5.p1": "OpenCode는 100% 무료로 사용할 수 있습니다.",
-  "download.faq.a5.p2.beforeZen":
-    "추가 비용은 모델 제공자 구독에서 발생합니다. OpenCode는 모든 모델 제공자와 작동하지만, 우리는",
-  "download.faq.a5.p2.afterZen": " 사용을 권장합니다.",
-
   "enterprise.title": "OpenCode | 조직을 위한 엔터프라이즈 솔루션",
   "enterprise.meta.description": "OpenCode 엔터프라이즈 솔루션 문의",
   "enterprise.hero.title": "여러분의 코드는 여러분의 것입니다",

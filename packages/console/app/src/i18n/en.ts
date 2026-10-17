@@ -361,17 +361,6 @@ export const dict = {
   "download.platform.linuxDeb": "Linux (.deb)",
   "download.platform.linuxRpm": "Linux (.rpm)",
 
-  "download.faq.a3.beforeLocal":
-    "Not necessarily, but probably. You'll need an AI subscription if you want to connect OpenCode to a paid provider, although you can work with",
-  "download.faq.a3.localLink": "local models",
-  "download.faq.a3.afterLocal.beforeZen": "for free. While we encourage users to use",
-  "download.faq.a3.afterZen": ", OpenCode works with all popular providers such as OpenAI, Anthropic, xAI etc.",
-
-  "download.faq.a5.p1": "OpenCode is 100% free to use.",
-  "download.faq.a5.p2.beforeZen":
-    "Any additional costs will come from your subscription to a model provider. While OpenCode works with any model provider, we recommend using",
-  "download.faq.a5.p2.afterZen": ".",
-
   "enterprise.title": "OpenCode | Enterprise solutions for your organisation",
   "enterprise.meta.description": "Contact OpenCode for enterprise solutions",
   "enterprise.hero.title": "Your code is yours",

@@ -363,17 +363,6 @@ export const dict = {
   "download.platform.linuxDeb": "Linux (.deb)",
   "download.platform.linuxRpm": "Linux (.rpm)",
 
-  "download.faq.a3.beforeLocal":
-    "Ikke nødvendigvis, men sandsynligvis. Du skal bruge et AI-abonnement hvis du vil forbinde OpenCode til en betalt udbyder, men du kan arbejde med",
-  "download.faq.a3.localLink": "lokale modeller",
-  "download.faq.a3.afterLocal.beforeZen": "gratis. Selvom vi opfordrer brugere til at bruge",
-  "download.faq.a3.afterZen": ", fungerer OpenCode med alle populære udbydere som OpenAI, Anthropic, xAI osv.",
-
-  "download.faq.a5.p1": "OpenCode er 100% gratis at bruge.",
-  "download.faq.a5.p2.beforeZen":
-    "Eventuelle ekstra omkostninger kommer fra dit abonnement hos en modeludbyder. Selvom OpenCode fungerer med enhver modeludbyder, anbefaler vi at bruge",
-  "download.faq.a5.p2.afterZen": ".",
-
   "enterprise.title": "OpenCode | Enterprise-løsninger til din organisation",
   "enterprise.meta.description": "Kontakt OpenCode for enterprise-løsninger",
   "enterprise.hero.title": "Din kode er din egen",

@@ -360,18 +360,6 @@ export const dict = {
   "download.platform.linuxDeb": "Linux (.deb)",
   "download.platform.linuxRpm": "Linux (.rpm)",
 
-  "download.faq.a3.beforeLocal":
-    "必ずしもそうではありませんが、おそらく必要です。OpenCodeを有料プロバイダーに接続したい場合はAIサブスクリプションが必要ですが、",
-  "download.faq.a3.localLink": "ローカルモデル",
-  "download.faq.a3.afterLocal.beforeZen": "であれば無料で利用できます。ユーザーには",
-  "download.faq.a3.afterZen":
-    "の利用をお勧めしていますが、OpenCodeはOpenAI、Anthropic、xAIなどの主要なプロバイダーに対応しています。",
-
-  "download.faq.a5.p1": "OpenCodeは100%無料で利用できます。",
-  "download.faq.a5.p2.beforeZen":
-    "追加コストはモデルプロバイダーのサブスクリプションから発生します。OpenCodeはどのモデルプロバイダーでも利用できますが、",
-  "download.faq.a5.p2.afterZen": "の利用をおすすめします。",
-
   "enterprise.title": "OpenCode | 組織向けエンタープライズソリューション",
   "enterprise.meta.description": "エンタープライズソリューションについてOpenCodeに問い合わせる",
   "enterprise.hero.title": "あなたのコードはあなたのもの",

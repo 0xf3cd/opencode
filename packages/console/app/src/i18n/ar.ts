@@ -356,17 +356,6 @@ export const dict = {
   "download.platform.linuxDeb": "Linux (.deb)",
   "download.platform.linuxRpm": "Linux (.rpm)",
 
-  "download.faq.a3.beforeLocal":
-    "ليس بالضرورة، ولكن على الأرجح. ستحتاج إلى اشتراك ذكاء اصطناعي إذا كنت تريد ربط OpenCode بمزوّد مدفوع، رغم أنه يمكنك العمل مع",
-  "download.faq.a3.localLink": "النماذج المحلية",
-  "download.faq.a3.afterLocal.beforeZen": "مجانًا. بينما نشجع المستخدمين على استخدام",
-  "download.faq.a3.afterZen": "، فإن OpenCode يعمل مع جميع المزودين الشائعين مثل OpenAI، Anthropic، xAI إلخ.",
-
-  "download.faq.a5.p1": "OpenCode مجاني 100% للاستخدام.",
-  "download.faq.a5.p2.beforeZen":
-    "أي تكاليف إضافية ستأتي من اشتراكك لدى مزود النماذج. بينما يعمل OpenCode مع أي مزود نماذج، نوصي باستخدام",
-  "download.faq.a5.p2.afterZen": ".",
-
   "enterprise.title": "OpenCode | حلول المؤسسات لمنظمتك",
   "enterprise.meta.description": "تواصل مع OpenCode لحلول المؤسسات",
   "enterprise.hero.title": "كودك ملكك",

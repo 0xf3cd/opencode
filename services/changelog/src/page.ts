@@ -92,7 +92,7 @@ export function renderPage(state: PageState) {
 </main>
 <footer>
 <a href="${REPO}" ${external}>GitHub</a>
-<a href="${SITE}/docs">Docs</a>
+<a href="${SITE}/v2/docs">Docs</a>
 <a href="${SITE}/changelog">Changelog</a>
 <a href="${SITE}/discord">Discord</a>
 <a href="https://x.com/opencode">X</a>

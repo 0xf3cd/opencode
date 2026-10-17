@@ -345,17 +345,6 @@ export const dict = {
   "download.platform.linuxDeb": "Linux (.deb)",
   "download.platform.linuxRpm": "Linux (.rpm)",
 
-  "download.faq.a3.beforeLocal":
-    "不一定，但可能需要。如果您想将 OpenCode 连接到付费提供商，您需要 AI 订阅，尽管您可以配合",
-  "download.faq.a3.localLink": "本地模型",
-  "download.faq.a3.afterLocal.beforeZen": "免费使用。虽然我们鼓励用户使用",
-  "download.faq.a3.afterZen": "，但 OpenCode 支持所有主流提供商，如 OpenAI, Anthropic, xAI 等。",
-
-  "download.faq.a5.p1": "OpenCode 是 100% 免费使用的。",
-  "download.faq.a5.p2.beforeZen":
-    "任何额外费用都来自您对模型提供商的订阅。虽然 OpenCode 支持任何模型提供商，但我们建议使用",
-  "download.faq.a5.p2.afterZen": "。",
-
   "enterprise.title": "OpenCode | 面向组织的 OpenCode 企业版解决方案",
   "enterprise.meta.description": "联系 OpenCode 获取企业版解决方案",
   "enterprise.hero.title": "您的代码属于您",

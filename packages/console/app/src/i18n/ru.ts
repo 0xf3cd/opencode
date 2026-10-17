@@ -368,18 +368,6 @@ export const dict = {
   "download.platform.linuxDeb": "Linux (.deb)",
   "download.platform.linuxRpm": "Linux (.rpm)",
 
-  "download.faq.a3.beforeLocal":
-    "Не обязательно, но возможно. Вам понадобится AI подписка, если вы хотите подключить OpenCode к платному провайдеру, хотя вы можете работать с",
-  "download.faq.a3.localLink": "локальными моделями",
-  "download.faq.a3.afterLocal.beforeZen": "бесплатно. Хотя мы рекомендуем использовать",
-  "download.faq.a3.afterZen":
-    ", OpenCode работает со всеми популярными провайдерами, такими как OpenAI, Anthropic, xAI и др.",
-
-  "download.faq.a5.p1": "OpenCode на 100% бесплатен.",
-  "download.faq.a5.p2.beforeZen":
-    "Любые дополнительные расходы будут связаны с вашей подпиской у провайдера моделей. Хотя OpenCode работает с любым провайдером моделей, мы рекомендуем использовать",
-  "download.faq.a5.p2.afterZen": ".",
-
   "enterprise.title": "OpenCode | Корпоративные решения для вашей организации",
   "enterprise.meta.description": "Свяжитесь с OpenCode для корпоративных решений",
   "enterprise.hero.title": "Ваш код принадлежит вам",
