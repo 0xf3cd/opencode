@@ -96,8 +96,6 @@ type Streamed = {
   readonly providerState?: SessionMessage.ProviderState
 }
 
-const instructionsSection = (instructions: string) => `Additional instructions for this summary:\n${instructions}`
-
 const NOTHING_TO_COMPACT: Failure = { error: { type: "compaction.unavailable", message: "Nothing to compact yet" } }
 /** After each "too long" rejection, the next attempt aims at this share of the first rejected request's size. */
 const SHRINK_STEPS = [0.7, 0.5, 0.35]
@@ -155,7 +153,7 @@ export const buildPrompt = (update: boolean, legacy = false, instructions?: stri
     "Summarize only what the user and the assistant said and did. Leave out instructions and setup the assistant was given rather than told by the user: repository conventions, instruction files such as AGENTS.md, and environment details like the session ID. The next agent receives current versions of all of these separately.",
     SUMMARY_TEMPLATE,
     SUMMARY_RULES,
-    ...(instructions?.trim() ? [instructionsSection(instructions.trim())] : []),
+    ...(instructions?.trim() ? [`Additional instructions for this summary:\n${instructions.trim()}`] : []),
     "Do not continue the task or call tools.",
     "Return only the structured summary in the requested format. Do not include a preamble, explanation, or other commentary.",
   ]
@@ -370,21 +368,7 @@ export const layer = Layer.effect(
           }),
         )
 
-      // The provider writes the checkpoint itself, so manual instructions ride as one extra user message. It is added
-      // to the request after fitting, so shrinking never trades a real exchange for it, and it is removed from a provider
-      // replacement, so it never persists.
-      const instructions = trigger.reason === "manual" ? trigger.instructions?.trim() : undefined
-      const note = instructions ? instructionsSection(instructions) : undefined
-      const isNote = (message: Message) =>
-        message.role === "user" &&
-        message.content.length === 1 &&
-        message.content[0]?.type === "text" &&
-        message.content[0].text === note
-
-      const send = (fitted: LLMRequest) => {
-        const request = note
-          ? LLMRequest.update(fitted, { messages: [...fitted.messages, Message.user(note)] })
-          : fitted
+      const send = (request: LLMRequest) => {
         if (LLMClient.canCompact(request, { mechanism: "trigger" })) {
           return Effect.gen(function* () {
             const history = yield* SessionHistory.load(db, context.session.id, "local").pipe(Effect.orDie)
@@ -394,19 +378,14 @@ export const layer = Layer.effect(
           })
         }
         if (LLMClient.canCompact(request)) {
-          return llm.compact(request, { mechanism: "endpoint", http: prepared.options.http }).pipe(
-            Effect.flatMap((response) =>
-              toResult(
-                response.replacement.filter((message) => !isNote(message)),
-                response.usage,
-              ),
-            ),
-          )
+          return llm
+            .compact(request, { mechanism: "endpoint", http: prepared.options.http })
+            .pipe(Effect.flatMap((response) => toResult(response.replacement, response.usage)))
         }
         return unsupported(`Native compaction is not supported for ${request.model.provider}/${request.model.route.id}`)
       }
 
-      return yield* deliver(trigger, prepared, "", budget - (note ? Token.estimate(note) : 0), send)
+      return yield* deliver(trigger, prepared, "", budget, send)
     })
 
     /**

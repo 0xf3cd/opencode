@@ -59,7 +59,7 @@ const setup = Effect.fnUntraced(function* (options: { endpoint?: boolean } = {})
   const hooks = yield* PluginHooks.Service
   const blocked = Deferred.makeUnsafe<void>()
   const hanging = Promise.withResolvers<Response>()
-  const state = { failure: false, flaky: false, hang: false, overflow: false, echoLastUser: false, calls: 0 }
+  const state = { failure: false, flaky: false, hang: false, overflow: false, calls: 0 }
   const bodies: Record<string, unknown>[] = []
   const headers: Headers[] = []
   const server = yield* Effect.acquireRelease(
@@ -111,10 +111,6 @@ const setup = Effect.fnUntraced(function* (options: { endpoint?: boolean } = {})
               object: "response.compaction",
               output: [
                 { type: "message", role: "user", content: [{ type: "input_text", text: "endpoint retained" }] },
-                // A provider may keep any user message it was sent, including the newest one.
-                ...(state.echoLastUser
-                  ? [(bodies.at(-1)?.input as unknown[]).findLast((item) => JSON.stringify(item).includes('"user"'))]
-                  : []),
                 checkpoint,
               ],
               usage: { input_tokens: 20, output_tokens: 4, total_tokens: 24 },
@@ -215,12 +211,11 @@ const setup = Effect.fnUntraced(function* (options: { endpoint?: boolean } = {})
     }
   })
   // Opens the compaction's message as the runner does when it delivers `/compact`.
-  const compactWith = Effect.fnUntraced(function* (instructions?: string) {
+  const compact = Effect.gen(function* () {
     const inputID = SessionMessage.ID.create()
     yield* bus.publish(SessionEvent.Compaction.Started, { sessionID, reason: "manual", recent: "", inputID })
-    return yield* compaction.compact({ reason: "manual", context: yield* load, inputID, instructions })
+    return yield* compaction.compact({ reason: "manual", context: yield* load, inputID })
   })
-  const compact = compactWith()
   const checkpoint = Effect.gen(function* () {
     const messages = (yield* load).messages
     const last = messages.findLast((message) => message.type === "compaction" && message.status === "completed")
@@ -234,7 +229,6 @@ const setup = Effect.fnUntraced(function* (options: { endpoint?: boolean } = {})
   })
   return {
     compact,
-    compactWith,
     // An automatic compaction that skips the "is it due" check, which a context this small never passes.
     overflow: Effect.gen(function* () {
       return yield* compaction.compact({ reason: "overflow", context: yield* load })
@@ -336,22 +330,6 @@ it.live(
     }),
   15000,
 )
-
-for (const endpoint of [false, true])
-  it.live(`manual instructions are the last message the provider compacts (endpoint: ${endpoint})`, () =>
-    Effect.gen(function* () {
-      const fixture = yield* setup({ endpoint })
-      fixture.state.echoLastUser = true
-      yield* fixture.prompt("Original user")
-      expect(yield* fixture.compactWith("Keep only the parser work")).toEqual({ status: "completed" })
-      const input = (fixture.bodies[0] as { input: unknown[] }).input
-      expect(JSON.stringify(input.at(endpoint ? -1 : -2))).toContain(
-        "Additional instructions for this summary:\\nKeep only the parser work",
-      )
-      if (!endpoint) expect(input.at(-1)).toEqual({ type: "compaction_trigger" })
-      expect(JSON.stringify((yield* fixture.checkpoint).messages)).not.toContain("Keep only the parser work")
-    }),
-  )
 
 it.live("manual and automatic endpoint compaction keep the provider replacement unchanged", () =>
   Effect.gen(function* () {
