@@ -96,4 +96,4 @@ const server = Bun.serve({
 })
 
 console.log(`Local Enterprise handler: ${server.url.origin}/api/enterprise`)
-console.log(`Salesforce CLI org: ${org}; local email and EmailOctopus delivery disabled.`)
+console.log(`Salesforce CLI org: ${org}; local email and OpenSend delivery disabled.`)

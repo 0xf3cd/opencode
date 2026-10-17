@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, test } from "bun:test"
-import { subscribeToNewsletter } from "../src/lib/opensend"
+import { addEnterpriseContact, subscribeToNewsletter } from "../src/lib/opensend"
 
 const realFetch = globalThis.fetch
 const LIST = "lst_83ab8cf3264d40e1b6b01fe5c2bd94bb"
@@ -89,5 +89,34 @@ describe("subscribeToNewsletter", () => {
 
     expect(await subscribeToNewsletter("key", "bad", "test")).toBe(false)
     expect(calls).toHaveLength(1)
+  })
+})
+
+describe("addEnterpriseContact", () => {
+  const ENTERPRISE_LIST = "REPLACE_WITH_OPENSEND_ENTERPRISE_LIST_ID"
+
+  test("creates the contact with its name and adds it to the enterprise list without consent", async () => {
+    const calls = mockOpenSend({
+      "POST /v1/contacts": Response.json({ id: "contact_5" }, { status: 201 }),
+      [`POST /v1/lists/${ENTERPRISE_LIST}/members`]: Response.json({ added: 1 }),
+    })
+
+    expect(await addEnterpriseContact("key", " b@example.com ", " Ada Lovelace ")).toBe(true)
+    expect(calls).toEqual([
+      { method: "POST", path: "/v1/contacts", query: "", body: { email: "b@example.com", name: "Ada Lovelace" } },
+      { method: "POST", path: `/v1/lists/${ENTERPRISE_LIST}/members`, query: "", body: { contactIds: ["contact_5"] } },
+    ])
+  })
+
+  test("reuses an existing contact", async () => {
+    const calls = mockOpenSend({
+      "POST /v1/contacts": apiError(409, "CONTACT_EXISTS"),
+      "GET /v1/contacts": Response.json({ data: [{ id: "contact_6", email: "b@example.com" }], nextCursor: null }),
+      [`POST /v1/lists/${ENTERPRISE_LIST}/members`]: Response.json({ added: 0 }),
+    })
+
+    expect(await addEnterpriseContact("key", "b@example.com", "")).toBe(true)
+    expect(calls[0]?.body).toEqual({ email: "b@example.com" })
+    expect(calls.at(-1)?.body).toEqual({ contactIds: ["contact_6"] })
   })
 })

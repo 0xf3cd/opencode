@@ -35,4 +35,4 @@ links `CONSOLE_CRM_LOOKUP_URL` to the stage's private Console account lookup.
 For local development, run `bun run dev:enterprise` in `packages/console/app` with
 `CONSOLE_CRM_TOKEN` set and `sf` on PATH. It serves the same Enterprise request and
 signup-sync handlers on `127.0.0.1:3101`, using the CLI's authenticated transport.
-It never sends local sales notifications or EmailOctopus subscriptions.
+It never sends local sales notifications or adds OpenSend contacts.
