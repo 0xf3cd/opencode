@@ -199,7 +199,9 @@ export function DirectoryPickerDialog(props: DirectoryPickerDialogProps) {
     },
   )
 
-  const currentSuggestions = createMemo(() => currentPickerSuggestions(suggestions.latest, state.input))
+  const currentSuggestions = createMemo(() =>
+    currentPickerSuggestions(suggestions.latest, state.input, suggestions.loading),
+  )
   const resolvedResult = createMemo(() => policy.result(state.root, state.selected, state.rootValid))
   const fullSelectionPath = createMemo(() => {
     const value = resolvedResult()
@@ -444,19 +446,21 @@ export function DirectoryPickerDialog(props: DirectoryPickerDialogProps) {
 
   function moveSuggestion(delta: -1 | 1) {
     setState("suggestionsOpen", true)
-    setState("activeSuggestion", (current) => nextSuggestionIndex(current, delta, currentSuggestions().length))
+    setState("activeSuggestion", nextSuggestionIndex(activeSuggestionIndex(), delta, currentSuggestions().length))
+  }
+
+  function activeSuggestionIndex() {
+    if (!state.suggestionsOpen) return -1
+    if (state.activeSuggestion >= 0) return state.activeSuggestion
+    const raw = cleanPickerInput(state.input)
+
+    if (raw === "~" || raw === "~/" || raw === "/" || raw.endsWith("/")) return -1
+
+    return currentSuggestions().length > 0 ? 0 : -1
   }
 
   function activeSuggestionValue() {
-    if (!state.suggestionsOpen) return
-    const items = currentSuggestions()
-
-    if (state.activeSuggestion >= 0) return items[state.activeSuggestion]
-    const raw = cleanPickerInput(state.input)
-
-    if (raw === "~" || raw === "~/" || raw === "/" || raw.endsWith("/")) return
-
-    return items[0]
+    return currentSuggestions()[activeSuggestionIndex()]
   }
 
   const keyActions = new Map([
@@ -711,7 +715,7 @@ export function DirectoryPickerDialog(props: DirectoryPickerDialogProps) {
             aria-expanded={state.suggestionsOpen}
             aria-controls="directory-picker-suggestions"
             aria-activedescendant={
-              state.activeSuggestion >= 0 ? `directory-picker-suggestion-${state.activeSuggestion}` : undefined
+              activeSuggestionIndex() >= 0 ? `directory-picker-suggestion-${activeSuggestionIndex()}` : undefined
             }
             onKeyDown={handleInputKey}
           />
@@ -738,8 +742,8 @@ export function DirectoryPickerDialog(props: DirectoryPickerDialogProps) {
                     id={`directory-picker-suggestion-${index()}`}
                     data-directory-path={suggestion.absolute}
                     role="option"
-                    aria-selected={index() === state.activeSuggestion}
-                    data-active={index() === state.activeSuggestion ? "" : undefined}
+                    aria-selected={index() === activeSuggestionIndex()}
+                    data-active={index() === activeSuggestionIndex() ? "" : undefined}
                     onPointerMove={() => setState("activeSuggestion", index())}
                     onClick={() => chooseSuggestion(suggestion)}
                   >

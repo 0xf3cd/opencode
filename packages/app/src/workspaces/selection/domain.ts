@@ -123,10 +123,14 @@ export function pickerRelativePath(base: string | undefined, path: string) {
   return targetPath.slice(prefix.length)
 }
 
-export function currentPickerSuggestions<T>(result: { query: string; items: readonly T[] } | undefined, query: string) {
-  if (result?.query !== query) return []
+export function currentPickerSuggestions<T>(
+  result: { query: string; items: readonly T[] } | undefined,
+  query: string,
+  loading = false,
+) {
+  if (result?.query !== query && !loading) return []
 
-  return result.items
+  return result?.items ?? []
 }
 
 export function activeTreeNavigation(request: number, current: number) {

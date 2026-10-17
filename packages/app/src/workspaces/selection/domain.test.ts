@@ -127,6 +127,7 @@ test("exposes autocomplete results only for their source query", () => {
   const result = { query: "/repo/src", items: ["/repo/src/index.ts"] }
   expect(currentPickerSuggestions(result, "/repo/src")).toEqual(result.items)
   expect(currentPickerSuggestions(result, "/repo/test")).toEqual([])
+  expect(currentPickerSuggestions(result, "/repo/test", true)).toEqual(result.items)
 })
 
 test("resolves directory autocomplete from the browser root without changing location", async () => {
