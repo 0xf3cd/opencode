@@ -255,7 +255,7 @@ export const make = Effect.fn("Session.make")(function* () {
         id: inputID,
         sessionID,
         delivery: input.delivery ?? "steer",
-        instructions: input.instructions,
+        instructions: input.instructions?.trim() || undefined,
       })
       .pipe(
         Effect.catchTag("SessionInbox.LifecycleConflict", () => new CompactionConflictError({ sessionID, inputID })),

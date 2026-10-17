@@ -370,7 +370,21 @@ export const layer = Layer.effect(
           }),
         )
 
-      const send = (request: LLMRequest) => {
+      // The provider writes the checkpoint itself, so manual instructions ride as one extra user message. It is added
+      // to the request after fitting, so shrinking never trades a real exchange for it, and it is removed from a provider
+      // replacement, so it never persists.
+      const instructions = trigger.reason === "manual" ? trigger.instructions?.trim() : undefined
+      const note = instructions ? instructionsSection(instructions) : undefined
+      const isNote = (message: Message) =>
+        message.role === "user" &&
+        message.content.length === 1 &&
+        message.content[0]?.type === "text" &&
+        message.content[0].text === note
+
+      const send = (fitted: LLMRequest) => {
+        const request = note
+          ? LLMRequest.update(fitted, { messages: [...fitted.messages, Message.user(note)] })
+          : fitted
         if (LLMClient.canCompact(request, { mechanism: "trigger" })) {
           return Effect.gen(function* () {
             const history = yield* SessionHistory.load(db, context.session.id, "local").pipe(Effect.orDie)
@@ -380,21 +394,19 @@ export const layer = Layer.effect(
           })
         }
         if (LLMClient.canCompact(request)) {
-          return llm
-            .compact(request, { mechanism: "endpoint", http: prepared.options.http })
-            .pipe(Effect.flatMap((response) => toResult(response.replacement, response.usage)))
+          return llm.compact(request, { mechanism: "endpoint", http: prepared.options.http }).pipe(
+            Effect.flatMap((response) =>
+              toResult(
+                response.replacement.filter((message) => !isNote(message)),
+                response.usage,
+              ),
+            ),
+          )
         }
         return unsupported(`Native compaction is not supported for ${request.model.provider}/${request.model.route.id}`)
       }
 
-      // The provider writes the checkpoint itself, so manual instructions reach it as the last message of the window.
-      const instructions = trigger.reason === "manual" ? trigger.instructions?.trim() : undefined
-      const request = instructions
-        ? LLMRequest.update(prepared.request, {
-            messages: [...prepared.request.messages, Message.user(instructionsSection(instructions))],
-          })
-        : prepared.request
-      return yield* deliver(trigger, { ...prepared, request }, "", budget, send)
+      return yield* deliver(trigger, prepared, "", budget - (note ? Token.estimate(note) : 0), send)
     })
 
     /**

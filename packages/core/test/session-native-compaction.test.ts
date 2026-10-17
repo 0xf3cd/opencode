@@ -59,7 +59,7 @@ const setup = Effect.fnUntraced(function* (options: { endpoint?: boolean } = {})
   const hooks = yield* PluginHooks.Service
   const blocked = Deferred.makeUnsafe<void>()
   const hanging = Promise.withResolvers<Response>()
-  const state = { failure: false, flaky: false, hang: false, overflow: false, calls: 0 }
+  const state = { failure: false, flaky: false, hang: false, overflow: false, echoLastUser: false, calls: 0 }
   const bodies: Record<string, unknown>[] = []
   const headers: Headers[] = []
   const server = yield* Effect.acquireRelease(
@@ -111,6 +111,10 @@ const setup = Effect.fnUntraced(function* (options: { endpoint?: boolean } = {})
               object: "response.compaction",
               output: [
                 { type: "message", role: "user", content: [{ type: "input_text", text: "endpoint retained" }] },
+                // A provider may keep any user message it was sent, including the newest one.
+                ...(state.echoLastUser
+                  ? [(bodies.at(-1)?.input as unknown[]).findLast((item) => JSON.stringify(item).includes('"user"'))]
+                  : []),
                 checkpoint,
               ],
               usage: { input_tokens: 20, output_tokens: 4, total_tokens: 24 },
@@ -337,6 +341,7 @@ for (const endpoint of [false, true])
   it.live(`manual instructions are the last message the provider compacts (endpoint: ${endpoint})`, () =>
     Effect.gen(function* () {
       const fixture = yield* setup({ endpoint })
+      fixture.state.echoLastUser = true
       yield* fixture.prompt("Original user")
       expect(yield* fixture.compactWith("Keep only the parser work")).toEqual({ status: "completed" })
       const input = (fixture.bodies[0] as { input: unknown[] }).input

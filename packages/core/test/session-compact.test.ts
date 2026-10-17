@@ -113,6 +113,18 @@ describe("Session.compact", () => {
       const queued = yield* session.create({ location })
       const queue = yield* session.compact({ sessionID: queued.id, delivery: "queue" })
       expect(queue).toMatchObject({ type: "compaction", delivery: "queue" })
+
+      const blank = yield* session.create({ location })
+      expect((yield* session.compact({ sessionID: blank.id, instructions: "   " })).payload).toEqual({})
+      const instructed = yield* session.create({ location })
+      expect(
+        (yield* session.compact({ sessionID: instructed.id, instructions: "  keep the parser  " })).payload,
+      ).toEqual({
+        instructions: "keep the parser",
+      })
+      expect(yield* session.inbox(instructed.id)).toEqual([
+        expect.objectContaining({ type: "compaction", payload: { instructions: "keep the parser" } }),
+      ])
     }),
   )
 
