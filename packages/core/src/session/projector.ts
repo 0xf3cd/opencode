@@ -23,6 +23,7 @@ import { Worktree } from "@opencode/schema/worktree"
 import { Project } from "@opencode/schema/project"
 import { AbsolutePath, RelativePath } from "../schema.js"
 import type { SessionSchema } from "./schema.js"
+import { SessionHistory } from "./history.js"
 import { ProjectTable } from "../project/sql.js"
 
 type DatabaseService = Database.Interface["db"]
@@ -31,7 +32,6 @@ type MessageEvent = Exclude<
   typeof SessionEvent.Forked.Type | typeof SessionEvent.Deleted.Type
 >
 
-const decodeMessage = Schema.decodeUnknownSync(SessionMessage.Info)
 const encodeMessage = Schema.encodeSync(SessionMessage.Info)
 
 export class SessionAlreadyProjected extends Error {}
@@ -236,8 +236,6 @@ const projectFork = Effect.fn("SessionProjector.projectFork")(function* (
 
 function run(db: DatabaseService, event: MessageEvent) {
   return Effect.gen(function* () {
-    const decodeRow = (row: typeof SessionMessageTable.$inferSelect) =>
-      decodeMessage({ ...row.data, id: row.id, type: row.type })
     const updateMessage = (message: SessionMessage.Info) => {
       const encoded = encodeMessage(message)
       const { id, type, ...data } = encoded
@@ -318,7 +316,7 @@ function run(db: DatabaseService, event: MessageEvent) {
             .get()
             .pipe(Effect.orDie)
           if (!row) return
-          const message = decodeRow(row)
+          const message = SessionHistory.decodeMessageRowSync(row)
           return message.type === "assistant" && !message.time.completed ? message : undefined
         })
       },
@@ -337,7 +335,7 @@ function run(db: DatabaseService, event: MessageEvent) {
             .get()
             .pipe(Effect.orDie)
           if (!row) return
-          const message = decodeRow(row)
+          const message = SessionHistory.decodeMessageRowSync(row)
           return message.type === "assistant" ? message : undefined
         })
       },
@@ -358,7 +356,7 @@ function run(db: DatabaseService, event: MessageEvent) {
             .get()
             .pipe(Effect.orDie)
           if (!row) return
-          const message = decodeRow(row)
+          const message = SessionHistory.decodeMessageRowSync(row)
           return message.type === "shell" ? message : undefined
         })
       },
@@ -379,7 +377,7 @@ function run(db: DatabaseService, event: MessageEvent) {
             .get()
             .pipe(Effect.orDie)
           if (!row) return
-          const message = decodeRow(row)
+          const message = SessionHistory.decodeMessageRowSync(row)
           return message.type === "compaction" ? message : undefined
         })
       },

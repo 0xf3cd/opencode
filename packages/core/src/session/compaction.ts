@@ -74,7 +74,7 @@ type Result = {
   // todo: this should become a msg reference, we shouldnt be stringifying the recent history (confuses some models...)
   readonly recent: string
   // todo: consolidate these 2
-  readonly providerState?: SessionMessage.ProviderState
+  readonly native?: SessionMessage.Native
   readonly providerContext?: SessionProviderContext.Info
   readonly metadata?: Record<string, unknown>
 }
@@ -87,7 +87,7 @@ type Prepared = Effect.Success<ReturnType<SessionModelRequest.Interface["compact
 
 type Streamed = {
   readonly text: string
-  readonly providerState?: SessionMessage.ProviderState
+  readonly native?: SessionMessage.Native
 }
 
 const NOTHING_TO_COMPACT: Failure = { error: { type: "compaction.unavailable", message: "Nothing to compact yet" } }
@@ -536,7 +536,7 @@ export const layer = Layer.effect(
 
             if (LLMEvent.is.stepFinish(event)) {
               return spend(sessionID, SessionUsage.record(event.usage, context.model.cost)).pipe(
-                Effect.as({ ...streamed, providerState: event.providerMetadata?.[metadataKey] }),
+                Effect.as({ ...streamed, native: event.providerMetadata?.[metadataKey] }),
               )
             }
 
@@ -607,7 +607,7 @@ export const layer = Layer.effect(
         Effect.as<Result>({
           text: supplied.summary,
           recent,
-          providerState: supplied.providerState,
+          native: supplied.native,
           metadata: supplied.metadata,
         }),
       )
@@ -652,7 +652,7 @@ export const layer = Layer.effect(
           sessionID,
           reason,
           model: context.model.ref,
-          providerState: outcome.providerState,
+          native: outcome.native,
           providerContext: outcome.providerContext,
           text: outcome.text,
           recent: outcome.recent,

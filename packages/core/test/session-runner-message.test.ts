@@ -72,7 +72,7 @@ describe("toLLMMessages", () => {
           SessionMessage.AssistantReasoning.make({
             type: "reasoning",
             text: "",
-            state: { signature: "sig_1" },
+            native: { signature: "sig_1" },
           }),
         ]),
       ],
@@ -740,7 +740,7 @@ Earlier work
             SessionMessage.AssistantReasoning.make({
               type: "reasoning",
               text: "Think",
-              state: { signature: "sig_1" },
+              native: { signature: "sig_1" },
             }),
             SessionMessage.AssistantTool.make({
               type: "tool",
@@ -784,7 +784,7 @@ Earlier work
               id: "hosted",
               name: "web_search",
               executed: true,
-              providerState: { continuation: "hosted-call" },
+              native: { continuation: "hosted-call" },
               providerResultState: { continuation: "hosted-result" },
               state: SessionMessage.ToolStateCompleted.make({
                 status: "completed",
@@ -798,7 +798,7 @@ Earlier work
               id: "hosted-failed",
               name: "write",
               executed: true,
-              providerState: { continuation: "failed" },
+              native: { continuation: "failed" },
               state: SessionMessage.ToolStateError.make({
                 status: "error",
                 input: { path: "README.md" },
@@ -889,7 +889,7 @@ Earlier work
             SessionMessage.AssistantReasoning.make({
               type: "reasoning",
               text: "Think",
-              state: { itemId: "rs_1", reasoningEncryptedContent: "encrypted-state" },
+              native: { itemId: "rs_1", reasoningEncryptedContent: "encrypted-state" },
             }),
           ],
           time: { created, completed: created },
@@ -920,7 +920,7 @@ Earlier work
             SessionMessage.AssistantReasoning.make({
               type: "reasoning",
               text: "Think",
-              state: { signature: "signed" },
+              native: { signature: "signed" },
             }),
           ],
           time: { created, completed: created },
@@ -947,14 +947,14 @@ Earlier work
             SessionMessage.AssistantReasoning.make({
               type: "reasoning",
               text: "Partial thought",
-              state: { itemId: "rs_failed", reasoningEncryptedContent: null },
+              native: { itemId: "rs_failed", reasoningEncryptedContent: null },
             }),
             SessionMessage.AssistantTool.make({
               type: "tool",
               id: "hosted-completed",
               name: "web_search",
               executed: true,
-              providerState: { itemId: "call_completed" },
+              native: { itemId: "call_completed" },
               providerResultState: { itemId: "result_completed" },
               state: SessionMessage.ToolStateCompleted.make({
                 status: "completed",
@@ -968,7 +968,7 @@ Earlier work
               id: "hosted-failed",
               name: "web_search",
               executed: true,
-              providerState: { itemId: "call_failed" },
+              native: { itemId: "call_failed" },
               providerResultState: { itemId: "result_failed" },
               state: SessionMessage.ToolStateError.make({
                 status: "error",
@@ -1045,13 +1045,13 @@ Earlier work
             SessionMessage.AssistantReasoning.make({
               type: "reasoning",
               text: "Completed summary part",
-              state: { itemId: "rs_interrupted", reasoningEncryptedContent: null },
+              native: { itemId: "rs_interrupted", reasoningEncryptedContent: null },
               time: { created, completed: created },
             }),
             SessionMessage.AssistantReasoning.make({
               type: "reasoning",
               text: "",
-              state: { itemId: "rs_interrupted", reasoningEncryptedContent: null },
+              native: { itemId: "rs_interrupted", reasoningEncryptedContent: null },
               time: { created },
             }),
           ],
@@ -1076,14 +1076,14 @@ Earlier work
             SessionMessage.AssistantReasoning.make({
               type: "reasoning",
               text: "Visible thought",
-              state: { signature: "sig_old" },
+              native: { signature: "sig_old" },
             }),
             SessionMessage.AssistantTool.make({
               type: "tool",
               id: "hosted-old-model",
               name: "web_search",
               executed: true,
-              providerState: { itemId: "hosted-old-model" },
+              native: { itemId: "hosted-old-model" },
               providerResultState: { itemId: "hosted-old-model" },
               state: SessionMessage.ToolStateCompleted.make({
                 status: "completed",
@@ -1097,7 +1097,7 @@ Earlier work
               id: "local-old-model",
               name: "read",
               executed: false,
-              providerState: { call: "old" },
+              native: { call: "old" },
               providerResultState: { result: "old" },
               state: SessionMessage.ToolStateCompleted.make({
                 status: "completed",
@@ -1170,7 +1170,7 @@ Earlier work
             SessionMessage.AssistantReasoning.make({
               type: "reasoning",
               text: "Visible thought",
-              state: { reasoningEncryptedContent: "encrypted" },
+              native: { reasoningEncryptedContent: "encrypted" },
             }),
           ],
           time: { created, completed: created },
@@ -1200,7 +1200,7 @@ Earlier work
             SessionMessage.AssistantText.make({
               type: "text",
               text: "Checking.",
-              state: { phase: "commentary" },
+              native: { phase: "commentary" },
             }),
           ],
           error: { type: "provider.unknown", message: "Interrupted after commentary" },
@@ -1231,7 +1231,7 @@ Earlier work
             SessionMessage.AssistantText.make({
               type: "text",
               text: "Checking.",
-              state: { phase: "commentary" },
+              native: { phase: "commentary" },
             }),
           ],
           time: { created, completed: created },

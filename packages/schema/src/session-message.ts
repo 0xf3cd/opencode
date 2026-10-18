@@ -36,10 +36,11 @@ const Base = {
   time: Schema.Struct({ created: DateTimeUtcFromMillis }),
 }
 
-export const ProviderState = Schema.Record(Schema.String, Schema.Unknown).annotate({
-  identifier: "Session.Message.ProviderState",
+/** Provider-owned replay data, keyed by the producing provider's metadata fields and echoed back verbatim. */
+export const Native = Schema.Record(Schema.String, Schema.Unknown).annotate({
+  identifier: "Session.Message.Native",
 })
-export type ProviderState = typeof ProviderState.Type
+export type Native = typeof Native.Type
 
 export interface AgentSelected extends Schema.Schema.Type<typeof AgentSelected> {}
 export const AgentSelected = Schema.Struct({
@@ -164,8 +165,8 @@ export const AssistantTool = Schema.Struct({
   id: Schema.String,
   name: Schema.String,
   executed: Schema.Boolean.pipe(optional),
-  providerState: ProviderState.pipe(optional),
-  providerResultState: ProviderState.pipe(optional),
+  native: Native.pipe(optional),
+  providerResultState: Native.pipe(optional),
   state: ToolState,
   time: Schema.Struct({
     created: DateTimeUtcFromMillis,
@@ -178,14 +179,14 @@ export interface AssistantText extends Schema.Schema.Type<typeof AssistantText> 
 export const AssistantText = Schema.Struct({
   type: Schema.tag("text"),
   text: Schema.String,
-  state: ProviderState.pipe(optional),
+  native: Native.pipe(optional),
 }).annotate({ identifier: "Session.Message.Assistant.Text" })
 
 export interface AssistantReasoning extends Schema.Schema.Type<typeof AssistantReasoning> {}
 export const AssistantReasoning = Schema.Struct({
   type: Schema.tag("reasoning"),
   text: Schema.String,
-  state: ProviderState.pipe(optional),
+  native: Native.pipe(optional),
   time: Schema.Struct({
     created: DateTimeUtcFromMillis,
     completed: DateTimeUtcFromMillis.pipe(optional),
@@ -223,7 +224,8 @@ export const Assistant = Schema.Struct({
   }).pipe(optional),
   finish: FinishReason.pipe(optional),
   rawFinish: Schema.String.pipe(optional),
-  providerState: ProviderState.pipe(optional),
+  /** Step-level native data, such as a provider's reason for blocking a response. */
+  native: Native.pipe(optional),
   cost: Money.USD.pipe(optional),
   tokens: TokenUsage.Info.pipe(optional),
   error: SessionError.Error.pipe(optional),
@@ -259,7 +261,7 @@ export const CompactionCompleted = Schema.Struct({
   status: Schema.tag("completed"),
   reason: Schema.Literals(["auto", "manual"]),
   model: Model.Ref.pipe(optional),
-  providerState: ProviderState.pipe(optional),
+  native: Native.pipe(optional),
   summary: Schema.String,
   recent: Schema.String,
   providerContext: SessionProviderContext.Info.pipe(optional),

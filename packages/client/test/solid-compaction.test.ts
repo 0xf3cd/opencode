@@ -99,7 +99,7 @@ test.each(["started", "cancelled", "failed"])(
     if (kind === "started") {
       expect(fixture.data.session.message.list(sessionID)).toMatchObject([{ type: "compaction", status: "running" }])
       const model = { providerID: "demo", id: "model" }
-      const providerState = { responseId: "summary-response" }
+      const native = { responseId: "summary-response" }
       const tokens = { input: 10, output: 4, reasoning: 0, cache: { read: 3, write: 0 } }
       const providerContext = {
         version: 1 as const,
@@ -120,7 +120,7 @@ test.each(["started", "cancelled", "failed"])(
           sessionID,
           reason: "manual",
           model,
-          providerState,
+          native,
           providerContext,
           text: "Summary",
           recent: "Recent",
@@ -135,7 +135,7 @@ test.each(["started", "cancelled", "failed"])(
           status: "completed",
           summary: "Summary",
           model,
-          providerState,
+          native,
           providerContext,
           cost: 0.01,
           tokens,

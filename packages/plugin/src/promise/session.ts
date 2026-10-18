@@ -37,7 +37,7 @@ export interface SessionContext extends SessionRequest {
 
 export interface SessionCompactionResult {
   summary: string
-  providerState?: SessionMessage.ProviderState
+  native?: SessionMessage.Native
   metadata?: Record<string, unknown>
   tokens?: TokenUsage.Info
 }

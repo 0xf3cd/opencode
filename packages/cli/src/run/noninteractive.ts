@@ -54,7 +54,7 @@ type ToolState = StartedPart & {
   input: Record<string, JsonValue>
   raw?: string
   provider?: unknown
-  providerState?: SessionMessageAssistantTool["providerState"]
+  native?: SessionMessageAssistantTool["native"]
   metadata: Record<string, JsonValue>
   content: ToolContent[]
 }
@@ -331,7 +331,7 @@ export async function runNonInteractivePrompt(input: Input) {
           messageID: event.data.assistantMessageID,
           type: "reasoning",
           text: event.data.text,
-          metadata: event.data.state,
+          metadata: event.data.native,
           time: { start: started?.timestamp ?? time, end: time },
         }
         renderedReasoning.set(key, event.data.text)
@@ -373,8 +373,8 @@ export async function runNonInteractivePrompt(input: Input) {
           tool: current?.tool ?? "tool",
           input: event.data.input,
           raw: current?.raw,
-          provider: { executed: event.data.executed, state: event.data.state },
-          providerState: event.data.state,
+          provider: { executed: event.data.executed, state: event.data.native },
+          native: event.data.native,
           metadata: {},
           content: [],
         })
@@ -395,7 +395,7 @@ export async function runNonInteractivePrompt(input: Input) {
           id: event.data.id,
           name: current.tool,
           executed: event.data.executed,
-          providerState: current.providerState,
+          native: current.native,
           providerResultState: event.data.resultState,
           state: {
             status: "completed",
@@ -443,7 +443,7 @@ export async function runNonInteractivePrompt(input: Input) {
           id: event.data.id,
           name: current.tool,
           executed: event.data.executed,
-          providerState: current.providerState,
+          native: current.native,
           providerResultState: event.data.resultState,
           state: {
             status: "error",
@@ -606,7 +606,7 @@ export async function runNonInteractivePrompt(input: Input) {
             messageID: message.id,
             type: "reasoning",
             text,
-            metadata: item.state,
+            metadata: item.native,
             time: { start: message.time.created, end: timestamp },
           }
           renderedReasoning.set(key, item.text)

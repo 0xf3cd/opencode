@@ -2576,7 +2576,7 @@ describe("SessionRunnerLLM", () => {
         expect(s.executions).toEqual(["x".repeat(4_000)])
         expect((yield* s.messages).find((message) => message.type === "compaction")).toMatchObject({
           model: { id: s.currentModel.id, providerID: s.currentModel.provider, variant },
-          providerState: { responseId: "summary" },
+          native: { responseId: "summary" },
         })
 
         // Compare wire content without the cache breakpoints that move to the new final message.
@@ -3652,7 +3652,7 @@ describe("SessionRunnerLLM", () => {
               id: "call-provider",
               name: "web_search",
               executed: true,
-              providerState: { source: "provider" },
+              native: { source: "provider" },
               providerResultState: { source: "provider" },
             },
             {
@@ -3824,12 +3824,12 @@ describe("SessionRunnerLLM", () => {
         {
           type: "reasoning",
           text: "Signed thought",
-          state: { signature: "sig_1" },
+          native: { signature: "sig_1" },
         },
         {
           type: "reasoning",
           text: "Encrypted thought",
-          state: { itemId: "rs_1", reasoningEncryptedContent: "encrypted-state" },
+          native: { itemId: "rs_1", reasoningEncryptedContent: "encrypted-state" },
         },
       ]),
     ])
@@ -3881,7 +3881,7 @@ describe("SessionRunnerLLM", () => {
         {
           type: "reasoning",
           text: "thinking",
-          state: { reasoningField: "reasoning", reasoningDetails: details },
+          native: { reasoningField: "reasoning", reasoningDetails: details },
         },
         { type: "text", text: "Hello world" },
       ]),
@@ -3925,7 +3925,7 @@ describe("SessionRunnerLLM", () => {
     expect(yield* s.context).toMatchObject([
       Expected.user("Check first"),
       Expected.assistant({}, [
-        { type: "text", text: "Checking.", state: { itemId: "msg_commentary", phase: "commentary" } },
+        { type: "text", text: "Checking.", native: { itemId: "msg_commentary", phase: "commentary" } },
       ]),
     ])
 
@@ -4618,7 +4618,7 @@ describe("SessionRunnerLLM", () => {
       id: "call-hosted-interrupted",
       input: { query: "stale" },
       executed: true,
-      state: { itemId: "call-hosted-interrupted" },
+      native: { itemId: "call-hosted-interrupted" },
     })
     s.requests.length = 0
     yield* s.llm.push([])
@@ -5340,7 +5340,7 @@ describe("SessionRunnerLLM", () => {
         type: "assistant",
         finish: "stop",
         rawFinish: "end_turn",
-        providerState: { responseId: "response-1", serviceTier: "priority" },
+        native: { responseId: "response-1", serviceTier: "priority" },
         content: [Expected.text("Complete")],
       },
     ])
@@ -5371,7 +5371,7 @@ describe("SessionRunnerLLM", () => {
         type: "assistant",
         finish: "content-filter",
         rawFinish: "SAFETY",
-        providerState: {
+        native: {
           responseId: "response-blocked",
           refusal: { category: "safety", explanation: "Prompt blocked" },
         },
@@ -5911,7 +5911,7 @@ describe("SessionRunnerLLM", () => {
           {
             type: "reasoning",
             text: "",
-            state: { itemId: "rs_disconnected", reasoningEncryptedContent: "encrypted-state" },
+            native: { itemId: "rs_disconnected", reasoningEncryptedContent: "encrypted-state" },
           },
         ]),
         { type: "synthetic", text: INCOMPLETE_STREAM_CONTINUATION },
