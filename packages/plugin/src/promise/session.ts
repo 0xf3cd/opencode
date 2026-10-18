@@ -37,8 +37,6 @@ export interface SessionContext extends SessionRequest {
 
 export interface SessionCompactionResult {
   summary: string
-  /** Last message covered by `summary`; messages after it are kept in `recent`. */
-  throughMessageID?: SessionMessage.ID
   providerState?: SessionMessage.ProviderState
   metadata?: Record<string, unknown>
   tokens?: TokenUsage.Info
