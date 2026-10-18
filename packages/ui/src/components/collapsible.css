@@ -89,21 +89,10 @@
 
   [data-slot="collapsible-content"] {
     overflow: hidden;
-    transition:
-      opacity 180ms var(--motion-spring-snappy, cubic-bezier(0.22, 1, 0.36, 1)),
-      transform 180ms var(--motion-spring-snappy, cubic-bezier(0.22, 1, 0.36, 1));
 
     &[data-expanded] {
       overflow: visible;
-    }
-  }
-
-  /* Animate disclosure only when expanded via user interaction, never on initial or virtualized mount. */
-  &:has(> [data-slot="collapsible-trigger"]:is(:hover, :focus-visible, :active))
-    > [data-slot="collapsible-content"][data-expanded] {
-    @starting-style {
-      opacity: 0;
-      transform: translateY(-4px);
+      animation: collapsible-content-in 180ms var(--motion-spring-snappy, cubic-bezier(0.22, 1, 0.36, 1));
     }
   }
 
@@ -142,10 +131,24 @@
   }
 }
 
+@keyframes collapsible-content-in {
+  from {
+    opacity: 0.01;
+    transform: translateY(-4px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
 @media (prefers-reduced-motion: reduce) {
   [data-component="collapsible"] [data-slot="collapsible-arrow"],
-  [data-component="collapsible"] [data-slot="collapsible-arrow-icon"],
-  [data-component="collapsible"] [data-slot="collapsible-content"] {
+  [data-component="collapsible"] [data-slot="collapsible-arrow-icon"] {
     transition: none;
+  }
+
+  [data-component="collapsible"] [data-slot="collapsible-content"][data-expanded] {
+    animation: none;
   }
 }
