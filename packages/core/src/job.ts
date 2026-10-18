@@ -3,6 +3,7 @@ export * as Job from "./job.js"
 import { Array, Cause, Clock, Context, Deferred, Effect, Exit, Layer, Schema, Scope, SynchronizedRef } from "effect"
 import { makeGlobalNode } from "@opencode/util/effect/app-node"
 import { KV } from "./kv.js"
+import { RuntimeStats } from "./runtime-stats.js"
 import { SessionMessage } from "./session/message.js"
 import { SessionSchema } from "./session/schema.js"
 
@@ -181,6 +182,17 @@ export const make = Effect.gen(function* () {
     jobs: yield* SynchronizedRef.make(new Map()),
     scope: yield* Scope.Scope,
   }
+  const unregisterStats = RuntimeStats.register("job", () => {
+    const jobs = SynchronizedRef.getUnsafe(state.jobs)
+    let running = 0
+    let unconsumed = 0
+    for (const job of jobs.values()) {
+      if (job.info.status === "running") running++
+      else if (!job.consumed) unconsumed++
+    }
+    return { total: jobs.size, running, unconsumed }
+  })
+  yield* Effect.addFinalizer(() => Effect.sync(unregisterStats))
 
   const consume = (id: string, generation: Scope.Closeable) =>
     SynchronizedRef.update(state.jobs, (jobs) => {

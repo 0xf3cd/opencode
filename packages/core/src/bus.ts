@@ -14,6 +14,7 @@ import { Durable } from "@opencode/schema/durable-event-manifest"
 import { SessionEvent } from "@opencode/schema/session-event"
 import type { SessionID } from "@opencode/schema/session-id"
 import { AbsolutePath } from "@opencode/schema/schema"
+import { RuntimeStats } from "./runtime-stats.js"
 
 export type Subscriber<D extends Event.Definition = Event.Definition> = (event: Event.Payload<D>) => Effect.Effect<void>
 export type Unsubscribe = Effect.Effect<void>
@@ -205,6 +206,28 @@ export function configured(options?: Options) {
         // Keep routing separate from the public event, and retain its snapshot
         // while a slow subscriber drains events queued before a move or deletion.
         const routes = new WeakMap<Event.Payload, readonly Location.Ref[]>()
+        // Every live subscriber shares one unbounded buffer: an event stays in memory until the
+        // slowest subscriber has taken it, so `live.backlog` is the memory a stalled consumer pins.
+        const stats = { liveSubscribers: 0, published: 0 }
+        const unregister = RuntimeStats.register("bus", () => {
+          let typedBacklog = 0
+          for (const typed of pubsub.typed.values()) typedBacklog += PubSub.sizeUnsafe(typed)
+          let durableWakes = 0
+          for (const wakes of pubsub.durable.values()) durableWakes += wakes.size
+          return {
+            "live.backlog": PubSub.sizeUnsafe(pubsub.live),
+            "live.subscribers": stats.liveSubscribers,
+            published: stats.published,
+            "typed.pubsubs": pubsub.typed.size,
+            "typed.backlog": typedBacklog,
+            "durable.aggregates": pubsub.durable.size,
+            "durable.wakes": durableWakes,
+            listeners: listeners.length,
+            projectors: [...projectors.values()].reduce((sum, list) => sum + list.length, 0),
+            "session.routes": sessions.size,
+          }
+        })
+        yield* Effect.addFinalizer(() => Effect.sync(unregister))
 
         const isSessionEvent = (event: Event.Payload): event is SessionEvent.Event =>
           Object.hasOwn(SessionEvent.All.cases, event.type)
@@ -500,6 +523,7 @@ export function configured(options?: Options) {
             )
             const typed = pubsub.typed.get(event.type)
             if (typed) yield* PubSub.publish(typed, event)
+            stats.published++
             yield* PubSub.publish(pubsub.live, event)
           })
         }
@@ -759,7 +783,13 @@ export function configured(options?: Options) {
           return streamLive().pipe(Stream.filter((event) => types.has(event.type)))
         }
 
-        const streamLive = (): Stream.Stream<Event.Payload> => local(Stream.fromPubSub(pubsub.live))
+        const countedLive = Stream.unwrap(
+          Effect.acquireRelease(
+            Effect.sync(() => stats.liveSubscribers++),
+            () => Effect.sync(() => stats.liveSubscribers--),
+          ).pipe(Effect.as(Stream.fromPubSub(pubsub.live))),
+        )
+        const streamLive = (): Stream.Stream<Event.Payload> => local(countedLive)
 
         const readAfter = (
           aggregateID: string,

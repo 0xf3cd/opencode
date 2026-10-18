@@ -4,6 +4,7 @@ import { Instance } from "./instance.js"
 import { Location } from "./location.js"
 import { LocationLifecycle } from "./location-lifecycle.js"
 import { LocationServiceMap } from "./location-service-map.js"
+import { RuntimeStats } from "./runtime-stats.js"
 
 export { LocationServiceMap } from "./location-service-map.js"
 
@@ -28,6 +29,7 @@ export function buildLocationServiceMap(
               Effect.onExit((exit) => {
                 const finish = Effect.suspend(() => {
                   if (Exit.isSuccess(exit)) {
+                    RuntimeStats.track("location.graph", exit.value)
                     return Effect.gen(function* () {
                       const lifecycle = Context.get(exit.value, LocationLifecycle.Service)
                       // A boot detached while in flight still needs shutdown and cancellation.

@@ -264,6 +264,9 @@ import type {
   DebugLocationListOutput,
   DebugLocationEvictInput,
   DebugLocationEvictOutput,
+  DebugRuntimeInput,
+  DebugRuntimeOutput,
+  DebugHeapSnapshotOutput,
   MigrationV1StatusOutput,
   WebsearchProvidersInput,
   WebsearchProvidersOutput,
@@ -1598,8 +1601,20 @@ const EndpointDebugLocationEvict = (raw: RawClient["server.debug"]) => (input?: 
     raw["debug.location.evict"]({ query: { location: input?.["location"] } }).pipe(Effect.mapError(mapClientError)),
   )
 
+const EndpointDebugRuntime = (raw: RawClient["server.debug"]) => (input?: DebugRuntimeInput) =>
+  preserveEffect<DebugRuntimeOutput>()(
+    raw["debug.runtime"]({ query: { types: input?.["types"], gc: input?.["gc"] } }).pipe(
+      Effect.mapError(mapClientError),
+    ),
+  )
+
+const EndpointDebugHeapSnapshot = (raw: RawClient["server.debug"]) => () =>
+  preserveEffect<DebugHeapSnapshotOutput>()(raw["debug.heapSnapshot"]({}).pipe(Effect.mapError(mapClientError)))
+
 const adaptGroupDebug = (raw: RawClient["server.debug"]) => ({
   location: { list: EndpointDebugLocationList(raw), evict: EndpointDebugLocationEvict(raw) },
+  runtime: EndpointDebugRuntime(raw),
+  heapSnapshot: EndpointDebugHeapSnapshot(raw),
 })
 
 const EndpointMigrationV1Status = (raw: RawClient["server.migration"]) => () =>

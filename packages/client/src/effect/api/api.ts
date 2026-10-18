@@ -2258,8 +2258,43 @@ export type DebugLocationEvictOperation<E = never> = (
   input?: DebugLocationEvictInput,
 ) => Effect.Effect<DebugLocationEvictOutput, E>
 
+export type DebugRuntimeInput = { readonly types?: boolean | undefined; readonly gc?: boolean | undefined }
+export type DebugRuntimeOutput = {
+  readonly pid: number
+  readonly uptimeSeconds: number
+  readonly memory: {
+    readonly rss: number
+    readonly heapTotal: number
+    readonly heapUsed: number
+    readonly external: number
+    readonly arrayBuffers: number
+  }
+  readonly heap?:
+    | {
+        readonly heapSize: number
+        readonly heapCapacity: number
+        readonly extraMemorySize: number
+        readonly objectCount: number
+        readonly protectedObjectCount: number
+        readonly globalObjectCount: number
+        readonly protectedGlobalObjectCount: number
+        readonly types?: { readonly [x: string]: number } | undefined
+        readonly protectedTypes?: { readonly [x: string]: number } | undefined
+      }
+    | undefined
+  readonly locations: number
+  readonly gauges: { readonly [x: string]: number }
+  readonly reachable: { readonly [x: string]: number }
+}
+export type DebugRuntimeOperation<E = never> = (input?: DebugRuntimeInput) => Effect.Effect<DebugRuntimeOutput, E>
+
+export type DebugHeapSnapshotOutput = { readonly path: string }
+export type DebugHeapSnapshotOperation<E = never> = () => Effect.Effect<DebugHeapSnapshotOutput, E>
+
 export interface DebugApi<E = never> {
   readonly location: { readonly list: DebugLocationListOperation<E>; readonly evict: DebugLocationEvictOperation<E> }
+  readonly runtime: DebugRuntimeOperation<E>
+  readonly heapSnapshot: DebugHeapSnapshotOperation<E>
 }
 
 export type MigrationV1StatusOutput =

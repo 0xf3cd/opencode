@@ -1,6 +1,7 @@
 export * as EventFeed from "./event-feed"
 
 import { Bus } from "@opencode/core/bus"
+import { RuntimeStats } from "@opencode/core/runtime-stats"
 import { Event } from "@opencode/schema/event"
 import { isOpenCodeEvent, type OpenCodeEvent } from "@opencode/protocol/groups/event"
 import { Cause, Context, Effect, Layer, Queue, Schema, Scope, Stream } from "effect"
@@ -70,6 +71,12 @@ export const make = Effect.fn("EventFeed.make")(function* (
 
   const unsubscribe = yield* observe(publish)
   yield* Effect.addFinalizer(() => unsubscribe)
+  const unregisterStats = RuntimeStats.register("eventFeed", () => {
+    let queued = 0
+    for (const subscriber of subscribers) queued += Queue.sizeUnsafe(subscriber)
+    return { subscribers: subscribers.size, queued }
+  })
+  yield* Effect.addFinalizer(() => Effect.sync(unregisterStats))
 
   return Service.of({
     subscribe: Effect.acquireRelease(

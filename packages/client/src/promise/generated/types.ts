@@ -294,6 +294,28 @@ export type VcsFileStatus = {
 
 export type VcsBranchList = Array<string>
 
+export type DebugRuntime = {
+  pid: number
+  uptimeSeconds: number
+  memory: { rss: number; heapTotal: number; heapUsed: number; external: number; arrayBuffers: number }
+  heap?:
+    | {
+        heapSize: number
+        heapCapacity: number
+        extraMemorySize: number
+        objectCount: number
+        protectedObjectCount: number
+        globalObjectCount: number
+        protectedGlobalObjectCount: number
+        types?: { [x: string]: number } | undefined
+        protectedTypes?: { [x: string]: number } | undefined
+      }
+    | undefined
+  locations: number
+  gauges: { [x: string]: number }
+  reachable: { [x: string]: number }
+}
+
 export type WebSearchID = string
 
 export type WebSearchResult = { url: string; title?: string; content?: string; time: { published?: number } }
@@ -6912,6 +6934,15 @@ export type DebugLocationEvictInput = {
 }
 
 export type DebugLocationEvictOutput = void
+
+export type DebugRuntimeInput = {
+  readonly types?: { readonly types?: boolean | undefined; readonly gc?: boolean | undefined }["types"]
+  readonly gc?: { readonly types?: boolean | undefined; readonly gc?: boolean | undefined }["gc"]
+}
+
+export type DebugRuntimeOutput = DebugRuntime
+
+export type DebugHeapSnapshotOutput = { path: string }
 
 export type MigrationV1StatusOutput =
   | { status: "required" | "completed" }

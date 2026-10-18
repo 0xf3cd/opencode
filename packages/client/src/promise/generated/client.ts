@@ -262,6 +262,9 @@ import type {
   DebugLocationListOutput,
   DebugLocationEvictInput,
   DebugLocationEvictOutput,
+  DebugRuntimeInput,
+  DebugRuntimeOutput,
+  DebugHeapSnapshotOutput,
   MigrationV1StatusOutput,
   WebsearchProvidersInput,
   WebsearchProvidersOutput,
@@ -2202,6 +2205,29 @@ export function make(options: ClientOptions) {
             requestOptions,
           ),
       },
+      runtime: (input?: DebugRuntimeInput, requestOptions?: RequestOptions) =>
+        request<DebugRuntimeOutput>(
+          {
+            method: "GET",
+            path: `/api/debug/runtime`,
+            query: { types: input?.["types"], gc: input?.["gc"] },
+            successStatus: 200,
+            declaredStatuses: [400, 401],
+            empty: false,
+          },
+          requestOptions,
+        ),
+      heapSnapshot: (requestOptions?: RequestOptions) =>
+        request<DebugHeapSnapshotOutput>(
+          {
+            method: "POST",
+            path: `/api/debug/heap-snapshot`,
+            successStatus: 200,
+            declaredStatuses: [400, 401, 503],
+            empty: false,
+          },
+          requestOptions,
+        ),
     },
     migration: {
       v1: {
