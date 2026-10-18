@@ -272,64 +272,58 @@ describe("Open Responses-compatible route", () => {
     }),
   )
 
-  it.effect("keeps foreign item id grammars but drops malformed ids", () =>
+  it.effect("replays opaque provider item ids verbatim and drops blank ones", () =>
     Effect.gen(function* () {
       const model = configure({
         apiKey: "test-key",
         baseURL: "https://responses.example.test/v1",
       }).model("example-model")
+      const text = (value: string, itemId: string) => ({
+        type: "text" as const,
+        text: value,
+        providerMetadata: { "openai-compatible": { itemId } },
+      })
+      const ids = [
+        "history_1",
+        `history_${"a".repeat(64)}`,
+        "provider_value/with+symbols",
+        "8a482c218291d43b",
+        "550e8400-e29b-41d4-a716-446655440000",
+        "rs_6ad5003c28b074d5fc7d465f:rs_ba65d5fa",
+        "0724338032de43954cc765d26d11bf3d_rs",
+        "msg_",
+        "_item",
+      ]
       const prepared = yield* compileRequest(
         LLM.request({
           model,
           messages: [
             Message.assistant([
-              { type: "text", text: "Kept.", providerMetadata: { "openai-compatible": { itemId: "history_1" } } },
-              {
-                type: "text",
-                text: "Long.",
-                providerMetadata: { "openai-compatible": { itemId: `history_${"a".repeat(64)}` } },
-              },
-              {
-                type: "text",
-                text: "Opaque.",
-                providerMetadata: { "openai-compatible": { itemId: "provider_value/with+symbols" } },
-              },
-              { type: "text", text: "No suffix.", providerMetadata: { "openai-compatible": { itemId: "msg_" } } },
-              { type: "text", text: "No prefix.", providerMetadata: { "openai-compatible": { itemId: "_item" } } },
+              ...ids.map((id) => text(id, id)),
+              text("Empty.", ""),
+              text("Blank.", " "),
+              text("Spaced.", "bad ref"),
             ]),
           ],
         }),
       )
 
       expect(prepared.body.input).toEqual([
-        {
+        ...ids.map((id) => ({
           type: "message",
-          id: "history_1",
+          id,
           role: "assistant",
           status: "completed",
-          content: [{ type: "output_text", text: "Kept." }],
-        },
-        {
-          type: "message",
-          id: `history_${"a".repeat(64)}`,
-          role: "assistant",
-          status: "completed",
-          content: [{ type: "output_text", text: "Long." }],
-        },
-        {
-          type: "message",
-          id: "provider_value/with+symbols",
-          role: "assistant",
-          status: "completed",
-          content: [{ type: "output_text", text: "Opaque." }],
-        },
+          content: [{ type: "output_text", text: id }],
+        })),
         {
           type: "message",
           role: "assistant",
           status: "completed",
           content: [
-            { type: "output_text", text: "No suffix." },
-            { type: "output_text", text: "No prefix." },
+            { type: "output_text", text: "Empty." },
+            { type: "output_text", text: "Blank." },
+            { type: "output_text", text: "Spaced." },
           ],
         },
       ])

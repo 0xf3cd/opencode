@@ -472,13 +472,13 @@ export const lowerToolChoice = (protocolName: string, toolChoice: NonNullable<LL
     tool: (toolName) => ({ type: "function" as const, name: toolName }),
   })
 
-// Server-issued item ids need a nonempty prefix and suffix, but the prefix is
-// provider-defined and does not necessarily identify the item's semantic type.
+// Item ids are opaque and provider-defined (bare UUIDs, hex, `:`-joined), and some
+// servers require them on replayed items, so any server-issued token replays as-is.
+// Core only replays this metadata to the model that produced it.
 const itemID = (providerMetadata: ProviderMetadata | undefined, providerMetadataKey: string) => {
   const metadata = providerMetadata?.[providerMetadataKey]
   if (!ProviderShared.isRecord(metadata) || typeof metadata.itemId !== "string") return undefined
-  const separator = metadata.itemId.indexOf("_")
-  return separator > 0 && separator < metadata.itemId.length - 1 ? metadata.itemId : undefined
+  return /^\S+$/.test(metadata.itemId) ? metadata.itemId : undefined
 }
 
 const lowerToolCall = (part: ToolCallPart, providerMetadataKey: string): OpenResponsesInputItem => {

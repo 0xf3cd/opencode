@@ -3756,7 +3756,7 @@ describe("OpenAI Responses route", () => {
     }),
   )
 
-  it.effect("preserves provider-issued item ids and removes malformed ids without dropping items", () =>
+  it.effect("preserves opaque provider-issued item ids without dropping items", () =>
     Effect.gen(function* () {
       const prepared = yield* compileRequest(
         LLM.request({
@@ -3828,11 +3828,13 @@ describe("OpenAI Responses route", () => {
         },
         {
           type: "reasoning",
+          id: "rs_",
           summary: [{ type: "summary_text", text: "Missing suffix." }],
           encrypted_content: "another-state",
         },
         {
           type: "reasoning",
+          id: "550e8400-e29b-41d4-a716-446655440000",
           summary: [{ type: "summary_text", text: "No prefix separator." }],
         },
         {
@@ -3844,6 +3846,7 @@ describe("OpenAI Responses route", () => {
         },
         {
           type: "function_call",
+          id: "fc_",
           call_id: "call_2",
           name: "lookup",
           arguments: '{"query":"news"}',
