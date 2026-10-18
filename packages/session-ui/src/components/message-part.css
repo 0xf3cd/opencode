@@ -133,6 +133,14 @@
     display: flex;
     flex-direction: column;
     align-items: flex-end;
+    transform-origin: bottom end;
+    transition:
+      opacity var(--motion-duration-normal, 220ms) var(--motion-spring-snappy, cubic-bezier(0.22, 1, 0.36, 1)),
+      transform var(--motion-duration-normal, 220ms) var(--motion-spring-snappy, cubic-bezier(0.22, 1, 0.36, 1));
+
+    @media (prefers-reduced-motion: reduce) {
+      transition: none;
+    }
   }
 
   /* Like the iOS app's Voice badge: on the bubble's top leading corner, ringed in the page background. */
@@ -178,8 +186,8 @@
     padding: 8px 12px;
     border-radius: 10px;
     transition:
-      background-color 200ms ease,
-      color 200ms ease;
+      background-color 200ms var(--motion-spring-snappy, cubic-bezier(0.22, 1, 0.36, 1)),
+      color 200ms var(--motion-spring-snappy, cubic-bezier(0.22, 1, 0.36, 1));
 
     @media (prefers-reduced-motion: reduce) {
       transition: none;
@@ -1562,5 +1570,36 @@
 
   [data-slot="user-message-mention-prefix"] {
     transition: none;
+  }
+}
+
+body:has([data-component="composer"]:focus-within)
+  [data-timeline-virtual-content]
+  > [data-timeline-key]:is(:last-child, :nth-last-child(2))
+  [data-component="user-message"]
+  [data-slot="user-message-body"] {
+  @starting-style {
+    opacity: 0.01;
+    transform: translateY(8px) scale(0.985);
+  }
+}
+
+[data-component="session-working"] {
+  animation: session-working-in var(--motion-duration-fast, 160ms)
+    var(--motion-spring-snappy, cubic-bezier(0.22, 1, 0.36, 1));
+
+  @media (prefers-reduced-motion: reduce) {
+    animation: none;
+  }
+}
+
+@keyframes session-working-in {
+  from {
+    opacity: 0.01;
+    transform: translateY(2px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
   }
 }
