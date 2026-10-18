@@ -1,4 +1,5 @@
 export { AIClient } from "./ai-client.js"
+export { applyCachePolicy } from "./cache-policy.js"
 export { LLMClient } from "./route/client.js"
 export { ImageClient } from "./image-client.js"
 export { Auth } from "./route/auth.js"

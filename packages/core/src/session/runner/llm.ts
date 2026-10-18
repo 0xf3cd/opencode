@@ -223,6 +223,7 @@ const layer = Layer.effect(
           assistantMessageID = SessionMessage.ID.create()
           continue
         }
+        yield* compaction.precompute(loaded)
         const stepLimitReached = loaded.agent.info.steps !== undefined && step >= loaded.agent.info.steps
         const transcript = SessionModelRequest.baseTranscript({
           agent: loaded.agent.info,
@@ -271,7 +272,13 @@ const layer = Layer.effect(
           ),
         })
         const completed = yield* SessionStep.Outcome.$match(outcome, {
-          Completed: (outcome) => Effect.succeed(outcome.needsContinuation),
+          Completed: Effect.fnUntraced(function* (outcome) {
+            if (!outcome.needsContinuation) {
+              const messages = yield* store.context(sessionID)
+              yield* compaction.precompute({ ...loaded, messages })
+            }
+            return outcome.needsContinuation
+          }),
           Retry: (outcome) =>
             retry.wait({
               decision: outcome.decision,

@@ -128,7 +128,9 @@ describe("ConfigCompactionPlugin.Plugin", () => {
       yield* config.setEntries([
         new Document({
           type: "document",
-          info: new Info({ compaction: new ConfigCompaction.Info({ auto: true, buffer: 20_000 }) }),
+          info: new Info({
+            compaction: new ConfigCompaction.Info({ auto: true, precompute: false, buffer: 20_000 }),
+          }),
         }),
       ])
       yield* bus.publish(Event.Updated, {})
