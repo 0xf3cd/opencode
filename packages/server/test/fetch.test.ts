@@ -640,34 +640,22 @@ it.live("serves session instruction entries at stable and deprecated experimenta
       (yield* request("/api/session", "POST", {})).body,
     ).data
 
-    for (const prefix of ["/api/session", "/api/experimental/session"]) {
-      const base = `${prefix}/${created.id}/instructions/entries`
+    const stable = `/api/session/${created.id}/instructions/entries`
+    const experimental = `/api/experimental/session/${created.id}/instructions/entries`
+    for (const [base, alias] of [
+      [stable, experimental],
+      [experimental, stable],
+    ]) {
       expect(yield* request(base)).toEqual({ status: 200, body: { data: [] } })
       expect(yield* request(`${base}/review-notes`, "PUT", { value: { text: "Check the diff", priority: 1 } })).toEqual(
         { status: 204, body: undefined },
       )
-      expect(yield* request(base)).toEqual({
+      expect(yield* request(alias)).toEqual({
         status: 200,
         body: { data: [{ key: "review-notes", value: { text: "Check the diff", priority: 1 } }] },
       })
-      expect(yield* request(`${base}/review-notes`, "DELETE")).toEqual({ status: 204, body: undefined })
+      expect(yield* request(`${alias}/review-notes`, "DELETE")).toEqual({ status: 204, body: undefined })
       expect(yield* request(base)).toEqual({ status: 200, body: { data: [] } })
     }
-
-    const stableBase = `/api/session/${created.id}/instructions/entries`
-    const experimentalBase = `/api/experimental/session/${created.id}/instructions/entries`
-    expect(yield* request(`${experimentalBase}/shared`, "PUT", { value: "from-experimental" })).toEqual({
-      status: 204,
-      body: undefined,
-    })
-    expect(yield* request(stableBase)).toEqual({
-      status: 200,
-      body: { data: [{ key: "shared", value: "from-experimental" }] },
-    })
-    expect(yield* request(`${stableBase}/shared`, "DELETE")).toEqual({
-      status: 204,
-      body: undefined,
-    })
-    expect(yield* request(experimentalBase)).toEqual({ status: 200, body: { data: [] } })
   }),
 )
