@@ -1205,6 +1205,7 @@ describe("SessionRunnerLLM", () => {
 
   scenario("runs one model request with system guidance when a prompt enables GenUI", function* (s) {
     const hooks = yield* PluginHooks.Service
+    const tools = yield* Tool.Service
     const registered = Effect.succeed({ dispose: Effect.void })
     yield* GenUIPlugin.effect(
       host({
@@ -1212,7 +1213,7 @@ describe("SessionRunnerLLM", () => {
           hook: (name, callback) => hooks.register("session", name, callback),
           synthetic: s.session.synthetic,
         },
-        tool: { ...host().tool, transform: () => registered },
+        tool: { ...host().tool, transform: tools.transform },
         skill: { ...host().skill, transform: () => registered },
       }),
     )
@@ -1221,6 +1222,7 @@ describe("SessionRunnerLLM", () => {
 
     expect(s.requests).toHaveLength(1)
     expect(s.requests[0]?.system.map((part) => part.text)).toContainEqual(expect.stringContaining("genui_render"))
+    expect(s.requests[0]?.tools.map((tool) => tool.name)).toContain("genui_render")
     expect(userTexts(s.requests[0]!)).toEqual(["hi"])
     expect(yield* s.messages).toMatchObject([{ id: message.id, type: "user", text: "hi" }])
   })

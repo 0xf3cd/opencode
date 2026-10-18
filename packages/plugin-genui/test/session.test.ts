@@ -5,10 +5,9 @@ import type { SessionContext, SessionPrompt } from "@opencode/plugin/effect/sess
 import { Model } from "@opencode/schema/model"
 import { Provider } from "@opencode/schema/provider"
 import { Session } from "@opencode/schema/session"
-import { SessionInbox } from "@opencode/schema/session-inbox"
 import { SessionMessage } from "@opencode/schema/session-message"
 import { Agent } from "@opencode/schema/agent"
-import { DateTime, Effect, Stream } from "effect"
+import { Effect, Stream } from "effect"
 import { GenUI } from "../src/genui"
 import { GenUISession } from "../src/session"
 
@@ -30,16 +29,7 @@ const run = async () => {
     },
     synthetic: (input) => {
       synthetics.push(input.text)
-      return Effect.succeed(
-        SessionInbox.Synthetic.make({
-          id: SessionMessage.ID.make("msg_genui_test"),
-          sessionID,
-          time: { created: DateTime.makeUnsafe(0) },
-          type: "synthetic",
-          payload: { text: input.text },
-          delivery: "steer",
-        }),
-      )
+      return Effect.die("GenUI must not enqueue synthetic input")
     },
   }
   await Effect.runPromise(
@@ -82,22 +72,30 @@ describe("GenUISession", () => {
     expect(first.system.map((part) => part.text)).toEqual([expect.stringContaining(GenUI.RENDER_TOOL)])
     expect(first.system[0]?.text).not.toContain("<system-reminder>")
     expect(first.messages).toEqual(initial)
+
+    const second = await plugin.context([Message.user("Again")])
+    expect(Object.keys(second.tools)).toEqual([GenUI.RENDER_TOOL, "read"])
+    expect(second.system).toEqual(first.system)
+    expect(second.messages).toEqual([Message.user("Again")])
     expect(plugin.synthetics).toEqual([])
   })
 
-  test("hides the render tool and adds no system part when a prompt comes without generated UI", async () => {
-    const plugin = await run()
-    await plugin.prompt({ genui: true })
-    await plugin.context([Message.user("hi")])
-    await plugin.prompt({ genui: false })
-    const initial = [Message.user("Text only now")]
-    const request = await plugin.context([...initial])
+  test.each([{ genui: false }, undefined])(
+    "hides the render tool and adds no system part when a prompt comes without generated UI (%j)",
+    async (metadata) => {
+      const plugin = await run()
+      await plugin.prompt({ genui: true })
+      await plugin.context([Message.user("hi")])
+      await plugin.prompt(metadata)
+      const initial = [Message.user("Text only now")]
+      const request = await plugin.context([...initial])
 
-    expect(Object.keys(request.tools)).toEqual(["read"])
-    expect(request.system).toEqual([])
-    expect(request.messages).toEqual(initial)
-    expect(plugin.synthetics).toEqual([])
-  })
+      expect(Object.keys(request.tools)).toEqual(["read"])
+      expect(request.system).toEqual([])
+      expect(request.messages).toEqual(initial)
+      expect(plugin.synthetics).toEqual([])
+    },
+  )
 
   test("never offers the render tool or system part to a session the app has not prompted, such as a subagent", async () => {
     const plugin = await run()
