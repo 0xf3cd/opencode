@@ -1,6 +1,7 @@
 import { app } from "electron"
 import { Context, Effect, FileSystem, Layer, Path } from "effect"
 import { BackgroundServiceState } from "./background-service-state"
+import { exposeCli } from "./cli-path"
 import { cleanStages } from "./cli-stages"
 import { DesktopCli } from "./desktop-cli"
 import { SidecarCredentials } from "./sidecar-credentials"
@@ -83,6 +84,13 @@ const connect = Effect.fn("BackgroundService.connect")(function* (mode: "initial
     runFork(
       cleanStages(cli.binary).pipe(
         Effect.catch((error) => Effect.logError("failed to clean staged v2 CLIs", { error })),
+      ),
+    )
+
+  if (mode === "initial" && app.isPackaged && process.platform === "win32" && cli.binary)
+    runFork(
+      exposeCli(cli.binary, path.join(app.getPath("userData"), "bin")).pipe(
+        Effect.catch((error) => Effect.logError("failed to put the v2 CLI on PATH", { error })),
       ),
     )
   const ready = { url: url.origin, password: service.auth.password } satisfies SidecarCredentials.Data

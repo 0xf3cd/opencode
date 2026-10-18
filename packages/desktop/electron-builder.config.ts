@@ -49,7 +49,7 @@ function macSignOptions(options: CustomMacSignOptions): CustomMacSignOptions {
     optionsForFile: (file) => {
       const defaults = options.optionsForFile?.(file)
 
-      if (file !== path.join(options.app, "Contents/Resources/opencode-cli")) return defaults ?? {}
+      if (file !== path.join(options.app, "Contents/Resources/opencode")) return defaults ?? {}
 
       // The Bun CLI loads bun-pty's native library; Electron and its helpers do not need this exception.
       return { ...defaults, entitlements: path.join(packageDir, "resources/entitlements.cli.plist") }
@@ -93,7 +93,7 @@ const getBase = (appId: string): Configuration => {
     files: [
       "out/**/*",
       "resources/**/*",
-      "!resources/opencode-cli*",
+      "!resources/opencode*",
       // Keep only the target platform's node-pty prebuild when cross-packaging with --cpu=*.
       ...CLI_BINARIES.filter((item) => item.os !== target.os || item.cpu !== target.cpu).map(
         (item) => `!**/node_modules/@lydell/node-pty-${item.os}-${item.cpu}{,/**/*}`,
@@ -117,7 +117,7 @@ const getBase = (appId: string): Configuration => {
       {
         from: "resources/",
         to: "",
-        filter: ["opencode-cli", "opencode-cli.exe", "opencode-cli.version"],
+        filter: ["opencode", "opencode.exe", "opencode.version"],
       },
     ],
     afterPack: async (context) => {
@@ -128,13 +128,13 @@ const getBase = (appId: string): Configuration => {
 
       if (arch !== target.cpu) throw new Error(`Packaging ${arch} Electron with the ${target.target} CLI`)
       const resources = context.packager.getResourcesDir(context.appOutDir)
-      const cli = path.join(resources, context.electronPlatformName === "win32" ? "opencode-cli.exe" : "opencode-cli")
+      const cli = path.join(resources, context.electronPlatformName === "win32" ? "opencode.exe" : "opencode")
 
       const file = await stat(cli)
 
       if (!file.isFile() || file.size === 0) throw new Error(`Bundled CLI must be a non-empty file: ${cli}`)
       await NativeArch.verify(cli, arch)
-      const version = path.join(path.dirname(cli), "opencode-cli.version")
+      const version = path.join(path.dirname(cli), "opencode.version")
 
       if ((await stat(version)).size === 0) throw new Error(`Bundled CLI version must be a non-empty file: ${version}`)
 

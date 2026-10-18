@@ -81,7 +81,7 @@ windows("installed accepts package-manager and curl binaries only", () =>
         ),
         true,
       ],
-      [path.join(home, "AppData", "Local", "Programs", "OpenCode", "resources", "opencode-cli.exe"), false],
+      [path.join(home, "AppData", "Local", "Programs", "OpenCode", "resources", "opencode.exe"), false],
       [path.join(home, "node_modules", "bun", "bin", "bun.exe"), false],
     ] as const
     const results = cases.map(([executable]) => {

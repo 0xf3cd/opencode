@@ -8,7 +8,17 @@
 !macro customUnInstall
   ${IfNot} ${isUpdated}
     !insertmacro removeStagedUpdates $INSTDIR
+    !insertmacro removeCliFromPath
   ${EndIf}
+!macroend
+
+; The app links the CLI into "<userData>\bin" and adds that directory to the user PATH once. Remove both,
+; so a later install adds the entry again. The raw registry value keeps entries such as %USERPROFILE%\bin.
+!macro removeCliFromPath
+  nsExec::Exec `"$SYSDIR\WindowsPowerShell\v1.0\powershell.exe" -NoLogo -NoProfile -NonInteractive -ExecutionPolicy Bypass -Command "$$d = $$env:APPDATA + '\${APP_ID}\bin'; $$k = [Microsoft.Win32.Registry]::CurrentUser.CreateSubKey('Environment'); $$o = @(([string]$$k.GetValue('Path', '', 'DoNotExpandEnvironmentNames')) -split ';' | Where-Object { $$_ }); $$n = @($$o | Where-Object { $$_ -ne $$d }); if ($$n.Count -lt $$o.Count) { $$k.SetValue('Path', ($$n -join ';'), 'ExpandString') }"`
+  Pop $0
+  System::Call 'user32::SendMessageTimeout(p 0xffff, i 0x1a, p 0, t "Environment", i 2, i 5000, *p .r0)'
+  RMDir /r "$APPDATA\${APP_ID}\bin"
 !macroend
 
 ; The stock check starts Windows PowerShell up to five times per installer and again in the old

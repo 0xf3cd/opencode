@@ -101,7 +101,7 @@ const bundledVersion = Effect.fn("DesktopCli.bundledVersion")(function* (bundled
   // async read waits behind everything else the main thread is doing at that moment.
   const shipped = yield* Effect.sync(() => {
     try {
-      return readFileSync(path.join(path.dirname(bundled), "opencode-cli.version"), "utf8").trim()
+      return readFileSync(path.join(path.dirname(bundled), "opencode.version"), "utf8").trim()
     } catch {
       return ""
     }
@@ -209,9 +209,9 @@ const runInstaller = Effect.fn("DesktopCli.installForUser")(function* (binary: s
 })
 
 function executableName() {
-  return process.platform === "win32" ? "opencode-cli.exe" : "opencode-cli"
+  return process.platform === "win32" ? "opencode.exe" : "opencode"
 }
 
 function developmentExecutableName() {
-  return process.platform === "win32" ? "opencode-cli-dev.exe" : "opencode-cli-dev"
+  return process.platform === "win32" ? "opencode-dev.exe" : "opencode-dev"
 }
