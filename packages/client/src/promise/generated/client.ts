@@ -922,7 +922,7 @@ export function make(options: ClientOptions) {
             request<{ readonly data: SessionInstructionsEntryListOutput }>(
               {
                 method: "GET",
-                path: `/api/experimental/session/${encodeURIComponent(input.sessionID)}/instructions/entries`,
+                path: `/api/session/${encodeURIComponent(input.sessionID)}/instructions/entries`,
                 successStatus: 200,
                 declaredStatuses: [400, 401, 404],
                 empty: false,
@@ -933,7 +933,7 @@ export function make(options: ClientOptions) {
             request<SessionInstructionsEntryPutOutput>(
               {
                 method: "PUT",
-                path: `/api/experimental/session/${encodeURIComponent(input.sessionID)}/instructions/entries/${encodeURIComponent(input.key)}`,
+                path: `/api/session/${encodeURIComponent(input.sessionID)}/instructions/entries/${encodeURIComponent(input.key)}`,
                 body: { value: input["value"] },
                 successStatus: 204,
                 declaredStatuses: [400, 401, 404, 413],
@@ -945,7 +945,7 @@ export function make(options: ClientOptions) {
             request<SessionInstructionsEntryRemoveOutput>(
               {
                 method: "DELETE",
-                path: `/api/experimental/session/${encodeURIComponent(input.sessionID)}/instructions/entries/${encodeURIComponent(input.key)}`,
+                path: `/api/session/${encodeURIComponent(input.sessionID)}/instructions/entries/${encodeURIComponent(input.key)}`,
                 successStatus: 204,
                 declaredStatuses: [400, 401, 404],
                 empty: true,

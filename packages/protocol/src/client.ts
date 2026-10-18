@@ -67,5 +67,17 @@ export const groupNames = {
   "server.config": "config",
 } as const
 
-export const promiseOmitEndpoints = new Set(["pty.connect", "persistentPty.connect"])
-export const effectOmitEndpoints = new Set(["fs.read", "fs.write", "pty.connect", "persistentPty.connect"])
+const deprecatedAliasEndpoints = [
+  "experimental.session.instructions.entry.list",
+  "experimental.session.instructions.entry.put",
+  "experimental.session.instructions.entry.remove",
+] as const
+
+export const promiseOmitEndpoints = new Set(["pty.connect", "persistentPty.connect", ...deprecatedAliasEndpoints])
+export const effectOmitEndpoints = new Set([
+  "fs.read",
+  "fs.write",
+  "pty.connect",
+  "persistentPty.connect",
+  ...deprecatedAliasEndpoints,
+])

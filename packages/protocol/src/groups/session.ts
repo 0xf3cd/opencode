@@ -566,8 +566,56 @@ export const makeSessionGroup = <I extends HttpApiMiddleware.AnyId, S, FormI ext
       ),
     )
     .add(
+      HttpApiEndpoint.get("session.instructions.entry.list", "/api/session/:sessionID/instructions/entries", {
+        params: { sessionID: Session.ID },
+        success: Schema.Struct({ data: Schema.Array(InstructionEntry.Info) }),
+        error: SessionNotFoundError,
+      })
+        .middleware(sessionLocationMiddleware)
+        .annotateMerge(
+          OpenApi.annotations({
+            identifier: "session.instructions.entry.list",
+            summary: "List instruction entries",
+            description: "List API-managed instruction entries attached to the session.",
+          }),
+        ),
+    )
+    .add(
+      HttpApiEndpoint.put("session.instructions.entry.put", "/api/session/:sessionID/instructions/entries/:key", {
+        params: { sessionID: Session.ID, key: InstructionEntry.Key },
+        payload: Schema.Struct({ value: Schema.Json }),
+        success: HttpApiSchema.NoContent,
+        error: [SessionNotFoundError, InstructionEntry.ValueTooLargeError],
+      })
+        .middleware(sessionLocationMiddleware)
+        .annotateMerge(
+          OpenApi.annotations({
+            identifier: "session.instructions.entry.put",
+            summary: "Put instruction entry",
+            description:
+              "Attach or replace one durable instruction entry. Changes announce as updates at the next step boundary.",
+          }),
+        ),
+    )
+    .add(
+      HttpApiEndpoint.delete("session.instructions.entry.remove", "/api/session/:sessionID/instructions/entries/:key", {
+        params: { sessionID: Session.ID, key: InstructionEntry.Key },
+        success: HttpApiSchema.NoContent,
+        error: SessionNotFoundError,
+      })
+        .middleware(sessionLocationMiddleware)
+        .annotateMerge(
+          OpenApi.annotations({
+            identifier: "session.instructions.entry.remove",
+            summary: "Remove instruction entry",
+            description:
+              "Remove one instruction entry; the removal is announced to the model at the next step boundary.",
+          }),
+        ),
+    )
+    .add(
       HttpApiEndpoint.get(
-        "session.instructions.entry.list",
+        "experimental.session.instructions.entry.list",
         "/api/experimental/session/:sessionID/instructions/entries",
         {
           params: { sessionID: Session.ID },
@@ -579,14 +627,16 @@ export const makeSessionGroup = <I extends HttpApiMiddleware.AnyId, S, FormI ext
         .annotateMerge(
           OpenApi.annotations({
             identifier: "experimental.session.instructions.entry.list",
-            summary: "List instruction entries",
-            description: "List API-managed instruction entries attached to the session.",
+            deprecated: true,
+            summary: "List instruction entries (deprecated)",
+            description:
+              "Deprecated alias for `GET /api/session/{sessionID}/instructions/entries` (`session.instructions.entry.list`).",
           }),
         ),
     )
     .add(
       HttpApiEndpoint.put(
-        "session.instructions.entry.put",
+        "experimental.session.instructions.entry.put",
         "/api/experimental/session/:sessionID/instructions/entries/:key",
         {
           params: { sessionID: Session.ID, key: InstructionEntry.Key },
@@ -599,15 +649,16 @@ export const makeSessionGroup = <I extends HttpApiMiddleware.AnyId, S, FormI ext
         .annotateMerge(
           OpenApi.annotations({
             identifier: "experimental.session.instructions.entry.put",
-            summary: "Put instruction entry",
+            deprecated: true,
+            summary: "Put instruction entry (deprecated)",
             description:
-              "Attach or replace one durable instruction entry. Changes announce as updates at the next step boundary.",
+              "Deprecated alias for `PUT /api/session/{sessionID}/instructions/entries/{key}` (`session.instructions.entry.put`).",
           }),
         ),
     )
     .add(
       HttpApiEndpoint.delete(
-        "session.instructions.entry.remove",
+        "experimental.session.instructions.entry.remove",
         "/api/experimental/session/:sessionID/instructions/entries/:key",
         {
           params: { sessionID: Session.ID, key: InstructionEntry.Key },
@@ -619,9 +670,10 @@ export const makeSessionGroup = <I extends HttpApiMiddleware.AnyId, S, FormI ext
         .annotateMerge(
           OpenApi.annotations({
             identifier: "experimental.session.instructions.entry.remove",
-            summary: "Remove instruction entry",
+            deprecated: true,
+            summary: "Remove instruction entry (deprecated)",
             description:
-              "Remove one instruction entry; the removal is announced to the model at the next step boundary.",
+              "Deprecated alias for `DELETE /api/session/{sessionID}/instructions/entries/{key}` (`session.instructions.entry.remove`).",
           }),
         ),
     )

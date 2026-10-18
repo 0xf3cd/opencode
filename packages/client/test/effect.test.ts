@@ -109,17 +109,17 @@ test("session instructions methods use the public HTTP contract", async () => {
   expect(requests).toEqual([
     {
       method: "GET",
-      url: "http://localhost:3000/api/experimental/session/ses_test/instructions/entries",
+      url: "http://localhost:3000/api/session/ses_test/instructions/entries",
       body: undefined,
     },
     {
       method: "PUT",
-      url: "http://localhost:3000/api/experimental/session/ses_test/instructions/entries/review-notes",
+      url: "http://localhost:3000/api/session/ses_test/instructions/entries/review-notes",
       body: { value: { text: "Check the diff", priority: 1 } },
     },
     {
       method: "DELETE",
-      url: "http://localhost:3000/api/experimental/session/ses_test/instructions/entries/review-notes",
+      url: "http://localhost:3000/api/session/ses_test/instructions/entries/review-notes",
       body: undefined,
     },
   ])

@@ -53,6 +53,25 @@ export const SessionHandler = HttpApiBuilder.group(Api, "server.session", (handl
         ),
         Effect.as(HttpApiSchema.NoContent.make()),
       )
+    const listInstructionEntries = Effect.fn(function* (ctx: { readonly params: { readonly sessionID: Session.ID } }) {
+      const instructions = yield* InstructionEntry.Service
+      return { data: yield* instructions.list(ctx.params.sessionID) }
+    })
+    const putInstructionEntry = Effect.fn(function* (ctx: {
+      readonly params: { readonly sessionID: Session.ID; readonly key: InstructionEntry.Key }
+      readonly payload: { readonly value: InstructionEntry.Info["value"] }
+    }) {
+      const instructions = yield* InstructionEntry.Service
+      yield* instructions.put({ sessionID: ctx.params.sessionID, key: ctx.params.key, value: ctx.payload.value })
+      return HttpApiSchema.NoContent.make()
+    })
+    const removeInstructionEntry = Effect.fn(function* (ctx: {
+      readonly params: { readonly sessionID: Session.ID; readonly key: InstructionEntry.Key }
+    }) {
+      const instructions = yield* InstructionEntry.Service
+      yield* instructions.remove({ sessionID: ctx.params.sessionID, key: ctx.params.key })
+      return HttpApiSchema.NoContent.make()
+    })
 
     return handlers
       .handle(
@@ -536,29 +555,12 @@ export const SessionHandler = HttpApiBuilder.group(Api, "server.session", (handl
           )
         }),
       )
-      .handle(
-        "session.instructions.entry.list",
-        Effect.fn(function* (ctx) {
-          const instructions = yield* InstructionEntry.Service
-          return { data: yield* instructions.list(ctx.params.sessionID) }
-        }),
-      )
-      .handle(
-        "session.instructions.entry.put",
-        Effect.fn(function* (ctx) {
-          const instructions = yield* InstructionEntry.Service
-          yield* instructions.put({ sessionID: ctx.params.sessionID, key: ctx.params.key, value: ctx.payload.value })
-          return HttpApiSchema.NoContent.make()
-        }),
-      )
-      .handle(
-        "session.instructions.entry.remove",
-        Effect.fn(function* (ctx) {
-          const instructions = yield* InstructionEntry.Service
-          yield* instructions.remove({ sessionID: ctx.params.sessionID, key: ctx.params.key })
-          return HttpApiSchema.NoContent.make()
-        }),
-      )
+      .handle("session.instructions.entry.list", listInstructionEntries)
+      .handle("session.instructions.entry.put", putInstructionEntry)
+      .handle("session.instructions.entry.remove", removeInstructionEntry)
+      .handle("experimental.session.instructions.entry.list", listInstructionEntries)
+      .handle("experimental.session.instructions.entry.put", putInstructionEntry)
+      .handle("experimental.session.instructions.entry.remove", removeInstructionEntry)
       .handle(
         "session.generate",
         Effect.fn(function* (ctx) {

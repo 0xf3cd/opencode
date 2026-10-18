@@ -3566,10 +3566,10 @@
         }
       }
     },
-    "/api/experimental/session/{sessionID}/instructions/entries": {
+    "/api/session/{sessionID}/instructions/entries": {
       "get": {
         "tags": ["session"],
-        "operationId": "experimental.session.instructions.entry.list",
+        "operationId": "session.instructions.entry.list",
         "parameters": [
           {
             "name": "sessionID",
@@ -3644,10 +3644,10 @@
         "summary": "List instruction entries"
       }
     },
-    "/api/experimental/session/{sessionID}/instructions/entries/{key}": {
+    "/api/session/{sessionID}/instructions/entries/{key}": {
       "put": {
         "tags": ["session"],
-        "operationId": "experimental.session.instructions.entry.put",
+        "operationId": "session.instructions.entry.put",
         "parameters": [
           {
             "name": "sessionID",
@@ -3739,7 +3739,7 @@
       },
       "delete": {
         "tags": ["session"],
-        "operationId": "experimental.session.instructions.entry.remove",
+        "operationId": "session.instructions.entry.remove",
         "parameters": [
           {
             "name": "sessionID",
@@ -3803,6 +3803,248 @@
         },
         "description": "Remove one instruction entry; the removal is announced to the model at the next step boundary.",
         "summary": "Remove instruction entry"
+      }
+    },
+    "/api/experimental/session/{sessionID}/instructions/entries": {
+      "get": {
+        "tags": ["session"],
+        "operationId": "experimental.session.instructions.entry.list",
+        "parameters": [
+          {
+            "name": "sessionID",
+            "in": "path",
+            "schema": {
+              "$ref": "#/components/schemas/Session.ID"
+            },
+            "required": true
+          }
+        ],
+        "security": [],
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "data": {
+                      "type": "array",
+                      "items": {
+                        "$ref": "#/components/schemas/InstructionEntry.Info"
+                      }
+                    }
+                  },
+                  "required": ["data"],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "InvalidRequestError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/InvalidRequestErrorEncoded"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "UnauthorizedError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UnauthorizedErrorEncoded"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "SessionNotFoundError | LocationNotFoundError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "anyOf": [
+                    {
+                      "$ref": "#/components/schemas/SessionNotFoundErrorEncoded"
+                    },
+                    {
+                      "$ref": "#/components/schemas/LocationNotFoundErrorEncoded"
+                    }
+                  ]
+                }
+              }
+            }
+          }
+        },
+        "description": "Deprecated alias for `GET /api/session/{sessionID}/instructions/entries` (`session.instructions.entry.list`).",
+        "summary": "List instruction entries (deprecated)",
+        "deprecated": true
+      }
+    },
+    "/api/experimental/session/{sessionID}/instructions/entries/{key}": {
+      "put": {
+        "tags": ["session"],
+        "operationId": "experimental.session.instructions.entry.put",
+        "parameters": [
+          {
+            "name": "sessionID",
+            "in": "path",
+            "schema": {
+              "$ref": "#/components/schemas/Session.ID"
+            },
+            "required": true
+          },
+          {
+            "name": "key",
+            "in": "path",
+            "schema": {
+              "$ref": "#/components/schemas/InstructionEntry.Key"
+            },
+            "required": true
+          }
+        ],
+        "security": [],
+        "responses": {
+          "204": {
+            "description": "<No Content>"
+          },
+          "400": {
+            "description": "InvalidRequestError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/InvalidRequestErrorEncoded"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "UnauthorizedError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UnauthorizedErrorEncoded"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "SessionNotFoundError | LocationNotFoundError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "anyOf": [
+                    {
+                      "$ref": "#/components/schemas/SessionNotFoundErrorEncoded"
+                    },
+                    {
+                      "$ref": "#/components/schemas/LocationNotFoundErrorEncoded"
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          "413": {
+            "description": "InstructionEntryValueTooLargeError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/InstructionEntryValueTooLargeErrorEncoded"
+                }
+              }
+            }
+          }
+        },
+        "description": "Deprecated alias for `PUT /api/session/{sessionID}/instructions/entries/{key}` (`session.instructions.entry.put`).",
+        "summary": "Put instruction entry (deprecated)",
+        "deprecated": true,
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "value": {}
+                },
+                "required": ["value"],
+                "additionalProperties": false
+              }
+            }
+          },
+          "required": true
+        }
+      },
+      "delete": {
+        "tags": ["session"],
+        "operationId": "experimental.session.instructions.entry.remove",
+        "parameters": [
+          {
+            "name": "sessionID",
+            "in": "path",
+            "schema": {
+              "$ref": "#/components/schemas/Session.ID"
+            },
+            "required": true
+          },
+          {
+            "name": "key",
+            "in": "path",
+            "schema": {
+              "$ref": "#/components/schemas/InstructionEntry.Key"
+            },
+            "required": true
+          }
+        ],
+        "security": [],
+        "responses": {
+          "204": {
+            "description": "<No Content>"
+          },
+          "400": {
+            "description": "InvalidRequestError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/InvalidRequestErrorEncoded"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "UnauthorizedError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UnauthorizedErrorEncoded"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "SessionNotFoundError | LocationNotFoundError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "anyOf": [
+                    {
+                      "$ref": "#/components/schemas/SessionNotFoundErrorEncoded"
+                    },
+                    {
+                      "$ref": "#/components/schemas/LocationNotFoundErrorEncoded"
+                    }
+                  ]
+                }
+              }
+            }
+          }
+        },
+        "description": "Deprecated alias for `DELETE /api/session/{sessionID}/instructions/entries/{key}` (`session.instructions.entry.remove`).",
+        "summary": "Remove instruction entry (deprecated)",
+        "deprecated": true
       }
     },
     "/api/session/{sessionID}/generate": {
