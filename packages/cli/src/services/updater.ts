@@ -119,6 +119,17 @@ export interface Interface {
 
 export class Service extends Context.Service<Service, Interface>()("@opencode/cli/Updater") {}
 
+export const desktopManagedMessage =
+  "OpenCode Desktop installed this CLI and updates it with the app. Update OpenCode Desktop to get a newer version."
+
+/**
+ * Whether OpenCode Desktop staged this executable, or linked it onto PATH, from the app's own copy.
+ * Desktop replaces it on every app update, so the CLI must not update it itself.
+ */
+export function desktopManaged(executable: string) {
+  return /[\\/]ai\.opencode\.desktop(?:\.[a-z]+)?[\\/](?:cli|bin)[\\/]/i.test(executable)
+}
+
 export function decodePolicy(text: string): Policy | undefined {
   // The CLI only projects this host-level preference instead of initializing
   // the location-scoped server configuration graph.
@@ -531,9 +542,13 @@ const make = Effect.gen(function* () {
   })
 
   const inspect = Effect.fnUntraced(function* () {
-    if (OPENCODE_LOCAL || ["1", "true"].includes(process.env.OPENCODE_DISABLE_AUTOUPDATE?.toLowerCase() ?? "")) {
+    if (
+      OPENCODE_LOCAL ||
+      desktopManaged(executable) ||
+      ["1", "true"].includes(process.env.OPENCODE_DISABLE_AUTOUPDATE?.toLowerCase() ?? "")
+    ) {
       yield* Effect.logInfo("update check skipped", {
-        reason: OPENCODE_LOCAL ? "local-install" : "disabled",
+        reason: OPENCODE_LOCAL ? "local-install" : desktopManaged(executable) ? "desktop-managed" : "disabled",
         version: OPENCODE_VERSION,
         channel: OPENCODE_CHANNEL,
       })
@@ -588,6 +603,7 @@ const make = Effect.gen(function* () {
         type: "unavailable" as const,
         message: "This build runs from a source checkout. Use an installed OpenCode release to check for updates.",
       }
+    if (desktopManaged(executable)) return { type: "unavailable" as const, message: desktopManagedMessage }
     const detected = yield* method()
     if (!detected)
       return {

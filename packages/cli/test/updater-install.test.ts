@@ -405,6 +405,22 @@ it.live("WinGet update checks report a missing package instead of a version", ()
   }),
 )
 
+// OpenCode Desktop replaces its staged and PATH-linked CLI on every app update, so only those copies skip
+// self-updates; every other install keeps its own upgrade path.
+test("only CLIs that OpenCode Desktop staged or linked are desktop-managed", () => {
+  const home = path.join("C:", "Users", "someone")
+  const cases = [
+    [path.join(home, "AppData", "Roaming", "ai.opencode.desktop", "cli", "2.1.0-x64", "opencode.exe"), true],
+    [path.join(home, "AppData", "Local", "ai.opencode.desktop.beta", "bin", "opencode.exe"), true],
+    ["/home/someone/.config/ai.opencode.desktop.dev/cli/2.1.0-x64/opencode", true],
+    ["/Users/someone/Library/Application Support/ai.opencode.desktop/cli/2.1.0-arm64/opencode", true],
+    [path.join(home, "AppData", "Local", "Programs", "OpenCode", "resources", "opencode.exe"), false],
+    [path.join(home, ".opencode", "bin", "opencode.exe"), false],
+    [path.join(home, "AppData", "Roaming", "npm", "node_modules", "@opencode", "cli", "bin", "opencode.exe"), false],
+  ] as const
+  expect(cases.map(([executable]) => Updater.desktopManaged(executable))).toEqual(cases.map(([, expected]) => expected))
+})
+
 // Links are named opencode-upgrade-<pid>-<random>.exe; read them from inside the installer run.
 const links = (directory: string) =>
   existsSync(directory) ? readdirSync(directory).filter((name) => name.startsWith("opencode-")) : []

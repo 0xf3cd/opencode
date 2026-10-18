@@ -1,4 +1,5 @@
 import { execFile } from "node:child_process"
+import type { BigIntStats } from "node:fs"
 import { stat } from "node:fs/promises"
 import { promisify } from "node:util"
 import { Effect, FileSystem, Path } from "effect"
@@ -6,14 +7,19 @@ import { Effect, FileSystem, Path } from "effect"
 const execFileAsync = promisify(execFile)
 
 // Each version stages its CLI in its own directory, so the user PATH holds one fixed directory with a
-// link to the current stage instead. PATH is edited only when that directory is first created: a user
-// who removes the entry keeps it removed, and the uninstaller deletes both to start over on reinstall.
+// link to the current stage instead. PATH is edited only when that directory is first created, and a
+// failed edit is not retried: a user who removes the entry keeps it removed, a machine that blocks
+// PowerShell does not start it on every launch, and the uninstaller deletes both so a reinstall starts over.
 export const exposeCli = Effect.fn("DesktopCli.expose")(function* (binary: string, directory: string) {
   const fs = yield* FileSystem.FileSystem
-
-  if (!(yield* fs.exists(directory))) yield* addToUserPath(directory)
+  const created = !(yield* fs.exists(directory))
   const target = yield* linkCli(binary, directory)
-  yield* Effect.logInfo("v2 CLI linked on PATH", { path: target })
+  yield* Effect.logInfo("v2 CLI linked", { path: target })
+
+  if (created)
+    yield* addToUserPath(directory).pipe(
+      Effect.catch((error) => Effect.logError("failed to add the v2 CLI directory to user PATH", { directory, error })),
+    )
 })
 
 export const linkCli = Effect.fn("DesktopCli.link")(function* (binary: string, directory: string) {
@@ -34,7 +40,7 @@ export const linkCli = Effect.fn("DesktopCli.link")(function* (binary: string, d
   const current = yield* Effect.promise(() => stat(target, { bigint: true }).catch(() => undefined))
   const source = yield* Effect.tryPromise(() => stat(binary, { bigint: true }))
 
-  if (current?.ino === source.ino && current.dev === source.dev) return target
+  if (current && (sameFile(current, source) || sameCopy(current, source))) return target
   const temp = `${target}.${process.pid}.tmp`
   yield* fs.remove(temp, { force: true })
   yield* fs.link(binary, temp).pipe(Effect.catch(() => fs.copyFile(binary, temp)))
@@ -45,6 +51,12 @@ export const linkCli = Effect.fn("DesktopCli.link")(function* (binary: string, d
 
   return target
 })
+
+const sameFile = (a: BigIntStats, b: BigIntStats) => a.ino === b.ino && a.dev === b.dev
+
+// Without hard links (FAT32, exFAT, some network shares) the link is a copy, which keeps the size and
+// modification time of the staged executable it came from.
+const sameCopy = (a: BigIntStats, b: BigIntStats) => a.nlink === 1n && a.size === b.size && a.mtimeNs === b.mtimeNs
 
 // Reads the raw value so entries such as %USERPROFILE%\bin stay unexpanded; .NET would write Path back as
 // REG_SZ. Clearing an unused variable through .NET broadcasts WM_SETTINGCHANGE, so Explorer and the

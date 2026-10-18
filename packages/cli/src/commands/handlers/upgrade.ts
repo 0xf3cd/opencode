@@ -14,6 +14,8 @@ export default Runtime.handler(
       intro("Upgrade")
       const updater = yield* Updater.Service
       const method = Option.getOrUndefined(input.method) ?? (yield* updater.method())
+      if (!method && Updater.desktopManaged(process.execPath))
+        return yield* Effect.fail(new Error(Updater.desktopManagedMessage))
       if (!method)
         return yield* Effect.fail(
           new Error("Could not detect the installation method. Pass --method to choose how to upgrade OpenCode."),

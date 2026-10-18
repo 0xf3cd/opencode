@@ -1,6 +1,7 @@
 import { app } from "electron"
 import { Context, Effect, FileSystem, Layer, Path } from "effect"
 import { BackgroundServiceState } from "./background-service-state"
+import { APP_ID } from "../constants"
 import { exposeCli } from "./cli-path"
 import { cleanStages } from "./cli-stages"
 import { DesktopCli } from "./desktop-cli"
@@ -87,9 +88,10 @@ const connect = Effect.fn("BackgroundService.connect")(function* (mode: "initial
       ),
     )
 
-  if (mode === "initial" && app.isPackaged && process.platform === "win32" && cli.binary)
+  // Local app data does not roam, so profiles that sync Roaming do not carry a second copy of the CLI.
+  if (mode === "initial" && app.isPackaged && process.platform === "win32" && process.env.LOCALAPPDATA && cli.binary)
     runFork(
-      exposeCli(cli.binary, path.join(app.getPath("userData"), "bin")).pipe(
+      exposeCli(cli.binary, path.join(process.env.LOCALAPPDATA, APP_ID, "bin")).pipe(
         Effect.catch((error) => Effect.logError("failed to put the v2 CLI on PATH", { error })),
       ),
     )
