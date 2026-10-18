@@ -5,6 +5,12 @@
   inset: 0;
   z-index: 50;
   background-color: var(--v2-overlay-simple-overlay-scrim);
+  animation: dialog-overlay-in var(--motion-duration-fast, 160ms) var(--motion-spring-snappy, cubic-bezier(0.22, 1, 0.36, 1));
+
+  &[data-closed] {
+    animation: dialog-overlay-out 100ms var(--motion-ease-exit, cubic-bezier(0.4, 0, 1, 1)) forwards;
+    pointer-events: none;
+  }
 }
 
 [data-component="dialog-v2"] {
@@ -27,8 +33,19 @@
     border-radius: 6px;
     overflow: hidden;
     pointer-events: auto;
+    transform-origin: center center;
+    animation: dialog-container-in var(--motion-duration-fast, 160ms)
+      var(--motion-spring-snappy, cubic-bezier(0.22, 1, 0.36, 1));
+
+    &:has(> [data-slot="dialog-content"][data-closed]) {
+      animation: dialog-container-out 100ms var(--motion-ease-exit, cubic-bezier(0.4, 0, 1, 1)) forwards;
+      pointer-events: none;
+    }
 
     [data-slot="dialog-content"] {
+      &[data-closed] {
+        animation: dialog-content-hold 100ms linear forwards;
+      }
       display: flex;
       flex-direction: column;
       align-items: flex-start;
@@ -176,5 +193,63 @@
   &[data-size="x-large"] [data-slot="dialog-container"] {
     width: min(calc(100vw - 32px), 980px);
     height: min(calc(100vh - 92px), 600px);
+  }
+}
+
+@keyframes dialog-overlay-in {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+@keyframes dialog-overlay-out {
+  from {
+    opacity: 1;
+  }
+  to {
+    opacity: 0;
+  }
+}
+
+@keyframes dialog-container-in {
+  from {
+    opacity: 0;
+    transform: translateY(6px) scale(0.97);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+@keyframes dialog-container-out {
+  from {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+  to {
+    opacity: 0;
+    transform: translateY(4px) scale(0.985);
+  }
+}
+
+/* Keeps Kobalte's Content mounted while the parent container plays its 100ms exit animation. */
+@keyframes dialog-content-hold {
+  from,
+  to {
+    opacity: 1;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  [data-component="dialog-overlay"],
+  [data-component="dialog-overlay"][data-closed],
+  [data-component="dialog-v2"] [data-slot="dialog-container"],
+  [data-component="dialog-v2"] [data-slot="dialog-container"]:has(> [data-slot="dialog-content"][data-closed]),
+  [data-component="dialog-v2"] [data-slot="dialog-content"][data-closed] {
+    animation: none;
   }
 }
