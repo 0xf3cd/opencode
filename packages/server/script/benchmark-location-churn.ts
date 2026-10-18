@@ -63,6 +63,12 @@ const program = Effect.gen(function* () {
       const body = (yield* Effect.promise(() => listed.json())) as { data?: { id: string; state: unknown }[] }
       console.error(JSON.stringify(body.data?.filter((p) => !p.id.startsWith("opencode.")) ?? body))
     }
+    if (cycle === 1) {
+      const held = yield* runtime()
+      rows.push(
+        `held  one booted Location: liveSubs ${held.gauges["bus.live.subscribers"]}  listeners ${held.gauges["bus.listeners"]}  heapUsed ${mib(held.memory.heapUsed)} MiB`,
+      )
+    }
     yield* call(`/api/debug/location?location[directory]=${encodeURIComponent(directory)}`, { method: "DELETE" })
     if (cycle % 10 === 0 || cycle === cycles) {
       const r = yield* runtime()
