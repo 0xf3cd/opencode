@@ -96,6 +96,8 @@ type Streamed = {
   readonly providerState?: SessionMessage.ProviderState
 }
 
+const guidanceSection = (guidance: string) => `Additional guidance for this summary:\n${guidance}`
+
 const NOTHING_TO_COMPACT: Failure = { error: { type: "compaction.unavailable", message: "Nothing to compact yet" } }
 /** After each "too long" rejection, the next attempt aims at this share of the first rejected request's size. */
 const SHRINK_STEPS = [0.7, 0.5, 0.35]
@@ -153,7 +155,7 @@ export const buildPrompt = (update: boolean, legacy = false, guidance?: string) 
     "Summarize only what the user and the assistant said and did. Leave out instructions and setup the assistant was given rather than told by the user: repository conventions, instruction files such as AGENTS.md, and environment details like the session ID. The next agent receives current versions of all of these separately.",
     SUMMARY_TEMPLATE,
     SUMMARY_RULES,
-    ...(guidance?.trim() ? [`Additional guidance for this summary:\n${guidance.trim()}`] : []),
+    ...(guidance?.trim() ? [guidanceSection(guidance.trim())] : []),
     "Do not continue the task or call tools.",
     "Return only the structured summary in the requested format. Do not include a preamble, explanation, or other commentary.",
   ]
@@ -286,14 +288,11 @@ export const layer = Layer.effect(
       if (!split) return yield* Effect.fail(NOTHING_TO_COMPACT)
 
       const previous = previousCompaction(context.messages)
-      const prompt = buildPrompt(
-        previous !== undefined,
-        previous?.summary.includes(LEGACY_HEADING) ?? false,
-        trigger.reason === "manual" ? trigger.guidance : undefined,
-      )
+      const guidance = trigger.reason === "manual" ? trigger.guidance : undefined
+      const prompt = buildPrompt(previous !== undefined, previous?.summary.includes(LEGACY_HEADING) ?? false, guidance)
       const headings = SUMMARY_TEMPLATE.split("\n").filter((line) => line.startsWith("##"))
       const filled = (text: string) => text.split("\n").some((line) => headings.includes(line.trim()))
-      const prepared = yield* prepare(context, split.older, budget)
+      const prepared = yield* prepare(context, split.older, budget, guidance)
 
       // Hooks saw the request without the summary prompt, so it is appended here. A reply that ignores the
       // template gets one reminder before it counts as a failure.
@@ -347,7 +346,8 @@ export const layer = Layer.effect(
       if (!context.messages.some(messageToText)) return yield* Effect.fail(NOTHING_TO_COMPACT)
       const unsupported = (message: string) =>
         Effect.fail<Failure>({ error: { type: "provider.unsupported-operation", message } })
-      const prepared = yield* prepare(context, context.messages, budget, "session")
+      const guidance = trigger.reason === "manual" ? trigger.guidance : undefined
+      const prepared = yield* prepare(context, context.messages, budget, guidance, "session")
 
       // History is selected before request hooks, so a hook that reroutes the request cannot be honored here.
       const provenance = SessionProviderContext.provenance(context.model)
@@ -368,7 +368,20 @@ export const layer = Layer.effect(
           }),
         )
 
-      const send = (request: LLMRequest) => {
+      // The provider writes the checkpoint itself, so guidance rides as one extra user message. It is added to the
+      // request after fitting, so shrinking never trades a real exchange for it, and it is removed from a provider
+      // replacement, so it never persists.
+      const note = guidance?.trim() ? guidanceSection(guidance.trim()) : undefined
+      const isNote = (message: Message) =>
+        message.role === "user" &&
+        message.content.length === 1 &&
+        message.content[0]?.type === "text" &&
+        message.content[0].text === note
+
+      const send = (fitted: LLMRequest) => {
+        const request = note
+          ? LLMRequest.update(fitted, { messages: [...fitted.messages, Message.user(note)] })
+          : fitted
         if (LLMClient.canCompact(request, { mechanism: "trigger" })) {
           return Effect.gen(function* () {
             const history = yield* SessionHistory.load(db, context.session.id, "local").pipe(Effect.orDie)
@@ -378,14 +391,19 @@ export const layer = Layer.effect(
           })
         }
         if (LLMClient.canCompact(request)) {
-          return llm
-            .compact(request, { mechanism: "endpoint", http: prepared.options.http })
-            .pipe(Effect.flatMap((response) => toResult(response.replacement, response.usage)))
+          return llm.compact(request, { mechanism: "endpoint", http: prepared.options.http }).pipe(
+            Effect.flatMap((response) =>
+              toResult(
+                response.replacement.filter((message) => !isNote(message)),
+                response.usage,
+              ),
+            ),
+          )
         }
         return unsupported(`Native compaction is not supported for ${request.model.provider}/${request.model.route.id}`)
       }
 
-      return yield* deliver(trigger, prepared, "", budget, send)
+      return yield* deliver(trigger, prepared, "", budget - (note ? Token.estimate(note) : 0), send)
     })
 
     /**
@@ -593,6 +611,7 @@ export const layer = Layer.effect(
       context: SessionContext.Loaded,
       messages: ReadonlyArray<SessionMessage.Info>,
       budget: number,
+      guidance: string | undefined,
       webSocket?: "session",
     ) => {
       const base = transcript(context, messages)
@@ -605,6 +624,7 @@ export const layer = Layer.effect(
         messages: base.messages,
         webSocket,
         inputTokens: { measured: budget, estimated: 0 },
+        guidance,
       })
     }
 

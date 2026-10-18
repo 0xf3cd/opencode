@@ -82,6 +82,8 @@ export interface Input {
   readonly webSocket?: "session"
   /** Prompt size, measured by the provider or estimated. The default output limit leaves room for it. */
   readonly inputTokens?: { readonly measured: number; readonly estimated: number }
+  /** Guidance from a manual `/compact`, shown to compaction hooks. */
+  readonly guidance?: string
 }
 
 /** The default output limit: the catalog limit, fitted to the room the prompt leaves in the context window. */
@@ -425,7 +427,10 @@ export const layer = Layer.effect(
 
     return Service.of({
       primary: (input) => prepare("primary", input, agentHook("context", input.agent)),
-      compaction: (input) => prepare("compaction", input, agentHook("compaction", input.agent)),
+      compaction: (input) =>
+        prepare("compaction", input, (draft, tools) =>
+          hooks.trigger("session", "compaction", { ...draft, agent: input.agent, tools, guidance: input.guidance }),
+        ),
       generate: (input) => prepare("generate", input, agentHook("generate", input.agent)),
       title: (input) => prepare("title", input, (draft) => hooks.trigger("session", "title", draft)),
     })
