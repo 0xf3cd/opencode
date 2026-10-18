@@ -75,24 +75,16 @@ it.live("Effect plugins can put, list, and remove session instruction entries se
     expect(yield* sessions.inbox(created.id)).toEqual([])
 
     const missing = Session.ID.create()
-    expect(yield* context.session.instructions.entry.list({ sessionID: missing }).pipe(Effect.flip)).toMatchObject({
-      _tag: "Session.NotFoundError",
-      sessionID: missing,
-    })
-    expect(
-      yield* context.session.instructions.entry
-        .put({ sessionID: missing, key: "deploy-target", value: "production" })
-        .pipe(Effect.flip),
-    ).toMatchObject({
-      _tag: "Session.NotFoundError",
-      sessionID: missing,
-    })
-    expect(
-      yield* context.session.instructions.entry.remove({ sessionID: missing, key: "deploy-target" }).pipe(Effect.flip),
-    ).toMatchObject({
-      _tag: "Session.NotFoundError",
-      sessionID: missing,
-    })
+    for (const operation of [
+      context.session.instructions.entry.list({ sessionID: missing }),
+      context.session.instructions.entry.put({ sessionID: missing, key: "deploy-target", value: "production" }),
+      context.session.instructions.entry.remove({ sessionID: missing, key: "deploy-target" }),
+    ]) {
+      expect(yield* operation.pipe(Effect.flip)).toMatchObject({
+        _tag: "Session.NotFoundError",
+        sessionID: missing,
+      })
+    }
     expect(
       yield* context.session.instructions.entry
         .put({
@@ -115,22 +107,44 @@ it.live("Promise plugins can put, list, and remove session instruction entries s
     yield* PluginPromise.fromPromise({
       id: "test.session-instructions.put",
       async setup(ctx) {
-        await ctx.session.instructions.entry.put({
-          sessionID: created.id,
-          key: "genui.guidelines",
-          value: "Use GenUI components when appropriate.",
-        })
+        expect(
+          await ctx.session.instructions.entry.put({
+            sessionID: created.id,
+            key: "genui.guidelines",
+            value: "Use GenUI components when appropriate.",
+          }),
+        ).toBeUndefined()
         expect(await ctx.session.instructions.entry.list({ sessionID: created.id })).toEqual([
           { key: "genui.guidelines", value: "Use GenUI components when appropriate." },
         ])
-        await expect(ctx.session.instructions.entry.list({ sessionID: Session.ID.create() })).rejects.toThrow()
+        const missing = Session.ID.create()
+        await expect(ctx.session.instructions.entry.list({ sessionID: missing })).rejects.toMatchObject({
+          _tag: "Session.NotFoundError",
+          sessionID: missing,
+        })
+        await expect(
+          ctx.session.instructions.entry.put({ sessionID: missing, key: "deploy-target", value: "production" }),
+        ).rejects.toMatchObject({ _tag: "Session.NotFoundError", sessionID: missing })
+        await expect(
+          ctx.session.instructions.entry.remove({ sessionID: missing, key: "deploy-target" }),
+        ).rejects.toMatchObject({ _tag: "Session.NotFoundError", sessionID: missing })
         await expect(
           ctx.session.instructions.entry.put({
             sessionID: created.id,
             key: "invalid/key",
             value: "rejected",
           }),
-        ).rejects.toThrow()
+        ).rejects.toMatchObject({ _tag: "SchemaError" })
+        await expect(
+          ctx.session.instructions.entry.remove({ sessionID: created.id, key: "invalid/key" }),
+        ).rejects.toMatchObject({ _tag: "SchemaError" })
+        await expect(
+          ctx.session.instructions.entry.put({
+            sessionID: created.id,
+            key: "oversized",
+            value: "x".repeat(InstructionEntry.MaxValueBytes),
+          }),
+        ).rejects.toBeInstanceOf(InstructionEntry.ValueTooLargeError)
       },
     }).effect(context)
 
@@ -143,10 +157,12 @@ it.live("Promise plugins can put, list, and remove session instruction entries s
     yield* PluginPromise.fromPromise({
       id: "test.session-instructions.remove",
       async setup(ctx) {
-        await ctx.session.instructions.entry.remove({
-          sessionID: created.id,
-          key: "genui.guidelines",
-        })
+        expect(
+          await ctx.session.instructions.entry.remove({
+            sessionID: created.id,
+            key: "genui.guidelines",
+          }),
+        ).toBeUndefined()
         expect(await ctx.session.instructions.entry.list({ sessionID: created.id })).toEqual([])
       },
     }).effect(context)
@@ -156,5 +172,6 @@ it.live("Promise plugins can put, list, and remove session instruction entries s
       type: "system",
       text: 'The context under "genui.guidelines" no longer applies. Disregard it.',
     })
+    expect(yield* sessions.inbox(created.id)).toEqual([])
   }),
 )
