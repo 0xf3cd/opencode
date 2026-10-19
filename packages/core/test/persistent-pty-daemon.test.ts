@@ -259,10 +259,19 @@ it.live("isolates PersistentPty terminal events from foreign locations even when
     const socketPath = path.join(directory, "daemon.sock")
     const sessionID = Session.ID.make("ses_pty_owner")
     const info = { ...terminal(1), group_id: sessionID }
+    let creates = 0
+    let removes = 0
     yield* listen(socketPath, (_socket, request) => {
       if (request.op === "ping") return pong
-      if (request.op === "create") return { type: "created", terminal: info }
+      if (request.op === "create") {
+        creates++
+        return { type: "created", terminal: info }
+      }
       if (request.op === "list") return { type: "terminals", terminals: [info] }
+      if (request.op === "terminate") {
+        removes++
+        return { type: "ok" }
+      }
       return { type: "ok" }
     })
     yield* Effect.promise(() => writeRegistration(directory, socketPath))
@@ -270,7 +279,17 @@ it.live("isolates PersistentPty terminal events from foreign locations even when
     const ownerRef = Location.Ref.make({ directory: AbsolutePath.make("/pty-owner") })
     const foreignRef = Location.Ref.make({ directory: AbsolutePath.make("/pty-foreign") })
     const layer = AppNodeBuilder.build(LayerNode.group([Database.node, Bus.node, PersistentPty.node]), [
-      PersistentPty.node.replace(PersistentPty.configured({ root })),
+      PersistentPty.node.replace(
+        PersistentPty.configured({
+          root,
+          handoff: {
+            directory,
+            instanceID: pong.instance_id,
+            ticket: "ticket",
+            expiresAt: Date.now() + 60_000,
+          },
+        }),
+      ),
     ])
 
     yield* Effect.gen(function* () {
@@ -316,6 +335,8 @@ it.live("isolates PersistentPty terminal events from foreign locations even when
       yield* pty.remove(created.id).pipe(Effect.provideService(Location.Service, location(foreignRef)))
       yield* Effect.yieldNow
 
+      expect(creates).toBe(1)
+      expect(removes).toBe(1)
       expect(ownerEvents).toEqual([Added.type, Removed.type])
       expect(foreignEvents).toEqual([])
     }).pipe(Effect.provide(layer))
