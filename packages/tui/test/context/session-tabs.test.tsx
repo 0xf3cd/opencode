@@ -265,6 +265,31 @@ test("loads VCS metadata for each persisted tab location", async () => {
   }
 })
 
+test("loads label metadata for the first 20 tabs and the rest when opened", async () => {
+  const sessionIDs = Array.from({ length: 25 }, (_, index) => `tab${index}`)
+  const directories = Object.fromEntries(sessionIDs.map((sessionID) => [sessionID, `${directory}/${sessionID}`]))
+  const setup = await renderSessionTabs("tab0", {
+    home: true,
+    persisted: sessionIDs,
+    sessionDirectories: directories,
+  })
+
+  try {
+    const eager = sessionIDs.slice(0, 20).map((sessionID) => directories[sessionID])
+    await wait(() => eager.every((dir) => setup.locations.includes(dir) && setup.vcsLocations.includes(dir)))
+    await Bun.sleep(100)
+    const lazy = directories.tab22
+    expect(setup.locations).not.toContain(lazy)
+    expect(setup.vcsLocations).not.toContain(lazy)
+    expect(sessionIDs.slice(20).some((sessionID) => setup.locations.includes(directories[sessionID]))).toBe(false)
+
+    setup.route.navigate({ type: "session", sessionID: "tab22" })
+    await wait(() => setup.locations.includes(lazy) && setup.vcsLocations.includes(lazy))
+  } finally {
+    await setup.destroy()
+  }
+})
+
 test("opens a background tab without changing the current session", async () => {
   const setup = await renderSessionTabs("first")
 

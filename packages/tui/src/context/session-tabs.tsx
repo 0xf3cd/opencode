@@ -51,6 +51,9 @@ const empty = (): TabsState => ({ tabs: [], unread: {} })
 
 // Deliberately after connect settles: the visible session's mount syncs win the first slots.
 const TAB_PREFETCH_DELAY = 300
+// Tab labels read Location and VCS info, and serving either boots that Location on the server
+// (config, plugins, MCP servers). Load the first tabs on connect; the rest load when opened.
+const TAB_LOCATION_PREFETCH_LIMIT = 20
 const VIEW_RETRY_DELAY = 250
 const VIEW_RETRY_MAX_DELAY = 5_000
 
@@ -293,8 +296,9 @@ export const { use: useSessionTabs, provider: SessionTabsProvider } = createSimp
         await Promise.allSettled(sessionIDs.map((sessionID) => data.session.sync(sessionID, { children: true })))
         if (stale) return
         const locations = new Map(
-          sessionIDs
-            .map((sessionID) => data.session.get(sessionID)?.location)
+          state()
+            .tabs.slice(0, TAB_LOCATION_PREFETCH_LIMIT)
+            .map((tab) => data.session.get(tab.sessionID)?.location)
             .filter((location) => location !== undefined)
             .map((location) => [locationKey(location), location]),
         )
@@ -323,6 +327,24 @@ export const { use: useSessionTabs, provider: SessionTabsProvider } = createSimp
         clearTimeout(timer)
       })
     })
+
+    // Tabs past the prefetch limit load their label metadata once opened.
+    createEffect(
+      on(
+        () => {
+          if (!enabled() || client.connection.status() !== "connected") return
+          const sessionID = current()
+          const location = sessionID ? data.session.get(sessionID)?.location : undefined
+          return location ? locationKey(location) : undefined
+        },
+        (key) => {
+          const sessionID = current()
+          const location = key && sessionID ? data.session.get(sessionID)?.location : undefined
+          if (!location || (data.location.info(location) && data.location.vcs.info(location))) return
+          void Promise.allSettled([data.location.syncInfo(location), data.location.vcs.sync(location)])
+        },
+      ),
+    )
 
     onCleanup(
       event.on("session.moved", (evt) => {
