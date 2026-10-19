@@ -174,6 +174,8 @@ export type MoneyUSDPerMillionTokens = number
 
 export type GenerateTextResponse = { data: { text: string } }
 
+export type VoiceTransportType = "webrtc" | "websocket"
+
 export type VoiceWebRTCTransport = { type: "webrtc"; sdp: string }
 
 export type VoiceWebSocketTransport = { type: "websocket"; url: string; token: string; expiresAt: number }
@@ -661,6 +663,8 @@ export type ModelCost = {
   output: MoneyUSDPerMillionTokens
   cache: { read: MoneyUSDPerMillionTokens; write: MoneyUSDPerMillionTokens }
 }
+
+export type VoiceModel = { model: string; provider: string; transports: Array<VoiceTransportType>; available: boolean }
 
 export type VoiceTransport = VoiceWebRTCTransport | VoiceWebSocketTransport
 
@@ -1966,6 +1970,8 @@ export type ProviderInfo = {
   headers?: { [x: string]: string }
   body?: { [x: string]: any }
 }
+
+export type VoiceModelsResponse = { data: { models: Array<VoiceModel>; default?: string | undefined } }
 
 export type VoiceSessionResponse = { data: { transport: VoiceTransport } }
 
@@ -5853,6 +5859,8 @@ export type GenerateTextInput = {
 }
 
 export type GenerateTextOutput = GenerateTextResponse["data"]
+
+export type VoiceModelsOutput = VoiceModelsResponse["data"]
 
 export type VoiceSessionInput = {
   readonly model: {
