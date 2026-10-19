@@ -52,7 +52,7 @@ const empty = (): TabsState => ({ tabs: [], unread: {} })
 // Deliberately after connect settles: the visible session's mount syncs win the first slots.
 const TAB_PREFETCH_DELAY = 300
 // Tab labels read Location and VCS info, and serving either boots that Location on the server
-// (config, plugins, MCP servers). Load the first tabs on connect; the rest load when opened.
+// (config, plugins, MCP servers). Load the most relevant tabs on connect; the rest load when opened.
 const TAB_LOCATION_PREFETCH_LIMIT = 20
 const VIEW_RETRY_DELAY = 250
 const VIEW_RETRY_MAX_DELAY = 5_000
@@ -295,10 +295,29 @@ export const { use: useSessionTabs, provider: SessionTabsProvider } = createSimp
       void (async () => {
         await Promise.allSettled(sessionIDs.map((sessionID) => data.session.sync(sessionID, { children: true })))
         if (stale) return
+        // Prefer the current tab, then tabs that need attention, then recently visited tabs (this
+        // client's history survives a service restart), then recent session activity. The stable
+        // sort keeps strip order as the final tie-break.
+        const visited = history.entries.toReversed()
+        const tier = (sessionID: string) => {
+          if (sessionID === current()) return 0
+          const tab = status(sessionID)
+          return tab.busy || tab.attention || tab.unread ? 1 : 2
+        }
+        const recency = (sessionID: string) => {
+          const index = visited.indexOf(sessionID)
+          return index === -1 ? visited.length : index
+        }
+        const activity = (sessionID: string) => {
+          const time = data.session.get(sessionID)?.time
+          return time ? Math.max(time.updated, time.idle ?? 0, time.viewed ?? 0) : 0
+        }
         const locations = new Map(
           state()
-            .tabs.slice(0, TAB_LOCATION_PREFETCH_LIMIT)
-            .map((tab) => data.session.get(tab.sessionID)?.location)
+            .tabs.map((tab) => tab.sessionID)
+            .toSorted((a, b) => tier(a) - tier(b) || recency(a) - recency(b) || activity(b) - activity(a))
+            .slice(0, TAB_LOCATION_PREFETCH_LIMIT)
+            .map((sessionID) => data.session.get(sessionID)?.location)
             .filter((location) => location !== undefined)
             .map((location) => [locationKey(location), location]),
         )

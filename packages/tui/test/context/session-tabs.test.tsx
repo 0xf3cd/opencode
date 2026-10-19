@@ -290,6 +290,26 @@ test("loads label metadata for the first 20 tabs and the rest when opened", asyn
   }
 })
 
+test("prefers the current, unread, and recently active tabs for label metadata", async () => {
+  const sessionIDs = Array.from({ length: 25 }, (_, index) => `tab${index}`)
+  const directories = Object.fromEntries(sessionIDs.map((sessionID) => [sessionID, `${directory}/${sessionID}`]))
+  const setup = await renderSessionTabs("tab24", {
+    persisted: sessionIDs,
+    sessionDirectories: directories,
+    sessionTimes: { tab23: { idle: 5 }, tab22: { idle: 10, viewed: 10 } },
+  })
+
+  try {
+    // Current tab24, unread tab23, recently active tab22, then strip order fills the remaining 17.
+    const eager = ["tab24", "tab23", "tab22", ...sessionIDs.slice(0, 17)].map((sessionID) => directories[sessionID])
+    await wait(() => eager.every((dir) => setup.locations.includes(dir) && setup.vcsLocations.includes(dir)))
+    await Bun.sleep(100)
+    expect(sessionIDs.slice(17, 22).some((sessionID) => setup.locations.includes(directories[sessionID]))).toBe(false)
+  } finally {
+    await setup.destroy()
+  }
+})
+
 test("opens a background tab without changing the current session", async () => {
   const setup = await renderSessionTabs("first")
 
