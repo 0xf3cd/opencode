@@ -958,7 +958,7 @@ export function createBrowserPage(
               }
 
         const pixelRatio = contents.getZoomFactor() * electron.screen.getDisplayMatching(win.getBounds()).scaleFactor
-        const scale = Math.min(1, (action.maxWidth ?? 2000) / (bounds.width * pixelRatio))
+        const scale = Math.min(1, (action.maxWidth ?? 1568) / (bounds.width * pixelRatio))
 
         if (bounds.width <= 0 || bounds.height <= 0)
           throw new Error(
@@ -967,7 +967,7 @@ export function createBrowserPage(
 
         if (bounds.width * bounds.height * (scale * pixelRatio) ** 2 > 16_000_000)
           throw new Error("Screenshot exceeds 16 megapixels; capture an element or use a smaller maxWidth.")
-        const format = action.format ?? "png"
+        const format = action.format ?? "jpeg"
 
         const capture = await cdp.send("Page.captureScreenshot", {
           format,

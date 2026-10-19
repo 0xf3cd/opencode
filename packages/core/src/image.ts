@@ -62,8 +62,8 @@ const layer = Layer.effect(
       name: "image",
       initial: () => ({
         autoResize: true,
-        maxWidth: 2_000,
-        maxHeight: 2_000,
+        maxWidth: 1_568,
+        maxHeight: 1_568,
         maxBase64Bytes: 5 * 1024 * 1024,
       }),
       editor: (editor) => ({

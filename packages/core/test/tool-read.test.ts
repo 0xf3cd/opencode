@@ -426,6 +426,47 @@ describe("ReadTool", () => {
     }),
   )
 
+  it.effect("downscales opaque screenshots to 1568px JPEG while keeping transparent PNGs", () =>
+    Effect.gen(function* () {
+      const photon = yield* Effect.promise(() => import("@silvia-odwyer/photon-node"))
+      const width = 2000
+      const height = 1125
+      const opaquePixels = Uint8Array.from({ length: width * height * 4 }, (_, index) =>
+        index % 4 === 3 ? 255 : (index * 31 + (index >> 7)) % 256,
+      )
+      const opaqueSource = new photon.PhotonImage(opaquePixels, width, height)
+      const opaqueBase64 = Buffer.from(opaqueSource.get_bytes()).toString("base64")
+      opaqueSource.free()
+      readResult = {
+        type: "file",
+        uri: "file:///screenshot.png",
+        name: "screenshot.png",
+        content: opaqueBase64,
+        encoding: "base64",
+        mime: "image/png",
+      }
+      const registry = yield* Tool.Service
+      const result = yield* executeTool(registry, {
+        sessionID,
+        ...toolIdentity,
+        call: { type: "tool-call", id: "call-transcode-screenshot", name: "read", input: { path: "screenshot.png" } },
+      })
+
+      expect(result.status).toBe("completed")
+      if (result.status !== "completed") return
+      const media = result.content?.[1]
+      expect(media?.type).toBe("file")
+      if (media?.type !== "file") return
+      expect(media.mime).toBe("image/jpeg")
+      const b64 = media.uri.split(",")[1] ?? ""
+      expect(b64.length).toBeLessThan(opaqueBase64.length / 3)
+      const resized = photon.PhotonImage.new_from_byteslice(Buffer.from(b64, "base64"))
+      expect(resized.get_width()).toBe(1568)
+      expect(resized.get_height()).toBe(882)
+      resized.free()
+    }),
+  )
+
   it.effect("accepts PNG candidates at the exact base64 limit and skips them one byte below", () =>
     Effect.gen(function* () {
       const photon = yield* Effect.promise(() => import("@silvia-odwyer/photon-node"))
