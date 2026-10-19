@@ -368,16 +368,10 @@ export const layer = Layer.effect(
           }),
         )
 
-      // The provider writes the checkpoint itself, so guidance rides as one extra user message. It is added to the
-      // request after fitting, so shrinking never trades a real exchange for it, and it is removed from a provider
-      // replacement, so it never persists.
-      const note = guidance?.trim() ? guidanceSection(guidance.trim()) : undefined
-      const isNote = (message: Message) =>
-        message.role === "user" &&
-        message.content.length === 1 &&
-        message.content[0]?.type === "text" &&
-        message.content[0].text === note
-
+      // Native compaction has no prompt, so guidance is sent as a final user message. It is added after the window
+      // is fitted and dropped from any replacement the provider returns, so it never displaces or joins stored history.
+      const note = guidance ? guidanceSection(guidance) : undefined
+      const stored = (message: Message) => !message.content.some((part) => part.type === "text" && part.text === note)
       const send = (fitted: LLMRequest) => {
         const request = note
           ? LLMRequest.update(fitted, { messages: [...fitted.messages, Message.user(note)] })
@@ -391,19 +385,14 @@ export const layer = Layer.effect(
           })
         }
         if (LLMClient.canCompact(request)) {
-          return llm.compact(request, { mechanism: "endpoint", http: prepared.options.http }).pipe(
-            Effect.flatMap((response) =>
-              toResult(
-                response.replacement.filter((message) => !isNote(message)),
-                response.usage,
-              ),
-            ),
-          )
+          return llm
+            .compact(request, { mechanism: "endpoint", http: prepared.options.http })
+            .pipe(Effect.flatMap((response) => toResult(response.replacement.filter(stored), response.usage)))
         }
         return unsupported(`Native compaction is not supported for ${request.model.provider}/${request.model.route.id}`)
       }
 
-      return yield* deliver(trigger, prepared, "", budget - (note ? Token.estimate(note) : 0), send)
+      return yield* deliver(trigger, prepared, "", budget, send)
     })
 
     /**
