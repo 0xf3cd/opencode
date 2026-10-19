@@ -4,12 +4,23 @@ let source: typeof matchMedia | undefined
 
 let result: MediaQueryList | undefined
 
-function media(): MediaQueryList | undefined {
-  if (!("matchMedia" in globalThis)) return undefined
+const listeners = new Set<() => void>()
 
-  if (source !== matchMedia) {
-    source = matchMedia
-    result = matchMedia(query)
+const notify = () => {
+  for (const listener of listeners) listener()
+}
+
+function media(): MediaQueryList | undefined {
+  const match = globalThis.matchMedia
+
+  if (!match) return undefined
+
+  if (source !== match) {
+    result?.removeEventListener("change", notify)
+    source = match
+    result = match(query)
+
+    if (listeners.size > 0) result.addEventListener("change", notify)
   }
 
   return result
@@ -23,7 +34,11 @@ export function observeReducedMotion(listener: () => void): () => void {
 
   if (!preference) return () => {}
 
-  preference.addEventListener("change", listener)
+  if (listeners.size === 0) preference.addEventListener("change", notify)
+  listeners.add(listener)
 
-  return () => preference.removeEventListener("change", listener)
+  return () => {
+    if (!listeners.delete(listener) || listeners.size > 0) return
+    result?.removeEventListener("change", notify)
+  }
 }
