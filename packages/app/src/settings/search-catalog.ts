@@ -1,5 +1,6 @@
 import type { useLanguage } from "@/runtime/i18n/language"
 import type { SettingsProjectTab, SettingsRootTab, SettingsServerTab } from "./surface"
+import { betaSettingsAvailable } from "./experimental/beta"
 
 type Label = Parameters<ReturnType<typeof useLanguage>["t"]>[0]
 
@@ -81,6 +82,17 @@ export const clientSettings: Entry<SettingsRootTab>[] = [
     description: "settings.experimental.row.generatedUI.description",
     keywords: "genui generative interface dashboards charts forms",
   },
+  ...(betaSettingsAvailable
+    ? [
+        {
+          tab: "experimental",
+          label: "settings.experimental.row.sidebarToggle.title",
+          target: "settings-sidebar-toggle",
+          description: "settings.experimental.row.sidebarToggle.description",
+          keywords: "collapse hide vertical tabs sidebar",
+        } satisfies Entry<SettingsRootTab>,
+      ]
+    : []),
   {
     tab: "appearance",
     label: "settings.general.row.colorScheme.title",

@@ -8,9 +8,14 @@ import { useCommand } from "@/shell/commands/command"
 import { useLanguage } from "@/runtime/i18n/language"
 import { usePlatform } from "@/runtime/platform/platform"
 import { useSettings } from "@/settings/model"
+import { betaSettingsAvailable } from "@/settings/experimental/beta"
 
 // Native controls: 14px left inset, two 20px button pitches, and a 14px button.
 export const macTrafficLightsBaseWidth = 68
+
+// The horizontal titlebar starts its first control 16px past the traffic lights. Newer macOS draws wider traffic
+// lights than the 68px base, so this gap also keeps the collapsed toggle clear of them.
+const macTrafficLightsGap = 16
 
 // The toggle's 28px plus a 4px gap before the header contents.
 const slotWidth = 32
@@ -18,10 +23,23 @@ const slotWidth = 32
 // The shell's 8px inline inset plus the session header's 10px start padding.
 const contentStart = 18
 
+// Hiding the vertical tabs sidebar is a beta setting, off by default. Without it the sidebar always stays open.
+export function useSidebar() {
+  const settings = useSettings()
+  const toggleable = () => betaSettingsAvailable && settings.appearance.sidebarToggle()
+  const open = () => !toggleable() || settings.appearance.sidebarOpen()
+
+  return {
+    toggleable,
+    open,
+    toggle: () => settings.appearance.setSidebarOpen(!open()),
+  }
+}
+
 export function SidebarToggle() {
   const command = useCommand()
   const language = useLanguage()
-  const settings = useSettings()
+  const sidebar = useSidebar()
   const keybind = () => command.keybindParts("sidebar.toggle")
 
   return (
@@ -42,10 +60,10 @@ export function SidebarToggle() {
         variant="ghost-muted"
         size="large"
         class="shrink-0"
-        state={settings.appearance.sidebarOpen() ? "pressed" : undefined}
-        onClick={() => settings.appearance.setSidebarOpen(!settings.appearance.sidebarOpen())}
+        state={sidebar.open() ? "pressed" : undefined}
+        onClick={sidebar.toggle}
         aria-label={language.t("command.sidebar.toggle")}
-        aria-expanded={settings.appearance.sidebarOpen()}
+        aria-expanded={sidebar.open()}
         aria-controls="vertical-tabs-sidebar"
         icon={<Icon name="layout-left" />}
       />
@@ -58,16 +76,22 @@ export function SidebarToggle() {
 function useCollapsedSlot() {
   const platform = usePlatform()
   const settings = useSettings()
+  const sidebar = useSidebar()
   const desktop = createMediaQuery("(min-width: 768px)")
   const windows = () => platform.platform === "desktop" && platform.os === "windows"
   const mac = () => platform.platform === "desktop" && platform.os === "macos" && !platform.windowFullscreen?.()
 
   return {
-    visible: () => desktop() && !windows() && settings.appearance.tabLayout() === "vertical",
-    open: settings.appearance.sidebarOpen,
-    // Keep the toggle clear of the traffic lights, which end 68px from the window edge.
-    width: () =>
-      mac() ? macTrafficLightsBaseWidth / (platform.webviewZoom?.() ?? 1) - contentStart + slotWidth : slotWidth,
+    visible: () => desktop() && !windows() && sidebar.toggleable() && settings.appearance.tabLayout() === "vertical",
+    open: sidebar.open,
+    // Lay the toggle out as if the traffic lights were the header's first control, so it starts where the horizontal
+    // titlebar's first control does.
+    width: () => {
+      const start = mac()
+        ? macTrafficLightsBaseWidth / (platform.webviewZoom?.() ?? 1) + macTrafficLightsGap
+        : contentStart
+      return start - contentStart + slotWidth
+    },
   }
 }
 

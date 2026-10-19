@@ -15,7 +15,7 @@ import { useSettings } from "@/settings/model"
 import { WindowsAppMenu } from "./windows-menu"
 import { applyPath, backPath, forwardPath, type HistoryLocation } from "./history"
 import { TitlebarTabStrip } from "@/shell/titlebar/tab-strip"
-import { macTrafficLightsBaseWidth, SidebarToggle } from "@/shell/sidebar-toggle"
+import { macTrafficLightsBaseWidth, SidebarToggle, useSidebar } from "@/shell/sidebar-toggle"
 import { makeEventListener } from "@solid-primitives/event-listener"
 import { createMediaQuery } from "@solid-primitives/media"
 import { readSessionTabsRemovedDetail, SESSION_TABS_REMOVED_EVENT } from "@/shell/titlebar/session-events"
@@ -60,6 +60,7 @@ export function Titlebar(props: { verticalTabs?: { mount?: HTMLElement } }) {
   const command = useCommand()
   const language = useLanguage()
   const settings = useSettings()
+  const sidebar = useSidebar()
   const openSettings = useSettingsDialog()
   const navigate = useNavigate()
   const location = useLocation()
@@ -542,7 +543,7 @@ export function Titlebar(props: { verticalTabs?: { mount?: HTMLElement } }) {
                 <Show when={windows() || linux()}>
                   <WindowsAppMenu command={command} platform={platform} />
                 </Show>
-                <Show when={windows() && props.verticalTabs}>
+                <Show when={windows() && props.verticalTabs && sidebar.toggleable()}>
                   <SidebarToggle />
                 </Show>
                 <Show when={!mobile() && !props.verticalTabs}>{homeButton()}</Show>
@@ -755,7 +756,9 @@ export function Titlebar(props: { verticalTabs?: { mount?: HTMLElement } }) {
                                 >
                                   <div class="min-w-0 flex-1">{homeButton(true)}</div>
                                 </Show>
-                                <SidebarToggle />
+                                <Show when={sidebar.toggleable()}>
+                                  <SidebarToggle />
+                                </Show>
                               </div>
                             </Show>
                             <Show when={!homeInSidebarHeader()}>{homeButton(true)}</Show>

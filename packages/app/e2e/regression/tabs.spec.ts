@@ -418,7 +418,7 @@ for (const [screen, href] of [
       name: "Tabs",
       sessions: [a],
       seed: {
-        settings: { appearance: { tabLayout: "vertical", sidebarOpen: false } },
+        settings: { appearance: { tabLayout: "vertical", sidebarToggle: true, sidebarOpen: false } },
         tabs: [a.id, { draft: "draft_collapsed_sidebar", directory: "C:/OpenCode/Tabs" }],
       },
     })
@@ -434,6 +434,21 @@ for (const [screen, href] of [
     )
   })
 }
+
+test("vertical tabs sidebar cannot be hidden until the beta sidebar toggle is on", async ({ page }) => {
+  await mockWorkspace(page, {
+    name: "Tabs",
+    sessions: [a],
+    seed: { settings: { appearance: { tabLayout: "vertical", sidebarOpen: false } }, tabs: [a.id] },
+  })
+  await page.goto(sessionHref(a.id))
+
+  const sidebar = page.locator('[data-slot="vertical-tabs-sidebar"]')
+  await expect(sidebar).toHaveAttribute("data-state", "open")
+  await expect(page.getByRole("button", { name: "Toggle sidebar", exact: true })).toHaveCount(0)
+  await page.keyboard.press("ControlOrMeta+Shift+B")
+  await expect(sidebar).toHaveAttribute("data-state", "open")
+})
 
 test("vertical tab gaps hover and select the nearest row", async ({ page }) => {
   await mockWorkspace(page, {

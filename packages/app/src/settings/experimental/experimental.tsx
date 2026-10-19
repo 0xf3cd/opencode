@@ -1,10 +1,11 @@
-import { Component } from "solid-js"
+import { Component, Show } from "solid-js"
 import { Switch } from "@opencode/ui/switch"
 import { useLanguage } from "@/runtime/i18n/language"
 import { SettingsList } from "@/settings/list"
 import { useSettings } from "@/settings/model"
 import { SettingsRow } from "@/settings/row"
 import "@/settings/settings.css"
+import { betaSettingsAvailable } from "./beta"
 
 export const experimentalSettingsAvailable = true
 
@@ -39,6 +40,19 @@ export const SettingsExperimental: Component = () => {
                 />
               </div>
             </SettingsRow>
+            <Show when={betaSettingsAvailable}>
+              <SettingsRow
+                title={language.t("settings.experimental.row.sidebarToggle.title")}
+                description={language.t("settings.experimental.row.sidebarToggle.description")}
+              >
+                <div data-action="settings-sidebar-toggle">
+                  <Switch
+                    checked={settings.appearance.sidebarToggle()}
+                    onChange={(checked) => settings.appearance.setSidebarToggle(checked)}
+                  />
+                </div>
+              </SettingsRow>
+            </Show>
           </SettingsList>
         </div>
       </div>

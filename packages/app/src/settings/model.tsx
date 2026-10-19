@@ -131,6 +131,8 @@ const appearanceSchema = Persistence.struct({
   terminal: Schema.String,
   tabLayout: Schema.Literals(["horizontal", "vertical"]),
   sidebarOpen: Persistence.optional(Schema.Boolean),
+  // Beta: lets the vertical tabs sidebar be hidden. Off by default, and prod builds ignore it.
+  sidebarToggle: Persistence.optional(Schema.Boolean),
 })
 
 const permissionsSchema = Persistence.struct({
@@ -402,6 +404,10 @@ export const { use: useSettings, provider: SettingsProvider } = createSimpleCont
         sidebarOpen: withFallback(() => store.appearance?.sidebarOpen, true),
         setSidebarOpen(value: boolean) {
           setStore("appearance", "sidebarOpen", value)
+        },
+        sidebarToggle: withFallback(() => store.appearance?.sidebarToggle, false),
+        setSidebarToggle(value: boolean) {
+          setStore("appearance", "sidebarToggle", value)
         },
       },
       keybinds: {

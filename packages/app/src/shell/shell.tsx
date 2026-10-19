@@ -13,7 +13,7 @@ import { ExtensionServerCover } from "@/runtime/extension/server-shell"
 import { ExtensionSlot } from "@/runtime/extension/render"
 import { useCommand } from "@/shell/commands/command"
 import { useLanguage } from "@/runtime/i18n/language"
-import { CollapsedSidebarToggle } from "@/shell/sidebar-toggle"
+import { CollapsedSidebarToggle, useSidebar } from "@/shell/sidebar-toggle"
 
 export default function Layout(props: ParentProps) {
   const platform = usePlatform()
@@ -21,6 +21,7 @@ export default function Layout(props: ParentProps) {
   const preferences = useSettings()
   const command = useCommand()
   const language = useLanguage()
+  const sidebar = useSidebar()
   const mobile = createMediaQuery("(max-width: 767px)")
 
   const [state, setState] = createStore<{
@@ -34,14 +35,14 @@ export default function Layout(props: ParentProps) {
   const verticalTabs = () => preferences.appearance.tabLayout() === "vertical" && !mobile()
 
   command.register("sidebar", () =>
-    verticalTabs()
+    verticalTabs() && sidebar.toggleable()
       ? [
           {
             id: "sidebar.toggle",
             title: language.t("command.sidebar.toggle"),
             category: language.t("command.category.view"),
             keybind: "mod+shift+b",
-            onSelect: () => preferences.appearance.setSidebarOpen(!preferences.appearance.sidebarOpen()),
+            onSelect: sidebar.toggle,
           },
         ]
       : [],
@@ -73,10 +74,10 @@ export default function Layout(props: ParentProps) {
             <aside
               id="vertical-tabs-sidebar"
               data-slot="vertical-tabs-sidebar"
-              data-state={preferences.appearance.sidebarOpen() ? "open" : "closed"}
+              data-state={sidebar.open() ? "open" : "closed"}
               class="relative h-full min-h-0 shrink-0"
-              style={{ width: preferences.appearance.sidebarOpen() ? `${state.tabsWidth}px` : "0px" }}
-              inert={!preferences.appearance.sidebarOpen()}
+              style={{ width: sidebar.open() ? `${state.tabsWidth}px` : "0px" }}
+              inert={!sidebar.open()}
             >
               <div class="absolute inset-0 overflow-hidden">
                 <div
@@ -88,7 +89,7 @@ export default function Layout(props: ParentProps) {
                   }}
                 />
               </div>
-              <Show when={preferences.appearance.sidebarOpen()}>
+              <Show when={sidebar.open()}>
                 <ResizeHandle
                   class="-end-2"
                   direction="horizontal"
