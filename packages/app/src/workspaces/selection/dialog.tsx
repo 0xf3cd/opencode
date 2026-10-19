@@ -95,7 +95,7 @@ export function DirectoryPickerDialog(props: DirectoryPickerDialogProps) {
 
   const knownGitRepos = createMemo(() => {
     const keys = new Set<string>()
-    const items = [...serverCtx.projects.list(), ...serverCtx.projects.recentlyClosed(), ...sync.data.project]
+    const items = [...serverCtx.projects.list(), ...sync.data.project]
 
     for (const project of items) {
       if (!project.worktree || project.id === "global") continue
@@ -142,7 +142,7 @@ export function DirectoryPickerDialog(props: DirectoryPickerDialogProps) {
   const recentProjects = createMemo(() => {
     if ((props.mode ?? "directory") !== "directory") return []
     const seen = new Set<string>()
-    const items = [...serverCtx.projects.list(), ...serverCtx.projects.recentlyClosed(), ...sync.data.project]
+    const items = [...serverCtx.projects.list(), ...sync.data.project]
 
     return items
       .filter((project) => {
