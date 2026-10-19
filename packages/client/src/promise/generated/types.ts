@@ -236,6 +236,8 @@ export type McpResourceTemplate = {
   mimeType?: string
 }
 
+export type CredentialKey = { type: "key"; key: string; metadata?: { [x: string]: JsonValue } }
+
 export type ProjectVcs = string
 
 export type ProjectIcon = { url?: string; override?: string; color?: string }
@@ -848,7 +850,7 @@ export type FormMultiselectField1 = {
   default?: Array<string>
 }
 
-export type FormAnswer2 = { [x: string]: FormValue1 }
+export type FormAnswer1 = { [x: string]: FormValue1 }
 
 export type VcsInfo = { provider?: string; branch: VcsBranch }
 
@@ -1922,13 +1924,6 @@ export type FormState =
   | { status: "answered"; answer: FormAnswer }
   | { status: "cancelled"; message?: string }
 
-export type CredentialKey = {
-  type: "key"
-  key: string
-  metadata?: { [x: string]: JsonValue }
-  configuration?: FormAnswer
-}
-
 export type ProviderInfo = {
   id: ProviderID
   canonical?: ProviderID
@@ -1943,6 +1938,8 @@ export type ProviderInfo = {
 }
 
 export type VoiceSessionResponse = { data: { transport: VoiceTransport } }
+
+export type CredentialValue = CredentialOAuth | CredentialKey | CredentialExternal
 
 export type ConnectionInfo = ConnectionCredentialInfo | ConnectionEnvInfo
 
@@ -1994,7 +1991,7 @@ export type FormReplied = {
   metadata?: { [x: string]: any }
   type: "form.replied"
   location?: LocationRef
-  data: { id: FormID; sessionID: string; answer: FormAnswer2 }
+  data: { id: FormID; sessionID: string; answer: FormAnswer1 }
 }
 
 export type SessionInboxMove = {
@@ -2379,7 +2376,13 @@ export type SessionMessageAssistantTool1 = {
 
 export type FormFields = [FormField, ...Array<FormField>]
 
-export type CredentialValue = CredentialOAuth | CredentialKey | CredentialExternal
+export type CredentialEntry = {
+  id: CredentialID
+  integrationID: IntegrationID
+  label: string
+  active: boolean
+  value: CredentialValue
+}
 
 export type FormFields2 = [FormField1, ...Array<FormField1>]
 
@@ -2444,14 +2447,6 @@ export type IntegrationOAuthMethod = { id: IntegrationMethodID; type: "oauth"; l
 export type IntegrationKeyMethod = { type: "key"; label?: string; form?: FormFields }
 
 export type IntegrationExternalMethod = { id: IntegrationMethodID; type: "external"; label: string; form?: FormFields }
-
-export type CredentialEntry = {
-  id: CredentialID
-  integrationID: IntegrationID
-  label: string
-  active: boolean
-  value: CredentialValue
-}
 
 export type FormInfo1 = { id: FormID; sessionID: string; title: string; metadata?: FormMetadata1; fields: FormFields2 }
 
@@ -5180,14 +5175,7 @@ export type CredentialCreateInput = {
           readonly expires: number
           readonly metadata?: { readonly [x: string]: JsonValue }
         }
-      | {
-          readonly type: "key"
-          readonly key: string
-          readonly metadata?: { readonly [x: string]: JsonValue }
-          readonly configuration?: {
-            readonly [x: string]: string | number | "Infinity" | "-Infinity" | "NaN" | boolean | ReadonlyArray<string>
-          }
-        }
+      | { readonly type: "key"; readonly key: string; readonly metadata?: { readonly [x: string]: JsonValue } }
       | {
           readonly type: "external"
           readonly methodID: string
@@ -5208,14 +5196,7 @@ export type CredentialCreateInput = {
           readonly expires: number
           readonly metadata?: { readonly [x: string]: JsonValue }
         }
-      | {
-          readonly type: "key"
-          readonly key: string
-          readonly metadata?: { readonly [x: string]: JsonValue }
-          readonly configuration?: {
-            readonly [x: string]: string | number | "Infinity" | "-Infinity" | "NaN" | boolean | ReadonlyArray<string>
-          }
-        }
+      | { readonly type: "key"; readonly key: string; readonly metadata?: { readonly [x: string]: JsonValue } }
       | {
           readonly type: "external"
           readonly methodID: string
@@ -5236,14 +5217,7 @@ export type CredentialCreateInput = {
           readonly expires: number
           readonly metadata?: { readonly [x: string]: JsonValue }
         }
-      | {
-          readonly type: "key"
-          readonly key: string
-          readonly metadata?: { readonly [x: string]: JsonValue }
-          readonly configuration?: {
-            readonly [x: string]: string | number | "Infinity" | "-Infinity" | "NaN" | boolean | ReadonlyArray<string>
-          }
-        }
+      | { readonly type: "key"; readonly key: string; readonly metadata?: { readonly [x: string]: JsonValue } }
       | {
           readonly type: "external"
           readonly methodID: string
@@ -5264,14 +5238,7 @@ export type CredentialCreateInput = {
           readonly expires: number
           readonly metadata?: { readonly [x: string]: JsonValue }
         }
-      | {
-          readonly type: "key"
-          readonly key: string
-          readonly metadata?: { readonly [x: string]: JsonValue }
-          readonly configuration?: {
-            readonly [x: string]: string | number | "Infinity" | "-Infinity" | "NaN" | boolean | ReadonlyArray<string>
-          }
-        }
+      | { readonly type: "key"; readonly key: string; readonly metadata?: { readonly [x: string]: JsonValue } }
       | {
           readonly type: "external"
           readonly methodID: string
@@ -5292,14 +5259,7 @@ export type CredentialCreateInput = {
           readonly expires: number
           readonly metadata?: { readonly [x: string]: JsonValue }
         }
-      | {
-          readonly type: "key"
-          readonly key: string
-          readonly metadata?: { readonly [x: string]: JsonValue }
-          readonly configuration?: {
-            readonly [x: string]: string | number | "Infinity" | "-Infinity" | "NaN" | boolean | ReadonlyArray<string>
-          }
-        }
+      | { readonly type: "key"; readonly key: string; readonly metadata?: { readonly [x: string]: JsonValue } }
       | {
           readonly type: "external"
           readonly methodID: string
