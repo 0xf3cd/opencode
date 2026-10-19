@@ -266,6 +266,39 @@ it.live("requires a token separately from the account and supports environment P
   ),
 )
 
+it.live("restores OAuth logins imported from V1 with their account and refreshes them", () =>
+  withEnv(env, () =>
+    Effect.gen(function* () {
+      const credentials = yield* Credential.Service
+      // The shape the V1 credential import writes for a Snowflake OAuth login; V1 stored the account as `accountId`.
+      const saved = yield* credentials.create({
+        integrationID,
+        value: Credential.OAuth.make({
+          type: "oauth",
+          methodID: Integration.MethodID.make("oauth"),
+          access: "expired",
+          refresh: "refresh",
+          expires: 1,
+          metadata: { accountID: "myorg-myaccount" },
+        }),
+      })
+      const test = yield* fixture()
+      test.replies.push(Response.json({ access_token: "renewed", refresh_token: "rotated-refresh", expires_in: 3600 }))
+      yield* test.stop
+      expect(test.requests[0].url).toBe(`${endpoint}/oauth/token-request`)
+      expect(test.requests[1].headers.get("authorization")).toBe("Bearer renewed")
+      expect((yield* credentials.get(saved.id))?.value).toEqual({
+        type: "oauth",
+        methodID,
+        access: "renewed",
+        refresh: "rotated-refresh",
+        expires: expect.any(Number),
+        metadata: { account: "myorg-myaccount" },
+      })
+    }),
+  ),
+)
+
 it.live("refreshes expired OAuth during native model resolution and persists rotated credentials", () =>
   withEnv(env, () =>
     Effect.gen(function* () {

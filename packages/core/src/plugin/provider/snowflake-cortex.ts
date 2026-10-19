@@ -13,6 +13,8 @@ import { configuredSettings } from "./configured.js"
 const providerID = Provider.ID.make("snowflake-cortex")
 const integrationID = Integration.ID.make(providerID)
 const methodID = Integration.MethodID.make("browser")
+// The V1 credential import recorded Snowflake OAuth logins under this generic method, with the account as `accountID`.
+const importedMethodID = Integration.MethodID.make("oauth")
 const clientID = "LOCAL_APPLICATION"
 const accountForm = Form.Fields.make([
   {
@@ -39,6 +41,21 @@ export const SnowflakeCortexPlugin = define({
   effect: Effect.fn(function* (ctx) {
     const http = yield* HttpClient.HttpClient
     const credentials = yield* Credential.Service
+    yield* Effect.forEach(
+      yield* credentials.list(integrationID),
+      (credential) => {
+        if (credential.value.type !== "oauth" || credential.value.methodID !== importedMethodID) return Effect.void
+        const { accountID, ...metadata } = credential.value.metadata ?? {}
+        return credentials.update(credential.id, {
+          value: Credential.OAuth.make({
+            ...credential.value,
+            methodID,
+            metadata: { ...metadata, account: metadata.account ?? accountID },
+          }),
+        })
+      },
+      { discard: true },
+    )
     const integrations = yield* Integration.Service
     const bus = yield* Bus.Service
     const configured = yield* configuredSettings(providerID)

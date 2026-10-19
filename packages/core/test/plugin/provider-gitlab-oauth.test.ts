@@ -285,6 +285,31 @@ describe("GitLabPlugin OAuth", () => {
     }),
   )
 
+  it.effect("refreshes OAuth logins imported from V1 under the generic oauth method", () =>
+    withEnv({ GITLAB_OAUTH_CLIENT_ID: undefined }, () =>
+      Effect.gen(function* () {
+        const credentials = yield* Credential.Service
+        // The shape the V1 credential import writes for a GitLab OAuth login.
+        const saved = yield* credentials.create({
+          integrationID,
+          value: Credential.OAuth.make({
+            type: "oauth",
+            methodID: Integration.MethodID.make("oauth"),
+            access: "stale-access",
+            refresh: `refresh-${crypto.randomUUID()}`,
+            expires: 1,
+          }),
+        })
+        const test = yield* fixture()
+        test.replies.push(renewal())
+        const resolved = yield* test.integrations.connection.resolve(connectionOf(saved))
+        if (resolved?.type !== "oauth") throw new Error("Expected OAuth credential")
+        expect(resolved).toMatchObject({ methodID, access: "renewed-access", refresh: "renewed-refresh" })
+        expect((yield* tokenRequests(test.requests)).map((request) => request.form.client_id)).toEqual([legacyClientID])
+      }),
+    ),
+  )
+
   it.effect("refreshes credentials without a client ID with the opencode-gitlab-auth application", () =>
     withEnv({ GITLAB_OAUTH_CLIENT_ID: undefined }, () =>
       Effect.gen(function* () {

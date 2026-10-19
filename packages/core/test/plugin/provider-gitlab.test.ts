@@ -142,10 +142,10 @@ describe("GitLabPlugin", () => {
           integrationID,
           value: {
             type: "oauth",
-            methodID: Integration.MethodID.make("oauth"),
+            methodID: Integration.MethodID.make("pkce"),
             access: "access-token",
             refresh: "refresh-token",
-            expires: 0,
+            expires: Date.now() + 3_600_000,
           },
         })
         yield* addPlugin()
