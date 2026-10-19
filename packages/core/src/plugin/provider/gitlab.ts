@@ -18,7 +18,7 @@ import type { PluginInternal } from "../internal.js"
 const providerID = Provider.ID.gitlab
 const integrationID = Integration.ID.make("gitlab")
 const methodID = Integration.MethodID.make("pkce")
-// The V1 credential import recorded GitLab OAuth logins under this generic method.
+// The V1 credential import recorded GitLab OAuth logins under this generic method, with the instance as `enterpriseUrl`.
 const importedMethodID = Integration.MethodID.make("oauth")
 // Instance-owned, trusted GitLab OAuth application for OpenCode. Registered with
 // redirect URI http://127.0.0.1:8080/callback on gitlab.com. Self-managed instances
@@ -60,7 +60,14 @@ export const GitLabPlugin = define({
       yield* credentials.list(integrationID),
       (credential) => {
         if (credential.value.type !== "oauth" || credential.value.methodID !== importedMethodID) return Effect.void
-        return credentials.update(credential.id, { value: Credential.OAuth.make({ ...credential.value, methodID }) })
+        const { enterpriseUrl, ...metadata } = credential.value.metadata ?? {}
+        return credentials.update(credential.id, {
+          value: Credential.OAuth.make({
+            ...credential.value,
+            methodID,
+            metadata: { ...metadata, instanceUrl: metadata.instanceUrl ?? enterpriseUrl },
+          }),
+        })
       },
       { discard: true },
     )

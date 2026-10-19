@@ -285,11 +285,11 @@ describe("GitLabPlugin OAuth", () => {
     }),
   )
 
-  it.effect("refreshes OAuth logins imported from V1 under the generic oauth method", () =>
-    withEnv({ GITLAB_OAUTH_CLIENT_ID: undefined }, () =>
+  it.effect("refreshes OAuth logins imported from V1 against their recorded instance", () =>
+    withEnv({ GITLAB_OAUTH_CLIENT_ID: undefined, GITLAB_INSTANCE_URL: undefined }, () =>
       Effect.gen(function* () {
         const credentials = yield* Credential.Service
-        // The shape the V1 credential import writes for a GitLab OAuth login.
+        // The V1 credential import keeps the generic method and the instance V1 stored as `enterpriseUrl`.
         const saved = yield* credentials.create({
           integrationID,
           value: Credential.OAuth.make({
@@ -298,14 +298,23 @@ describe("GitLabPlugin OAuth", () => {
             access: "stale-access",
             refresh: `refresh-${crypto.randomUUID()}`,
             expires: 1,
+            metadata: { enterpriseUrl: "https://gitlab.example.com" },
           }),
         })
         const test = yield* fixture()
         test.replies.push(renewal())
         const resolved = yield* test.integrations.connection.resolve(connectionOf(saved))
         if (resolved?.type !== "oauth") throw new Error("Expected OAuth credential")
-        expect(resolved).toMatchObject({ methodID, access: "renewed-access", refresh: "renewed-refresh" })
-        expect((yield* tokenRequests(test.requests)).map((request) => request.form.client_id)).toEqual([legacyClientID])
+        expect(resolved).toMatchObject({
+          methodID,
+          access: "renewed-access",
+          refresh: "renewed-refresh",
+          metadata: { instanceUrl: "https://gitlab.example.com", clientID: legacyClientID },
+        })
+        expect(resolved.metadata).not.toHaveProperty("enterpriseUrl")
+        expect((yield* tokenRequests(test.requests)).map((request) => [request.url, request.form.client_id])).toEqual([
+          ["https://gitlab.example.com/oauth/token", legacyClientID],
+        ])
       }),
     ),
   )

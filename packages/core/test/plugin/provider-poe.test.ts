@@ -306,6 +306,28 @@ for (const cancel of [false, true]) {
   )
 }
 
+it.effect("restores the browser method on OAuth logins imported from V1", () =>
+  Effect.gen(function* () {
+    const credentials = yield* Credential.Service
+    // The V1 credential import recorded Poe logins under a generic `oauth` method.
+    const saved = yield* credentials.create({
+      integrationID,
+      value: Credential.OAuth.make({
+        type: "oauth",
+        methodID: Integration.MethodID.make("oauth"),
+        access: "poe-key",
+        refresh: "",
+        expires: 0,
+      }),
+    })
+    const test = yield* fixture
+    expect((yield* credentials.get(saved.id))?.value).toMatchObject({ methodID })
+    const connection = { type: "credential" as const, method: "oauth" as const, id: saved.id, label: saved.label }
+    const error = yield* test.integrations.connection.resolve(connection).pipe(Effect.flip)
+    expect(error.cause).toEqual(new Error("Poe API key expired. Log in with Poe again."))
+  }),
+)
+
 it.effect("keeps near-expiry keys usable and requires a new login after expiry", () =>
   Effect.gen(function* () {
     const test = yield* fixture

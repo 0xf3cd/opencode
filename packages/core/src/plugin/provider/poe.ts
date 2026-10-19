@@ -8,6 +8,8 @@ import { OauthCallbackPage } from "../../oauth/page.js"
 
 const integrationID = Integration.ID.make("poe")
 const methodID = Integration.MethodID.make("browser")
+// The V1 credential import recorded Poe OAuth logins under this generic method.
+const importedMethodID = Integration.MethodID.make("oauth")
 const clientID = "client_728290227fc048cc9262091a1ea197ea"
 const issuer = "https://poe.com"
 const maxExpiry = 8_640_000_000_000_000
@@ -24,6 +26,15 @@ const decodeError = Schema.decodeUnknownOption(
 export const PoePlugin = define({
   id: "opencode.provider.poe",
   effect: Effect.fn(function* (ctx) {
+    const credentials = yield* Credential.Service
+    yield* Effect.forEach(
+      yield* credentials.list(integrationID),
+      (credential) => {
+        if (credential.value.type !== "oauth" || credential.value.methodID !== importedMethodID) return Effect.void
+        return credentials.update(credential.id, { value: Credential.OAuth.make({ ...credential.value, methodID }) })
+      },
+      { discard: true },
+    )
     const http = yield* HttpClient.HttpClient
     yield* ctx.integration.transform((editor) => {
       editor.method.update({
