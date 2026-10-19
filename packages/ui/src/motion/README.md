@@ -9,12 +9,12 @@ Springs, a shared frame loop and DOM animation controllers for the UI packages.
 
 Vendored from Kit Langton's `@problems/motion` (`team-board` repo, `packages/motion`, commit `873f5d5`). Behaviour is unchanged. The port applies this repo's formatting and lint rules, removes `else` branches, and moves tests to Bun: pure tests in `core.test.ts`, DOM and Solid tests in `packages/app/test-browser/motion-dom.test.ts` (happy-dom with Solid's browser build). The playground and the SwiftUI comparison script were not carried over. To re-sync, diff the upstream package against `873f5d5` and apply the changes here.
 
-Hot paths deliberately use indexed `for` loops and an intrusive linked list, so the loop allocates no arrays, closures or job snapshots per frame. V8 still boxes some doubles at call boundaries: in headless Chromium, 1,000 `springStyle` values allocate about 80–130 bytes each per frame, a quarter of what `motion`'s `useSpring` path allocates.
+Hot paths deliberately use indexed `for` loops, an intrusive linked list with lazy compaction, numeric field initializers (avoiding V8 `undefined` → `Double` field representation transitions), and a `Float64Array`-cached closed-form damped-harmonic transition matrix, so the frame loop and `Spring.step` allocate nothing per frame. In headless Chromium, 1,000 `springStyle` values with a non-allocating paint callback allocate ~0 bytes/frame during rAF steps (~8.5 KB/frame averaged across 250 ms Solid target updates, and ~58 KB/frame when formatting 1,000 CSS `translate3d(...)` strings).
 
 ## API
 
 ```ts
-// Unit-mass spring, integrated with semi-implicit Euler at a fixed 480 Hz substep.
+// Unit-mass spring, integrated with an exact closed-form damped-harmonic step.
 class Spring {
   constructor(value: number, options?: { omega?: number; zeta?: number }) // defaults omega 26, zeta 0.86
   static fromDuration(value: number, options: { duration: number; bounce: number }): Spring // SwiftUI parameters
@@ -74,7 +74,7 @@ damping c = 2ζω
 acceleration = −k(value − target) − c·velocity
 ```
 
-`step()` uses semi-implicit Euler at 480 Hz, with a fractional last substep and a 100 ms frame clamp. Retargeting preserves velocity unless you supply a new velocity. Rest snaps exactly when displacement is below `0.005` and speed is below `0.02` units/s.
+`step()` advances the exact closed-form damped-harmonic solution for `dt` (reusing a cached 2×2 state transition matrix when `(omega, zeta, dt)` matches the previous step), with a 100 ms frame clamp. Retargeting preserves velocity unless you supply a new velocity. Rest snaps exactly when displacement is below `0.005` and speed is below `0.02` units/s.
 
 The mapping was checked against native `SwiftUI.Spring` on macOS. At `d = 0.42, b = 0.18`, SwiftUI returns `k = 223.80055331268386` and `c = 24.534342628034576`; `core.test.ts` pins these values.
 

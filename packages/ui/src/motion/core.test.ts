@@ -77,6 +77,46 @@ describe("Spring", () => {
     expect(spring.omega ** 2).toBeCloseTo(223.80055331268386, 10)
     expect(2 * spring.zeta * spring.omega).toBeCloseTo(24.534342628034576, 10)
   })
+  it("tracks the 480 Hz reference integrator across underdamped, critical, and overdamped regimes", () => {
+    const regimes = [
+      { omega: 26, zeta: 0.7 },
+      { omega: 26, zeta: 1 },
+      { omega: 26, zeta: 1 + 1e-9 },
+      { omega: 20, zeta: 1.4 },
+    ]
+
+    for (const cfg of regimes) {
+      const spring = new Spring(0, cfg).set(100)
+      let refValue = 0
+      let refVelocity = 0
+      const stiffness = cfg.omega * cfg.omega
+      const damping = 2 * cfg.zeta * cfg.omega
+      let maxDiff = 0
+
+      for (let frame = 0; frame < 180; frame++) {
+        if (frame === 15) {
+          spring.set(-50)
+        }
+
+        const target = frame < 15 ? 100 : -50
+
+        for (let i = 0; i < 8; i++) {
+          const h = 1 / 480
+          refVelocity += (-stiffness * (refValue - target) - damping * refVelocity) * h
+          refValue += refVelocity * h
+        }
+
+        spring.step(1 / 60)
+        maxDiff = Math.max(maxDiff, Math.abs(spring.value - refValue))
+      }
+
+      // First-order 480 Hz Euler lag over a 150-unit sweep is within ~2% of travel, and both settle to target.
+      expect(maxDiff).toBeLessThan(3.5)
+      expect(spring.value).toBe(-50)
+      expect(spring.velocity).toBe(0)
+      expect(spring.resting).toBe(true)
+    }
+  })
 })
 
 function scheduler() {

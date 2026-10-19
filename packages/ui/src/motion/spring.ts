@@ -8,13 +8,32 @@ export interface DurationOptions {
   bounce: number
 }
 
-/** Unit-mass spring. Semi-implicit Euler, matching the hosted 480 Hz integrator. */
+const matrix = new Float64Array(7)
+
+function coefficients(w: number, z: number, t: number) {
+  matrix[0] = w
+  matrix[1] = z
+  matrix[2] = t
+  const zw = z * w
+  const e = Math.exp(-zw * t)
+  const near = Math.abs(z - 1) < 1e-7
+  const wd = near ? 0 : w * Math.sqrt(Math.abs(1 - z * z))
+  const wdt = wd * t
+  const c = near ? 1 : z < 1 ? Math.cos(wdt) : Math.cosh(wdt)
+  const s = near ? t : (z < 1 ? Math.sin(wdt) : Math.sinh(wdt)) / wd
+  matrix[3] = e * (c + zw * s)
+  matrix[4] = e * s
+  matrix[5] = -e * w * w * s
+  matrix[6] = e * (c - zw * s)
+}
+
+/** Unit-mass spring. Exact analytic damped-harmonic step. */
 export class Spring {
-  value: number
-  target: number
+  value = 0
+  target = 0
   velocity = 0
-  omega: number
-  zeta: number
+  omega = 26
+  zeta = 0.86
 
   constructor(value: number, { omega = 26, zeta = 0.86 }: SpringOptions = {}) {
     if (
@@ -71,20 +90,33 @@ export class Spring {
   }
 
   step(dt: number): number {
-    if (this.value === this.target && this.velocity === 0) return this.value
-    const end = Number.isFinite(dt) ? Math.min(0.1, Math.max(0, dt)) : 0
-    const stiffness = this.omega * this.omega
-    const damping = 2 * this.zeta * this.omega
+    const target = this.target
+    const x0 = this.value - target
+    const v0 = this.velocity
 
-    for (let t = 0; t < end; t += 1 / 480) {
-      const h = Math.min(1 / 480, end - t)
-      this.velocity += (-stiffness * (this.value - this.target) - damping * this.velocity) * h
-      this.value += this.velocity * h
+    if (x0 === 0 && v0 === 0) return target
+    const t = Number.isFinite(dt) ? Math.min(0.1, Math.max(0, dt)) : 0
+
+    if (t === 0) return this.value
+    const w = this.omega
+    const z = this.zeta
+
+    if (w !== matrix[0] || z !== matrix[1] || t !== matrix[2]) coefficients(w, z, t)
+    const d = matrix[3]! * x0 + matrix[4]! * v0
+    const velocity = matrix[5]! * x0 + matrix[6]! * v0
+
+    if (Math.abs(d) < 0.005 && Math.abs(velocity) < 0.02) {
+      this.value = target
+      this.velocity = 0
+
+      return target
     }
 
-    if (this.resting) this.snap(this.target)
+    const value = target + d
+    this.value = value
+    this.velocity = velocity
 
-    return this.value
+    return value
   }
 
   get resting(): boolean {
