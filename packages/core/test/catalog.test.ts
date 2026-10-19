@@ -202,8 +202,7 @@ describe("Provider and Model", () => {
       yield* settle(
         Ref.get(log).pipe(
           Effect.map(
-            (types) =>
-              types.lastIndexOf(Model.Event.Updated.type) > types.lastIndexOf(Credential.Event.Updated.type),
+            (types) => types.lastIndexOf(Model.Event.Updated.type) > types.lastIndexOf(Credential.Event.Updated.type),
           ),
         ),
       )
@@ -719,6 +718,93 @@ describe("Provider and Model", () => {
       })
 
       expect(yield* models.small(providerID)).toBeUndefined()
+    }),
+  )
+
+  it.effect("reuses snapshots across unchanged reloads without dropping changed function references", () =>
+    Effect.gen(function* () {
+      const providers = yield* Provider.Service
+      const models = yield* Model.Service
+      const bus = yield* Bus.Service
+      const providerID = Provider.ID.make("custom-fetch")
+      const templateID = Provider.ID.make("template-fetch")
+      const modelID = Model.ID.make("chat")
+      const firstFetch = async () => new Response("first")
+      const secondFetch = async () => new Response("second")
+      let activeFetch = firstFetch
+      let modelLimit = 4096
+      const drafts: Provider.Definition[] = []
+      const counts = new Map<string, number>()
+      yield* Effect.acquireRelease(
+        bus.listen((event) =>
+          Effect.sync(() => {
+            counts.set(event.type, (counts.get(event.type) ?? 0) + 1)
+          }),
+        ),
+        (unsubscribe) => unsubscribe,
+      )
+
+      yield* providers.transform((editor) => {
+        editor.update(providerID, (provider) => {
+          provider.activation = "enabled"
+        })
+        editor.update(templateID, (provider) => {
+          provider.activation = "disabled"
+          provider.settings = { fetch: activeFetch }
+        })
+        editor.models.update(providerID, modelID, () => {})
+        const draft = editor.get(providerID)
+        if (draft) drafts.push(draft)
+      })
+      yield* models.transform((editor) => {
+        editor.update(providerID, modelID, (model) => {
+          model.limit.context = modelLimit
+          model.variants = [{ id: Model.VariantID.make("high"), settings: { fetch: activeFetch } }]
+        })
+      })
+      yield* settle(Effect.sync(() => (counts.get(Model.Event.Updated.type) ?? 0) >= 1))
+
+      const initialSnapshot = yield* providers.snapshot()
+      const initialAvailable = yield* models.available()
+      expect(initialSnapshot.records.get(templateID)?.provider.settings?.fetch).toBe(firstFetch)
+      expect((yield* models.get(providerID, modelID))?.variants[0]?.settings?.fetch).toBe(firstFetch)
+      expect(drafts).toHaveLength(1)
+
+      counts.clear()
+      yield* providers.reload()
+      yield* models.reload()
+      expect(yield* providers.snapshot()).toBe(initialSnapshot)
+      expect(yield* models.available()).toBe(initialAvailable)
+      expect(drafts).toHaveLength(2)
+      // Reusing cached snapshot entries must not overwrite the draft produced during the second fold.
+      expect(drafts[1]).not.toBe(drafts[0])
+      expect(Object.fromEntries(counts)).toEqual({})
+
+      activeFetch = secondFetch
+      yield* providers.reload()
+      const updatedSnapshot = yield* providers.snapshot()
+      expect(updatedSnapshot).not.toBe(initialSnapshot)
+      expect(updatedSnapshot.records.get(templateID)?.provider.settings?.fetch).toBe(secondFetch)
+      expect((yield* providers.get(templateID))?.settings?.fetch).toBe(secondFetch)
+      expect((yield* models.get(providerID, modelID))?.variants[0]?.settings?.fetch).toBe(secondFetch)
+      expect(counts.get(Provider.Event.Updated.type)).toBe(1)
+      yield* settle(Effect.sync(() => (counts.get(Model.Event.Updated.type) ?? 0) >= 1))
+      expect(counts.get(Model.Event.Updated.type)).toBe(1)
+
+      counts.clear()
+      modelLimit = 8192
+      yield* models.reload()
+      expect((yield* models.get(providerID, modelID))?.limit.context).toBe(8192)
+      expect(Object.fromEntries(counts)).toEqual({
+        [Model.Event.Updated.type]: 1,
+      })
+
+      expect(Provider.sameValue({ a: 1, fn: firstFetch }, { a: 1, fn: firstFetch })).toBe(true)
+      expect(Provider.sameValue({ a: 1, fn: firstFetch }, { a: 1, fn: secondFetch })).toBe(false)
+      expect(Provider.sameValue({ a: undefined }, {})).toBe(false)
+      expect(Provider.sameValue({ timeout: Number.NaN }, { timeout: Number.NaN })).toBe(true)
+      expect(Provider.sameValue({ timeout: Number.NaN }, { timeout: null })).toBe(false)
+      expect(Provider.sameValue(new Set(["a"]), new Set(["a"]))).toBe(false)
     }),
   )
 })

@@ -16,6 +16,7 @@ import { ConfigSkillPlugin } from "@opencode/core/config/plugin/skill"
 import { ConfigWebSearchPlugin } from "@opencode/core/config/plugin/websearch"
 import { Bus } from "@opencode/core/bus"
 import { Integration } from "@opencode/core/integration"
+import { Model } from "@opencode/core/model"
 import { Plugin } from "@opencode/core/plugin"
 import { PluginHost } from "@opencode/core/plugin/host"
 import { AppNodeBuilder } from "@opencode/core/effect/app-node-builder"
@@ -332,6 +333,7 @@ describe("config plugin reloads", () => {
     Effect.gen(function* () {
       const bus = yield* Bus.Service
       const integrations = yield* Integration.Service
+      const models = yield* Model.Service
       const plugins = yield* Plugin.Service
       const websearch = yield* WebSearch.Service
       const baseHost = yield* PluginHost.make(plugins)
@@ -343,11 +345,22 @@ describe("config plugin reloads", () => {
         Reference.Event.Updated.type,
         WebSearch.Event.Updated.type,
         Integration.Event.Updated.type,
+        Provider.Event.Updated.type,
+        Model.Event.Updated.type,
         Credential.Event.Updated.type,
         Credential.Event.Switched.type,
       ])
       const counts = new Map<string, number>()
-      const reloads = { agent: 0, command: 0, skill: 0, reference: 0, websearch: 0, integration: 0 }
+      const reloads = {
+        agent: 0,
+        command: 0,
+        skill: 0,
+        reference: 0,
+        websearch: 0,
+        integration: 0,
+        provider: 0,
+        model: 0,
+      }
       const count = (type: string) => counts.get(type) ?? 0
       yield* Effect.acquireRelease(
         bus.listen((event) =>
@@ -385,6 +398,14 @@ describe("config plugin reloads", () => {
           reload: () =>
             baseHost.integration.reload().pipe(Effect.tap(() => Effect.sync(() => void reloads.integration++))),
         },
+        provider: {
+          ...baseHost.provider,
+          reload: () => baseHost.provider.reload().pipe(Effect.tap(() => Effect.sync(() => void reloads.provider++))),
+        },
+        model: {
+          ...baseHost.model,
+          reload: () => baseHost.model.reload().pipe(Effect.tap(() => Effect.sync(() => void reloads.model++))),
+        },
       }
 
       let providerName = "First search"
@@ -409,6 +430,8 @@ describe("config plugin reloads", () => {
         [Reference.Event.Updated.type]: 1,
         [WebSearch.Event.Updated.type]: 1,
         [Integration.Event.Updated.type]: 1,
+        [Provider.Event.Updated.type]: 1,
+        [Model.Event.Updated.type]: 1,
       })
 
       counts.clear()
@@ -422,7 +445,9 @@ describe("config plugin reloads", () => {
             reloads.skill === 2 &&
             reloads.reference === 1 &&
             reloads.websearch === 1 &&
-            reloads.integration === 1,
+            reloads.integration === 1 &&
+            reloads.provider === 2 &&
+            reloads.model === 1,
         ),
       )
       expect(Object.fromEntries(counts)).toEqual({})
@@ -449,14 +474,15 @@ describe("config plugin reloads", () => {
             reloads.skill === 4 &&
             reloads.reference === 2 &&
             reloads.websearch === 2 &&
-            reloads.integration === 2,
+            reloads.integration === 2 &&
+            reloads.provider === 4 &&
+            reloads.model === 2,
         ),
       )
       expect(Object.fromEntries(counts)).toEqual({})
 
-      yield* test.setEntries([config("second")])
-      providerName = "Second search"
-      yield* host.websearch.reload()
+      yield* test.setEntries([config("first", { modelName: "Renamed first model" })])
+      yield* Effect.yieldNow
       yield* bus.publish(Event.Updated, {})
       yield* waitUntil(
         Effect.sync(
@@ -465,8 +491,33 @@ describe("config plugin reloads", () => {
             reloads.command === 3 &&
             reloads.skill === 6 &&
             reloads.reference === 3 &&
-            reloads.websearch === 4 &&
-            reloads.integration === 3,
+            reloads.websearch === 3 &&
+            reloads.integration === 3 &&
+            reloads.provider === 6 &&
+            reloads.model === 3,
+        ),
+      )
+      expect((yield* models.get(Provider.ID.make("first"), Model.ID.make("chat")))?.name).toBe("Renamed first model")
+      expect(Object.fromEntries(counts)).toEqual({
+        [Model.Event.Updated.type]: 1,
+      })
+
+      counts.clear()
+      yield* test.setEntries([config("second")])
+      providerName = "Second search"
+      yield* host.websearch.reload()
+      yield* bus.publish(Event.Updated, {})
+      yield* waitUntil(
+        Effect.sync(
+          () =>
+            reloads.agent === 4 &&
+            reloads.command === 4 &&
+            reloads.skill === 8 &&
+            reloads.reference === 4 &&
+            reloads.websearch === 5 &&
+            reloads.integration === 4 &&
+            reloads.provider === 8 &&
+            reloads.model === 4,
         ),
       )
       expect(Object.fromEntries(counts)).toEqual({
@@ -476,6 +527,8 @@ describe("config plugin reloads", () => {
         [Reference.Event.Updated.type]: 1,
         [WebSearch.Event.Updated.type]: 1,
         [Integration.Event.Updated.type]: 1,
+        [Provider.Event.Updated.type]: 1,
+        [Model.Event.Updated.type]: 1,
       })
     }).pipe(
       Effect.provide(Config.testLayer([config("first")])),
@@ -501,7 +554,7 @@ function liveConfig(directory: string, native?: Watcher.NativeInterface, options
   ])
 }
 
-function config(name: string) {
+function config(name: string, options?: { modelName?: string }) {
   return new Document({
     type: "document",
     path: AbsolutePath.make(document),
@@ -510,7 +563,7 @@ function config(name: string) {
       commands: { [name]: { template: `${title(name)} command`, description: `${title(name)} command` } },
       skills: [path.join(import.meta.dir, "fixture", "skills", `${name}-source`)],
       references: { [name]: `/references/${name}` },
-      providers: { [name]: { models: { chat: { name: `${title(name)} model` } } } },
+      providers: { [name]: { models: { chat: { name: options?.modelName ?? `${title(name)} model` } } } },
     }),
   })
 }

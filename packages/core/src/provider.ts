@@ -449,7 +449,16 @@ const layer = Layer.effect(
         // Either fold can disable a plugin that also contributed to the other domain.
         if (revision !== integrations.revision() || records !== state.get()) continue
         const byID = new Map(connections.map((integration) => [integration.id, integration]))
-        const available = Array.from(records.values()).filter((record) => {
+        const resolved =
+          cached?.records === records
+            ? cached.value.records
+            : new Map(
+                Array.from(records, ([id, record]) => {
+                  const previous = cached?.value.records.get(id)
+                  return [id, previous && sameValue(previous, record) ? previous : freeze(record, true)]
+                }),
+              )
+        const available = Array.from(resolved.values()).filter((record) => {
           if (record.provider.activation === "disabled") return false
           const integration = byID.get(record.provider.integrationID ?? Integration.ID.make(record.provider.id))
           // Never combine the previous account's discovered endpoints/models with a new connection.
@@ -463,14 +472,20 @@ const layer = Layer.effect(
           if (integration?.connections.length) return true
           return record.provider.integrationID === undefined && !integration
         })
-        // A credential change that leaves the same definitions available is not a catalog change.
+        // A reload or credential change that leaves the same definitions and availability is not a catalog change.
         if (
-          cached?.records === records &&
+          cached &&
+          (cached.records === records || sameRecordOrder(cached.value.records, resolved)) &&
           cached.value.available.length === available.length &&
           cached.value.available.every((record, index) => record === available[index])
-        )
+        ) {
+          cached = { records, value: cached.value }
           return cached.value
-        const value = freeze({ records, available, providers: available.map((record) => record.provider) }, true)
+        }
+        const value = freeze(
+          { records: resolved, available, providers: available.map((record) => record.provider) },
+          true,
+        )
         cached = { records, value }
         return value
       }
@@ -506,6 +521,48 @@ const layer = Layer.effect(
 )
 
 export const node = makeLocationNode({ service: Service, layer, deps: [Bus.node, Integration.node, Location.node] })
+
+function sameRecordOrder(left: Snapshot["records"], right: Snapshot["records"]) {
+  if (left.size !== right.size) return false
+  const entries = right.entries()
+  for (const [id, record] of left) {
+    const next = entries.next()
+    if (next.done || next.value[0] !== id || next.value[1] !== record) return false
+  }
+  return true
+}
+
+export function sameValue(left: unknown, right: unknown): boolean {
+  if (Object.is(left, right)) return true
+  if (typeof left !== "object" || left === null || typeof right !== "object" || right === null) return false
+  if (Array.isArray(left) || Array.isArray(right)) {
+    if (!Array.isArray(left) || !Array.isArray(right) || left.length !== right.length) return false
+    for (let index = 0; index < left.length; index++) {
+      if (!sameValue(left[index], right[index])) return false
+    }
+    return true
+  }
+  if (left instanceof Map || right instanceof Map) {
+    if (!(left instanceof Map) || !(right instanceof Map) || left.size !== right.size) return false
+    const entries = right.entries()
+    for (const [key, value] of left) {
+      const next = entries.next()
+      if (next.done || !Object.is(key, next.value[0]) || !sameValue(value, next.value[1])) return false
+    }
+    return true
+  }
+  const proto = Object.getPrototypeOf(left)
+  if (proto !== Object.getPrototypeOf(right) || (proto !== Object.prototype && proto !== null)) return false
+  const leftKeys = Object.keys(left)
+  const rightKeys = Object.keys(right)
+  if (leftKeys.length !== rightKeys.length) return false
+  for (let index = 0; index < leftKeys.length; index++) {
+    const key = leftKeys[index]!
+    if (!Object.prototype.hasOwnProperty.call(right, key)) return false
+    if (!sameValue((left as Record<string, unknown>)[key], (right as Record<string, unknown>)[key])) return false
+  }
+  return true
+}
 
 const importPackage = Effect.fn("Provider.importPackage")(function* (
   specifier: string,

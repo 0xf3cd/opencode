@@ -8,6 +8,7 @@ import { Effect } from "effect"
 import { Config } from "../../config.js"
 import { Model } from "../../model.js"
 import { Provider } from "../../provider.js"
+import { State } from "../../state.js"
 import { Variant } from "../../variant.js"
 import { ConfigEntryObserver } from "./entry-observer.js"
 
@@ -18,7 +19,9 @@ export const Plugin = define({
     const loaded = yield* ConfigEntryObserver.observe(
       config,
       ctx.event,
-      ctx.integration.reload().pipe(Effect.andThen(ctx.provider.reload())),
+      State.batch(
+        ctx.integration.reload().pipe(Effect.andThen(ctx.provider.reload()), Effect.andThen(ctx.model.reload())),
+      ),
     )
     yield* ctx.integration.transform((integrations) => {
       for (const [id, provider] of configuredProviders(loaded.entries)) {
