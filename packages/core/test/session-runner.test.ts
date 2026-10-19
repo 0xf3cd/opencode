@@ -2109,18 +2109,23 @@ describe("SessionRunnerLLM", () => {
     ])
   })
 
-  scenario("adds requested guidance to a manual compaction prompt and its hook", function* (s) {
+  scenario("compaction hooks see requested guidance and can replace it", function* (s) {
     const hooks = yield* PluginHooks.Service
     const seen: (string | undefined)[] = []
-    yield* hooks.register("session", "compaction", (event) => Effect.sync(() => void seen.push(event.guidance)))
+    yield* hooks.register("session", "compaction", (event) =>
+      Effect.sync(() => {
+        seen.push(event.guidance)
+        event.guidance = "Keep only the lexer work"
+      }),
+    )
     yield* s.runPrompt("First")
     yield* s.llm.push(TestLLM.text("## Objective\n- summary", "guidance-summary"))
     yield* s.session.compact({ sessionID, guidance: "Keep only the parser work" })
     yield* s.resume
-    expect(userTexts(s.requests[1]).at(-1)).toBe(
-      SessionCompaction.buildPrompt(false, false, "Keep only the parser work"),
-    )
     expect(seen).toEqual(["Keep only the parser work"])
+    expect(userTexts(s.requests[1]).at(-1)).toBe(
+      SessionCompaction.buildPrompt(false, false, "Keep only the lexer work"),
+    )
   })
 
   scenario("moves the epoch at compaction and narrates later changes", function* (s) {

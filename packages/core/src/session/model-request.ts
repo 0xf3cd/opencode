@@ -82,7 +82,7 @@ export interface Input {
   readonly webSocket?: "session"
   /** Prompt size, measured by the provider or estimated. The default output limit leaves room for it. */
   readonly inputTokens?: { readonly measured: number; readonly estimated: number }
-  /** Guidance from a manual `/compact`, shown to compaction hooks. */
+  /** Guidance from a manual `/compact`; compaction hooks may change it. */
   readonly guidance?: string
 }
 

@@ -287,12 +287,15 @@ export const layer = Layer.effect(
       const split = splitConversation(context.messages, keep)
       if (!split) return yield* Effect.fail(NOTHING_TO_COMPACT)
 
+      const prepared = yield* prepare(context, split.older, budget, trigger)
       const previous = previousCompaction(context.messages)
-      const guidance = trigger.reason === "manual" ? trigger.guidance : undefined
-      const prompt = buildPrompt(previous !== undefined, previous?.summary.includes(LEGACY_HEADING) ?? false, guidance)
+      const prompt = buildPrompt(
+        previous !== undefined,
+        previous?.summary.includes(LEGACY_HEADING) ?? false,
+        prepared.event.guidance,
+      )
       const headings = SUMMARY_TEMPLATE.split("\n").filter((line) => line.startsWith("##"))
       const filled = (text: string) => text.split("\n").some((line) => headings.includes(line.trim()))
-      const prepared = yield* prepare(context, split.older, budget, guidance)
 
       // Hooks saw the request without the summary prompt, so it is appended here. A reply that ignores the
       // template gets one reminder before it counts as a failure.
@@ -346,8 +349,7 @@ export const layer = Layer.effect(
       if (!context.messages.some(messageToText)) return yield* Effect.fail(NOTHING_TO_COMPACT)
       const unsupported = (message: string) =>
         Effect.fail<Failure>({ error: { type: "provider.unsupported-operation", message } })
-      const guidance = trigger.reason === "manual" ? trigger.guidance : undefined
-      const prepared = yield* prepare(context, context.messages, budget, guidance, "session")
+      const prepared = yield* prepare(context, context.messages, budget, trigger, "session")
 
       // History is selected before request hooks, so a hook that reroutes the request cannot be honored here.
       const provenance = SessionProviderContext.provenance(context.model)
@@ -370,6 +372,7 @@ export const layer = Layer.effect(
 
       // Native compaction has no prompt, so guidance is sent as a final user message. It is added after the window
       // is fitted and dropped from any replacement the provider returns, so it never displaces or joins stored history.
+      const guidance = prepared.event.guidance?.trim()
       const note = guidance ? guidanceSection(guidance) : undefined
       const stored = (message: Message) => !message.content.some((part) => part.type === "text" && part.text === note)
       const send = (fitted: LLMRequest) => {
@@ -600,7 +603,7 @@ export const layer = Layer.effect(
       context: SessionContext.Loaded,
       messages: ReadonlyArray<SessionMessage.Info>,
       budget: number,
-      guidance: string | undefined,
+      trigger: Trigger,
       webSocket?: "session",
     ) => {
       const base = transcript(context, messages)
@@ -613,7 +616,7 @@ export const layer = Layer.effect(
         messages: base.messages,
         webSocket,
         inputTokens: { measured: budget, estimated: 0 },
-        guidance,
+        guidance: trigger.reason === "manual" ? trigger.guidance : undefined,
       })
     }
 

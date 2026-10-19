@@ -353,6 +353,22 @@ for (const endpoint of [false, true])
     }),
   )
 
+it.live("a compaction hook can set guidance for native compaction", () =>
+  Effect.gen(function* () {
+    const fixture = yield* setup()
+    yield* fixture.hooks.register("session", "compaction", (event) =>
+      Effect.sync(() => {
+        event.guidance = "Keep only the parser work"
+      }),
+    )
+    yield* fixture.prompt("Original user")
+    expect(yield* fixture.compact).toEqual({ status: "completed" })
+    const input = (fixture.bodies[0] as { input: unknown[] }).input
+    expect(JSON.stringify(input.at(-2))).toContain("Additional guidance for this summary:\\nKeep only the parser work")
+    expect(input.at(-1)).toEqual({ type: "compaction_trigger" })
+  }),
+)
+
 it.live("manual and automatic endpoint compaction keep the provider replacement unchanged", () =>
   Effect.gen(function* () {
     const fixture = yield* setup({ endpoint: true })
