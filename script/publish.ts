@@ -47,50 +47,14 @@ await prepareReleaseFiles(pkgjsons)
 
 if (Script.release) await $`bun ./packages/desktop/scripts/publish.ts --dry-run`
 
-console.log("\n=== schema ===\n")
-await $`bun ./packages/schema/script/publish.ts`
-
-console.log("\n=== codemode ===\n")
-await $`bun ./packages/codemode/script/publish.ts`
-
-console.log("\n=== theme ===\n")
-await $`bun ./packages/theme/script/publish.ts`
-
-console.log("\n=== ai ===\n")
-await $`bun ./packages/ai/script/publish.ts`
-
-console.log("\n=== util ===\n")
-await $`bun ./packages/util/script/publish.ts`
-
-console.log("\n=== protocol ===\n")
-await $`bun ./packages/protocol/script/publish.ts`
-
-console.log("\n=== client ===\n")
-await $`bun ./packages/client/script/publish.ts`
-
-console.log("\n=== cli ===\n")
-await $`bun ./packages/cli/script/publish.ts`
-
-console.log("\n=== plugin ===\n")
-await $`bun ./packages/plugin/script/publish.ts`
-
-console.log("\n=== plugin-browser ===\n")
-await $`bun ./packages/plugin-browser/script/publish.ts`
-
-console.log("\n=== core ===\n")
-await $`bun ./packages/core/script/publish.ts`
-
-console.log("\n=== simulation ===\n")
-await $`bun ./packages/simulation/script/publish.ts`
-
-console.log("\n=== server ===\n")
-await $`bun ./packages/server/script/publish.ts`
-
-console.log("\n=== sdk ===\n")
-await $`bun ./packages/sdk/script/publish.ts`
-
-console.log("\n=== ui ===\n")
-await $`bun ./packages/ui/script/publish.ts`
+// NpmLibraries.names is also the list pack-npm packs. The CLI publishes from its own dist, right after client.
+for (const name of NpmLibraries.names) {
+  console.log(`\n=== ${name} ===\n`)
+  await $`bun ./packages/${name}/script/publish.ts`
+  if (name !== "client") continue
+  console.log("\n=== cli ===\n")
+  await $`bun ./packages/cli/script/publish.ts`
+}
 
 if (Script.release && !Script.preview) {
   if ((await $`git diff --quiet`.nothrow()).exitCode !== 0) await $`git commit -am "release: ${tag}"`

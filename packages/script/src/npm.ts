@@ -8,8 +8,7 @@ import { Script } from "./index.js"
 const packDir = process.env["OPENCODE_NPM_PACK_DIR"]
 const tarballs = process.env["OPENCODE_NPM_TARBALLS"]
 
-// The library scripts script/publish.ts runs besides the CLI's, in its order. A library missing here still builds and
-// publishes in place.
+// The npm libraries in publish order. script/publish.ts publishes exactly these (plus the CLI), and pack-npm packs them.
 const names = [
   "schema",
   "codemode",

@@ -357,6 +357,8 @@ jobs:
             target: x86_64-apple-darwin
             cli: darwin-x64-baseline
             platform_flag: --mac --x64
+            # The arm64 host runs arm64 build tools while the app bundles x64 node-pty, so install both CPUs. --cpu=x64
+            # would leave only x64 tools, which run under Rosetta at best.
             bun_install_flags: --os=darwin --cpu=*
           - host: macos-26
             target: aarch64-apple-darwin
@@ -507,6 +509,15 @@ jobs:
             done
           fi
           sleep 90
+
+      # The first login's OIDC assertion has expired by now, so the retry's signing would fail without a new login.
+      - name: Azure login (retry)
+        if: runner.os == 'Windows' && steps.package.outcome == 'failure'
+        uses: azure/login@a457da9ea143d694b1b9c7c869ebb04ebe844ef5 # v2.3.0
+        with:
+          client-id: ${{ env.AZURE_CLIENT_ID }}
+          tenant-id: ${{ env.AZURE_TENANT_ID }}
+          subscription-id: ${{ env.AZURE_SUBSCRIPTION_ID }}
 
       - name: Package (retry)
         if: steps.package.outcome == 'failure'

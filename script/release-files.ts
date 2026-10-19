@@ -13,8 +13,7 @@ export async function packageJsons() {
 
 export async function prepareReleaseFiles(files: string[]) {
   for (const file of files) {
-    let pkg = await Bun.file(file).text()
-    pkg = pkg.replaceAll(/"version": "[^"]+"/g, `"version": "${Script.version}"`)
+    const pkg = (await Bun.file(file).text()).replaceAll(/"version": "[^"]+"/g, `"version": "${Script.version}"`)
     console.log("updated:", file)
     await Bun.file(file).write(pkg)
   }

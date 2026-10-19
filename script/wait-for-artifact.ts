@@ -42,21 +42,33 @@ async function uploaded() {
 async function producerConclusion() {
   const body = await get(`${run}/attempts/${process.env.GITHUB_RUN_ATTEMPT ?? "1"}/jobs?per_page=100`)
   const jobs = isRecord(body) && Array.isArray(body.jobs) ? body.jobs : []
-  const job = jobs.find((item) => isRecord(item) && item.name === producer)
+  // A matrix job whose needs failed is never expanded: it completes as skipped under its bare name, e.g. "build-cli".
+  const names = [producer, producer.replace(/ \(.*\)$/, "")]
+  const job = jobs.find((item) => isRecord(item) && typeof item.name === "string" && names.includes(item.name))
 
   if (!isRecord(job) || job.status !== "completed") return undefined
 
   return typeof job.conclusion === "string" ? job.conclusion : "unknown"
 }
 
+// A failed request reads as "not ready yet": a transient API error must not fail the job, only the deadline or the
+// producer's conclusion does.
 async function get(url: string): Promise<unknown> {
   const response = await fetch(url, {
     headers: { Authorization: `Bearer ${token}`, Accept: "application/vnd.github+json" },
+  }).catch((error: unknown) => {
+    console.warn(`GitHub API request failed for ${url}: ${error}`)
+    return undefined
   })
 
-  if (!response.ok) throw new Error(`GitHub API ${response.status} for ${url}`)
+  if (!response) return undefined
 
-  return response.json()
+  if (!response.ok) {
+    console.warn(`GitHub API ${response.status} for ${url}`)
+    return undefined
+  }
+
+  return response.json().catch(() => undefined)
 }
 
 function isRecord(input: unknown): input is Record<string, unknown> {

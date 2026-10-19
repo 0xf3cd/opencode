@@ -134,7 +134,8 @@ const getBase = (appId: string): Configuration => {
 
       if ((await stat(version)).size === 0) throw new Error(`Bundled CLI version must be a non-empty file: ${version}`)
 
-      if (context.electronPlatformName !== "win32") return
+      // Windows and macOS legs install every CPU's node-pty (--cpu=*), so only the files filter keeps the right one.
+      if (context.electronPlatformName !== "win32" && context.electronPlatformName !== "darwin") return
 
       const prebuilds = path.join(
         resources,
@@ -144,7 +145,7 @@ const getBase = (appId: string): Configuration => {
         `${target.os}-${target.cpu}`,
       )
 
-      const addon = path.join(prebuilds, "conpty.node")
+      const addon = path.join(prebuilds, context.electronPlatformName === "win32" ? "conpty.node" : "pty.node")
 
       if ((await stat(addon)).size === 0) throw new Error(`Bundled node-pty must be a non-empty file: ${addon}`)
       const entries = await readdir(prebuilds, { recursive: true, withFileTypes: true })
