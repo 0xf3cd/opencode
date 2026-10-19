@@ -4,7 +4,7 @@ import { useDialog } from "@opencode/ui/context/dialog"
 import { isScrollKeyTarget, scrollKey, scrollKeyOwner } from "@opencode/ui/scroll-view"
 import { makeEventListener } from "@solid-primitives/event-listener"
 import { useNavigate } from "@solidjs/router"
-import { createEffect, createMemo, on, onMount, Show, type Accessor } from "solid-js"
+import { createEffect, createMemo, createSignal, on, onMount, Show, type Accessor } from "solid-js"
 import { Composer } from "@/composer/composer"
 import { useComposerState } from "@/composer/persistence"
 import { createComposerControls } from "@/composer/selection"
@@ -33,6 +33,7 @@ import { SessionComposerRegion } from "./session-composer-region"
 import { createSessionComposerController, type SessionComposerController } from "./controller"
 import { SessionQueuePanel } from "./queue-panel"
 import { SessionActivityChips, type SessionActivityItem } from "./activity-chips"
+import { SessionActivitySheet, type SessionActivitySubagent } from "./activity-sheet"
 import { useOpenSessionRoute } from "../session-identity-header"
 import { resolveSessionComposerSelection } from "./selection"
 import { createSessionRequestModel } from "../requests/model"
@@ -331,7 +332,7 @@ export function ActiveSessionComposerRegion(props: {
   })
 
   // Subagents count while their call still blocks the run; foreground shells stay out, the timeline shows them.
-  const subagents = createMemo<SessionActivityItem[]>(() => [
+  const subagents = createMemo<SessionActivitySubagent[]>(() => [
     ...props.model.region.state.background.blocking().flatMap((task) =>
       task.type === "subagent"
         ? [
@@ -341,6 +342,7 @@ export function ActiveSessionComposerRegion(props: {
               agent: task.id ? data.session.get(task.id)?.agent : undefined,
               sessionID: task.id,
               target: task.partID,
+              started: task.id ? data.session.get(task.id)?.time.created : undefined,
             },
           ]
         : [],
@@ -354,6 +356,7 @@ export function ActiveSessionComposerRegion(props: {
               agent: task.agent ?? data.session.get(task.id)?.agent,
               sessionID: task.id,
               target: task.id,
+              started: data.session.get(task.id)?.time.created,
             },
           ]
         : [],
@@ -365,6 +368,8 @@ export function ActiveSessionComposerRegion(props: {
       .tasks()
       .flatMap((task) => (task.type === "shell" ? [{ ...task, key: task.id, target: task.id }] : [])),
   )
+
+  const [sheet, setSheet] = createSignal(false)
 
   const open = (item: SessionActivityItem) => {
     const current = props.session.identity.params.id
@@ -402,15 +407,26 @@ export function ActiveSessionComposerRegion(props: {
           keyed
           fallback={
             <div class="relative">
-              <SessionActivityChips subagents={subagents()} shells={shells()} onOpen={open} onStop={stop} />
+              <SessionActivityChips subagents={[]} shells={shells()} onOpen={open} onStop={stop} />
               <SessionQueuePanel queue={props.model.queue} />
               <div class="relative z-10">
-                <Composer
-                  model={props.model.composer}
-                  borderUnderlay
-                  readOnly={props.model.queue.undoing()}
-                  suggestionBoundary={props.suggestionBoundary}
-                />
+                <SessionActivitySheet
+                  subagents={subagents()}
+                  open={sheet()}
+                  onOpenChange={setSheet}
+                  onOpen={(item) => {
+                    setSheet(false)
+                    open(item)
+                  }}
+                  onStop={stop}
+                >
+                  <Composer
+                    model={props.model.composer}
+                    borderUnderlay
+                    readOnly={props.model.queue.undoing()}
+                    suggestionBoundary={props.suggestionBoundary}
+                  />
+                </SessionActivitySheet>
               </div>
             </div>
           }

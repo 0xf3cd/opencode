@@ -7,6 +7,7 @@ import {
   type SessionComposerRegionViewController,
 } from "@/session/composer/session-composer-region"
 import { SessionActivityChips, type SessionActivityItem } from "@/session/composer/activity-chips"
+import { SessionActivitySheet, type SessionActivitySubagent } from "@/session/composer/activity-sheet"
 import { SessionPanelFrame, SessionRouteFrame } from "@/session/session-frame"
 import type { FormInfo, PermissionRequest, SessionStatus } from "@opencode/client/promise"
 import type { SessionDocument } from "@opencode/session-ui/document"
@@ -18,9 +19,11 @@ import type { ComposerPersistedState } from "@/composer/types"
 import { Button } from "@opencode/ui/button"
 import { Icon } from "@opencode/ui/icon"
 import { QueryClient, QueryClientProvider } from "@tanstack/solid-query"
-import { Show } from "solid-js"
+import { onCleanup, onMount, Show } from "solid-js"
 import { createStore } from "solid-js/store"
 import { useLanguage } from "@/runtime/i18n/language"
+import { frameLoop, Spring } from "@opencode/ui/motion"
+import { motionGlobals } from "@opencode/ui/motion-tuning"
 import type { WebSearchRequestModel } from "./requests/websearch"
 
 const modelReady = Object.assign(() => true, { promise: undefined }) satisfies ModelSelection["ready"]
@@ -94,6 +97,17 @@ export type SessionPreviewProps = {
     onStop?: (item: SessionActivityItem) => void
   }
   timelineDetail?: TimelineDetail
+  /** Running subagents as a band on the composer that sheets up over the timeline, instead of the activity pill. */
+  sheet?: {
+    subagents: SessionActivitySubagent[]
+    open: boolean
+    onOpenChange: (open: boolean) => void
+    onOpen?: (item: SessionActivitySubagent) => void
+  }
+  /** The timeline scrolls behind the composer region and fades out above it, instead of ending at its top edge. */
+  fade?: boolean
+  modelName?: string
+  onTimeline?: (element: HTMLDivElement) => void
 }
 
 export function SessionPreview(props: SessionPreviewProps) {
@@ -126,6 +140,7 @@ export function SessionPreview(props: SessionPreviewProps) {
 
 function createPromptController(input: {
   initial: string
+  modelName?: string
   placeholder: string
   status: () => SessionStatus
   onActivity: (activity: string) => void
@@ -170,7 +185,13 @@ function createPromptController(input: {
   return {
     controller: {
       ...interaction,
-      model: { selection: modelSelection, paid: true, loading: false },
+      model: {
+        selection: input.modelName
+          ? { ...modelSelection, current: () => ({ ...storyComposerModel, name: input.modelName! }) }
+          : modelSelection,
+        paid: true,
+        loading: false,
+      },
     } satisfies ComposerModel,
     setValue(value: string) {
       draft[1]("prompt", [{ type: "text", content: value, start: 0, end: value.length }])
@@ -196,6 +217,7 @@ function SessionSurfaceState(props: SessionPreviewProps & { onReset: () => void 
 
   const prompt = createPromptController({
     initial: props.draft ?? "",
+    modelName: props.modelName,
     placeholder: language.t(
       props.document.status.type === "idle"
         ? "ui.promptInput.placeholder.normal"
@@ -253,6 +275,48 @@ function SessionSurfaceState(props: SessionPreviewProps & { onReset: () => void 
     showComposer: () => true,
   } satisfies SessionComposerRegionViewController
 
+  let section: HTMLElement | undefined
+  let timeline: HTMLDivElement | undefined
+  let pinned = true
+  let following = false
+
+  // The region's height becomes the timeline's bottom inset, so the last message clears it, and a timeline resting at
+  // its end stays there as the region or the timeline grows.
+  onMount(() => {
+    const dock = section?.querySelector<HTMLElement>('[data-component="session-composer-dock"]')
+    const content = timeline?.firstElementChild
+
+    if (!section || !timeline || !dock) return
+    // Following the end eases, as the app's pinned timeline does, so a new row never jumps the history.
+    const follow = new Spring(timeline.scrollTop, { zeta: 1 })
+    let stop: (() => void) | undefined
+    const observer = new ResizeObserver(() => {
+      section!.style.setProperty("--story-dock", `${dock.offsetHeight}px`)
+
+      if (!pinned) return
+      const velocity = follow.velocity
+      follow.omega = (2 * Math.PI * motionGlobals.speed.value) / (0.4 * (motionGlobals.slow.value ? 4 : 1))
+      follow.snap(timeline!.scrollTop).set(timeline!.scrollHeight - timeline!.clientHeight, { velocity })
+      following = true
+      stop ??= frameLoop.add((dt) => {
+        timeline!.scrollTop = follow.step(dt)
+
+        if (!follow.resting) return true
+        stop = undefined
+        following = false
+
+        return false
+      })
+    })
+    observer.observe(dock)
+
+    if (content) observer.observe(content)
+    onCleanup(() => {
+      observer.disconnect()
+      stop?.()
+    })
+  })
+
   return (
     <div class="mx-auto h-screen min-h-[640px] w-full max-w-[1440px]">
       <SessionRouteFrame padded>
@@ -269,13 +333,27 @@ function SessionSurfaceState(props: SessionPreviewProps & { onReset: () => void 
             <CurrentSessionProviders document={props.document}>
               <div class="flex min-h-0 flex-1">
                 <section
+                  ref={(element) => (section = element)}
+                  data-story-fade={props.fade || undefined}
                   classList={{
-                    "min-w-0 flex-1 flex-col bg-v2-background-bg-base": true,
+                    "relative min-w-0 flex-1 flex-col bg-v2-background-bg-base": true,
                     flex: !state.reviewOpened,
                     "hidden md:flex": state.reviewOpened,
                   }}
                 >
-                  <div data-slot="story-timeline" class="min-h-0 flex-1 overflow-y-auto py-6">
+                  <div
+                    ref={(element) => {
+                      timeline = element
+                      props.onTimeline?.(element)
+                    }}
+                    data-slot="story-timeline"
+                    class="min-h-0 flex-1 overflow-y-auto py-6"
+                    onScroll={(event) => {
+                      if (following) return
+                      const element = event.currentTarget
+                      pinned = element.scrollHeight - element.clientHeight - element.scrollTop < 2
+                    }}
+                  >
                     <SessionTimeline
                       document={props.document}
                       timelineDetail={props.timelineDetail}
@@ -287,25 +365,46 @@ function SessionSurfaceState(props: SessionPreviewProps & { onReset: () => void 
                   <SessionComposerRegion
                     controller={region}
                     composer={
-                      <div class="relative">
-                        <SessionActivityChips
-                          subagents={props.activity?.subagents ?? []}
-                          shells={props.activity?.shells ?? []}
-                          onOpen={(item) =>
-                            props.activity?.onOpen
-                              ? props.activity.onOpen(item)
-                              : setState("activity", `Opened ${item.label ?? item.key}`)
-                          }
-                          onStop={(item) =>
-                            props.activity?.onStop
-                              ? props.activity.onStop(item)
-                              : setState("activity", `Stopped ${item.label ?? item.key}`)
-                          }
-                        />
-                        <div class="relative z-10">
-                          <Composer model={prompt.controller} borderUnderlay />
-                        </div>
-                      </div>
+                      <Show
+                        when={props.sheet}
+                        fallback={
+                          <div class="relative">
+                            <SessionActivityChips
+                              subagents={props.activity?.subagents ?? []}
+                              shells={props.activity?.shells ?? []}
+                              onOpen={(item) =>
+                                props.activity?.onOpen
+                                  ? props.activity.onOpen(item)
+                                  : setState("activity", `Opened ${item.label ?? item.key}`)
+                              }
+                              onStop={(item) =>
+                                props.activity?.onStop
+                                  ? props.activity.onStop(item)
+                                  : setState("activity", `Stopped ${item.label ?? item.key}`)
+                              }
+                            />
+                            <div class="relative z-10">
+                              <Composer model={prompt.controller} borderUnderlay />
+                            </div>
+                          </div>
+                        }
+                      >
+                        {(sheet) => (
+                          <SessionActivitySheet
+                            subagents={sheet().subagents}
+                            open={sheet().open}
+                            onOpenChange={sheet().onOpenChange}
+                            onOpen={(item) =>
+                              sheet().onOpen
+                                ? sheet().onOpen!(item)
+                                : setState("activity", `Opened ${item.label ?? item.key}`)
+                            }
+                            onStop={(item) => setState("activity", `Stopped ${item.label ?? item.key}`)}
+                          >
+                            <Composer model={prompt.controller} borderUnderlay />
+                          </SessionActivitySheet>
+                        )}
+                      </Show>
                     }
                   />
                 </section>

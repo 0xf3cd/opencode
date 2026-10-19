@@ -1,0 +1,98 @@
+/*
+ * One surface for the band, its list and the composer: a single outline and shadow drawn behind all three. The surface
+ * extends above the region when the list is open, so the sheet overlays the timeline instead of resizing the region.
+ */
+[data-component="composer-sheet"] {
+  position: relative;
+
+  [data-component="composer"] {
+    box-shadow: none;
+  }
+}
+
+[data-slot="composer-sheet-surface"] {
+  position: absolute;
+  inset-inline: 0;
+  top: 0;
+  bottom: 0;
+  border-radius: var(--radius-xl);
+  background: var(--v2-background-bg-base);
+  box-shadow: var(--v2-elevation-raised);
+  pointer-events: none;
+}
+
+[data-color-scheme="dark"] [data-slot="composer-sheet-surface"] {
+  background: var(--v2-background-bg-layer-01);
+}
+
+[data-slot="composer-sheet-clip"] {
+  overflow: clip;
+  border-start-start-radius: var(--radius-xl);
+  border-start-end-radius: var(--radius-xl);
+}
+
+[data-slot="composer-sheet-hairline"] {
+  position: absolute;
+  inset-inline: 0;
+  bottom: 0;
+  z-index: 1;
+  height: 0.5px;
+  background: var(--v2-border-border-muted);
+  pointer-events: none;
+}
+
+/* The list scrolls past seven rows; its inner top edge fades instead of cutting a row. */
+[data-slot="composer-sheet-list"] {
+  scrollbar-width: none;
+}
+
+[data-slot="composer-sheet-list"][data-overflow] {
+  mask-image: linear-gradient(to bottom, transparent, black 8px);
+}
+
+[data-slot="composer-sheet-running"],
+[data-slot="composer-sheet-check"] {
+  transition:
+    opacity 150ms cubic-bezier(0.2, 0.8, 0.2, 1),
+    scale 150ms cubic-bezier(0.2, 0.8, 0.2, 1);
+}
+
+[data-slot="composer-sheet-row"] [data-slot="composer-sheet-check"],
+[data-slot="composer-sheet-row"][data-done] [data-slot="composer-sheet-running"] {
+  opacity: 0;
+  scale: 0.9;
+}
+
+[data-slot="composer-sheet-row"][data-done] [data-slot="composer-sheet-check"] {
+  opacity: 1;
+  scale: 1;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  [data-slot="composer-sheet-running"],
+  [data-slot="composer-sheet-check"] {
+    transition-duration: 0ms;
+  }
+}
+
+/*
+ * Scroll-behind: the region floats over the timeline's end. The timeline keeps the region's height as its bottom inset
+ * and fades out across the 40px around the region's top edge, so text softens before it passes under the composer.
+ */
+[data-story-fade] {
+  [data-component="session-composer-dock"] {
+    position: absolute;
+    inset-inline: 0;
+    bottom: 0;
+    background: transparent;
+  }
+
+  [data-slot="story-timeline"] {
+    padding-bottom: calc(var(--story-dock, 0px) + 16px);
+    mask-image: linear-gradient(
+      to top,
+      transparent calc(var(--story-dock, 0px) - 8px),
+      black calc(var(--story-dock, 0px) + 32px)
+    );
+  }
+}
