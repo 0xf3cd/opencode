@@ -302,26 +302,6 @@ export const OpencodePlugin = define<HttpClient.HttpClient | Bus.Service | Manag
             model.headers = Provider.mergeHeaders(model.headers, config.headers)
             model.body = Provider.mergeOverlay(model.body, config.body)
             if (config.limit !== undefined) model.limit = { ...model.limit, ...config.limit }
-            // The Console's reasoning replaces the base variants; its variants still overlay them below.
-            if (config.capabilities?.reasoning !== undefined)
-              model.variants = [
-                ...Variant.resolve(
-                  { ...model, package: model.package ?? providers.get(providerID)?.provider.package },
-                  Variant.supports(config.capabilities.reasoning),
-                ),
-              ]
-            for (const variant of config.variants ?? []) {
-              let existing = model.variants.find((item) => item.id === variant.id)
-              if (!existing) {
-                existing = { id: variant.id }
-                model.variants.push(existing)
-              }
-              if (variant.settings !== undefined)
-                existing.settings = Provider.mergeOverlay(existing.settings, withoutCredentials(variant.settings))
-              if (variant.headers !== undefined)
-                existing.headers = Provider.mergeHeaders(existing.headers, variant.headers)
-              if (variant.body !== undefined) existing.body = Provider.mergeOverlay(existing.body, variant.body)
-            }
             if (config.cost !== undefined)
               model.cost = (Array.isArray(config.cost) ? config.cost : [config.cost]).map((cost) => ({
                 tier: cost.tier && { ...cost.tier },
@@ -334,6 +314,30 @@ export const OpencodePlugin = define<HttpClient.HttpClient | Bus.Service | Manag
               }))
             model.enabled = !config.disabled
           })
+          // The first update normalizes model-level AI SDK packages before reasoning selects a native protocol.
+          if (config.capabilities?.reasoning !== undefined || config.variants !== undefined)
+            providers.models.update(providerID, modelID, (model) => {
+              // The Console's reasoning replaces the base variants; its variants still overlay them below.
+              if (config.capabilities?.reasoning !== undefined)
+                model.variants = [
+                  ...Variant.resolve(
+                    { ...model, package: model.package ?? providers.get(providerID)?.provider.package },
+                    Variant.supports(config.capabilities.reasoning),
+                  ),
+                ]
+              for (const variant of config.variants ?? []) {
+                let existing = model.variants.find((item) => item.id === variant.id)
+                if (!existing) {
+                  existing = { id: variant.id }
+                  model.variants.push(existing)
+                }
+                if (variant.settings !== undefined)
+                  existing.settings = Provider.mergeOverlay(existing.settings, withoutCredentials(variant.settings))
+                if (variant.headers !== undefined)
+                  existing.headers = Provider.mergeHeaders(existing.headers, variant.headers)
+                if (variant.body !== undefined) existing.body = Provider.mergeOverlay(existing.body, variant.body)
+              }
+            })
         }
         const configured = providers.get(providerID)
         if (configured)
