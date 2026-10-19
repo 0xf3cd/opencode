@@ -84,6 +84,8 @@ function monoBody(body: RunEntryBody): RunEntryBody {
   if (body.type === "none" || body.type === "text" || body.type === "markdown") return body
   if (body.type === "code") return textBody(body.content)
   const snapshot = body.snapshot
+  // Todo cards are not flattened: the writer draws them with ASCII markers in mono.
+  if (snapshot.kind === "todo") return body
   if (snapshot.kind === "code") return textBody(`${snapshot.title}\n${snapshot.content}`)
   if (snapshot.kind === "diff") {
     return textBody(
@@ -95,8 +97,6 @@ function monoBody(body: RunEntryBody): RunEntryBody {
   if (snapshot.kind === "task") {
     return textBody([snapshot.title, ...snapshot.rows, snapshot.tail].filter(Boolean).join("\n"))
   }
-  // The writer renders todo cards with ASCII markers in mono so wrapped items keep their indent.
-  if (snapshot.kind === "todo") return body
   return textBody(
     ["# Questions", ...snapshot.items.flatMap((item) => [item.question, item.answer]), snapshot.tail]
       .filter(Boolean)
