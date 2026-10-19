@@ -35,7 +35,7 @@ import {
   type MarkdownCacheEntry,
 } from "./markdown-cache"
 import { inlineCodeKind } from "./markdown-inline-code-kind"
-import { renderMermaidSvg } from "./markdown-mermaid"
+import { renderMermaidSvg, renderMermaidSvgSync } from "./markdown-mermaid"
 import { createMarkdownRenderer } from "./markdown-solid"
 import {
   useMarkdown,
@@ -245,6 +245,16 @@ function applyCodeMetadata(wrapper: HTMLElement, language: string | undefined) {
   else delete wrapper.dataset.codeKind
 }
 
+function showMermaid(wrapper: HTMLElement, svg: string) {
+  const diagram = wrapper.querySelector('[data-component="markdown-mermaid"]') ?? document.createElement("div")
+  diagram.setAttribute("data-component", "markdown-mermaid")
+  diagram.innerHTML = svg
+
+  if (!diagram.parentElement) wrapper.appendChild(diagram)
+  delete wrapper.dataset.mermaidPending
+  wrapper.dataset.mermaidReady = "true"
+}
+
 function decorateMermaid(wrapper: HTMLElement, code: HTMLElement, complete: boolean) {
   if (!code.classList.contains("language-mermaid")) {
     clearMermaid(wrapper)
@@ -255,11 +265,6 @@ function decorateMermaid(wrapper: HTMLElement, code: HTMLElement, complete: bool
   const source = code.textContent ?? ""
 
   if (!source) return
-  const diagram = wrapper.querySelector('[data-component="markdown-mermaid"]') ?? document.createElement("div")
-  diagram.setAttribute("data-component", "markdown-mermaid")
-
-  if (!diagram.parentElement) wrapper.appendChild(diagram)
-  wrapper.dataset.mermaidPending = "true"
   const input = complete ? source : source.slice(0, source.lastIndexOf("\n") + 1)
 
   if (!input) return
@@ -267,7 +272,14 @@ function decorateMermaid(wrapper: HTMLElement, code: HTMLElement, complete: bool
 
   if (wrapper.dataset.mermaidAttempt === attempt) return
   wrapper.dataset.mermaidAttempt = attempt
-  void renderMermaidSvg(input)
+  const syncSvg = renderMermaidSvgSync(input, !complete)
+  if (syncSvg) {
+    showMermaid(wrapper, syncSvg)
+
+    return
+  }
+
+  void renderMermaidSvg(input, !complete)
     .then((svg) => {
       if (!svg) {
         if (complete && code.textContent === source) clearMermaid(wrapper)
@@ -276,9 +288,7 @@ function decorateMermaid(wrapper: HTMLElement, code: HTMLElement, complete: bool
       }
 
       if (!(code.textContent ?? "").startsWith(input)) return
-      diagram.innerHTML = svg
-      delete wrapper.dataset.mermaidPending
-      wrapper.dataset.mermaidReady = "true"
+      showMermaid(wrapper, svg)
     })
     .catch(() => {
       if (!complete || code.textContent !== source) return

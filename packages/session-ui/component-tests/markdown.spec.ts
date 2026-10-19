@@ -84,7 +84,7 @@ story("keeps Markdown sanitization and link protections after Mermaid renders", 
     for (const source of [
       "flowchart LR\n A[Start] --> B[End]",
       "sequenceDiagram\n Alice->>Bob: Hello",
-      '%%{init: {"flowchart": {"htmlLabels": true}}}%%\nflowchart LR\n A["<a href=\'https://example.com\' target=\'_blank\'>External</a>"] --> B[End]',
+      '%%{init: {"flowchart": {"htmlLabels": true}}}%%\nflowchart LR\n A["<a href=\'https://example.com\' target=\'_blank\'>External</a>"] --> B[End]\n click A "https://example.com" _blank',
     ]) {
       const svg = await renderMermaidSvg(source)
       const document = new DOMParser().parseFromString(svg, "image/svg+xml")
@@ -119,7 +119,7 @@ story("keeps Markdown sanitization and link protections after Mermaid renders", 
       root: "svg",
       text: expect.stringContaining("External"),
       unsafe: 0,
-      links: [{ href: "https://example.com", target: "_blank", rel: "noopener" }],
+      links: [{ href: "https://example.com/", target: "_blank", rel: "noopener noreferrer" }],
       markdown: result.before,
     },
   ])
@@ -640,7 +640,7 @@ for (const theme of ["light", "dark"]) {
     await expect(diagrams.nth(0)).toContainText("swim()")
     await expect(diagrams.nth(1)).toBeVisible()
     await expect(diagrams.nth(1)).toContainText("Display")
-    await expect(diagrams.nth(1).locator(".edgePaths path")).toHaveCount(3)
+    await expect(diagrams.nth(1).locator(".pele-edge")).toHaveCount(3)
     await expect(harness.locator('[data-mermaid-ready="true"] > pre:visible')).toHaveCount(0)
     await harness.getByLabel("Streaming").uncheck()
     await expect(diagrams).toHaveCount(2)
