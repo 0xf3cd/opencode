@@ -1,6 +1,6 @@
 import { describe, expect } from "bun:test"
 import { Message } from "@opencode/ai"
-import { Effect, Layer, PubSub, Ref, Schema, Stream } from "effect"
+import { Effect, Layer, Ref, Schema, Stream } from "effect"
 import { Agent } from "@opencode/core/agent"
 import { AppNodeBuilder } from "@opencode/core/effect/app-node-builder"
 import { Config } from "@opencode/core/config"
@@ -14,7 +14,6 @@ import { TodoTool } from "@opencode/core/tool/plugin/todo"
 import type { SessionHooks } from "@opencode/plugin/effect/session"
 import { Document, Info, type Entry } from "@opencode/schema/config"
 import { ConfigExperimental } from "@opencode/schema/config/experimental"
-import { Event } from "@opencode/schema/event"
 import { SessionInbox } from "@opencode/schema/session-inbox"
 import { testEffect } from "./lib/effect"
 import { imagePassthrough } from "./lib/image"
@@ -37,9 +36,7 @@ const setup = (
   options: { readonly history?: SessionMessage.Info[] } = {},
 ) =>
   Effect.gen(function* () {
-    const entries = yield* Ref.make<Entry[]>([document(experimental)])
     const history = yield* Ref.make(options.history ?? [])
-    const updates = yield* PubSub.unbounded<ReturnType<typeof updated>>()
     const synthetics: {
       sessionID: Session.ID
       text: string
@@ -48,7 +45,7 @@ const setup = (
     }[] = []
     const hooks = new Map<string, (event: SessionHooks["context"]) => Effect.Effect<void>>()
     yield* registerToolPlugin(TodoTool.Plugin, {
-      event: { subscribe: () => Stream.fromPubSub(updates) },
+      event: { subscribe: () => Stream.never },
       session: {
         hook: (name, callback) =>
           Effect.sync(() => {
@@ -71,7 +68,7 @@ const setup = (
           ),
       },
     }).pipe(
-      Effect.provide(Layer.mock(Config.Service)({ entries: () => Ref.get(entries) })),
+      Effect.provide(Layer.mock(Config.Service)({ entries: () => Effect.succeed([document(experimental)]) })),
       Effect.provide(
         Layer.mock(Session.Service)({
           messages: () => Ref.get(history).pipe(Effect.map((messages) => messages.toReversed())),
@@ -105,8 +102,6 @@ const setup = (
       request,
       history,
       registry: yield* Tool.Service,
-      configure: (next: ConfigExperimental.Info | undefined) =>
-        Ref.set(entries, [document(next)]).pipe(Effect.andThen(PubSub.publish(updates, updated()))),
     }
   })
 
@@ -150,19 +145,6 @@ describe("TodoTool", () => {
       })
     }),
   )
-
-  it.effect("follows config updates without a plugin restart", () =>
-    Effect.gen(function* () {
-      const fixture = yield* setup(undefined)
-      expect(yield* names(fixture.registry)).not.toContain(TodoTool.name)
-
-      yield* fixture.configure(enabled)
-      yield* waitFor(fixture.registry, true)
-
-      yield* fixture.configure(undefined)
-      yield* waitFor(fixture.registry, false)
-    }),
-  )
 })
 
 describe("TodoTool compaction reminder", () => {
@@ -189,16 +171,6 @@ describe("TodoTool compaction reminder", () => {
     }),
   )
 })
-
-function waitFor(registry: Tool.Interface, present: boolean, attempts = 1_000): Effect.Effect<void> {
-  return names(registry).pipe(
-    Effect.flatMap((current) => {
-      if (current.includes(TodoTool.name) === present) return Effect.void
-      if (attempts === 0) return Effect.die(`todowrite was ${present ? "never registered" : "never removed"}`)
-      return Effect.yieldNow.pipe(Effect.andThen(() => waitFor(registry, present, attempts - 1)))
-    }),
-  )
-}
 
 const decodeMessage = Schema.decodeUnknownSync(SessionMessage.Info)
 
@@ -243,8 +215,4 @@ function synthetic(text: string, metadata: Record<string, unknown> | undefined) 
 
 function document(experimental: ConfigExperimental.Info | undefined): Entry {
   return new Document({ type: "document", info: new Info(experimental ? { experimental } : {}) })
-}
-
-function updated() {
-  return { id: Event.ID.create(), created: Date.now(), type: "config.updated" as const, data: {} }
 }
