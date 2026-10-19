@@ -190,13 +190,13 @@ describe("TodoTool compaction reminder", () => {
   )
 })
 
-function waitFor(registry: Tool.Interface, present: boolean): Effect.Effect<void> {
+function waitFor(registry: Tool.Interface, present: boolean, attempts = 1_000): Effect.Effect<void> {
   return names(registry).pipe(
-    Effect.flatMap((current) =>
-      current.includes(TodoTool.name) === present
-        ? Effect.void
-        : Effect.yieldNow.pipe(Effect.andThen(() => waitFor(registry, present))),
-    ),
+    Effect.flatMap((current) => {
+      if (current.includes(TodoTool.name) === present) return Effect.void
+      if (attempts === 0) return Effect.die(`todowrite was ${present ? "never registered" : "never removed"}`)
+      return Effect.yieldNow.pipe(Effect.andThen(() => waitFor(registry, present, attempts - 1)))
+    }),
   )
 }
 
