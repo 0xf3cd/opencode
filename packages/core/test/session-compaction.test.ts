@@ -15,7 +15,7 @@ import { SessionModelRequest } from "@opencode/core/session/model-request"
 import { PluginHooks } from "@opencode/core/plugin/hooks"
 import { SessionProjector } from "@opencode/core/session/projector"
 import { SessionRunnerModel } from "@opencode/core/session/runner/model"
-import { SessionTable } from "@opencode/core/session/sql"
+import { SessionMessageTable, SessionTable } from "@opencode/core/session/sql"
 import { SessionStore } from "@opencode/core/session/store"
 import { Session } from "@opencode/core/session"
 import { Location } from "@opencode/core/location"
@@ -138,6 +138,62 @@ it.effect("compaction truncation does not split surrogate pairs", () =>
     expect(whole).toEndWith(`[Tool result]: ${"😀".repeat(1_250)}`)
   }),
 )
+
+it.effect("summaries written before kept-message references keep their stored recent text", () =>
+  Effect.gen(function* () {
+    const id = Session.ID.make("ses_legacy_recent")
+    yield* insertSession(id)
+    yield* storeMessages(id, [
+      textUser("Kept question"),
+      Schema.decodeUnknownSync(SessionMessage.CompactionCompleted)({
+        id: SessionMessage.ID.create(),
+        type: "compaction",
+        status: "completed",
+        reason: "auto",
+        summary: "## Objective\n- legacy",
+        recent: "[User]: Kept question as flattened then",
+        time: { created: 0 },
+      }),
+    ])
+    const store = yield* SessionStore.Service
+    expect((yield* store.context(id))[0]).toMatchObject({
+      type: "compaction",
+      recent: "[User]: Kept question as flattened then",
+    })
+  }),
+)
+
+it.effect("forks rebuild the recent text of a summary they copied", () =>
+  Effect.gen(function* () {
+    const parentID = Session.ID.make("ses_fork_recent_parent")
+    const childID = Session.ID.make("ses_fork_recent_child")
+    const session = yield* insertSession(parentID)
+    const messages = [textUser("Earlier question"), textUser("Kept question")]
+    yield* storeMessages(parentID, messages)
+    expect(yield* compactManually(session, messages)).toEqual({ status: "completed" })
+    const store = yield* SessionStore.Service
+    const [parent] = yield* store.context(parentID)
+    expect(parent).toMatchObject({ type: "compaction", recent: "[User]: Kept question" })
+
+    const bus = yield* Bus.Service
+    yield* bus.publish(SessionEvent.Forked, {
+      sessionID: childID,
+      parentID,
+      boundary: { type: "through", messageID: parent.id },
+    })
+    const [child] = yield* store.context(childID)
+    expect(child).toMatchObject({ type: "compaction", recent: "[User]: Kept question" })
+    expect(child.metadata?.firstKeptMessageID).not.toBe(parent.metadata?.firstKeptMessageID)
+  }),
+)
+
+const textUser = (text: string) =>
+  SessionMessage.User.make({
+    id: SessionMessage.ID.create(),
+    type: "user",
+    text,
+    time: { created: DateTime.makeUnsafe(0) },
+  })
 
 test("compaction prompt requires the checkpoint headings in order", () => {
   const prompt = SessionCompaction.buildPrompt(false)
@@ -351,6 +407,23 @@ const compactManually = (
     return yield* compaction.compact({ reason: "manual", context: loaded(session, messages), inputID })
   })
 
+/** Stores messages as the session's history so far, ahead of anything published next. */
+const storeMessages = (sessionID: Session.ID, messages: readonly SessionMessage.Info[]) =>
+  Effect.gen(function* () {
+    const db = (yield* Database.Service).db
+    yield* db
+      .insert(SessionMessageTable)
+      .values(
+        messages.map((message, index) => {
+          const { id, type, ...data } = Schema.encodeSync(SessionMessage.Info)(message)
+          return { id: SessionMessage.ID.make(id), session_id: sessionID, type, seq: index + 1, time_created: 0, data }
+        }),
+      )
+      .run()
+      .pipe(Effect.orDie)
+    yield* Bus.reserveSequence(db, sessionID, messages.length)
+  })
+
 /** The recent text a manual compaction keeps when the latest exchange is one tool call with this output. */
 const recentWithToolOutput = (id: Session.ID, content: SessionMessage.ToolStateCompleted["content"]) =>
   Effect.gen(function* () {
@@ -378,7 +451,9 @@ const recentWithToolOutput = (id: Session.ID, content: SessionMessage.ToolStateC
       ],
       time: { created: 0, completed: 0 },
     })
-    expect(yield* compactManually(session, [user("Earlier question"), user("Read it"), assistant])).toEqual({
+    const messages = [user("Earlier question"), user("Read it"), assistant]
+    yield* storeMessages(id, messages)
+    expect(yield* compactManually(session, messages)).toEqual({
       status: "completed",
     })
     const store = yield* SessionStore.Service

@@ -35,6 +35,7 @@ import { SessionProviderContext } from "./provider-context.js"
 import { SessionRunnerModel } from "./runner/model.js"
 import { SessionRunnerRetry } from "./runner/retry.js"
 import { toLLMMessages } from "./runner/to-llm-message.js"
+import { SessionRecentText } from "./recent-text.js"
 import { contentFilterError, toSessionError } from "./to-session-error.js"
 import { SessionUsage } from "./usage.js"
 
@@ -68,11 +69,12 @@ export interface Interface extends State.Transformable<Editor> {
 
 export class Service extends Context.Service<Service, Interface>()("@opencode/SessionCompaction") {}
 
-/** A summary fills `text` and `recent`; a native compaction fills `providerContext`. */
+/**
+ * A summary fills `text`, and references the messages it keeps verbatim with `metadata.firstKeptMessageID`; history
+ * rebuilds their text from that. A native compaction fills `providerContext`.
+ */
 type Result = {
   readonly text: string
-  // todo: this should become a msg reference, we shouldnt be stringifying the recent history (confuses some models...)
-  readonly recent: string
   // todo: consolidate these 2
   readonly native?: SessionMessage.Native
   readonly providerContext?: SessionProviderContext.Info
@@ -97,7 +99,6 @@ const SHRINK_STEPS = [0.7, 0.5, 0.35]
 const RESERVE_MIN = 16_000
 /** A common window size, assumed for the compaction request when the model's window is unknown. */
 const UNKNOWN_WINDOW = 200_000
-const TOOL_OUTPUT_MAX_CHARS = 1_250
 const IMAGE_TOKEN_ESTIMATE = 1_500
 const PDF_TOKEN_ESTIMATE = 2_000
 
@@ -267,7 +268,7 @@ export const layer = Layer.effect(
      *   [new messages…]
      *
      * E = one exchange: a user message and the replies to it. S = a summary. [S + "…"] = one checkpoint: a summary
-     * plus the newest `keep` tokens of messages, saved as text.
+     * plus the newest `keep` tokens of messages, referenced by their first message and sent as text.
      */
     const summarize = Effect.fnUntraced(function* (
       trigger: Trigger,
@@ -293,14 +294,14 @@ export const layer = Layer.effect(
             context.model.limit,
           )
           const reply = yield* stream(context, prompted, prepared.options)
-          if (filled(reply.text)) return { ...reply, recent: split.recent }
+          if (filled(reply.text)) return reply
 
           const nudged = fitOutput(
             LLMRequest.update(prompted, { messages: [...prompted.messages, Message.user(NUDGE)] }),
             context.model.limit,
           )
           const retry = yield* stream(context, nudged, prepared.options)
-          if (filled(retry.text)) return { ...retry, recent: split.recent }
+          if (filled(retry.text)) return retry
           return yield* Effect.fail<Failure>({
             error: {
               type: "compaction.failed",
@@ -312,7 +313,10 @@ export const layer = Layer.effect(
         })
 
       const overhead = Token.estimate(prompt) + Token.estimate(NUDGE)
-      return yield* deliver(trigger, prepared, split.recent, budget - overhead, send)
+      const result = yield* deliver(trigger, prepared, budget - overhead, send)
+      if (!split.firstKept) return result
+      // A compaction hook may choose its own kept range.
+      return { ...result, metadata: { firstKeptMessageID: split.firstKept, ...result.metadata } }
     })
 
     /**
@@ -333,7 +337,7 @@ export const layer = Layer.effect(
       keep: number,
     ): Effect.fn.Return<Result, Failure> {
       const context = trigger.context
-      if (!context.messages.some(messageToText)) return yield* Effect.fail(NOTHING_TO_COMPACT)
+      if (!context.messages.some(SessionRecentText.messageToText)) return yield* Effect.fail(NOTHING_TO_COMPACT)
       const unsupported = (message: string) =>
         Effect.fail<Failure>({ error: { type: "provider.unsupported-operation", message } })
       const prepared = yield* prepare(context, context.messages, budget, "session")
@@ -352,7 +356,6 @@ export const layer = Layer.effect(
         spend(context.session.id, usage && SessionUsage.record(usage, context.model.cost)).pipe(
           Effect.as<Result>({
             text: "",
-            recent: "",
             providerContext: SessionProviderContext.encode(provenance, window),
           }),
         )
@@ -374,7 +377,7 @@ export const layer = Layer.effect(
         return unsupported(`Native compaction is not supported for ${request.model.provider}/${request.model.route.id}`)
       }
 
-      return yield* deliver(trigger, prepared, "", budget, send)
+      return yield* deliver(trigger, prepared, budget, send)
     })
 
     /**
@@ -390,16 +393,19 @@ export const layer = Layer.effect(
     const deliver = Effect.fnUntraced(function* (
       trigger: Trigger,
       prepared: Prepared,
-      recent: string,
       target: number,
       send: (request: LLMRequest) => Effect.Effect<Result, AIError | Failure>,
     ): Effect.fn.Return<Result, Failure> {
       const context = trigger.context
       // The runner opened the manual compaction's message when it delivered the `/compact` item.
       if (trigger.reason !== "manual") {
-        yield* bus.publish(SessionEvent.Compaction.Started, { sessionID: context.session.id, reason: "auto", recent })
+        yield* bus.publish(SessionEvent.Compaction.Started, {
+          sessionID: context.session.id,
+          reason: "auto",
+          recent: "",
+        })
       }
-      if (prepared.event.result) return yield* fromHook(context, prepared.event.result, recent)
+      if (prepared.event.result) return yield* fromHook(context, prepared.event.result)
 
       const policy = yield* SessionRunnerRetry.policy(context.session.id)
       let rejections = 0
@@ -598,7 +604,7 @@ export const layer = Layer.effect(
     }
 
     /** A request hook supplied the summary itself, so no model call happens. */
-    const fromHook = (context: SessionContext.Loaded, supplied: SessionCompactionResult, recent: string) => {
+    const fromHook = (context: SessionContext.Loaded, supplied: SessionCompactionResult) => {
       const usage = supplied.tokens && {
         tokens: supplied.tokens,
         cost: SessionUsage.calculateCost(context.model.cost, supplied.tokens),
@@ -606,7 +612,6 @@ export const layer = Layer.effect(
       return spend(context.session.id, usage).pipe(
         Effect.as<Result>({
           text: supplied.summary,
-          recent,
           native: supplied.native,
           metadata: supplied.metadata,
         }),
@@ -655,7 +660,7 @@ export const layer = Layer.effect(
           native: outcome.native,
           providerContext: outcome.providerContext,
           text: outcome.text,
-          recent: outcome.recent,
+          recent: "",
           ...usage,
         },
         { metadata: outcome.metadata },
@@ -702,20 +707,20 @@ const transcript = (context: SessionContext.Loaded, messages: ReadonlyArray<Sess
   })
 
 /**
- * `older` gets summarized; `recent`, the newest messages within `keep` tokens, is kept verbatim as text beside
+ * `older` gets summarized; the newest messages within `keep` tokens, from `firstKept` on, are kept verbatim beside
  * the summary. Undefined when there is nothing to compact.
  */
 const splitConversation = (messages: ReadonlyArray<SessionMessage.Info>, keep: number) => {
   const entries = messages.flatMap((message, index) => {
-    const text = messageToText(message)
+    const text = SessionRecentText.messageToText(message)
     return text ? [{ message, text, index }] : []
   })
   if (entries.length === 0) return undefined
 
-  const recent = entries.slice(recentStart(entries, keep, previousCompaction(messages)))
+  const first = entries[recentStart(entries, keep, previousCompaction(messages))]
   return {
-    older: messages.slice(0, recent[0]?.index ?? messages.length),
-    recent: recent.map((entry) => entry.text).join("\n\n"),
+    older: messages.slice(0, first?.index ?? messages.length),
+    firstKept: first?.message.id,
   }
 }
 
@@ -755,76 +760,6 @@ const oldestToDrop = <T>(items: ReadonlyArray<T>, size: (item: T) => number, bud
   return start
 }
 
-/** One message as the recent, verbatim part of a summary shows it. Empty for messages that part leaves out. */
-const messageToText = (message: SessionMessage.Info): string => {
-  switch (message.type) {
-    // Earlier summaries and instruction updates are handled outside the recent part.
-    case "compaction":
-    case "system":
-      return ""
-
-    case "user": {
-      const skills =
-        message.skills?.flatMap((skill) =>
-          skill.text === undefined ? [] : [`[Skill activated: ${skill.name}]\n${skill.text}`],
-        ) ?? []
-      const files =
-        message.files?.map((file) => {
-          const name = file.name ?? (file.source.type === "uri" ? file.source.uri : "inline attachment")
-          return `[Attached ${file.mime}: ${name}]`
-        }) ?? []
-      return [...skills, `[User]: ${message.text}`, ...files].join("\n")
-    }
-
-    case "location-switched":
-      return `[User]: The working directory has been changed to ${message.location.directory}.`
-
-    case "assistant":
-      return message.content
-        .flatMap((part) => {
-          if (part.type === "text") return [`[Assistant]: ${part.text}`]
-          if (part.type === "reasoning") return part.text ? [`[Assistant reasoning]: ${part.text}`] : []
-
-          const input = typeof part.state.input === "string" ? part.state.input : JSON.stringify(part.state.input)
-          const call = `[Assistant tool call]: ${part.name}(${input})`
-          if (part.state.status === "completed") {
-            return [call, `[Tool result]: ${truncateToolOutput(serializeToolContent(part.state.content))}`]
-          }
-          if (part.state.status === "error") return [call, `[Tool error]: ${part.state.error.message}`]
-          return [call]
-        })
-        .join("\n")
-
-    case "synthetic":
-      return `[Synthetic context]: ${message.text}`
-
-    case "skill":
-      return `[Skill activated: ${message.name}]\n${message.text}`
-
-    case "shell":
-      if (message.metadata?.background === true) return ""
-      return `[Shell]: ${message.command}\n${truncateToolOutput(message.output?.output ?? "")}`
-
-    default:
-      return ""
-  }
-}
-
-const truncateToolOutput = (value: string) => {
-  if (value.length <= TOOL_OUTPUT_MAX_CHARS) return value
-
-  // Count code points so a surrogate pair is never split.
-  let end = 0
-  let kept = 0
-  for (const char of value) {
-    if (kept === TOOL_OUTPUT_MAX_CHARS) break
-    end += char.length
-    kept++
-  }
-  if (end === value.length) return value
-  return `${value.slice(0, end)}\n[truncated]`
-}
-
 /** One request message as a flattened transcript line. Empty for what the transcript leaves out. */
 const flattenMessage = (message: Message) => {
   if (message.role === "system") return ""
@@ -838,23 +773,15 @@ const flattenMessage = (message: Message) => {
       const result = part.result
       const output =
         result.type === "content"
-          ? serializeToolContent(result.value)
+          ? SessionRecentText.serializeToolContent(result.value)
           : typeof result.value === "string"
             ? result.value
             : (JSON.stringify(result.value) ?? "")
       const label = result.type === "error" ? "Tool error" : "Tool result"
-      return [`[${label}]: ${truncateToolOutput(output)}`]
+      return [`[${label}]: ${SessionRecentText.truncateToolOutput(output)}`]
     })
     .join("\n")
 }
-
-const serializeToolContent = (content: ReadonlyArray<SessionMessage.ToolStateCompleted["content"][number]>) =>
-  content
-    .map((item) => {
-      if (item.type === "text") return item.text
-      return `[Attached ${item.mime}${item.name === undefined ? "" : `: ${item.name}`}]`
-    })
-    .join("\n")
 
 /** The newest whole, real user messages within `keep` tokens: no synthetic guidance, no half of an attachment. */
 export const recentUserMessages = (

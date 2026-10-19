@@ -3114,6 +3114,22 @@ describe("SessionRunnerLLM", () => {
       summary: "## Objective\n- Preserve the task",
       recent: `[User]: ${"Recent exact request ".repeat(180)}`,
     })
+    // Only a reference to the kept messages is stored; history rebuilds their text.
+    const db = (yield* Database.Service).db
+    const stored = yield* db
+      .select()
+      .from(SessionMessageTable)
+      .where(eq(SessionMessageTable.id, context[0].id))
+      .get()
+      .pipe(Effect.orDie)
+    const kept = yield* db
+      .select()
+      .from(SessionMessageTable)
+      .where(sql`${SessionMessageTable.session_id} = ${sessionID} and ${SessionMessageTable.type} = 'user'`)
+      .orderBy(desc(SessionMessageTable.seq))
+      .get()
+      .pipe(Effect.orDie)
+    expect(stored?.data).toMatchObject({ recent: "", metadata: { firstKeptMessageID: kept?.id } })
 
     s.requests.length = 0
     s.executions.length = 0

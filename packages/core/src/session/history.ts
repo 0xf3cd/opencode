@@ -1,4 +1,4 @@
-import { and, asc, desc, eq, gte, or, sql } from "drizzle-orm"
+import { and, asc, desc, eq, gte, lt, or, sql } from "drizzle-orm"
 import { Effect, Schema } from "effect"
 import { SessionLegacy } from "@opencode/schema/session-legacy"
 import { Database } from "../database/database.js"
@@ -8,6 +8,7 @@ import { SessionSchema } from "./schema.js"
 import { Instructions } from "../instructions/index.js"
 import { InstructionState } from "./instruction-state.js"
 import { SessionProviderContext } from "./provider-context.js"
+import { SessionRecentText } from "./recent-text.js"
 import { SessionMessageTable } from "./sql.js"
 
 type DatabaseService = Database.Interface["db"]
@@ -104,9 +105,10 @@ const messageEntries = Effect.fnUntraced(function* (
     .orderBy(asc(SessionMessageTable.seq))
     .all()
     .pipe(Effect.orDie)
-  const entries = yield* Effect.forEach(rows, (row) =>
+  const decoded = yield* Effect.forEach(rows, (row) =>
     decodeMessageRow(row).pipe(Effect.map((message) => ({ seq: row.seq, message }))),
   )
+  const entries = compaction ? yield* withRecentText(db, sessionID, decoded) : decoded
   // Re-expansion may cross a native checkpoint whose completion already advanced the instruction
   // epoch: the baseline supersedes the chronological updates before it. Forks seed their baseline
   // at sequence 0 but retain parent sequences, so the copied checkpoint still retires them.
@@ -116,6 +118,48 @@ const messageEntries = Effect.fnUntraced(function* (
     (entry) =>
       !(entry.message.type === "system" && native && entry.seq < native.seq) && replayable(entry.message, boundary),
   )
+})
+
+/**
+ * A summary compaction references its kept messages by `metadata.firstKeptMessageID` instead of storing them, so
+ * history rebuilds their text from the messages between that one and the compaction. Compactions written before
+ * the reference existed have none and keep their stored `recent` text.
+ */
+const withRecentText = Effect.fnUntraced(function* (
+  db: DatabaseService,
+  sessionID: SessionSchema.ID,
+  entries: ReadonlyArray<{ readonly seq: number; readonly message: SessionMessage.Info }>,
+) {
+  const first = entries[0]
+  const compaction = first?.message
+  if (compaction?.type !== "compaction" || compaction.status !== "completed") return entries
+  const firstKept = compaction.metadata?.firstKeptMessageID
+  if (typeof firstKept !== "string") return entries
+  const start = yield* db
+    .select({ seq: SessionMessageTable.seq })
+    .from(SessionMessageTable)
+    .where(
+      and(eq(SessionMessageTable.session_id, sessionID), eq(SessionMessageTable.id, SessionMessage.ID.make(firstKept))),
+    )
+    .get()
+    .pipe(Effect.orDie)
+  if (!start) return entries
+  const rows = yield* db
+    .select()
+    .from(SessionMessageTable)
+    .where(
+      and(
+        eq(SessionMessageTable.session_id, sessionID),
+        gte(SessionMessageTable.seq, start.seq),
+        lt(SessionMessageTable.seq, first.seq),
+      ),
+    )
+    .orderBy(asc(SessionMessageTable.seq))
+    .all()
+    .pipe(Effect.orDie)
+  const kept = yield* Effect.forEach(rows, decodeMessageRow)
+  const recent = kept.map(SessionRecentText.messageToText).filter(Boolean).join("\n\n")
+  return [{ ...first, message: { ...compaction, recent } }, ...entries.slice(1)]
 })
 
 export const load = Effect.fn("SessionHistory.load")(function* (
