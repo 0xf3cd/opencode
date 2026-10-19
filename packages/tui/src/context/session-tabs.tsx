@@ -52,7 +52,8 @@ const empty = (): TabsState => ({ tabs: [], unread: {} })
 // Deliberately after connect settles: the visible session's mount syncs win the first slots.
 const TAB_PREFETCH_DELAY = 300
 // Tab labels read Location and VCS info, and serving either boots that Location on the server
-// (config, plugins, MCP servers). Load the most relevant tabs on connect; the rest load when opened.
+// (config, plugins, MCP servers). Load the most relevant tab Locations on connect; the rest load
+// when opened.
 const TAB_LOCATION_PREFETCH_LIMIT = 20
 const VIEW_RETRY_DELAY = 250
 const VIEW_RETRY_MAX_DELAY = 5_000
@@ -316,15 +317,14 @@ export const { use: useSessionTabs, provider: SessionTabsProvider } = createSimp
           state()
             .tabs.map((tab) => tab.sessionID)
             .toSorted((a, b) => tier(a) - tier(b) || recency(a) - recency(b) || activity(b) - activity(a))
-            .slice(0, TAB_LOCATION_PREFETCH_LIMIT)
             .map((sessionID) => data.session.get(sessionID)?.location)
             .filter((location) => location !== undefined)
             .map((location) => [locationKey(location), location]),
         )
         await Promise.allSettled(
-          Array.from(locations.values(), (location) =>
-            Promise.all([data.location.syncInfo(location), data.location.vcs.sync(location)]),
-          ),
+          Array.from(locations.values())
+            .slice(0, TAB_LOCATION_PREFETCH_LIMIT)
+            .map((location) => Promise.all([data.location.syncInfo(location), data.location.vcs.sync(location)])),
         )
       })()
       const timer = setTimeout(async () => {
