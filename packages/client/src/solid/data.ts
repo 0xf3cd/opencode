@@ -630,6 +630,16 @@ export function createData(config: CreateDataInput) {
     )
   }
 
+  function refreshCatalog(field: "integration" | "model" | "provider", location: LocationRef) {
+    const resource = result.location[field]
+    const key = `location.${field}:${locationKey(location)}`
+    const loaded = resource.list(location) !== undefined || sync.has(key)
+    resource.invalidate(location)
+    // Unopened catalogs stay stale until first use. Related notifications share a
+    // trailing window per catalog, including updates that overtake its first read.
+    if (loaded) settle(key, () => resource.sync(location))
+  }
+
   function handleEvent(event: OpenCodeEvent) {
     switch (event.type) {
       case "server.connected": {
@@ -1259,12 +1269,10 @@ export function createData(config: CreateDataInput) {
     const location = event.location
     switch (event.type) {
       case "provider.updated":
-        result.location.provider.invalidate(location)
-        refresh(() => result.location.provider.sync(location))
+        refreshCatalog("provider", location)
         break
       case "model.updated":
-        result.location.model.invalidate(location)
-        refresh(() => result.location.model.sync(location))
+        refreshCatalog("model", location)
         break
       case "agent.updated":
         result.location.agent.invalidate(location)
@@ -1314,16 +1322,9 @@ export function createData(config: CreateDataInput) {
         refresh(() => result.location.reference.sync(location))
         break
       case "integration.updated":
-        result.location.integration.invalidate(location)
-        result.location.model.invalidate(location)
-        result.location.provider.invalidate(location)
-        refresh(() =>
-          Promise.all([
-            result.location.integration.sync(location),
-            result.location.model.sync(location),
-            result.location.provider.sync(location),
-          ]),
-        )
+        refreshCatalog("integration", location)
+        refreshCatalog("model", location)
+        refreshCatalog("provider", location)
         break
       case "config.updated":
         result.location.config.invalidate(location)
