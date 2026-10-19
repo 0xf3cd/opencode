@@ -29,7 +29,11 @@ import { createSessionRevert } from "../revert"
 import { SessionComposerRegion } from "./session-composer-region"
 import { createSessionComposerController, type SessionComposerController } from "./controller"
 import { SessionQueuePanel } from "./queue-panel"
-import { SessionActivityChips, type SessionActivityItem } from "./activity-chips"
+import { AgentProgressChip } from "./agent-progress-chip"
+import { activeState, agentProgressItems, type AgentProgressItem } from "./agent-progress"
+import { useStopRunning } from "../header/stop-running"
+import { useModels } from "@/providers/models/models"
+import type { ModelRef } from "@opencode/client/promise"
 import { useOpenSessionRoute } from "../session-identity-header"
 import { resolveSessionComposerSelection } from "./selection"
 import { createSessionRequestModel } from "../requests/model"
@@ -298,7 +302,10 @@ export function ActiveSessionComposerRegion(props: {
 }) {
   const location = useWorkspaceLocation()
   const data = useData()
+  const models = useModels()
   const openRoute = useOpenSessionRoute()
+  const stop = useStopRunning()
+  const server = useServerSDK()
 
   // Only the server's LocationNotFoundError for the session's own Location replaces the composer.
   const missing = createMemo(() => {
@@ -310,43 +317,53 @@ export function ActiveSessionComposerRegion(props: {
     return { directory: info.location.directory, sessionID: info.id, projectID: info.projectID }
   })
 
-  // Subagents count while their call still blocks the run; foreground shells stay out, the timeline shows them.
-  const subagents = createMemo<SessionActivityItem[]>(() => [
-    ...props.model.region.state.background.blocking().flatMap((task) =>
-      task.type === "subagent"
-        ? [
-            {
-              ...task,
-              key: task.id ?? task.partID,
-              agent: task.id ? data.session.get(task.id)?.agent : undefined,
-              sessionID: task.id,
-              target: task.partID,
-            },
-          ]
-        : [],
-    ),
-    ...props.model.region.state.background.tasks().flatMap((task) =>
-      task.type === "subagent"
-        ? [
-            {
-              ...task,
-              key: task.id,
-              agent: task.agent ?? data.session.get(task.id)?.agent,
-              sessionID: task.id,
-              target: task.id,
-            },
-          ]
-        : [],
-    ),
-  ])
+  // The current batch of subagents, kept while any runs or the run that started them still works. Background
+  // shells ride along; foreground shells stay out, the timeline shows them.
+  const progress = createMemo<AgentProgressItem[]>(() => {
+    const owner = props.session.identity.params.id
 
-  const shells = createMemo<SessionActivityItem[]>(() =>
-    props.model.region.state.background
-      .tasks()
-      .flatMap((task) => (task.type === "shell" ? [{ ...task, key: task.id, target: task.id }] : [])),
+    if (!owner || props.session.data.isChild()) return []
+
+    const items = agentProgressItems({
+      owner,
+      sessions: data.session.list(),
+      status: data.session.status,
+      needsYou: (sessionID) =>
+        !!data.session.permission.list(sessionID)?.length ||
+        !!data.session.form.list(sessionID)?.some((form) => form.metadata?.kind === "question"),
+      messages: data.session.message.list(owner) ?? [],
+      childError: (sessionID) =>
+        data.session.message
+          .list(sessionID)
+          ?.flatMap((message) => (message.type === "idle" && message.outcome === "failed" ? [message] : []))
+          .at(-1)?.error?.message,
+      shells: props.model.region.state.background
+        .tasks()
+        .flatMap((task) =>
+          task.type === "shell" ? [{ ...task, started: data.shell.get(task.id)?.time.started }] : [],
+        ),
+    })
+
+    if (items.some((item) => activeState(item.state)) || data.session.status(owner) === "running") return items
+
+    return []
+  })
+
+  // Requests on running children arrive as events; ones raised before this client connected need a read.
+  createEffect(
+    on(
+      () =>
+        server.connection.status() === "connected"
+          ? progress().flatMap((item) => (item.sessionID && item.state === "running" ? [item.sessionID] : []))
+          : [],
+      (ids) => ids.forEach((id) => void data.session.permission.sync(id).catch(() => undefined)),
+    ),
   )
 
-  const open = (item: SessionActivityItem) => {
+  const modelName = (model: ModelRef) =>
+    models.find({ providerID: model.providerID, modelID: model.id })?.name ?? model.id
+
+  const open = (item: AgentProgressItem) => {
     const current = props.session.identity.params.id
 
     if (!current) return
@@ -358,13 +375,13 @@ export function ActiveSessionComposerRegion(props: {
   return (
     <SessionComposerRegion
       controller={props.model.region}
+      above={<AgentProgressChip items={progress()} modelName={modelName} onOpen={open} onStop={stop} />}
       composer={
         <Show
           when={missing()}
           keyed
           fallback={
             <div class="relative">
-              <SessionActivityChips subagents={subagents()} shells={shells()} onOpen={open} />
               <SessionQueuePanel queue={props.model.queue} />
               <div class="relative z-10">
                 <Composer

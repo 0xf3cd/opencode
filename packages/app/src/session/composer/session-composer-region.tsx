@@ -18,6 +18,8 @@ export type SessionComposerRegionViewController = Pick<
 export function SessionComposerRegion(props: {
   controller: SessionComposerRegionViewController
   composer: JSX.Element
+  // Above the docks too: work that needs you stays in view while its request asks.
+  above?: JSX.Element
 }) {
   const language = useLanguage()
   const controller = props.controller
@@ -34,6 +36,7 @@ export function SessionComposerRegion(props: {
           "md:max-w-session md:mx-auto": controller.centered(),
         }}
       >
+        <Show when={!controller.child()}>{props.above}</Show>
         <Show when={controller.state.websearch.request()}>
           <SessionWebSearchDock model={controller.state.websearch} onSubmit={controller.onResponseSubmit} />
         </Show>

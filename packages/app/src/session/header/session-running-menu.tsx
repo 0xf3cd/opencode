@@ -8,12 +8,10 @@ import { createEffect, createMemo, createUniqueId, For, on, Show } from "solid-j
 import { createStore } from "solid-js/store"
 import { createAnimatedPresence } from "@/runtime/animated-presence"
 import { useLanguage } from "@/runtime/i18n/language"
-import { useServerSDK } from "@/runtime/server/client"
 import { useServer } from "@/runtime/server/current"
 import { useOpenSessionRoute } from "@/session/session-identity-header"
-import { errorMessage } from "@/shell/layout/helpers"
-import { showToast } from "@/shell/notifications/toast"
 import { SessionWorkingIndicator } from "./session-working-indicator"
+import { useStopRunning } from "./stop-running"
 
 const neutral = "light-dark(var(--v2-text-text-base), #ffffff)"
 
@@ -38,7 +36,6 @@ export function SessionRunningMenu(props: {
   const language = useLanguage()
   const openRoute = useOpenSessionRoute()
   const server = useServer()
-  const sdk = useServerSDK()
   const id = createUniqueId()
   const [menu, setMenu] = createStore({ open: false })
 
@@ -129,21 +126,7 @@ export function SessionRunningMenu(props: {
   // A subagent can only be interrupted once its child session exists.
   const stoppable = (item: RunningItem) => item.type === "shell" || !!item.sessionID
 
-  const stop = (item: RunningItem) => {
-    const request = item.sessionID
-      ? sdk.api.session.interrupt({ sessionID: item.sessionID })
-      : sdk.api.shell.remove({
-          id: item.target,
-          location: { directory: server.ctx.data.shell.get(item.target)?.location.directory },
-        })
-
-    void request.catch((error) =>
-      showToast({
-        title: language.t("common.requestFailed"),
-        description: errorMessage(error, language.t("common.requestFailed")),
-      }),
-    )
-  }
+  const stop = useStopRunning()
 
   return (
     <Show when={props.title || presence.present()}>

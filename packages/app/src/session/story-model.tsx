@@ -6,7 +6,8 @@ import {
   SessionComposerRegion,
   type SessionComposerRegionViewController,
 } from "@/session/composer/session-composer-region"
-import { SessionActivityChips, type SessionActivityItem } from "@/session/composer/activity-chips"
+import { AgentProgressChip } from "@/session/composer/agent-progress-chip"
+import type { AgentProgressItem } from "@/session/composer/agent-progress"
 import { SessionPanelFrame, SessionRouteFrame } from "@/session/session-frame"
 import type { FormInfo, PermissionRequest, SessionStatus } from "@opencode/client/promise"
 import type { SessionDocument } from "@opencode/session-ui/document"
@@ -87,9 +88,12 @@ export type SessionPreviewProps = {
   reviewOpened?: boolean
   child?: { parentID: string }
   activity?: {
-    subagents: SessionActivityItem[]
-    shells: SessionActivityItem[]
-    onOpen?: (item: SessionActivityItem) => void
+    items: readonly AgentProgressItem[]
+    onOpen?: (item: AgentProgressItem) => void
+    onStop?: (item: AgentProgressItem) => void
+    open?: boolean
+    onOpenChange?: (open: boolean) => void
+    now?: () => number
   }
   timelineDetail?: TimelineDetail
 }
@@ -284,17 +288,27 @@ function SessionSurfaceState(props: SessionPreviewProps & { onReset: () => void 
                   </div>
                   <SessionComposerRegion
                     controller={region}
+                    above={
+                      <AgentProgressChip
+                        items={props.activity?.items ?? []}
+                        modelName={(model) => model.id}
+                        open={props.activity?.open}
+                        onOpenChange={props.activity?.onOpenChange}
+                        now={props.activity?.now}
+                        onOpen={(item) =>
+                          props.activity?.onOpen
+                            ? props.activity.onOpen(item)
+                            : setState("activity", `Opened ${item.title}`)
+                        }
+                        onStop={(item) =>
+                          props.activity?.onStop
+                            ? props.activity.onStop(item)
+                            : setState("activity", `Stopped ${item.title}`)
+                        }
+                      />
+                    }
                     composer={
                       <div class="relative">
-                        <SessionActivityChips
-                          subagents={props.activity?.subagents ?? []}
-                          shells={props.activity?.shells ?? []}
-                          onOpen={(item) =>
-                            props.activity?.onOpen
-                              ? props.activity.onOpen(item)
-                              : setState("activity", `Opened ${item.label ?? item.key}`)
-                          }
-                        />
                         <div class="relative z-10">
                           <Composer model={prompt.controller} borderUnderlay />
                         </div>
