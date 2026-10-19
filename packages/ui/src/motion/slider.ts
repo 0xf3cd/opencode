@@ -60,7 +60,7 @@ export function steppedSlider(options: {
   onCommit?: (value: number) => void
 }) {
   let spec = options.spec
-  validate(spec)
+  let continuous = sliderStops(spec) > 10
   let target = sliderValue(spec, options.value)
   const spring = new Spring(target, { omega: 34, zeta: 0.86 })
   let pointer: number | undefined
@@ -68,6 +68,7 @@ export function steppedSlider(options: {
   let width = 1
   let remove: (() => void) | undefined
   let disposed = false
+  let reduced = prefersReducedMotion()
   const el = options.el
   const originalTouchAction = el.style.touchAction
   el.style.touchAction = "pan-y"
@@ -76,10 +77,10 @@ export function steppedSlider(options: {
   if (!el.hasAttribute("tabindex")) el.tabIndex = 0
 
   const paint = (dt: number) => {
-    if (prefersReducedMotion()) spring.snap(target)
+    if (reduced) spring.snap(target)
     const value = spring.step(dt)
     options.paint(value, sliderFraction(spec, value))
-    const moving = !spring.resting
+    const moving = spring.value !== spring.target || spring.velocity !== 0
 
     if (!moving) remove = undefined
 
@@ -90,7 +91,10 @@ export function steppedSlider(options: {
     if (!remove && !disposed) remove = frameLoop.add(paint)
   }
 
-  const unsubscribe = observeReducedMotion(wake)
+  const unsubscribe = observeReducedMotion(() => {
+    reduced = prefersReducedMotion()
+    wake()
+  })
 
   const aria = () => {
     el.setAttribute("aria-valuemin", String(spec.min))
@@ -104,7 +108,7 @@ export function steppedSlider(options: {
 
     spring.set(target)
 
-    if (snap || prefersReducedMotion()) spring.snap(target)
+    if (snap || reduced) spring.snap(target)
     aria()
 
     if (notify) options.onChange(target)
@@ -113,7 +117,7 @@ export function steppedSlider(options: {
 
   const point = (event: PointerEvent) => {
     const value = spec.min + clamp((event.clientX - left) / width, 0, 1) * (spec.max - spec.min)
-    set(value, sliderStops(spec) > 10, true)
+    set(value, continuous, true)
   }
 
   const down = (event: PointerEvent) => {
@@ -201,7 +205,7 @@ export function steppedSlider(options: {
   return {
     set: (value: number, options: { snap?: boolean } = {}) => set(value, options.snap),
     configure: (next: SliderSpec) => {
-      validate(next)
+      continuous = sliderStops(next) > 10
       spec = next
       set(target)
     },

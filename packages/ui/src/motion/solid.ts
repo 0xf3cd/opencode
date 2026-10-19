@@ -10,12 +10,13 @@ export function springStyle<K extends string>(
   apply: (el: HTMLElement, values: Record<K, number>) => void,
   options: SpringOptions & { snap?: () => boolean } = {},
 ): void {
-  const springs = new Map<K, Spring>()
-  let entries: { key: K; spring: Spring }[] = []
+  const keys: K[] = []
+  const springs: Spring[] = []
   // SAFETY: every key is written by the target effect before the first paint reads values.
   const values = {} as Record<K, number>
   let element: HTMLElement | undefined
   let remove: (() => void) | undefined
+  let reduced = prefersReducedMotion()
 
   const paint = (dt: number) => {
     if (!element) {
@@ -25,12 +26,12 @@ export function springStyle<K extends string>(
     }
 
     let moving = false
-    const reduced = prefersReducedMotion() || Boolean(options.snap?.())
+    const snap = reduced || Boolean(options.snap?.())
 
-    for (let i = 0; i < entries.length; i++) {
-      const { key, spring } = entries[i]!
-      values[key] = reduced ? spring.snap(spring.target).value : spring.step(dt)
-      moving = moving || !spring.resting
+    for (let i = 0; i < keys.length; i++) {
+      const spring = springs[i]!
+      values[keys[i]!] = snap ? spring.snap(spring.target).value : spring.step(dt)
+      moving = moving || spring.value !== spring.target || spring.velocity !== 0
     }
 
     apply(element, values)
@@ -44,35 +45,45 @@ export function springStyle<K extends string>(
     if (!remove && element) remove = frameLoop.add(paint)
   }
 
-  const unsubscribe = observeReducedMotion(wake)
+  const unsubscribe = observeReducedMotion(() => {
+    reduced = prefersReducedMotion()
+    wake()
+  })
+
   createEffect(() => {
     const el = ref()
     const next = targets()
-    const snap = options.snap?.() || prefersReducedMotion() || el !== element
+    const snap = options.snap?.() || reduced || el !== element
     element = el
 
-    for (const key of springs.keys()) {
+    for (let i = keys.length - 1; i >= 0; i--) {
+      const key = keys[i]!
+
       if (!(key in next)) {
-        springs.delete(key)
+        keys.splice(i, 1)
+        springs.splice(i, 1)
         delete values[key]
-      }
-    }
-
-    // SAFETY: next is the Record<K, number> returned by targets().
-    for (const key of Object.keys(next) as K[]) {
-      let spring = springs.get(key)
-
-      if (!spring) {
-        spring = new Spring(next[key], options)
-        springs.set(key, spring)
+        continue
       }
 
-      spring.set(next[key])
+      const target = next[key]
+      const spring = springs[i]!
+      spring.set(target)
 
-      if (snap) spring.snap(next[key])
+      if (snap) spring.snap(target)
     }
 
-    entries = Array.from(springs, ([key, spring]) => ({ key, spring }))
+    for (const key in next) {
+      if (!Object.hasOwn(next, key) || keys.includes(key)) continue
+      const target = next[key]
+      const spring = new Spring(target, options)
+
+      if (snap) spring.snap(target)
+      keys.push(key)
+      springs.push(spring)
+      values[key] = target
+    }
+
     // The write phase is shared with all measuring primitives, even on first run.
     wake()
   })
@@ -98,6 +109,7 @@ export function slidingHighlight(options: {
   const y = new Spring(0, { omega: 30, zeta: 0.88 })
   const w = new Spring(0, { omega: 30, zeta: 0.88 })
   const h = new Spring(0, { omega: 30, zeta: 0.88 })
+  const box = { x: 0, y: 0, width: 0, height: 0 }
   let first = true
   createEffect(() => {
     const container = options.container()
@@ -108,6 +120,7 @@ export function slidingHighlight(options: {
     if (!container || !highlight || !selected) return
     let until = performance.now() + 420
     let remove: (() => void) | undefined
+    let reduced = prefersReducedMotion()
 
     const read = () => {
       if (performance.now() > until && !first) return
@@ -115,11 +128,10 @@ export function slidingHighlight(options: {
       // Children must share the container as offset parent (position: relative).
       if (options.spring && (selected.offsetLeft !== x.target || selected.offsetTop !== y.target)) {
         const curve = options.spring(Math.hypot(selected.offsetLeft - x.value, selected.offsetTop - y.value))
-
-        for (const spring of [x, y, w, h]) {
-          spring.omega = (2 * Math.PI) / curve.duration
-          spring.zeta = 1 - curve.bounce
-        }
+        const omega = (2 * Math.PI) / curve.duration
+        const zeta = 1 - curve.bounce
+        x.omega = y.omega = w.omega = h.omega = omega
+        x.zeta = y.zeta = w.zeta = h.zeta = zeta
       }
 
       x.set(selected.offsetLeft)
@@ -129,7 +141,7 @@ export function slidingHighlight(options: {
     }
 
     const write = (dt: number) => {
-      const snap = first || prefersReducedMotion() || Boolean(options.snap?.())
+      const snap = first || reduced || Boolean(options.snap?.())
 
       if (snap) {
         x.snap(x.target)
@@ -148,7 +160,15 @@ export function slidingHighlight(options: {
       if (axis !== "x") highlight.style.height = `${h.value}px`
 
       if (axis !== "y") highlight.style.width = `${w.value}px`
-      options.paint?.({ x: x.value, y: y.value, width: w.value, height: h.value })
+
+      if (options.paint) {
+        box.x = x.value
+        box.y = y.value
+        box.width = w.value
+        box.height = h.value
+        options.paint(box)
+      }
+
       const moving = !snap && (performance.now() < until || !x.resting || !y.resting || !w.resting || !h.resting)
 
       if (!moving) remove = undefined
@@ -166,7 +186,12 @@ export function slidingHighlight(options: {
     const observer = typeof ResizeObserver === "undefined" ? undefined : new ResizeObserver(wake)
     observer?.observe(container)
     observer?.observe(selected)
-    const unsubscribe = observeReducedMotion(wake)
+
+    const unsubscribe = observeReducedMotion(() => {
+      reduced = prefersReducedMotion()
+      wake()
+    })
+
     onCleanup(() => {
       remove?.()
       observer?.disconnect()
@@ -221,6 +246,7 @@ export function widthMorph(options: {
     el.append(clone)
     let measured = false
     let remove: (() => void) | undefined
+    let reduced = prefersReducedMotion()
 
     const read = () => {
       if (measured) return
@@ -229,7 +255,7 @@ export function widthMorph(options: {
     }
 
     const write = (dt: number) => {
-      if (first || prefersReducedMotion()) spring.snap(spring.target)
+      if (first || reduced) spring.snap(spring.target)
       first = false
       el.style.width = `${spring.step(dt)}px`
       clone.remove()
@@ -243,6 +269,8 @@ export function widthMorph(options: {
     remove = frameLoop.addMeasured(read, write)
 
     const unsubscribe = observeReducedMotion(() => {
+      reduced = prefersReducedMotion()
+
       if (!remove) remove = frameLoop.addMeasured(read, write)
     })
 
@@ -263,9 +291,14 @@ export function numberTween(options: {
   zeta?: number
   snap?: () => boolean
 }): void {
+  const target = { value: 0 }
   springStyle(
     options.ref,
-    () => ({ value: options.value() }),
+    () => {
+      target.value = options.value()
+
+      return target
+    },
     (el, numbers) => {
       const text = options.format?.(numbers.value) ?? String(Math.round(numbers.value))
 
