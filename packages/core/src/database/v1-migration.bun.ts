@@ -898,7 +898,6 @@ function row(
 
 const RENAMED_TOOLS: Readonly<Record<string, string>> = { bash: "shell", task: "subagent", apply_patch: "patch" }
 const PATH_TOOLS = ["read", "edit", "write"]
-const REMOVED_TOOLS = ["todowrite"]
 
 /**
  * Tells the model about V1 tools it called in the still-visible history whose
@@ -918,7 +917,6 @@ function legacyToolNotice(messages: ReadonlyArray<TransformResult["messages"][nu
   const list = (names: ReadonlyArray<string>) => names.map((name) => `\`${name}\``).join(", ")
   const renamed = Object.keys(RENAMED_TOOLS).filter((name) => called.has(name))
   const paths = PATH_TOOLS.filter((name) => called.has(name))
-  const removed = REMOVED_TOOLS.filter((name) => called.has(name))
   const parts = [
     ...(renamed.length === 1
       ? [`The \`${renamed[0]}\` tool is now \`${RENAMED_TOOLS[renamed[0]]}\` and must be called by that name.`]
@@ -938,11 +936,6 @@ function legacyToolNotice(messages: ReadonlyArray<TransformResult["messages"][nu
         ? [`The following tools now take \`path\` instead of \`filePath\`: ${list(paths)}.`]
         : []),
     ...(called.has("skill") ? ["The `skill` tool now takes `id` instead of `name`."] : []),
-    ...(removed.length === 1
-      ? [`The \`${removed[0]}\` tool is no longer available and must not be called.`]
-      : removed.length > 1
-        ? [`The following tools are no longer available and must not be called: ${list(removed)}.`]
-        : []),
   ]
   if (parts.length === 0) return undefined
   return ["The available tools have changed.", ...parts].join("\n\n")

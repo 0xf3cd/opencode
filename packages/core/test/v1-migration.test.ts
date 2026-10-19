@@ -469,7 +469,7 @@ describe("V1Migration.transformSession", () => {
     })
   })
 
-  test("appends a legacy tool notice naming only the renamed or removed tools that were called", () => {
+  test("appends a legacy tool notice naming only the renamed tools that were called", () => {
     const parent = user("msg_000000000060aaaaaaaaaaaaaa")
     const message = assistant("msg_000000000061aaaaaaaaaaaaaa", parent.id)
     const call = (id: string, tool: string) =>
@@ -505,7 +505,6 @@ describe("V1Migration.transformSession", () => {
           "The following tools were renamed and must be called by their new names: `bash` is now `shell`; `task` is now `subagent`; `apply_patch` is now `patch`.",
           "The `subagent` tool takes `agent` instead of `subagent_type` and `sessionID` instead of `task_id`.",
           "The `read` tool now takes `path` instead of `filePath`.",
-          "The `todowrite` tool is no longer available and must not be called.",
         ].join("\n\n"),
         time: { created: 20 },
       },
