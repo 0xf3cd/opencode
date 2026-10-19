@@ -3,9 +3,11 @@ export * as SessionCompaction from "./compaction.js"
 import {
   AIError,
   type ContentPart,
+  type FinishReason,
   InvalidProviderOutputError,
   InvalidRequestError,
   isContextOverflowFailure,
+  LanguageModel,
   LLMClient,
   LLMEvent,
   LLMRequest,
@@ -87,6 +89,7 @@ type Prepared = Effect.Success<ReturnType<SessionModelRequest.Interface["compact
 
 type Streamed = {
   readonly text: string
+  readonly finish?: FinishReason
   readonly providerState?: SessionMessage.ProviderState
 }
 
@@ -184,6 +187,9 @@ export const buildPrompt = (update: boolean, legacy = false) => {
 const NUDGE =
   "The previous response did not fill in the required summary template. Do not call tools. Return the summary as text using the exact section headings from the template."
 
+const LENGTH_NUDGE =
+  "The previous response hit the output token limit. Do not call tools. Return a much shorter summary using the exact section headings from the template."
+
 /** Summaries written with the previous template carry this catch-all heading. */
 const LEGACY_HEADING = "## Additional Context"
 
@@ -247,9 +253,9 @@ export const layer = Layer.effect(
 
     const due = (context: SessionContext.Loaded, ceiling: number) => {
       const messages = context.messages
-      // A compaction just completed; let the runner rebuild the request from it first.
+      // A compaction just settled; let the runner finish or rebuild the request from it first.
       const last = messages.at(-1)
-      if (last?.type === "compaction" && last.status === "completed") return false
+      if (last?.type === "compaction") return false
       // An encrypted native window estimates as nothing, so wait for a response to measure it.
       const measured = messages.findLastIndex((message) => hasMeasuredPrompt(message, context.model.ref))
       if (measured < messages.findLastIndex(SessionProviderContext.isCheckpoint)) return false
@@ -292,7 +298,7 @@ export const layer = Layer.effect(
       const prepared = yield* prepare(context, context.messages, budget)
 
       // Hooks saw the request without the summary prompt, so it is appended here. A reply that ignores the
-      // template gets one reminder before it counts as a failure.
+      // template or hits the output token limit gets one reminder before it counts as a failure.
       const send = (request: LLMRequest) =>
         Effect.gen(function* () {
           const prompted = fitOutput(
@@ -300,13 +306,23 @@ export const layer = Layer.effect(
             context.model.limit,
           )
           const reply = yield* stream(context, prompted, prepared.options)
-          if (filled(reply.text)) return { ...reply, recent: recent.text }
+          if (reply.finish !== "length" && filled(reply.text)) return { ...reply, recent: recent.text }
 
+          const base = reply.finish === "length" ? lowerReasoning(prompted) : prompted
+          const reminder = reply.finish === "length" ? LENGTH_NUDGE : NUDGE
           const nudged = fitOutput(
-            LLMRequest.update(prompted, { messages: [...prompted.messages, Message.user(NUDGE)] }),
+            LLMRequest.update(base, { messages: [...base.messages, Message.user(reminder)] }),
             context.model.limit,
           )
           const retry = yield* stream(context, nudged, prepared.options)
+          if (retry.finish === "length") {
+            return yield* Effect.fail<Failure>({
+              error: {
+                type: "compaction.failed",
+                message: "Compaction summary reached the output token limit",
+              },
+            })
+          }
           if (filled(retry.text)) return { ...retry, recent: recent.text }
           return yield* Effect.fail<Failure>({
             error: {
@@ -318,7 +334,7 @@ export const layer = Layer.effect(
           })
         })
 
-      const overhead = Token.estimate(prompt) + Token.estimate(NUDGE)
+      const overhead = Token.estimate(prompt) + Math.max(Token.estimate(NUDGE), Token.estimate(LENGTH_NUDGE))
       // Automatic compaction starts past the ceiling, so the whole conversation is sent unchanged while the window can
       // still fit the summary. Below that, the history before the tail is sent instead, as before: unchanged when it fits,
       // which still reuses the cache for that shorter prefix, and as text otherwise. Dropping exchanges to make room
@@ -581,15 +597,10 @@ export const layer = Layer.effect(
                 return Effect.fail(
                   new AIError({ reason: new UnknownProviderError({ message: "Compaction generation failed" }) }),
                 )
-              case "length":
-                return unusable({
-                  type: "compaction.failed",
-                  message: "Compaction summary reached the output token limit",
-                })
               case "content-filter":
                 return unusable(contentFilterError("Compaction summary was blocked by the provider", event.reason))
               default:
-                return Effect.succeed(streamed)
+                return Effect.succeed({ ...streamed, finish: event.reason.normalized })
             }
           },
         ),
@@ -979,6 +990,104 @@ const fitOutput = (request: LLMRequest, limit: SessionContext.Loaded["model"]["l
   )
   if (maxTokens === current) return request
   return LLMRequest.update(request, { generation: { ...request.generation, maxTokens } })
+}
+
+const LOW_EFFORTS = new Set(["none", "minimal", "low"])
+
+const isRecord = (value: unknown): value is Record<string, unknown> =>
+  typeof value === "object" && value !== null && !Array.isArray(value)
+
+const lowerProviderOptions = (options: Record<string, unknown> | undefined) => {
+  if (!options) return undefined
+  const next: Record<string, unknown> = { ...options }
+  if (typeof next.effort === "string" && !LOW_EFFORTS.has(next.effort)) next.effort = "low"
+  if (typeof next.reasoningEffort === "string" && !LOW_EFFORTS.has(next.reasoningEffort)) next.reasoningEffort = "low"
+  if (typeof next.thinkingLevel === "string" && !LOW_EFFORTS.has(next.thinkingLevel)) next.thinkingLevel = "low"
+  if (isRecord(next.thinking)) {
+    if (next.thinking.type === "enabled") {
+      next.thinking = { type: "disabled" }
+      delete next.effort
+    } else if (next.thinking.type === "adaptive" && next.effort === undefined) {
+      next.effort = "low"
+    }
+  }
+  if (next.enableThinking === true) {
+    next.enableThinking = false
+    delete next.thinkingBudget
+  }
+  if (isRecord(next.thinkingConfig)) {
+    next.thinkingConfig =
+      typeof next.thinkingConfig.thinkingLevel === "string"
+        ? { ...next.thinkingConfig, thinkingLevel: "low" }
+        : { includeThoughts: false, thinkingBudget: 0 }
+  }
+  if (isRecord(next.reasoning)) {
+    next.reasoning =
+      typeof next.reasoning.effort === "string" ? { ...next.reasoning, effort: "low" } : { enabled: false }
+  }
+  return next
+}
+
+/**
+ * When a summary hits `maxTokens`, thinking tokens and verbose output share that cap. Lower reasoning on the
+ * retry so the budget goes to the summary, using a per-message effort update where the route supports one so
+ * the top-level effort stays frozen for the prompt cache.
+ */
+const lowerReasoning = (request: LLMRequest): LLMRequest => {
+  const merged = {
+    ...request.model.route.defaults.providerOptions,
+    ...request.model.defaults?.providerOptions,
+    ...request.providerOptions,
+  }
+  const configuredEffort =
+    typeof merged.effort === "string"
+      ? merged.effort
+      : typeof merged.reasoningEffort === "string"
+        ? merged.reasoningEffort
+        : undefined
+  const manualThinking = isRecord(merged.thinking) && merged.thinking.type === "enabled"
+  const needsExplicitLowEffort =
+    !manualThinking &&
+    configuredEffort === undefined &&
+    (request.model.route.protocol === "anthropic-messages" ||
+      (isRecord(merged.thinking) && merged.thinking.type === "adaptive"))
+  const canLowerEffort =
+    !manualThinking &&
+    (needsExplicitLowEffort || (configuredEffort !== undefined && !LOW_EFFORTS.has(configuredEffort)))
+
+  const defaults = lowerProviderOptions(request.model.defaults?.providerOptions)
+  const providerOptions = lowerProviderOptions(
+    needsExplicitLowEffort ? { ...request.providerOptions, effort: "low" } : request.providerOptions,
+  )
+  const model =
+    defaults === request.model.defaults?.providerOptions
+      ? request.model
+      : LanguageModel.update(request.model, {
+          defaults: { ...request.model.defaults, providerOptions: defaults },
+        })
+
+  const supportsUpdates = request.model.route.supportsEffortUpdates?.(request) ?? false
+  if (!supportsUpdates || !canLowerEffort) {
+    return LLMRequest.update(request, { model, providerOptions })
+  }
+
+  const updates = request.messages.flatMap((message) =>
+    message.role === "system" && message.content.length === 1 && message.content[0]?.type === "effort"
+      ? [message.content[0]]
+      : [],
+  )
+  const baseMessages =
+    updates.length > 0 && updates.at(-1)?.effort !== configuredEffort
+      ? request.messages.filter(
+          (message) =>
+            !(message.role === "system" && message.content.length === 1 && message.content[0]?.type === "effort"),
+        )
+      : request.messages
+  return LLMRequest.update(request, {
+    model,
+    providerOptions,
+    messages: [...baseMessages, Message.effort({ effort: "low", previous: configuredEffort })],
+  })
 }
 
 const estimateRequest = (request: Pick<LLMRequest, "system" | "tools" | "messages">) =>

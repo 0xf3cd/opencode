@@ -218,11 +218,11 @@ const layer = Layer.effect(
         const loaded = initial ?? (yield* prepareContext(sessionID).pipe(Effect.flatMap(context.load)))
         initial = undefined
         const compacted = yield* compaction.compact({ reason: "auto", context: loaded })
-        if (compacted.status === "failed") return yield* new StepFailedError({ error: compacted.error })
         if (compacted.status === "completed") {
           assistantMessageID = SessionMessage.ID.create()
           continue
         }
+        if (compacted.status === "failed") recoverOverflow = false
         const stepLimitReached = loaded.agent.info.steps !== undefined && step >= loaded.agent.info.steps
         const transcript = SessionModelRequest.baseTranscript({
           agent: loaded.agent.info,

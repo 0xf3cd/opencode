@@ -1,6 +1,7 @@
 import { expect, test } from "bun:test"
-import { GenerationOptions, LLMClient, LLMEvent, LanguageModel, ToolDefinition, type LLMRequest } from "@opencode/ai"
-import { OpenAIChat } from "@opencode/ai/protocols"
+import { GenerationOptions, LLMClient, LLMEvent, LLMRequest, LanguageModel, ToolDefinition } from "@opencode/ai"
+import { AnthropicMessages, OpenAIChat } from "@opencode/ai/protocols"
+import { compileRequest } from "../../ai/src/route/client"
 import { Database } from "@opencode/core/database/database"
 import { AppNodeBuilder } from "@opencode/core/effect/app-node-builder"
 import { llmClient } from "@opencode/core/effect/app-node-platform"
@@ -33,6 +34,7 @@ import { asc, eq } from "drizzle-orm"
 import { testEffect } from "./lib/effect"
 
 let requests: LLMRequest[] = []
+let responses: Array<Stream.Stream<LLMEvent>> = []
 const model = LanguageModel.make({
   id: "summary-model",
   provider: "test",
@@ -51,6 +53,8 @@ const cost = [
 const client = Layer.mock(LLMClient.Service)({
   stream: (request: LLMRequest) => {
     requests.push(request)
+    const scripted = responses.shift()
+    if (scripted) return scripted
     return Stream.make(
       LLMEvent.textDelta({ id: "summary", text: "## Objective\n- manual summary" }),
       LLMEvent.stepFinish({
@@ -733,5 +737,135 @@ it.effect("forked session compaction reuses the fork root prompt cache key", () 
 
     expect(requests).toHaveLength(1)
     expect(requests[0]?.promptCacheKey).toBe(rootID)
+  }),
+)
+
+it.effect("compaction inherits high-effort thinking on the first request and lowers reasoning after length", () =>
+  Effect.gen(function* () {
+    requests = []
+    responses = [
+      Stream.make(
+        LLMEvent.reasoningDelta({ id: "think", text: "Extensive thinking..." }),
+        LLMEvent.textDelta({ id: "summary", text: "## Objective\n- Truncated summary" }),
+        LLMEvent.stepFinish({
+          index: 0,
+          reason: { normalized: "length", raw: "max_tokens" },
+          usage: {
+            inputTokens: 265_898,
+            outputTokens: 32_000,
+            nonCachedInputTokens: 4,
+            cacheReadInputTokens: 250_074,
+            cacheWriteInputTokens: 15_820,
+            reasoningTokens: 24_848,
+          },
+        }),
+        LLMEvent.finish({ reason: { normalized: "length", raw: "max_tokens" } }),
+      ),
+      Stream.make(
+        LLMEvent.textDelta({ id: "summary-retry", text: "## Objective\n- Concise recovered summary" }),
+        LLMEvent.stepFinish({
+          index: 0,
+          reason: { normalized: "stop", raw: "end_turn" },
+          usage: {
+            inputTokens: 265_940,
+            outputTokens: 400,
+            nonCachedInputTokens: 42,
+            cacheReadInputTokens: 265_898,
+            cacheWriteInputTokens: 0,
+            reasoningTokens: 0,
+          },
+        }),
+        LLMEvent.finish({ reason: { normalized: "stop", raw: "end_turn" } }),
+      ),
+    ]
+    const compaction = yield* SessionCompaction.Service
+    const store = yield* SessionStore.Service
+    const session = yield* insertSession(Session.ID.make("ses_opus_length_retry"))
+    const opusHigh = LanguageModel.make({
+      id: "claude-opus-5-5",
+      provider: "anthropic",
+      route: AnthropicMessages.route,
+      defaults: {
+        providerOptions: {
+          thinking: { type: "adaptive", display: "summarized" },
+          effort: "high",
+        },
+      },
+    })
+    const opusResolved = SessionRunnerModel.resolved(opusHigh, {
+      capabilities: { tools: true, input: ["text", "image"], output: ["text"] },
+      variant: Provider.ID.make("high") as never,
+      cost,
+      limit: { context: 400_000, output: 128_000 },
+    })
+    const messages = [
+      SessionMessage.User.make({
+        id: SessionMessage.ID.create(),
+        type: "user",
+        text: "Summarize our long session.",
+        time: { created: DateTime.makeUnsafe(0) },
+      }),
+    ]
+
+    const outcome = yield* compaction.compact({
+      reason: "auto",
+      context: {
+        ...loaded(session, [
+          ...messages,
+          Schema.decodeUnknownSync(SessionMessage.Assistant)({
+            id: SessionMessage.ID.create(),
+            type: "assistant",
+            agent: Agent.defaultID,
+            model: { id: "claude-opus-5-5", providerID: "anthropic", variant: "high" },
+            content: [{ type: "text", text: "Earlier reply" }],
+            tokens: { input: 350_000, output: 100, reasoning: 0, cache: { read: 0, write: 0 } },
+            time: { created: 0, completed: 1 },
+          }),
+        ]),
+        model: opusResolved,
+      },
+    })
+
+    expect(outcome).toEqual({ status: "completed" })
+    expect(requests).toHaveLength(2)
+
+    // First attempt inherits the session variant's adaptive high-effort thinking and the 32k compaction cap.
+    const first = yield* compileRequest(LLMRequest.update(requests[0]!, { cache: "none" }))
+    expect(first.body).toMatchObject({
+      max_tokens: 32_000,
+      thinking: {
+        type: "adaptive",
+        display: "summarized",
+        block_binding: { prefix_mismatch_behavior: "drop_block" },
+      },
+      output_config: { effort: "high" },
+    })
+
+    // Retry keeps top-level effort frozen for prompt-cache reuse and lowers effort per-turn with a shorter prompt.
+    const second = yield* compileRequest(LLMRequest.update(requests[1]!, { cache: "none" }))
+    expect(second.body).toMatchObject({
+      max_tokens: 32_000,
+      output_config: { effort: "high" },
+    })
+    expect((second.body.messages as Array<Record<string, unknown>>).slice(-2)).toEqual([
+      { role: "system", content: [], output_config: { effort: "low" } },
+      {
+        role: "user",
+        content: [
+          {
+            type: "text",
+            text: "The previous response hit the output token limit. Do not call tools. Return a much shorter summary using the exact section headings from the template.",
+          },
+        ],
+      },
+    ])
+
+    expect(yield* store.context(session.id)).toMatchObject([
+      {
+        type: "compaction",
+        status: "completed",
+        summary: "## Objective\n- Concise recovered summary",
+      },
+    ])
   }),
 )

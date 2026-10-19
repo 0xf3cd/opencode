@@ -2821,26 +2821,60 @@ describe("SessionRunnerLLM", () => {
     })
   }
 
-  for (const response of ["length", "content-filter"] as const) {
-    scenario(`rejects compaction ${response} without retrying or committing its draft`, function* (s) {
+  scenario("rejects compaction content-filter without retrying or committing its draft", function* (s) {
+    yield* s.llm.push(TestLLM.text("Earlier answer", "history"))
+    yield* s.runPrompt("Earlier question")
+    s.requests.length = 0
+    yield* s.llm.push(
+      TestLLM.complete(
+        { reason: { normalized: "content-filter" } },
+        LLMEvent.textDelta({ id: "truncated", text: "## Objective\n- Incomplete summary" }),
+      ),
+    )
+    const compaction = yield* s.session.compact({ sessionID })
+    yield* s.resume
+
+    expect(s.requests).toHaveLength(1)
+    expect((yield* s.messages).find((message) => message.id === compaction.id)).toMatchObject({ status: "failed" })
+    yield* s.llm.push(TestLLM.text("Continued", "continued"))
+    yield* s.runPrompt("Continue")
+    expect(userTexts(s.requests[1])).toContain("Earlier question")
+    expect(JSON.stringify(s.requests[1])).not.toContain("Incomplete summary")
+  })
+
+  for (const summary of [true, false]) {
+    scenario(`compaction ${summary ? "recovers" : "stops"} after one shorter-summary retry for length`, function* (s) {
       yield* s.llm.push(TestLLM.text("Earlier answer", "history"))
       yield* s.runPrompt("Earlier question")
       s.requests.length = 0
+      const truncated = TestLLM.complete(
+        { reason: { normalized: "length" } },
+        LLMEvent.textDelta({ id: "truncated", text: "## Objective\n- Incomplete summary" }),
+      )
       yield* s.llm.push(
-        TestLLM.complete(
-          { reason: { normalized: response } },
-          LLMEvent.textDelta({ id: "truncated", text: "## Objective\n- Incomplete summary" }),
-        ),
+        truncated,
+        summary ? TestLLM.text("## Objective\n- Concise summary", "recovered") : truncated,
       )
       const compaction = yield* s.session.compact({ sessionID })
       yield* s.resume
 
-      expect(s.requests).toHaveLength(1)
-      expect((yield* s.messages).find((message) => message.id === compaction.id)).toMatchObject({ status: "failed" })
+      expect(s.requests).toHaveLength(2)
+      expect(userTexts(s.requests[1]).at(-1)).toContain("hit the output token limit")
+      expect((yield* s.messages).find((message) => message.id === compaction.id)).toMatchObject(
+        summary
+          ? { status: "completed", summary: "## Objective\n- Concise summary" }
+          : {
+              status: "failed",
+              error: {
+                type: "compaction.failed",
+                message: "Compaction summary reached the output token limit",
+              },
+            },
+      )
       yield* s.llm.push(TestLLM.text("Continued", "continued"))
       yield* s.runPrompt("Continue")
-      expect(userTexts(s.requests[1])).toContain("Earlier question")
-      expect(JSON.stringify(s.requests[1])).not.toContain("Incomplete summary")
+      expect(JSON.stringify(s.requests[2])).not.toContain("Incomplete summary")
+      if (!summary) expect(userTexts(s.requests[2])).toContain("Earlier question")
     })
   }
 
@@ -3261,7 +3295,7 @@ describe("SessionRunnerLLM", () => {
     expect(yield* s.context).not.toContainEqual(expect.objectContaining({ type: "compaction" }))
   })
 
-  scenario("stops after required automatic compaction fails", function* (s) {
+  scenario("continues the user turn when automatic compaction fails", function* (s) {
     yield* s.llm.push(TestLLM.textWithUsage("Earlier answer", "text-before-failed-compaction", 3_950))
     yield* s.runPrompt("Earlier question ".repeat(180))
 
@@ -3269,19 +3303,25 @@ describe("SessionRunnerLLM", () => {
     s.requests.length = 0
     yield* s.llm.push(
       [LLMEvent.providerError({ message: "Unsupported parameter: max_output_tokens" })],
-      TestLLM.text("Must not run", "text-after-failed-compaction"),
+      TestLLM.text("Turn answered despite failed compaction", "text-after-failed-compaction"),
     )
-    yield* s.admit("Recent exact request ".repeat(180))
-    expect(yield* Effect.exit(s.resume)).toMatchObject({ _tag: "Failure" })
+    yield* s.runPrompt("Recent exact request ".repeat(180))
 
-    expect(s.requests).toHaveLength(1)
+    expect(s.requests).toHaveLength(2)
     expect(s.requests[0]?.generation?.maxTokens).toBe(50)
+    expect(userTexts(s.requests[1])).toContain("Recent exact request ".repeat(180))
     expect(yield* s.context).toContainEqual(
       expect.objectContaining({
         type: "compaction",
         status: "failed",
         reason: "auto",
         error: expect.objectContaining({ message: "Unsupported parameter: max_output_tokens" }),
+      }),
+    )
+    expect(yield* s.context).toContainEqual(
+      expect.objectContaining({
+        type: "assistant",
+        finish: "stop",
       }),
     )
   })
