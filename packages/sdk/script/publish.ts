@@ -18,11 +18,7 @@ const tarball = `${pkg.name.replace("@", "").replace("/", "-")}-${pkg.version}.t
 const output = (value: string, types = false) =>
   value.replace("./src/", "./dist/").replace(/\.ts$/, types ? ".d.ts" : ".js")
 
-if (
-  !dryRun &&
-  !NpmLibraries.packDir &&
-  (await $`npm view ${pkg.name}@${pkg.version} version`.nothrow()).exitCode === 0
-) {
+if (!dryRun && (await $`npm view ${pkg.name}@${pkg.version} version`.nothrow()).exitCode === 0) {
   console.log(`already published ${pkg.name}@${pkg.version}`)
   process.exit(0)
 }

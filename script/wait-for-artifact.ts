@@ -17,8 +17,7 @@ const run = `https://api.github.com/repos/${process.env.GITHUB_REPOSITORY}/actio
 const producers = [producer, producer.replace(/ \(.*\)$/, "")]
 const wait = 30 * 60_000
 const started = Date.now()
-// Queue time counts against the deadline, so a producer that never starts or never shows up fails the wait. While
-// the producer, or a job it needs, is running, the deadline moves forward the way `needs` would keep waiting.
+// Queue time counts against the deadline; it moves forward while the producer, or a job it needs, is running.
 let deadline = started + wait
 let failures = 0
 
@@ -36,9 +35,8 @@ for (let check = 0; Date.now() < deadline; check++) {
     deadline = Date.now() + wait
   }
 
-  // Every request spends the repository's GITHUB_TOKEN budget (1,000 an hour, shared with other workflows) and several
-  // jobs wait at once. Checking the artifact every 20 s, then every minute after 10 minutes, and the jobs every third
-  // check keeps six waiting jobs under about 500 requests an hour.
+  // Requests spend the repository's GITHUB_TOKEN budget (1,000 an hour, shared with other workflows). This pace costs a
+  // waiting job about 107 requests in its first hour and 80 an hour after.
   await Bun.sleep(Date.now() - started < 10 * 60_000 ? 20_000 : 60_000)
 }
 
@@ -49,7 +47,7 @@ function ready(): never {
   process.exit(0)
 }
 
-// Undefined when the request failed, so callers can tell "not uploaded" from "unknown".
+// Undefined when the request failed.
 async function uploaded() {
   const body = await get(`${run}/artifacts?name=${encodeURIComponent(artifact)}`)
 
@@ -58,8 +56,7 @@ async function uploaded() {
   return body.total_count > 0
 }
 
-// A job can finish just before its artifact appears in the listing, so a successful producer gets three more checks.
-// Only a definite "not uploaded" on the last one fails; a failed request leaves it to the next producer check.
+// A job can finish just before its artifact is listed. Only a definite "not uploaded" on the last check fails.
 async function confirmed() {
   for (const attempt of [1, 2, 3]) {
     await Bun.sleep(5_000)
@@ -84,8 +81,8 @@ async function listJobs() {
     )
 }
 
-// Rate limits, 5xx responses and network errors are retried after a backoff. Errors a retry cannot fix, such as 401,
-// 404 or a missing permission, fail right away instead of waiting out the deadline.
+// Retries rate limits, 5xx responses and network errors; fails at once on errors a retry cannot fix (401, 404,
+// missing permission).
 async function get(url: string): Promise<unknown> {
   const response = await fetch(url, {
     headers: { Authorization: `Bearer ${token}`, Accept: "application/vnd.github+json" },
@@ -113,20 +110,19 @@ async function get(url: string): Promise<unknown> {
 
   const delay = backoff(response, limited)
 
-  // A rate limit ends at a time GitHub names while the producer keeps running, so waiting it out does not spend the
-  // deadline.
+  // Waiting out a rate limit does not spend the deadline.
   if (limited) deadline += delay
 
-  console.warn(`GitHub API ${response?.status ?? "request failed"} for ${url}; retrying in ${Math.round(delay / 1000)}s`)
+  console.warn(
+    `GitHub API ${response?.status ?? "request failed"} for ${url}; retrying in ${Math.round(delay / 1000)}s`,
+  )
   await Bun.sleep(delay)
 
-  // Retry at once, so a wait that ends just before the deadline still gets its request in.
+  // Retry at once, so a wait ending just before the deadline still gets its request in.
   return Date.now() < deadline ? get(url) : undefined
 }
 
-// GitHub asks clients to honour retry-after, then x-ratelimit-reset when no requests remain, and otherwise to wait at
-// least a minute after a rate limit, exponentially longer while it persists. Server and network errors back off
-// exponentially up to a minute.
+// GitHub's guidance: retry-after, then x-ratelimit-reset, otherwise at least a minute, doubling while it persists.
 function backoff(response: Response | undefined, limited: boolean) {
   failures++
   const retryAfter = Number(response?.headers.get("retry-after"))

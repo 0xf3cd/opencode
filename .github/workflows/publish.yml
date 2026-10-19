@@ -31,7 +31,7 @@ permissions:
   id-token: write
   contents: write
   packages: write
-  # Desktop jobs poll this run's artifacts and jobs while the CLI builds.
+  # script/wait-for-artifact.ts reads this run's artifacts and jobs.
   actions: read
 
 env:
@@ -65,7 +65,7 @@ jobs:
       release: ${{ steps.version.outputs.release }}
       tag: ${{ steps.version.outputs.tag }}
 
-  # build-cli and build-node-cli embed the same web UI archive, so it builds once instead of in every CLI target's job.
+  # Built once for every build-cli and build-node-cli leg.
   build-app-archive:
     needs: version
     runs-on: blacksmith-4vcpu-ubuntu-2404
@@ -88,7 +88,6 @@ jobs:
           path: packages/cli/.cache/app-archive.bin
           if-no-files-found: error
 
-  # Each target builds in its own job and artifact, so signers and desktop jobs download only the CLIs they use.
   build-cli:
     needs:
       - version
@@ -126,9 +125,8 @@ jobs:
           name: opencode-app-archive
           path: packages/cli/.cache
 
-      # build.ts looks up and downloads the Bun release through the REST API. An app token has its own rate limit, so 12
-      # legs don't spend the repository's GITHUB_TOKEN budget, which the desktop jobs poll artifacts with. It is
-      # read-only and scoped to this repository because the build runs dependency install scripts.
+      # build.ts fetches the Bun release through the REST API. An app token keeps that off the GITHUB_TOKEN budget the
+      # desktop jobs poll with; read-only because the build runs dependency install scripts.
       - name: Create Bun download token
         id: bun-token
         uses: actions/create-github-app-token@fee1f7d63c2ff003460e3d139729b119787bc349 # v2.2.2
@@ -349,7 +347,7 @@ jobs:
 
   build-electron:
     # Desktop packaging re-signs the bundled CLI on macOS and Windows, so it starts from the unsigned build.
-    # It builds the app while build-cli runs and waits for its own CLI just before Prepare.
+    # No build-cli need: it builds the app first and waits for its own CLI before Prepare.
     needs:
       - version
     if: github.repository == 'anomalyco/opencode' && ((github.ref_name == 'dev' && needs.version.outputs.release != '') || github.ref_name == 'beta')
@@ -370,8 +368,7 @@ jobs:
             target: x86_64-apple-darwin
             cli: darwin-x64-baseline
             platform_flag: --mac --x64
-            # The arm64 host runs arm64 build tools while the app bundles x64 node-pty, so install both CPUs. --cpu=x64
-            # would leave only x64 tools, which run under Rosetta at best.
+            # Both CPUs: arm64 build tools for the host, x64 node-pty for the app.
             bun_install_flags: --os=darwin --cpu=*
           - host: macos-26
             target: aarch64-apple-darwin
@@ -442,8 +439,7 @@ jobs:
           opencode-app-id: ${{ vars.OPENCODE_APP_ID }}
           opencode-app-secret: ${{ secrets.OPENCODE_APP_SECRET }}
 
-      # The app builds before its CLI exists. `bun run build` would run the prebuild hook, which copies the CLI;
-      # Prepare runs it once the CLI is here.
+      # Not `bun run build`: its prebuild hook needs the CLI, so Prepare runs it later.
       - name: Build app
         run: bun run electron-vite build
         working-directory: packages/desktop
@@ -460,8 +456,8 @@ jobs:
           VITE_SENTRY_RELEASE: desktop@${{ needs.version.outputs.version }}
           OPENCODE_CLI_TARGET: ${{ matrix.settings.target }}
 
-      # The job name is the one GitHub gives the build-cli leg for this target. build-app-archive is the job it needs, so
-      # the wait keeps going while that runs.
+      # The second argument is GitHub's default name for that build-cli leg. build-app-archive is what build-cli
+      # needs, so the wait extends while it runs.
       - name: Wait for the CLI
         run: bun ./script/wait-for-artifact.ts cli-unsigned-${{ matrix.settings.cli }} "build-cli (${{ matrix.settings.cli }})" build-app-archive
         env:
@@ -472,8 +468,7 @@ jobs:
           name: cli-unsigned-${{ matrix.settings.cli }}
           path: packages/cli/dist
 
-      # az requests new Azure tokens with the GitHub OIDC token, which expires 5 minutes after login. Prepare requests
-      # the first signing token, so a login before a long wait would fail it with AADSTS700024.
+      # The OIDC assertion az refreshes with expires 5 minutes after login, so log in after the wait (AADSTS700024).
       - name: Azure login
         if: runner.os == 'Windows'
         uses: azure/login@a457da9ea143d694b1b9c7c869ebb04ebe844ef5 # v2.3.0
@@ -491,8 +486,8 @@ jobs:
           OPENCODE_CLI_TARGET: ${{ matrix.settings.target }}
           OPENCODE_CLI_DIST: ${{ github.workspace }}/packages/cli/dist
 
-      # A transient download, signing timestamp or notarization error in one leg fails the whole release, so a failed
-      # Package retries once below. Keep the retry identical to this step.
+      # Any failure retries once below, for transient download, signing or notarization errors. Keep the retry
+      # identical.
       - name: Package
         id: package
         if: needs.version.outputs.release
@@ -509,8 +504,7 @@ jobs:
           APPLE_API_KEY_ID: ${{ secrets.APPLE_API_KEY }}
           APPLE_API_ISSUER: ${{ secrets.APPLE_API_ISSUER }}
 
-      # Only dist holds electron-builder output. It copies out/ (the app build) and resources/ (the CLI from Prepare)
-      # into dist rather than changing them, so the retry reuses both.
+      # electron-builder writes only to dist, so the retry reuses out/ and resources/.
       - name: Clean up failed Package
         if: steps.package.outcome == 'failure'
         shell: bash
@@ -524,7 +518,7 @@ jobs:
           fi
           sleep 90
 
-      # The first login's OIDC assertion has expired by now, so the retry's signing would fail without a new login.
+      # The first login's OIDC assertion has expired by now.
       - name: Azure login (retry)
         if: runner.os == 'Windows' && steps.package.outcome == 'failure'
         uses: azure/login@a457da9ea143d694b1b9c7c869ebb04ebe844ef5 # v2.3.0
@@ -593,9 +587,7 @@ jobs:
             }
           }
 
-      # publish merges these artifacts into OPENCODE_DESKTOP_DIST, and packages/desktop/scripts/publish.ts ships only
-      # its top-level *.{exe,blockmap,dmg,zip,AppImage,deb,rpm,app.tar.gz} files. @actions/glob has no brace expansion,
-      # so keep one line per extension in step with that glob. The installers are already compressed.
+      # Keep in step with the glob in packages/desktop/scripts/publish.ts (@actions/glob has no brace expansion).
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
           name: opencode-desktop-${{ matrix.settings.target }}
@@ -617,8 +609,7 @@ jobs:
           name: latest-yml-${{ matrix.settings.target }}
           path: packages/desktop/dist/latest*.yml
 
-  # Builds and packs the npm libraries while the CLI builds, so publish only publishes them. It gets no secrets or
-  # id-token, so it cannot publish anything. Beta publishes no npm packages.
+  # No secrets or id-token, so it cannot publish. Beta publishes no npm packages.
   pack-npm:
     needs: version
     runs-on: blacksmith-4vcpu-ubuntu-2404
@@ -629,7 +620,7 @@ jobs:
     steps:
       - uses: actions/checkout@f43a0e5ff2bd294095638e18286ca9a3d1956744 # v3.6.0
 
-      # The same Bun and install as publish, so the tarballs match the ones publish would build.
+      # Same Bun and install as publish, so the tarballs match what publish would build.
       - uses: ./.github/actions/setup-bun
 
       - name: Pack npm libraries
@@ -638,13 +629,14 @@ jobs:
           OPENCODE_VERSION: ${{ needs.version.outputs.version }}
           OPENCODE_NPM_PACK_DIR: /tmp/npm-libraries
 
-      # The tarballs are already gzipped.
+      # Libraries already on npm at this version are not packed, so a re-dispatched release may have none.
+      # NpmLibraries.verify checks the set.
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
           name: npm-libraries
           path: /tmp/npm-libraries/*.tgz
           compression-level: 0
-          if-no-files-found: error
+          if-no-files-found: ignore
 
   publish:
     needs:
@@ -656,14 +648,26 @@ jobs:
       - sign-cli-windows
       - build-electron
       - pack-npm
-    if: always() && !failure() && !cancelled()
+    # When pack-npm fails, a dev preview still publishes the way it did before pack-npm: the libraries build in place
+    # in publish order, so one that fails again stops everything after it (the CLI publishes right after client). A
+    # release stops.
+    if: >-
+      always() && !cancelled() && (!failure() || (
+        needs.pack-npm.result == 'failure' &&
+        !needs.version.outputs.release &&
+        needs.build-cli.result != 'failure' &&
+        needs.sign-cli-macos.result != 'failure' &&
+        needs.sign-cli-windows.result != 'failure' &&
+        needs.build-app-archive.result != 'failure' &&
+        needs.build-node-cli.result != 'failure' &&
+        needs.build-electron.result != 'failure'))
     runs-on: blacksmith-4vcpu-ubuntu-2404
     steps:
       - uses: actions/checkout@f43a0e5ff2bd294095638e18286ca9a3d1956744 # v3.6.0
 
       - uses: ./.github/actions/setup-bun
 
-      # Only releases push the Docker image (packages/cli/script/publish.ts).
+      # Only releases push the Docker image.
       - name: Login to GitHub Container Registry
         if: needs.version.outputs.release
         uses: docker/login-action@c94ce9fb468520275223c153574b00df6fe4bcc9 # v3.7.0
@@ -706,8 +710,7 @@ jobs:
           path: packages/cli/dist/node
           merge-multiple: true
 
-      # packages/cli/script/publish.ts publishes every package in dist, and a pattern that matches nothing downloads
-      # nothing, so check that dist holds each target once and that no macOS binary is unsigned.
+      # packages/cli/script/publish.ts publishes whatever is in dist, and an unmatched pattern downloads nothing.
       - name: Check CLI packages
         if: github.ref_name != 'beta'
         working-directory: packages/cli/dist
@@ -729,8 +732,7 @@ jobs:
             fi
           done
 
-          # Cross-compiled macOS binaries keep Bun's own, now invalid, Developer ID signature, so match the full name of
-          # the certificate sign-cli-macos signs with.
+          # Unsigned cross-compiled binaries still carry Bun's Developer ID, so match ours by full name.
           for binary in cli-darwin-*/bin/opencode; do
             if ! LC_ALL=C grep -aqF "Developer ID Application: Anomaly Innovations, Inc. (5NZ4Q7NXJ4)" "$binary"; then
               echo "$binary is not signed with the OpenCode Developer ID"
@@ -738,10 +740,10 @@ jobs:
             fi
           done
 
-      # script/publish.ts checks these tarballs before it publishes anything, and the library scripts publish them
-      # instead of building again.
+      # Absent when every library was already on npm; script/publish.ts verifies the set either way.
       - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
-        if: github.ref_name != 'beta'
+        if: needs.pack-npm.result == 'success'
+        continue-on-error: true
         with:
           name: npm-libraries
           path: /tmp/npm-libraries
@@ -766,7 +768,7 @@ jobs:
           opencode-app-id: ${{ vars.OPENCODE_APP_ID }}
           opencode-app-secret: ${{ secrets.OPENCODE_APP_SECRET }}
 
-      # Only releases publish to AUR and Homebrew and make release commits, which use the git identity set below.
+      # Only releases publish to AUR and Homebrew and make release commits with this git identity.
       - name: Cache apt packages (AUR)
         if: needs.version.outputs.release
         uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.3.0
@@ -801,7 +803,7 @@ jobs:
           TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
           TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
           OPENCODE_DESKTOP_DIST: /tmp/desktop
-          OPENCODE_NPM_TARBALLS: /tmp/npm-libraries
+          OPENCODE_NPM_TARBALLS: ${{ needs.pack-npm.result == 'success' && '/tmp/npm-libraries' || '' }}
           WINGET_GITHUB_TOKEN: ${{ secrets.WINGET_GITHUB_TOKEN }}
           CLOUDFLARE_ACCOUNT_ID: 15d29c8639fd3733b1b5486a2acfd968
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}

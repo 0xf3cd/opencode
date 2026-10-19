@@ -10,7 +10,7 @@ process.chdir(fileURLToPath(new URL("..", import.meta.url)))
 
 const tarball = `${pkg.name.replace("@", "").replace("/", "-")}-${pkg.version}.tgz`
 
-if (!NpmLibraries.packDir && (await $`npm view ${pkg.name}@${pkg.version} version`.nothrow()).exitCode === 0) {
+if ((await $`npm view ${pkg.name}@${pkg.version} version`.nothrow()).exitCode === 0) {
   console.log(`already published ${pkg.name}@${pkg.version}`)
   process.exit(0)
 }

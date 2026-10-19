@@ -37,8 +37,7 @@ if (-not $module) {
   }
 
   # PowerShellGet registers PSGallery only when the gallery answers, so a short outage fails Install-Module with
-  # "Unable to find repository 'PSGallery'". Only the install retries: the signing call below runs once, and the
-  # workflow retries a failed Package step but not Prepare.
+  # "Unable to find repository 'PSGallery'".
   foreach ($attempt in 1..3) {
     try {
       if (-not (Get-PSRepository | Where-Object { $_.Name -eq "PSGallery" })) {

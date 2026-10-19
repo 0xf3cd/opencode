@@ -1,7 +1,6 @@
 #!/usr/bin/env bun
 
-// publish.yml's pack-npm job: builds and packs the npm libraries into OPENCODE_NPM_PACK_DIR, with each library's own
-// script and gates, so the publish job only publishes them. Publishes nothing.
+// publish.yml's pack-npm job: packs the npm libraries into OPENCODE_NPM_PACK_DIR with their own scripts and checks.
 
 import { NpmLibraries } from "@opencode/script/npm"
 import { $ } from "bun"

@@ -35,7 +35,7 @@ async function writeChangelog() {
   await file.write(`${head}\n\n${entry}${rest ? `\n${rest}` : ""}`)
 }
 
-// publish.yml's pack-npm job built the library tarballs. Check them all before anything is published.
+// Check pack-npm's tarballs before anything is published.
 if (NpmLibraries.tarballs) await NpmLibraries.verify(NpmLibraries.tarballs)
 
 if (Script.release && !Script.preview) {
@@ -47,7 +47,7 @@ await prepareReleaseFiles(pkgjsons)
 
 if (Script.release) await $`bun ./packages/desktop/scripts/publish.ts --dry-run`
 
-// NpmLibraries.names is also the list pack-npm packs. The CLI publishes from its own dist, right after client.
+// The CLI publishes right after client, so a failing later library cannot hold back a dev preview.
 for (const name of NpmLibraries.names) {
   console.log(`\n=== ${name} ===\n`)
   await $`bun ./packages/${name}/script/publish.ts`

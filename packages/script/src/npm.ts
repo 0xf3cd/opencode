@@ -8,7 +8,7 @@ import { Script } from "./index.js"
 const packDir = process.env["OPENCODE_NPM_PACK_DIR"]
 const tarballs = process.env["OPENCODE_NPM_TARBALLS"]
 
-// The npm libraries in publish order. script/publish.ts publishes exactly these (plus the CLI), and pack-npm packs them.
+// The npm libraries in publish order. script/publish.ts publishes these (plus the CLI), and pack-npm packs them.
 const names = [
   "schema",
   "codemode",
@@ -28,12 +28,11 @@ const names = [
 
 export const NpmLibraries = {
   names,
-  // Set in pack-npm: the library scripts skip the npm view check, pack into this directory and publish nothing.
+  // Set in pack-npm: the library scripts pack into this directory and publish nothing.
   packDir,
   // Set in publish: the directory holding pack-npm's tarballs.
   tarballs,
 
-  // The tarball pack-npm built for this package, if publish has it.
   async carried(tarball: string) {
     if (!tarballs) return undefined
     const file = join(tarballs, basename(tarball))
@@ -47,20 +46,23 @@ export const NpmLibraries = {
     await $`npm publish ${tarball} --tag ${Script.channel} --access public`
   },
 
-  // Fails unless the directory holds every library's tarball, packed from that package for this version. Runs from
-  // the repository root.
+  // Fails unless each library has a tarball here packed from that package for this version, or is already on npm at
+  // this version (its script skips it). Runs from the repository root.
   async verify(directory: string) {
     const problems = await Promise.all(
       names.map(async (name) => {
         const pkg: { name: string } = await Bun.file(`packages/${name}/package.json`).json()
         const file = join(directory, `${pkg.name.replace("@", "").replace("/", "-")}-${Script.version}.tgz`)
-        if (!(await Bun.file(file).exists())) return `${file} is missing`
+        if (!(await Bun.file(file).exists())) {
+          const published = await $`npm view ${pkg.name}@${Script.version} version`.quiet().nothrow()
+          return published.exitCode === 0 ? undefined : `${file} is missing`
+        }
         const packed: { name: string; version: string } = await $`tar -xzOf ${file} package/package.json`.quiet().json()
         if (packed.name === pkg.name && packed.version === Script.version) return undefined
         return `${file} holds ${packed.name}@${packed.version}, expected ${pkg.name}@${Script.version}`
       }),
     ).then((items) => items.filter((item) => item !== undefined))
     if (problems.length > 0) throw new Error(`npm library tarballs do not match this release:\n${problems.join("\n")}`)
-    console.log(`verified ${names.length} npm library tarballs in ${directory}`)
+    console.log(`verified npm library tarballs for ${Script.version} in ${directory}`)
   },
 }

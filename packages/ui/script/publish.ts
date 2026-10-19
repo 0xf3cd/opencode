@@ -8,12 +8,11 @@ import { pack } from "./pack"
 
 process.chdir(fileURLToPath(new URL("..", import.meta.url)))
 
-// SAFETY: this is the package's own manifest, which always has a name and a version.
 const pkg = (await Bun.file("package.json").json()) as { name: string; version: string }
 
 const tarball = `${pkg.name.replace("@", "").replace("/", "-")}-${pkg.version}.tgz`
 
-if (!NpmLibraries.packDir && (await $`npm view ${pkg.name}@${pkg.version} version`.nothrow()).exitCode === 0) {
+if ((await $`npm view ${pkg.name}@${pkg.version} version`.nothrow()).exitCode === 0) {
   console.log(`already published ${pkg.name}@${pkg.version}`)
   process.exit(0)
 }

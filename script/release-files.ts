@@ -1,8 +1,7 @@
 import { Script } from "@opencode/script"
 import { $ } from "bun"
 
-// Shared by script/publish.ts and script/pack-npm.ts, so the libraries pack-npm builds see the same package versions
-// and install as a build in publish would.
+// Shared with script/pack-npm.ts so its libraries build against the same versions and install as publish's would.
 export async function packageJsons() {
   return Array.fromAsync(
     new Bun.Glob("**/package.json").scan({

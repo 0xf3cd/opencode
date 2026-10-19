@@ -134,7 +134,8 @@ const getBase = (appId: string): Configuration => {
 
       if ((await stat(version)).size === 0) throw new Error(`Bundled CLI version must be a non-empty file: ${version}`)
 
-      // Windows and macOS legs install every CPU's node-pty (--cpu=*), so only the files filter keeps the right one.
+      // The macOS x64 and Windows arm64 legs install every CPU's node-pty (--cpu=*), so only the files filter keeps
+      // the right one.
       if (context.electronPlatformName !== "win32" && context.electronPlatformName !== "darwin") return
 
       const prebuilds = path.join(

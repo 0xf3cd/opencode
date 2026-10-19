@@ -21,7 +21,7 @@ const tarball = `${pkg.name.replace("@", "").replace("/", "-")}-${pkg.version}.t
 const carried = await NpmLibraries.carried(tarball)
 
 if (!carried) await $`bun run build`
-if (!NpmLibraries.packDir && (await published(pkg.name, pkg.version))) {
+if (await published(pkg.name, pkg.version)) {
   console.log(`already published ${pkg.name}@${pkg.version}`)
 } else if (carried) {
   await NpmLibraries.publish(carried)
