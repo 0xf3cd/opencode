@@ -15,6 +15,7 @@ import { displayName } from "@opencode/ui/project-avatar"
 import { useGlobal } from "@/runtime/server/runtime"
 import { ServerConnection, serverName, useServers } from "@/runtime/server/registry"
 import { useLanguage } from "@/runtime/i18n/language"
+import { useCommand } from "@/shell/commands/command"
 import { Persist, persisted } from "@/runtime/persistence/storage"
 import { projectSettingsKey, useSettings } from "@/settings/model"
 import { useLayout } from "@/shell/state/layout"
@@ -65,6 +66,8 @@ export function SidebarInbox() {
   const tabs = useTabs()
   const language = useLanguage()
   const dialog = useDialog()
+  const command = useCommand()
+  let root!: HTMLDivElement
 
   const [state, setState, , ready] = persisted(Persist.global("sidebar.inbox"), InboxState, {
     workingExpanded: true,
@@ -155,9 +158,11 @@ export function SidebarInbox() {
 
         // Locally known sessions come last so live archive and unarchive events win over cached indexes.
         const sessions = new Map(
-          [...(queries[index]?.data?.() ?? []), ...(archivedQueries[index]?.data?.() ?? []), ...data.session.list()].map(
-            (session) => [session.id, session] as const,
-          ),
+          [
+            ...(queries[index]?.data?.() ?? []),
+            ...(archivedQueries[index]?.data?.() ?? []),
+            ...data.session.list(),
+          ].map((session) => [session.id, session] as const),
         )
 
         return data.session.apply([...sessions.values()].filter((session) => !session.parentID)).map(
@@ -176,6 +181,7 @@ export function SidebarInbox() {
 
   const sections = createMemo(() => {
     const list = entries()
+
     // The most recently finished session comes first.
     const finished = list
       .filter((entry) => {
@@ -356,6 +362,103 @@ export function SidebarInbox() {
     )
   }
 
+  // Rows in the order they appear on screen; a collapsed Working shelf still shows the open session.
+  const visible = createMemo(() => {
+    const list = sections()
+
+    return [
+      ...list.needs,
+      ...list.inbox,
+      ...list.archived,
+      ...list.working.filter((entry) => state.workingExpanded || selected(entry)),
+    ]
+  })
+
+  // Shortcuts follow the inbox's vertical order instead of the tab list, which this layout does not show.
+  command.register("inbox-navigation", () => [
+    ...visible()
+      .slice(0, 9)
+      .map((entry, index) => ({
+        id: `tab.${index + 1}`,
+        category: "tab",
+        title: "",
+        keybind: `mod+${index + 1}`,
+        hidden: true,
+        onSelect: () => open(entry),
+      })),
+    {
+      id: "session.previous",
+      category: language.t("command.category.session"),
+      title: language.t("command.session.previous"),
+      keybind: "alt+arrowup",
+      onSelect: () => openAdjacent(-1),
+    },
+    {
+      id: "session.next",
+      category: language.t("command.category.session"),
+      title: language.t("command.session.next"),
+      keybind: "alt+arrowdown",
+      onSelect: () => openAdjacent(1),
+    },
+    {
+      id: "session.previous.unseen",
+      category: language.t("command.category.session"),
+      title: language.t("command.session.previous.unseen"),
+      keybind: "shift+alt+arrowup",
+      onSelect: () => openAdjacent(-1, unread),
+    },
+    {
+      id: "session.next.unseen",
+      category: language.t("command.category.session"),
+      title: language.t("command.session.next.unseen"),
+      keybind: "shift+alt+arrowdown",
+      onSelect: () => openAdjacent(1, unread),
+    },
+  ])
+
+  // Without an open inbox session, moving down starts at the top and moving up starts at the bottom.
+  const openAdjacent = (offset: -1 | 1, include: (entry: InboxEntry) => boolean = () => true) => {
+    const list = visible()
+    const index = list.findIndex(selected)
+
+    // Every other row in the offset's direction, wrapping around.
+    const candidates =
+      index === -1
+        ? offset === 1
+          ? list
+          : list.toReversed()
+        : Array.from(
+            { length: list.length - 1 },
+            (_, step) => list[(index + offset * (step + 1) + list.length) % list.length],
+          )
+
+    const next = candidates.find(include)
+
+    if (next) open(next)
+  }
+
+  // Keep the open row in view when keyboard navigation selects one outside the scrolled area.
+  createEffect(() => {
+    if (!active()) return
+    requestAnimationFrame(() =>
+      root.querySelector('[data-slot="sidebar-inbox-item"][data-state="active"]')?.scrollIntoView({ block: "nearest" }),
+    )
+  })
+
+  // Arrow keys move focus between rows once one is focused.
+  const moveFocus = (event: KeyboardEvent) => {
+    if (event.key !== "ArrowDown" && event.key !== "ArrowUp") return
+
+    if (event.altKey || event.metaKey || event.ctrlKey || event.shiftKey) return
+
+    const items = [...root.querySelectorAll<HTMLElement>('[data-slot="sidebar-inbox-item"]')]
+    const index = items.findIndex((item) => item === event.target)
+
+    if (index === -1) return
+    event.preventDefault()
+    items[Math.min(items.length - 1, Math.max(0, index + (event.key === "ArrowDown" ? 1 : -1)))]?.focus()
+  }
+
   const rows = (list: InboxEntry[]) => (
     <For each={list.map((entry) => entry.key)}>
       {(key) => (
@@ -379,7 +482,7 @@ export function SidebarInbox() {
   )
 
   return (
-    <div data-slot="sidebar-inbox" class="flex min-h-0 flex-1 flex-col">
+    <div ref={root} data-slot="sidebar-inbox" class="flex min-h-0 flex-1 flex-col" onKeyDown={moveFocus}>
       <div data-slot="sidebar-inbox-scroll" class="flex min-h-0 flex-1 flex-col gap-px overflow-y-auto pb-1">
         <Show when={sections().needs.length > 0}>
           <div class="flex shrink-0 flex-col gap-px pb-3">
@@ -391,7 +494,9 @@ export function SidebarInbox() {
           when={sections().inbox.length > 0}
           fallback={
             <Show
-              when={sections().needs.length === 0 && sections().working.length === 0 && sections().archived.length === 0}
+              when={
+                sections().needs.length === 0 && sections().working.length === 0 && sections().archived.length === 0
+              }
             >
               <div class="px-1.5 py-2 text-[13px] leading-4 text-v2-text-text-faint">
                 {language.t("sidebar.inbox.empty")}
@@ -488,7 +593,6 @@ function InboxRow(props: {
   const language = useLanguage()
   const project = createMemo(() => props.entry.ctx.projects.forSession(props.entry.session))
   const status = () => props.entry.status
-  const unread = () => status() !== "ready" && status() !== "working"
 
   const worktree = () => inWorktree(props.entry)
 
@@ -581,8 +685,8 @@ function InboxRow(props: {
           class="w-full min-w-0 truncate text-[13px] leading-4"
           // Rows recede once read so unread results stand out.
           classList={{
-            "font-medium text-v2-text-text-base": unread(),
-            "text-v2-text-text-muted": !unread(),
+            "font-medium text-v2-text-text-base": unread(props.entry),
+            "text-v2-text-text-muted": !unread(props.entry),
           }}
         >
           {sessionTabTitle(props.entry.session.title, language.t("session.tab.session"))}
@@ -632,8 +736,12 @@ function InboxRow(props: {
   )
 }
 
+function unread(entry: InboxEntry) {
+  return entry.status !== "ready" && entry.status !== "working"
+}
+
 function archived(entry: InboxEntry) {
-  return typeof entry.session.time.archived === "number"
+  return entry.session.time.archived !== undefined
 }
 
 function busy(status: InboxStatus) {
