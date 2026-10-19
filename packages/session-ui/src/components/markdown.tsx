@@ -36,7 +36,7 @@ import {
 } from "./markdown-cache"
 import { inlineCodeKind } from "./markdown-inline-code-kind"
 import { renderMermaidSvg } from "./markdown-mermaid"
-import { createMarkdownRenderer } from "./markdown-solid"
+import { captureMarkdownSelection, createMarkdownRenderer, restoreMarkdownSelection } from "./markdown-solid"
 import {
   useMarkdown,
   type OpenMarkdownLocalFile,
@@ -73,6 +73,10 @@ const renderedMarkdown = new WeakMap<
   HTMLDivElement,
   { renderer: ReturnType<typeof createMarkdownRenderer>; raw: string }
 >()
+
+export function hasLiveMarkdownRenderer(block: HTMLDivElement) {
+  return renderedMarkdown.has(block)
+}
 
 function escape(text: string) {
   return text
@@ -893,15 +897,18 @@ function updateBlock(
       ? current
       : undefined
 
-  if (existing?.dataset.markdownHash === block.hash) {
-    // A block that finishes streaming keeps its DOM and the user's selection; only its file paths get checked now.
-    if (existing.dataset.markdownMode === "live" && block.mode !== "live") {
-      existing.dataset.markdownMode = block.mode
-      markInlineCode(existing, existing, false, localFileExists)
-    }
-
+  if (
+    existing?.dataset.markdownHash === block.hash &&
+    (existing.dataset.markdownMode !== "live" || block.mode === "live")
+  )
     return
-  }
+
+  const previous = existing ?? (current instanceof HTMLDivElement ? current : undefined)
+
+  const selection =
+    block.mode !== "live" && previous?.dataset.markdownMode === "live"
+      ? captureMarkdownSelection(previous)
+      : undefined
 
   const next = existing ?? document.createElement("div")
   next.dataset.markdownBlock = ""
@@ -910,8 +917,13 @@ function updateBlock(
   next.dataset.markdownMode = block.mode
   next.style.display = "contents"
   const rendered = renderedMarkdown.get(next)
-  // Keep live renderers in control of their DOM, including after completion.
-  const source = rendered || block.mode === "live" ? document.createElement("div") : next
+
+  if (rendered && block.mode !== "live") {
+    rendered.renderer.dispose()
+    renderedMarkdown.delete(next)
+  }
+
+  const source = block.mode === "live" ? document.createElement("div") : next
 
   if (source === next) disposeCopyButtons(next)
   source.innerHTML = block.html
@@ -921,8 +933,8 @@ function updateBlock(
   if (sessionLinks) markSessionLinks(source)
   markExternalLinkFavicons(source)
 
-  if (rendered) {
-    rendered.renderer.update(source.innerHTML, block.mode === "live", rendered.raw !== block.raw)
+  if (rendered && block.mode === "live") {
+    rendered.renderer.update(source.innerHTML, true, rendered.raw !== block.raw)
     rendered.raw = block.raw
 
     return
@@ -954,7 +966,11 @@ function updateBlock(
     })
   }
 
-  if (existing) return
+  if (existing) {
+    if (selection) restoreMarkdownSelection(next, selection)
+
+    return
+  }
 
   if (!current) {
     container.appendChild(next)
@@ -965,6 +981,8 @@ function updateBlock(
   disposeCopyButtons(current)
   disposeRenderedMarkdown(current)
   current.replaceWith(next)
+
+  if (selection) restoreMarkdownSelection(next, selection)
 }
 
 function updateCodeBlock(

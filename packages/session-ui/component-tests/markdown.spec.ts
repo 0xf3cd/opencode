@@ -492,20 +492,33 @@ story("renders the trailing chunk while the stream is paused", async ({ page }) 
   await expect(harness.getByLabel("Streaming")).toBeChecked()
 })
 
-story("keeps live elements and selection when a stream completes and later changes", async ({ page }) => {
+story("disposes live renderers and word spans on settle while preserving selection", async ({ page }) => {
   await page.evaluate(async (fixture) => {
     const { mountMarkdown } = await import(fixture)
     await mountMarkdown({ text: "Hello **world**", streaming: true })
   }, fixture)
   const harness = page.getByTestId("markdown-fixture")
   const markdown = harness.locator('[data-component="markdown"]')
-  const paragraph = markdown.locator("p")
+  const block = markdown.locator("[data-markdown-block]").first()
+  const paragraph = markdown.locator("p").first()
   await expect(markdown.locator("[data-markdown-word]")).toHaveCount(2)
-  await paragraph.evaluate((element) => element.setAttribute("data-retained", "true"))
+  await block.evaluate((element) => element.setAttribute("data-retained", "true"))
+  await paragraph.evaluate((element) => element.setAttribute("data-live-retained", "true"))
   await harness.getByLabel("Markdown text").fill("Hello **world** again")
   await expect(markdown.locator("[data-markdown-word]")).toHaveCount(3)
-  await expect(paragraph).toHaveAttribute("data-retained", "true")
+  await expect(paragraph).toHaveAttribute("data-live-retained", "true")
   await expect(markdown.locator("[data-markdown-enter]")).not.toHaveCount(0)
+  expect(
+    await page.evaluate(async (fixture) => {
+      const { hasLiveMarkdownRenderer } = await import(fixture)
+
+      const element = document.querySelector<HTMLDivElement>(
+        '[data-testid="markdown-fixture"] [data-markdown-block]',
+      )!
+
+      return hasLiveMarkdownRenderer(element)
+    }, fixture),
+  ).toBe(true)
   await paragraph.evaluate((element) => {
     const range = document.createRange()
     range.selectNodeContents(element.querySelector("strong")!)
@@ -518,11 +531,23 @@ story("keeps live elements and selection when a stream completes and later chang
   })
   await expect(harness.getByLabel("Streaming")).not.toBeChecked()
   await expect(markdown).toHaveAttribute("data-markdown-ready", "")
-  await expect(paragraph).toHaveAttribute("data-retained", "true")
+  await expect(block).toHaveAttribute("data-retained", "true")
+  await expect(markdown.locator("[data-markdown-word]")).toHaveCount(0)
+  expect(
+    await page.evaluate(async (fixture) => {
+      const { hasLiveMarkdownRenderer } = await import(fixture)
+
+      const element = document.querySelector<HTMLDivElement>(
+        '[data-testid="markdown-fixture"] [data-markdown-block]',
+      )!
+
+      return hasLiveMarkdownRenderer(element)
+    }, fixture),
+  ).toBe(false)
   expect(await page.evaluate(() => window.getSelection()?.toString())).toBe("world")
   await harness.getByLabel("Markdown text").fill("Changed **content**")
   await expect(paragraph).toHaveText("Changed content")
-  await expect(paragraph).toHaveAttribute("data-retained", "true")
+  await expect(block).toHaveAttribute("data-retained", "true")
   await expect(markdown.locator("[data-markdown-word]")).toHaveCount(0)
   await harness.getByRole("button", { name: "Toggle Markdown" }).click()
   await expect(markdown).toHaveCount(0)

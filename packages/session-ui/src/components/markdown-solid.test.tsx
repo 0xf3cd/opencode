@@ -1,6 +1,6 @@
 import { GlobalRegistrator } from "@happy-dom/global-registrator"
 import { afterAll, beforeAll, expect, test } from "bun:test"
-import { parseMarkdownNodes } from "./markdown-solid"
+import { captureMarkdownSelection, parseMarkdownNodes, restoreMarkdownSelection } from "./markdown-solid"
 
 beforeAll(() => GlobalRegistrator.register())
 
@@ -86,4 +86,30 @@ test("marks words for animation only when requested", () => {
     text: "Hello",
     animate: true,
   })
+})
+
+test("preserves text selection when replacing word-wrapped live DOM with settled HTML", () => {
+  const block = document.createElement("div")
+  block.innerHTML =
+    '<p><span data-markdown-word="">Hello</span> <strong><span data-markdown-word="">world</span></strong> <span data-markdown-word="">again</span></p>'
+  document.body.appendChild(block)
+
+  const range = document.createRange()
+  range.selectNodeContents(block.querySelector("strong")!)
+  const selection = window.getSelection()!
+  selection.removeAllRanges()
+  selection.addRange(range)
+  expect(selection.toString()).toBe("world")
+
+  const saved = captureMarkdownSelection(block)
+  expect(saved).toEqual({
+    start: { kind: "inside", offset: 6 },
+    end: { kind: "inside", offset: 11 },
+  })
+
+  block.innerHTML = "<p>Hello <strong>world</strong> again</p>"
+  expect(block.querySelectorAll("[data-markdown-word]").length).toBe(0)
+  restoreMarkdownSelection(block, saved!)
+  expect(window.getSelection()?.toString()).toBe("world")
+  block.remove()
 })
