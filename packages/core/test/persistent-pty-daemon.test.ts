@@ -5,8 +5,21 @@ import { mkdir, mkdtemp, rm, stat, writeFile } from "node:fs/promises"
 import net from "node:net"
 import os from "node:os"
 import path from "node:path"
-import { Effect } from "effect"
+import { Effect, Stream } from "effect"
+import { AppNodeBuilder } from "../src/effect/app-node-builder"
+import { Bus } from "../src/bus"
+import { Database } from "../src/database/database"
+import { Location } from "../src/location"
+import { PersistentPty } from "../src/persistent-pty"
+import { ProjectTable } from "../src/project/sql"
+import { SessionTable } from "../src/session/sql"
+import { Added, Removed } from "@opencode/schema/persistent-pty"
+import { Project } from "@opencode/schema/project"
+import { AbsolutePath } from "@opencode/schema/schema"
+import { Session } from "@opencode/schema/session"
+import { LayerNode } from "@opencode/util/effect/layer-node"
 import { makeDaemonTransport } from "../src/persistent-pty/daemon"
+import { location } from "./fixture/location"
 import { it } from "./lib/effect"
 
 const pong = { type: "pong", instance_id: "test", pid: process.pid, protocol: 7 }
@@ -237,6 +250,75 @@ it.live("stops a discovered inherited daemon when adoption fails", () =>
       expiresAt: Date.now() + 60_000,
     })
     expect(shutdowns).toBe(1)
+  }),
+)
+
+it.live("isolates PersistentPty terminal events from foreign locations even when called under another location", () =>
+  Effect.gen(function* () {
+    const { root, directory } = yield* temporaryRuntime()
+    const socketPath = path.join(directory, "daemon.sock")
+    const sessionID = Session.ID.make("ses_pty_owner")
+    const info = { ...terminal(1), group_id: sessionID }
+    yield* listen(socketPath, (_socket, request) => {
+      if (request.op === "ping") return pong
+      if (request.op === "create") return { type: "created", terminal: info }
+      if (request.op === "list") return { type: "terminals", terminals: [info] }
+      return { type: "ok" }
+    })
+    yield* Effect.promise(() => writeRegistration(directory, socketPath))
+
+    const ownerRef = Location.Ref.make({ directory: AbsolutePath.make("/pty-owner") })
+    const foreignRef = Location.Ref.make({ directory: AbsolutePath.make("/pty-foreign") })
+    const layer = AppNodeBuilder.build(LayerNode.group([Database.node, Bus.node, PersistentPty.node]), [
+      PersistentPty.node.replace(PersistentPty.configured({ root })),
+    ])
+
+    yield* Effect.gen(function* () {
+      const { db } = yield* Database.Service
+      yield* db
+        .insert(ProjectTable)
+        .values({ id: Project.ID.global, worktree: ownerRef.directory, sandboxes: [] })
+        .run()
+      yield* db
+        .insert(SessionTable)
+        .values({
+          id: sessionID,
+          project_id: Project.ID.global,
+          directory: ownerRef.directory,
+          slug: "pty-owner",
+          version: "test",
+        })
+        .run()
+
+      const bus = yield* Bus.Service
+      const pty = yield* PersistentPty.Service
+      const ownerEvents: string[] = []
+      const foreignEvents: string[] = []
+
+      yield* bus
+        .subscribe([Added, Removed])
+        .pipe(
+          Stream.runForEach((event) => Effect.sync(() => void ownerEvents.push(event.type))),
+          Effect.provideService(Location.Service, location(ownerRef)),
+          Effect.forkScoped({ startImmediately: true }),
+        )
+      yield* bus
+        .subscribe([Added, Removed])
+        .pipe(
+          Stream.runForEach((event) => Effect.sync(() => void foreignEvents.push(event.type))),
+          Effect.provideService(Location.Service, location(foreignRef)),
+          Effect.forkScoped({ startImmediately: true }),
+        )
+
+      const created = yield* pty
+        .create(sessionID, { args: [], title: "shell", env: {} })
+        .pipe(Effect.provideService(Location.Service, location(foreignRef)))
+      yield* pty.remove(created.id).pipe(Effect.provideService(Location.Service, location(foreignRef)))
+      yield* Effect.yieldNow
+
+      expect(ownerEvents).toEqual([Added.type, Removed.type])
+      expect(foreignEvents).toEqual([])
+    }).pipe(Effect.provide(layer))
   }),
 )
 

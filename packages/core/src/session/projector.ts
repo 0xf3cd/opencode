@@ -114,7 +114,7 @@ const publishSessionUsage = Effect.fn("SessionProjector.publishUsage")(function*
         cache: { read: row.cacheRead, write: row.cacheWrite },
       },
     },
-    location ? { location } : { global: true },
+    location ? { location } : undefined,
   )
 })
 

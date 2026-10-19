@@ -6,6 +6,7 @@ import { makeGlobalNode } from "@opencode/util/effect/app-node"
 import { Added, Handoff, PersistentPty, ReadLines, Removed, type ReadResult } from "@opencode/schema/persistent-pty"
 import { Session } from "@opencode/schema/session"
 import { Bus } from "../bus.js"
+import { Location } from "../location.js"
 import { Pty } from "@opencode/schema/pty"
 import { Global } from "@opencode/util/global"
 import { ShellSelect } from "../shell/select.js"
@@ -122,7 +123,7 @@ const makeLayer = (options: Options = {}) =>
     Effect.gen(function* () {
       const bus = yield* Bus.Service
       const global = yield* Global.Service
-      const context = yield* Effect.context()
+      const context = Context.omit(Location.Service)(yield* Effect.context<never>())
       const runFork = Effect.runForkWith(context)
       let binary: Promise<string> | undefined
       const daemon = yield* makeDaemonTransport(
@@ -175,7 +176,9 @@ const makeLayer = (options: Options = {}) =>
         )
         if (response.type !== "created") return yield* unexpected(response)
         const terminal = toInfo(response.terminal)
-        yield* bus.publish(Added, { sessionID, terminal }, { global: true })
+        yield* bus
+          .publish(Added, { sessionID, terminal })
+          .pipe(Effect.updateContext((context: Context.Context<never>) => Context.omit(Location.Service)(context)))
         return terminal
       })
 
@@ -295,7 +298,9 @@ const makeLayer = (options: Options = {}) =>
         const response = yield* request(daemon, { op: "terminate", id: fromID(id) })
         if (response.type !== "ok") return yield* unexpected(response)
         if (current.get(terminal.sessionID) === id) current.delete(terminal.sessionID)
-        yield* bus.publish(Removed, { sessionID: terminal.sessionID, ptyID: id }, { global: true })
+        yield* bus
+          .publish(Removed, { sessionID: terminal.sessionID, ptyID: id })
+          .pipe(Effect.updateContext((context: Context.Context<never>) => Context.omit(Location.Service)(context)))
         return undefined
       })
 

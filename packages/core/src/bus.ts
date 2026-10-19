@@ -11,6 +11,7 @@ import { KeyedMutex } from "./effect/keyed-mutex.js"
 import { makeGlobalNode } from "@opencode/util/effect/app-node"
 import { isDeepStrictEqual } from "node:util"
 import { Durable } from "@opencode/schema/durable-event-manifest"
+import { PersistentPty } from "@opencode/schema/persistent-pty"
 import { SessionEvent } from "@opencode/schema/session-event"
 import type { SessionID } from "@opencode/schema/session-id"
 import { AbsolutePath } from "@opencode/schema/schema"
@@ -206,8 +207,12 @@ export function configured(options?: Options) {
         // while a slow subscriber drains events queued before a move or deletion.
         const routes = new WeakMap<Event.Payload, readonly Location.Ref[]>()
 
-        const isSessionEvent = (event: Event.Payload): event is SessionEvent.Event =>
-          Object.hasOwn(SessionEvent.All.cases, event.type)
+        const isSessionEvent = (
+          event: Event.Payload,
+        ): event is SessionEvent.Event | Event.Payload<typeof PersistentPty.Added | typeof PersistentPty.Removed> =>
+          Object.hasOwn(SessionEvent.All.cases, event.type) ||
+          event.type === PersistentPty.Added.type ||
+          event.type === PersistentPty.Removed.type
 
         const prepareRoutes = Effect.fnUntraced(function* (events: readonly Event.Payload[]) {
           const updates = new Map<SessionID, Location.Ref | undefined>()

@@ -9,8 +9,10 @@ import { ProjectTable } from "@opencode/core/project/sql"
 import { SessionProjector } from "@opencode/core/session/projector"
 import { SessionMessageTable, SessionTable } from "@opencode/core/session/sql"
 import { Event } from "@opencode/schema/event"
+import { PersistentPty } from "@opencode/schema/persistent-pty"
 import { Project } from "@opencode/schema/project"
-import { AbsolutePath } from "@opencode/schema/schema"
+import { Pty } from "@opencode/schema/pty"
+import { AbsolutePath, NonNegativeInt, PositiveInt } from "@opencode/schema/schema"
 import { SessionID } from "@opencode/schema/session-id"
 import { SessionEvent } from "@opencode/schema/session-event"
 import { SessionMessage } from "@opencode/schema/session-message"
@@ -329,6 +331,43 @@ describe("Bus Session routing", () => {
       const received = yield* Fiber.join(second)
       expect(received.map((event) => event.id)).toEqual([after.id, replayID, done.id])
       expect(received[1]).not.toHaveProperty("location")
+    }),
+  )
+
+  it.effect("routes persistent PTY terminal events to the session owner and isolates foreign locations", () =>
+    Effect.gen(function* () {
+      yield* seed()
+      const bus = yield* Bus.Service
+      const owner = yield* watch(bus, a)
+      const foreign = yield* watch(bus, b)
+      const workspace = yield* watch(bus, otherWorkspace)
+      const global = yield* watch(bus)
+      const ptyID = Pty.ID.make("pty_persistent_1")
+      const added = yield* bus.publish(PersistentPty.Added, {
+        sessionID: id,
+        terminal: {
+          id: ptyID,
+          title: "shell",
+          command: "/bin/sh",
+          args: [],
+          cwd: "/a",
+          status: "running",
+          pid: 123,
+          sessionID: id,
+          foregroundProcess: null,
+          size: { cols: PositiveInt.make(80), rows: PositiveInt.make(24) },
+          output: { head: NonNegativeInt.make(0), tail: NonNegativeInt.make(0) },
+        },
+      })
+      const removed = yield* bus.publish(PersistentPty.Removed, { sessionID: id, ptyID })
+      const done = yield* bus.publish(Done, {})
+
+      expect(yield* Fiber.join(owner)).toEqual([added, removed, done])
+      expect(yield* Fiber.join(foreign)).toEqual([done])
+      expect(yield* Fiber.join(workspace)).toEqual([done])
+      expect(yield* Fiber.join(global)).toEqual([added, removed, done])
+      expect(added).not.toHaveProperty("location")
+      expect(removed).not.toHaveProperty("location")
     }),
   )
 })

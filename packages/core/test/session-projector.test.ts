@@ -1,5 +1,5 @@
 import { describe, expect } from "bun:test"
-import { DateTime, Effect, Fiber, Option, Schema, Stream } from "effect"
+import { Context, DateTime, Effect, Fiber, Option, Schema, Stream } from "effect"
 import { TestClock } from "effect/testing"
 import { asc, eq, sql } from "drizzle-orm"
 import { Database } from "@opencode/core/database/database"
@@ -7,6 +7,7 @@ import { Agent } from "@opencode/core/agent"
 import { LayerNode } from "@opencode/util/effect/layer-node"
 import { AppNodeBuilder } from "@opencode/core/effect/app-node-builder"
 import { Bus } from "@opencode/core/bus"
+import { Location } from "@opencode/core/location"
 import { Event } from "@opencode/schema/event"
 import { EventTable } from "@opencode/core/event/sql"
 import { Model } from "@opencode/core/model"
@@ -30,7 +31,8 @@ import {
   SessionMessageTable,
   SessionTable,
 } from "@opencode/core/session/sql"
-import { testEffect } from "./lib/effect"
+import { it as baseIt, testEffect } from "./lib/effect"
+import { location } from "./fixture/location"
 import { Snapshot } from "@opencode/core/snapshot"
 
 const it = testEffect(
@@ -806,6 +808,81 @@ describe("SessionProjector", () => {
         error: { type: "provider.invalid-request", message: "Failed" },
       })
       expect(yield* updated()).toEqual({ time_updated: 15 })
+    }),
+  )
+
+  baseIt.effect("projects session usage across locations even when initialized under another location", () =>
+    Effect.gen(function* () {
+      const locA = Location.Ref.make({ directory: AbsolutePath.make("/loc-a") })
+      const locB = Location.Ref.make({ directory: AbsolutePath.make("/loc-b") })
+      const layer = AppNodeBuilder.build(LayerNode.group([Database.node, Bus.node, SessionProjector.node]))
+
+      yield* Effect.gen(function* () {
+        const db = (yield* Database.Service).db
+        const bus = yield* Bus.Service
+        yield* db
+          .insert(ProjectTable)
+          .values({ id: Project.ID.global, worktree: locB.directory, sandboxes: [] })
+          .run()
+        yield* db
+          .insert(SessionTable)
+          .values({
+            id: sessionID,
+            project_id: Project.ID.global,
+            slug: "cross-location",
+            directory: locB.directory,
+            title: "cross-location",
+            version: "test",
+          })
+          .run()
+
+        const receivedA: Array<Event.Payload<typeof SessionEvent.UsageUpdated>> = []
+        yield* bus
+          .subscribe(SessionEvent.UsageUpdated)
+          .pipe(
+            Stream.runForEach((event) => Effect.sync(() => void receivedA.push(event))),
+            Effect.provideService(Location.Service, location(locA)),
+            Effect.forkScoped({ startImmediately: true }),
+          )
+        const receivedB = yield* bus
+          .subscribe(SessionEvent.UsageUpdated)
+          .pipe(
+            Stream.take(1),
+            Stream.runCollect,
+            Effect.provideService(Location.Service, location(locB)),
+            Effect.forkScoped({ startImmediately: true }),
+          )
+        const receivedGlobal = yield* bus
+          .subscribe(SessionEvent.UsageUpdated)
+          .pipe(
+            Stream.take(1),
+            Stream.runCollect,
+            Effect.updateContext((context: Context.Context<never>) => Context.omit(Location.Service)(context)),
+            Effect.forkScoped({ startImmediately: true }),
+          )
+
+        yield* Effect.yieldNow
+        yield* bus
+          .publish(SessionEvent.UsageRecorded, {
+            sessionID,
+            source: "title",
+            cost: Money.USD.make(0.42),
+            tokens: { input: 10, output: 5, reasoning: 0, cache: { read: 0, write: 0 } },
+          })
+          .pipe(Effect.updateContext((context: Context.Context<never>) => Context.omit(Location.Service)(context)))
+
+        const [fromB] = yield* Fiber.join(receivedB)
+        const [fromGlobal] = yield* Fiber.join(receivedGlobal)
+        expect(receivedA).toEqual([])
+        expect(fromB?.data).toMatchObject({
+          sessionID,
+          cost: Money.USD.make(0.42),
+        })
+        expect(fromGlobal?.data).toMatchObject({
+          sessionID,
+          cost: Money.USD.make(0.42),
+        })
+      }).pipe(Effect.provide(layer), Effect.provideService(Location.Service, location(locA)))
     }),
   )
 })
