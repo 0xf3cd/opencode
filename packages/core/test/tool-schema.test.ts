@@ -1,6 +1,8 @@
 import { expect, test } from "bun:test"
 import { Effect, Schema, SchemaGetter } from "effect"
 import { z } from "zod"
+import { ToolDefinition } from "@opencode/ai"
+import { ToolSchemaProjection } from "@opencode/ai/protocols/utils/tool-schema"
 import { emptyInputJsonSchema } from "@opencode/ai/tool"
 import { Agent } from "@opencode/schema/agent"
 import { Session } from "@opencode/schema/session"
@@ -524,3 +526,59 @@ test("missing external input schemas fall back to an empty schema", () => {
     inputSchema: {},
   })
 })
+
+test("Effect tool schemas convert once and are shared read-only across definitions", () => {
+  const Item = Schema.Struct({ name: Schema.String }).annotate({ identifier: "Item" })
+  const input = Schema.Struct({
+    count: Schema.optionalKey(Schema.Int.check(Schema.isGreaterThanOrEqualTo(0))),
+    items: Schema.Array(Item),
+  })
+  const output = Schema.Struct({ ok: Schema.Boolean })
+  const empty = Schema.Struct({})
+  const tool = (name: string, schema: Schema.Codec<unknown, unknown>): Info => ({
+    name,
+    description: name,
+    input: schema,
+    output,
+    execute: () => Effect.succeed({ output: { ok: true } }),
+  })
+
+  const first = definition(tool("first", input))
+  const second = definition(tool("second", input))
+  expect(second.inputSchema).toBe(first.inputSchema)
+  expect(second.outputSchema).toBe(first.outputSchema)
+  expect(definition(tool("empty", empty)).inputSchema).toBe(definition(tool("again", empty)).inputSchema)
+
+  // Request preparation projects shared schemas for providers; it must never write into them.
+  const frozen = deepFreeze(first)
+  expect(ToolDefinition.make(frozen).inputSchema).toEqual(frozen.inputSchema)
+  expect(ToolSchemaProjection.gemini(frozen.inputSchema)).toEqual(
+    ToolSchemaProjection.gemini(structuredClone(frozen.inputSchema)),
+  )
+  expect(ToolSchemaProjection.moonshot(frozen.inputSchema)).toEqual(
+    ToolSchemaProjection.moonshot(structuredClone(frozen.inputSchema)),
+  )
+  expect(frozen.inputSchema).toEqual({
+    type: "object",
+    properties: {
+      count: { type: "integer", minimum: 0 },
+      items: {
+        type: "array",
+        items: {
+          type: "object",
+          properties: { name: { type: "string" } },
+          required: ["name"],
+          additionalProperties: false,
+        },
+      },
+    },
+    required: ["items"],
+    additionalProperties: false,
+  })
+})
+
+function deepFreeze<T>(value: T): T {
+  if (typeof value !== "object" || value === null || Object.isFrozen(value)) return value
+  Object.values(value).forEach(deepFreeze)
+  return Object.freeze(value)
+}

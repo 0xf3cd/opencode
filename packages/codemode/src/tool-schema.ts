@@ -216,14 +216,39 @@ const renderSchema = (
   return "unknown"
 }
 
+type JsonSchemaDocument = {
+  readonly schema: JsonSchema
+  readonly definitions: Readonly<Record<string, JsonSchema>>
+}
+
+// Schemas are immutable, and discovery renders the same tool schemas repeatedly. Rendering only reads
+// these documents, so they are shared.
+const memoizeDocument = (convert: (schema: Schema.Top) => JsonSchemaDocument) => {
+  const cache = new WeakMap<Schema.Top, JsonSchemaDocument>()
+  return (schema: Schema.Top) => {
+    const cached = cache.get(schema)
+    if (cached) return cached
+    const document = convert(schema)
+    cache.set(schema, document)
+    return document
+  }
+}
+
+const encodedDocument = memoizeDocument(
+  (schema) => Schema.toJsonSchemaDocument(schema, { onExcessProperty: "error" }) as JsonSchemaDocument,
+)
+
+const decodedDocument = memoizeDocument(
+  (schema) => Schema.toJsonSchemaDocument(Schema.toType(schema), { onExcessProperty: "error" }) as JsonSchemaDocument,
+)
+
+const inlineDocument = memoizeDocument(
+  (schema) => Schema.toJsonSchemaDocument(schema, { referencePolicy: () => undefined }) as JsonSchemaDocument,
+)
+
 export const toTypeScript = (schema: Schema.Top, decoded = false, pretty = false): string => {
   try {
-    const document = Schema.toJsonSchemaDocument(decoded ? Schema.toType(schema) : schema, {
-      onExcessProperty: "error",
-    }) as {
-      readonly schema: JsonSchema
-      readonly definitions: Readonly<Record<string, JsonSchema>>
-    }
+    const document = decoded ? decodedDocument(schema) : encodedDocument(schema)
     return renderSchema(document.schema, { definitions: document.definitions, pretty })
   } catch {
     return "unknown"
@@ -247,10 +272,7 @@ export type InputProperty = {
 export const inputProperties = <R>(tool: Tool<R>): Array<InputProperty> => {
   try {
     const document = isEffectSchema(tool.input)
-      ? (Schema.toJsonSchemaDocument(tool.input, { onExcessProperty: "error" }) as {
-          readonly schema: JsonSchema
-          readonly definitions: Readonly<Record<string, JsonSchema>>
-        })
+      ? encodedDocument(tool.input)
       : {
           schema: tool.input,
           definitions: { ...(tool.input.definitions ?? {}), ...(tool.input.$defs ?? {}) },
@@ -279,11 +301,7 @@ export const inputTypeScript = <R>(tool: Tool<R>, pretty = false): string =>
 // Effect inputs are empty only when their encoded root is Effect's empty-struct marker, which records and checked
 // structs never are. Raw JSON Schema inputs keep the `{}` rendering check, which treats `{ type: "object" }` as empty.
 export const isEmptyInput = <R>(tool: Tool<R>): boolean =>
-  isEffectSchema(tool.input)
-    ? isEffectEmptyStruct(
-        Schema.toJsonSchemaDocument(tool.input, { referencePolicy: () => undefined }).schema as JsonSchema,
-      )
-    : inputTypeScript(tool) === "{}"
+  isEffectSchema(tool.input) ? isEffectEmptyStruct(inlineDocument(tool.input).schema) : inputTypeScript(tool) === "{}"
 
 export const outputTypeScript = <R>(tool: Tool<R>, pretty = false): string =>
   tool.output === undefined

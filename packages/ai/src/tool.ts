@@ -241,6 +241,17 @@ export const toDefinitions = (tools: Tools): ReadonlyArray<ToolDefinitionClass> 
  * check's `minProperties`, leaves the schema as Effect emitted it.
  */
 export const emptyInputJsonSchema = (schema: Schema.Top): JsonSchema.JsonSchema | undefined => {
+  if (emptyInputJsonSchemas.has(schema)) return emptyInputJsonSchemas.get(schema)
+  const result = describeEmptyInput(schema)
+  emptyInputJsonSchemas.set(schema, result)
+  return result
+}
+
+// Schemas are immutable, and core converts the same tool schemas on every step. Callers share the
+// cached JSON Schema and must not mutate it.
+const emptyInputJsonSchemas = new WeakMap<Schema.Top, JsonSchema.JsonSchema | undefined>()
+
+const describeEmptyInput = (schema: Schema.Top): JsonSchema.JsonSchema | undefined => {
   const { not, ...rest } = Schema.toJsonSchemaDocument(schema, { referencePolicy: () => undefined }).schema
   if (!isRecord(not) || not.type !== "null" || Object.keys(not).length !== 1) return undefined
   if (!Object.keys(rest).every((key) => annotationKeywords.has(key))) return undefined

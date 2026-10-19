@@ -171,7 +171,19 @@ const standardJsonSchema = (schema: StandardSchemaV1<any, any>, io: "input" | "o
   throw new Error(`Schema vendor "${schema["~standard"].vendor}" does not support JSON Schema conversion`)
 }
 
+// Schemas are immutable, and every step rebuilds definitions from the same tool schemas. Callers
+// share the cached JSON Schema and must not mutate it.
+const effectJsonSchemas = new WeakMap<Schema.Top, JsonSchema.JsonSchema>()
+
 const toJsonSchema = (schema: Schema.Top): JsonSchema.JsonSchema => {
+  const cached = effectJsonSchemas.get(schema)
+  if (cached) return cached
+  const result = convertJsonSchema(schema)
+  effectJsonSchemas.set(schema, result)
+  return result
+}
+
+const convertJsonSchema = (schema: Schema.Top): JsonSchema.JsonSchema => {
   const document = Schema.toJsonSchemaDocument(schema, { onExcessProperty: "error" })
   // Effect emits valid JSON Schema that some inference providers handle poorly. Simplify it
   // without changing validation: `{ type: "integer", allOf: [{ minimum: 0 }] }` becomes

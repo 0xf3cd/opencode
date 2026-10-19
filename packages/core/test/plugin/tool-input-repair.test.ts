@@ -5,11 +5,12 @@ import { Session } from "@opencode/core/session"
 import { SessionMessage } from "@opencode/core/session/message"
 import type { ToolHooks } from "@opencode/plugin/effect/tool"
 import { Tool } from "@opencode/schema/tool"
-import { Effect, type JsonSchema } from "effect"
+import { definition } from "@opencode/core/tool/runtime"
+import { Effect, Schema } from "effect"
 import { it } from "../lib/effect"
 import { host } from "./host"
 
-function run(input: unknown, inputSchema: JsonSchema.JsonSchema) {
+function run(input: unknown, inputSchema: Tool.ValueSchema) {
   const event: ToolHooks["execute.before"] = {
     tool: "test",
     input,
@@ -452,4 +453,27 @@ describe("tool input repair plugin", () => {
       expect((yield* run(input, { allOf: [object({ numeric: { type: "integer" } })] })).input).toBe(input)
     }),
   )
+
+  it.effect("repairs Effect inputs without mutating their shared JSON Schema", () =>
+    Effect.gen(function* () {
+      const schema = Schema.Struct({
+        count: Schema.Int,
+        items: Schema.Array(Schema.Struct({ enabled: Schema.Boolean })),
+      })
+      const tool = { name: "test", description: "", input: schema, execute: () => Effect.die("unused") }
+      const frozen = deepFreeze(definition(tool).inputSchema)
+
+      expect((yield* run({ count: "2", items: '[{"enabled":"false"}]' }, schema)).input).toEqual({
+        count: 2,
+        items: [{ enabled: false }],
+      })
+      expect(definition(tool).inputSchema).toBe(frozen)
+    }),
+  )
 })
+
+function deepFreeze<T>(value: T): T {
+  if (typeof value !== "object" || value === null || Object.isFrozen(value)) return value
+  Object.values(value).forEach(deepFreeze)
+  return Object.freeze(value)
+}
