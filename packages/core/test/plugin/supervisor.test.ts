@@ -5,6 +5,7 @@ import { define } from "@opencode/plugin/effect/plugin"
 import { AppNodeBuilder } from "@opencode/core/effect/app-node-builder"
 import { LayerNode } from "@opencode/util/effect/layer-node"
 import { Global } from "@opencode/util/global"
+import { Agent } from "@opencode/core/agent"
 import { Command } from "@opencode/core/command"
 import { ConfigPluginSource } from "@opencode/core/config/plugin/source"
 import { Instance } from "@opencode/core/instance"
@@ -256,6 +257,69 @@ describe("PluginSupervisor", () => {
         Effect.provide(locations.get(Location.Ref.make({ directory: AbsolutePath.make(directory.path) }))),
       )
       expect(source.activations).toBe(2)
+    }),
+  )
+
+  it.effect("scopes external plugin event subscriptions and async catalog reloads to the plugin's location", () =>
+    Effect.gen(function* () {
+      const sdk = yield* SdkPlugins.Service
+      const bus = yield* Bus.Service
+      const dirA = yield* tmpdirScoped()
+      const dirB = yield* tmpdirScoped()
+      const refA = Location.Ref.make({ directory: AbsolutePath.make(dirA.path) })
+      const refB = Location.Ref.make({ directory: AbsolutePath.make(dirB.path) })
+      const locations = yield* LocationServiceMap.Service
+      const observedByA: Array<string> = []
+      const publishedLocations: Array<string | undefined> = []
+      let step = 0
+
+      yield* bus
+        .subscribe(Command.Event.Updated)
+        .pipe(
+          Stream.runForEach((event) => Effect.sync(() => publishedLocations.push(event.location?.directory))),
+          Effect.forkScoped({ startImmediately: true }),
+        )
+
+      yield* sdk.register(
+        define({
+          id: "location-scoped-observer",
+          effect: (ctx) =>
+            Effect.gen(function* () {
+              yield* ctx.command.transform((editor) => {
+                editor.add({ name: `cmd-${++step}`, execute: () => Effect.void })
+              })
+              if (ctx.location.directory !== refA.directory) return
+              yield* ctx.event.subscribe().pipe(
+                Stream.runForEach((event) => {
+                  if (event.type !== "agent.updated") return Effect.void
+                  observedByA.push(event.location?.directory ?? "global")
+                  return ctx.command.reload()
+                }),
+                Effect.forkScoped({ startImmediately: true }),
+              )
+            }),
+        }),
+      )
+
+      for (const ref of [refA, refB]) {
+        yield* Effect.gen(function* () {
+          const plugins = yield* Plugin.Service
+          yield* plugins.awaitActivation
+        }).pipe(Effect.provide(locations.get(ref)))
+      }
+      yield* Effect.yieldNow
+
+      observedByA.length = 0
+      publishedLocations.length = 0
+      yield* bus.publish(Agent.Event.Updated, {}, { location: refB })
+      yield* Effect.yieldNow
+      expect(observedByA).toEqual([])
+      expect(publishedLocations).toEqual([])
+
+      yield* bus.publish(Agent.Event.Updated, {}, { location: refA })
+      yield* Effect.yieldNow
+      expect(observedByA).toEqual([refA.directory])
+      expect(publishedLocations).toEqual([refA.directory])
     }),
   )
 })
