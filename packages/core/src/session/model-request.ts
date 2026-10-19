@@ -42,6 +42,7 @@ import type { SessionMessage } from "./message.js"
 
 const IMAGE_BYTES_TRIGGER = 25 * 1024 * 1024 // 25 MiB
 const IMAGE_BYTES_TARGET = 15 * 1024 * 1024 // 15 MiB
+export const IMAGE_MAX_ASSISTANT_AGE = 6
 const IMAGE_REMOVED =
   "[This image was removed to reduce the request size and is no longer visible. Do not make claims about its contents from memory. If needed, retrieve it again with an available tool or ask the user to attach it again.]"
 const GENERATION_KEYS = new Set(Object.keys(GenerationOptions.fields))
@@ -186,9 +187,41 @@ export const unsupportedParts = (
   provider?: string,
 ) => replaceMedia(messages, (media) => unsupportedMedia(media.mime, media.name, capabilities, provider))
 
-export const boundImages = (messages: LLMRequest["messages"]) => {
+export const boundImages = (
+  messages: LLMRequest["messages"],
+  options?: { readonly maxAssistantAge?: number },
+) => {
   const isImage = (mime: string) => mime.toLowerCase().startsWith("image/")
-  const imageBytes = messages.reduce(
+  const maxAssistantAge = options?.maxAssistantAge ?? IMAGE_MAX_ASSISTANT_AGE
+
+  const assistantAfter = new Array<number>(messages.length).fill(0)
+  let seenAssistants = 0
+  for (let index = messages.length - 1; index >= 0; index--) {
+    assistantAfter[index] = seenAssistants
+    if (messages[index]?.role === "assistant") seenAssistants++
+  }
+
+  const hasExpired = messages.some(
+    (msg, index) =>
+      (assistantAfter[index] ?? 0) > maxAssistantAge &&
+      msg.content.some(
+        (part) =>
+          (part.type === "media" && isImage(part.media.mediaType)) ||
+          (part.type === "tool-result" &&
+            part.result.type === "content" &&
+            part.result.value.some((item) => item.type === "file" && isImage(item.mime))),
+      ),
+  )
+
+  const ageBounded = hasExpired
+    ? messages.map((message, index) =>
+        (assistantAfter[index] ?? 0) > maxAssistantAge
+          ? replaceMedia([message], (media) => (isImage(media.mime) ? IMAGE_REMOVED : undefined))[0]!
+          : message,
+      )
+    : messages
+
+  const imageBytes = ageBounded.reduce(
     (total, message) =>
       total +
       message.content.reduce((sum, part) => {
@@ -205,10 +238,10 @@ export const boundImages = (messages: LLMRequest["messages"]) => {
       }, 0),
     0,
   )
-  if (imageBytes <= IMAGE_BYTES_TRIGGER) return messages
+  if (imageBytes <= IMAGE_BYTES_TRIGGER) return ageBounded
 
   let removed = 0
-  return replaceMedia(messages, (media) => {
+  return replaceMedia(ageBounded, (media) => {
     if (!isImage(media.mime) || imageBytes - removed <= IMAGE_BYTES_TARGET) return
     removed += media.bytes()
     return IMAGE_REMOVED

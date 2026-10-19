@@ -229,4 +229,43 @@ describe("SessionModelRequest.boundImages", () => {
       },
     })
   })
+
+  test("evicts images older than maxAssistantAge steps even below the byte trigger", () => {
+    const oldTool = Message.tool(
+      ToolResultPart.make({
+        id: "call_old",
+        name: "read",
+        result: {
+          type: "content",
+          value: [{ type: "file", uri: "data:image/jpeg;base64,aGVsbG8=", mime: "image/jpeg", name: "old.jpg" }],
+        },
+      }),
+    )
+    const recentTool = Message.tool(
+      ToolResultPart.make({
+        id: "call_recent",
+        name: "read",
+        result: {
+          type: "content",
+          value: [{ type: "file", uri: "data:image/jpeg;base64,aGVsbG8=", mime: "image/jpeg", name: "recent.jpg" }],
+        },
+      }),
+    )
+    const messages = [
+      oldTool,
+      Message.assistant("step 1"),
+      Message.assistant("step 2"),
+      recentTool,
+      Message.assistant("step 3"),
+    ]
+    const result = boundImages(messages, { maxAssistantAge: 2 })
+    expect(result[0]?.content[0]).toMatchObject({
+      type: "tool-result",
+      result: {
+        type: "content",
+        value: [{ type: "text", text: expect.stringContaining("image was removed") }],
+      },
+    })
+    expect(result[3]).toBe(recentTool)
+  })
 })
