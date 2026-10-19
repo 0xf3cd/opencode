@@ -11,6 +11,8 @@ export * as BackgroundService from "./background-service"
 export interface Interface {
   readonly connection: Effect.Effect<SidecarCredentials.Data>
   readonly reconnect: Effect.Effect<SidecarCredentials.Data>
+  /** Stops the registered service, including one stuck after a failed boot, so the next connect spawns a fresh one. */
+  readonly stop: Effect.Effect<void>
 }
 
 export class Service extends Context.Service<Service, Interface>()("opencode/desktop/BackgroundService") {}
@@ -20,12 +22,13 @@ export const layer = Layer.effect(
   Effect.gen(function* () {
     const context = yield* Effect.context<FileSystem.FileSystem | Path.Path | DesktopCli.Service>()
 
-    return Service.of(
-      yield* BackgroundServiceState.make({
+    return Service.of({
+      ...(yield* BackgroundServiceState.make({
         initial: connect("initial").pipe(Effect.provide(context)),
         reconnect: connect("reconnect").pipe(Effect.provide(context), Effect.orDie),
-      }),
-    )
+      })),
+      stop: stop().pipe(Effect.provide(context), Effect.orDie),
+    })
   }),
 )
 
@@ -34,7 +37,7 @@ const connect = Effect.fn("BackgroundService.connect")(function* (mode: "initial
   const path = yield* Path.Path
   const desktopCli = yield* DesktopCli.Service
   const runFork = Effect.runForkWith(yield* Effect.context<FileSystem.FileSystem | Path.Path>())
-  const isolated = !app.isPackaged && process.env.OPENCODE_DESKTOP_ISOLATED_SERVER === "1"
+  const isolated = isolatedServer()
   const cli = yield* desktopCli.resolve
   const version = mode === "initial" ? cli.version : undefined
 
@@ -43,10 +46,7 @@ const connect = Effect.fn("BackgroundService.connect")(function* (mode: "initial
 
   const ensure = () =>
     client.Service.ensure({
-      file:
-        isolated && process.env.OPENCODE_DESKTOP_SERVER_CHANNEL === "local"
-          ? path.join(app.getPath("userData"), "opencode", "service-local.json")
-          : undefined,
+      file: registrationFile(path),
       version,
       // A fixed port makes a second contender fail to bind and back off; port 0 never collides, so two
       // services could boot against the same database.
@@ -90,6 +90,24 @@ const connect = Effect.fn("BackgroundService.connect")(function* (mode: "initial
 
   return ready
 })
+
+const stop = Effect.fn("BackgroundService.stop")(function* () {
+  yield* Effect.logInfo("stopping v2 background service")
+  const path = yield* Path.Path
+  const client = yield* Effect.promise(() => import("@opencode/client/service"))
+
+  yield* Effect.tryPromise(() => client.Service.stop({ file: registrationFile(path) }))
+})
+
+function isolatedServer() {
+  return !app.isPackaged && process.env.OPENCODE_DESKTOP_ISOLATED_SERVER === "1"
+}
+
+function registrationFile(path: Path.Path) {
+  if (!isolatedServer() || process.env.OPENCODE_DESKTOP_SERVER_CHANNEL !== "local") return undefined
+
+  return path.join(app.getPath("userData"), "opencode", "service-local.json")
+}
 
 function endpoint(url: string | undefined) {
   if (!url || !URL.canParse(url)) return {}
