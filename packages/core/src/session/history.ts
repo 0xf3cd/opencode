@@ -6,6 +6,7 @@ import { SessionMessage } from "./message.js"
 import { SessionSchema } from "./schema.js"
 import { Instructions } from "../instructions/index.js"
 import { InstructionState } from "./instruction-state.js"
+import { SessionMediaBlob } from "./media-blob.js"
 import { SessionProviderContext } from "./provider-context.js"
 import { SessionMessageTable } from "./sql.js"
 
@@ -93,7 +94,8 @@ const messageEntries = Effect.fnUntraced(function* (
     .orderBy(asc(SessionMessageTable.seq))
     .all()
     .pipe(Effect.orDie)
-  const entries = yield* Effect.forEach(rows, (row) =>
+  const hydrated = yield* SessionMediaBlob.hydrateRows(db, rows)
+  const entries = yield* Effect.forEach(hydrated, (row) =>
     decodeMessageRow(row).pipe(Effect.map((message) => ({ seq: row.seq, message }))),
   )
   // Re-expansion may cross a native checkpoint whose completion already advanced the instruction

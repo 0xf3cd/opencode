@@ -11,6 +11,7 @@ import { SessionHistory } from "./history.js"
 import { MessageDecodeError } from "./error.js"
 import { SessionMessage } from "./message.js"
 import { Session } from "@opencode/schema/session"
+import { SessionMediaBlob } from "./media-blob.js"
 import { SessionMessageTable, SessionTable } from "./sql.js"
 import { fromRow } from "./info.js"
 
@@ -174,10 +175,9 @@ const layer = Layer.effect(
         const rows = yield* (input.limit === undefined ? query.all() : query.limit(input.limit).all()).pipe(
           Effect.orDie,
         )
-        return yield* Effect.forEach(
-          direction === "previous" ? rows.toReversed() : rows,
-          SessionHistory.decodeMessageRow,
-        )
+        const ordered = direction === "previous" ? rows.toReversed() : rows
+        const hydrated = yield* SessionMediaBlob.hydrateRows(db, ordered)
+        return yield* Effect.forEach(hydrated, SessionHistory.decodeMessageRow)
       }),
       context: Effect.fn("SessionStore.context")((sessionID) => SessionHistory.load(db, sessionID, "latest")),
       message: Effect.fn("SessionStore.message")(function* (messageID) {
@@ -187,12 +187,12 @@ const layer = Layer.effect(
           .where(eq(SessionMessageTable.id, messageID))
           .get()
           .pipe(Effect.orDie)
-        return row
-          ? {
-              sessionID: Session.ID.make(row.session_id),
-              message: yield* SessionHistory.decodeMessageRow(row).pipe(Effect.orDie),
-            }
-          : undefined
+        if (!row) return undefined
+        const hydrated = yield* SessionMediaBlob.hydrateRows(db, [row])
+        return {
+          sessionID: Session.ID.make(row.session_id),
+          message: yield* SessionHistory.decodeMessageRow(hydrated[0] ?? row).pipe(Effect.orDie),
+        }
       }),
       listSuspended: Effect.fn("SessionStore.listSuspended")(function* () {
         return yield* db
