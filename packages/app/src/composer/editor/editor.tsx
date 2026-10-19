@@ -90,6 +90,7 @@ export type ComposerEditorProps = {
   alternateKeybind?: string[]
   exitShellKeybind?: string[]
   suggestionBoundary?: () => HTMLElement | undefined
+  status?: JSX.Element
 }
 
 export function ComposerEditor(props: ComposerEditorProps) {
@@ -376,6 +377,7 @@ export function ComposerEditor(props: ComposerEditorProps) {
             </div>
           </div>
           <div data-slot="composer-actions" class="flex shrink-0 items-center">
+            {props.status}
             <Show when={state.mode === "normal"}>
               <ComposerEditorAlternateDelivery
                 controller={props.controller}

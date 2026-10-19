@@ -137,4 +137,3 @@ export function SessionActivityChips(props: {
     </Show>
   )
 }
-

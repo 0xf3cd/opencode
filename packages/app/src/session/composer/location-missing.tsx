@@ -185,9 +185,7 @@ export function SessionLocationMissing(props: { sessionID: string; projectID: st
                       // Worktrees load after the menu opens, so focus the field once it mounts.
                       ref={(element) => {
                         searchInput = element
-                        requestAnimationFrame(() =>
-                          requestAnimationFrame(() => element.focus({ preventScroll: true })),
-                        )
+                        requestAnimationFrame(() => requestAnimationFrame(() => element.focus({ preventScroll: true })))
                       }}
                       value={state.search}
                       placeholder={language.t("session.new.workspace.search.placeholder")}

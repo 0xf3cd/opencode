@@ -9,7 +9,7 @@ import {
 } from "@opencode/session-ui/storybook"
 import { timelinePresets } from "@opencode/session-ui/timeline/detail"
 import { motionTuning } from "@opencode/ui/motion-tuning"
-import { createMemo, For, onCleanup, onMount } from "solid-js"
+import { createMemo, For, onCleanup, onMount, Show } from "solid-js"
 import { createStore } from "solid-js/store"
 import { SessionPreview } from "@/session/story-model"
 import { composerSheetSpring, type SessionActivitySubagent } from "./activity-sheet"
@@ -77,7 +77,7 @@ function document_(agents: Agent[]): SessionDocument {
   return { sessionID: CURRENT_SESSION_ID, messages, status: done ? { type: "idle" } : { type: "busy" }, diffs: [] }
 }
 
-function SheetStory(props: { fade: boolean; agents: number; open: boolean }) {
+function SheetStory(props: { fade: boolean; agents: number; open: boolean; variant?: "band" | "inline" }) {
   const [state, setState] = createStore({
     agents: Array.from({ length: props.agents }, (_, index) => ({
       id: `ses_child_${index}`,
@@ -88,6 +88,7 @@ function SheetStory(props: { fade: boolean; agents: number; open: boolean }) {
     next: props.agents,
     open: props.open,
     fade: props.fade,
+    variant: props.variant ?? "band",
     action: "",
     panel: false,
   })
@@ -157,6 +158,14 @@ function SheetStory(props: { fade: boolean; agents: number; open: boolean }) {
     },
     { key: "t", label: "Fade", run: () => setState("fade", (value) => !value) },
     {
+      key: "v",
+      label: "Band / no band",
+      run: () => {
+        setState("variant", (value) => (value === "band" ? "inline" : "band"))
+        setTimeout(() => timeline?.scrollTo({ top: timeline.scrollHeight }), 150)
+      },
+    },
+    {
       key: "0",
       label: "Reset",
       run: () => setState({ agents: [], next: 0, open: false }),
@@ -221,21 +230,27 @@ function SheetStory(props: { fade: boolean; agents: number; open: boolean }) {
 
   return (
     <>
-      <SessionPreview
-        title="Investigate Alpha and Beta"
-        description="opencode · composer sheet"
-        document={value()}
-        timelineDetail={timelineDetail}
-        modelName="Alpha"
-        fade={state.fade}
-        onTimeline={(element) => (timeline = element)}
-        sheet={{
-          subagents: subagents(),
-          open: state.open,
-          onOpenChange: (open) => setState("open", open),
-          onOpen: (item) => setState("action", `Open ${item.sessionID}`),
-        }}
-      />
+      {/* A variant mounts its own sheet; the story's work and open state carry over. */}
+      <Show when={state.variant} keyed>
+        {(variant) => (
+          <SessionPreview
+            title="Investigate Alpha and Beta"
+            description="opencode · composer sheet"
+            document={value()}
+            timelineDetail={timelineDetail}
+            modelName="Alpha"
+            fade={state.fade}
+            onTimeline={(element) => (timeline = element)}
+            sheet={{
+              subagents: subagents(),
+              open: state.open,
+              onOpenChange: (open) => setState("open", open),
+              onOpen: (item) => setState("action", `Open ${item.sessionID}`),
+              variant,
+            }}
+          />
+        )}
+      </Show>
       <div
         data-slot="composer-sheet-story-controls"
         class="fixed top-2 left-1/2 z-[100] flex -translate-x-1/2 items-center gap-0.5 whitespace-nowrap rounded-lg bg-v2-background-bg-base p-1 text-[12px] shadow-[var(--v2-elevation-floating)]"
@@ -268,7 +283,7 @@ export default {
     docs: {
       description: {
         component:
-          "Running subagents as a band on the production Composer's surface. Opening the band sheets its list up over the timeline; the timeline scrolls behind the region with a soft fade. Keys: 1/2 start, f finish one, a finish all, e expand, m collapse mid-expand, j/l scroll, t fade, 0 reset, k knobs.",
+          "Running subagents as a band on the production Composer's surface. Opening the band sheets its list up over the timeline; the timeline scrolls behind the region with a soft fade. Keys: 1/2 start, f finish one, a finish all, e expand, m collapse mid-expand, j/l scroll, t fade, v band or no band (status in the toolbar), 0 reset, k knobs.",
       },
     },
   },
@@ -279,5 +294,11 @@ export const Playground = { render: () => <SheetStory fade agents={0} open={fals
 export const Running = { render: () => <SheetStory fade agents={2} open={false} /> }
 
 export const Open = { render: () => <SheetStory fade agents={2} open /> }
+
+export const PlaygroundNoBand = { render: () => <SheetStory fade agents={0} open={false} variant="inline" /> }
+
+export const RunningNoBand = { render: () => <SheetStory fade agents={2} open={false} variant="inline" /> }
+
+export const OpenNoBand = { render: () => <SheetStory fade agents={2} open variant="inline" /> }
 
 export const HardEdge = { render: () => <SheetStory fade={false} agents={2} open={false} /> }

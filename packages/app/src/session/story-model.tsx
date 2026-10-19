@@ -103,6 +103,7 @@ export type SessionPreviewProps = {
     open: boolean
     onOpenChange: (open: boolean) => void
     onOpen?: (item: SessionActivitySubagent) => void
+    variant?: "band" | "inline"
   }
   /** The timeline scrolls behind the composer region and fades out above it, instead of ending at its top edge. */
   fade?: boolean
@@ -400,8 +401,9 @@ function SessionSurfaceState(props: SessionPreviewProps & { onReset: () => void 
                                 : setState("activity", `Opened ${item.label ?? item.key}`)
                             }
                             onStop={(item) => setState("activity", `Stopped ${item.label ?? item.key}`)}
+                            variant={sheet().variant}
                           >
-                            <Composer model={prompt.controller} borderUnderlay />
+                            {(status) => <Composer model={prompt.controller} borderUnderlay status={status} />}
                           </SessionActivitySheet>
                         )}
                       </Show>

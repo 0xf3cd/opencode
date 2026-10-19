@@ -34,6 +34,7 @@ import { createSessionComposerController, type SessionComposerController } from 
 import { SessionQueuePanel } from "./queue-panel"
 import { SessionActivityChips, type SessionActivityItem } from "./activity-chips"
 import { SessionActivitySheet, type SessionActivitySubagent } from "./activity-sheet"
+import { motionTuning } from "@opencode/ui/motion-tuning"
 import { useOpenSessionRoute } from "../session-identity-header"
 import { resolveSessionComposerSelection } from "./selection"
 import { createSessionRequestModel } from "../requests/model"
@@ -309,6 +310,13 @@ export function createActiveSessionRegion(input: {
 
 export type ActiveSessionRegionModel = ReturnType<typeof createActiveSessionRegion>
 
+// Developer-mode switch between the two subagent layouts, read when a session's composer mounts.
+const inlineSheet = motionTuning.toggle("composerSheetInline", {
+  label: "No band: subagent status in the composer toolbar",
+  group: "Composer sheet",
+  value: false,
+})
+
 export function ActiveSessionComposerRegion(props: {
   session: SessionModel
   model: SessionComposerController
@@ -419,13 +427,17 @@ export function ActiveSessionComposerRegion(props: {
                     open(item)
                   }}
                   onStop={stop}
+                  variant={inlineSheet() ? "inline" : "band"}
                 >
-                  <Composer
-                    model={props.model.composer}
-                    borderUnderlay
-                    readOnly={props.model.queue.undoing()}
-                    suggestionBoundary={props.suggestionBoundary}
-                  />
+                  {(status) => (
+                    <Composer
+                      model={props.model.composer}
+                      borderUnderlay
+                      readOnly={props.model.queue.undoing()}
+                      suggestionBoundary={props.suggestionBoundary}
+                      status={status}
+                    />
+                  )}
                 </SessionActivitySheet>
               </div>
             </div>

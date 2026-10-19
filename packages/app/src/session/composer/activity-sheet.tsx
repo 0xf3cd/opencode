@@ -48,6 +48,8 @@ const INSET = 4
 const MAX = INSET + ROW * 7
 // A finished row shows its check this long before it leaves an open sheet.
 const HOLD = 700
+// Space between the composer's status item and the next toolbar control.
+const GAP = 4
 
 type Row = {
   key: string
@@ -62,8 +64,9 @@ type Row = {
 }
 
 /**
- * Running subagents as a band on the composer's own surface. The band grows out of the composer's top edge while
- * work runs; opening it sheets the list up over the timeline from the band without changing the region's height.
+ * Running subagents on the composer's own surface. As a band, a row grows out of the composer's top edge while work
+ * runs. Inline, nothing sits above the composer: a quiet status item in its toolbar (`children` receives it) widens
+ * in while work runs. Either way, opening sheets the list up over the timeline without changing the region's height.
  */
 export function SessionActivitySheet(props: {
   subagents: readonly SessionActivitySubagent[]
@@ -71,14 +74,19 @@ export function SessionActivitySheet(props: {
   onOpenChange: (open: boolean) => void
   onOpen: (item: SessionActivitySubagent) => void
   onStop?: (item: SessionActivitySubagent) => void
-  children: JSX.Element
+  variant?: "band" | "inline"
+  children: (status: JSX.Element | undefined) => JSX.Element
 }) {
   const language = useLanguage()
+  const inline = untrack(() => props.variant === "inline")
   // The first paint is the resting state: rows already running when the sheet mounts start in place.
   const [rows, setRows] = createSignal<Row[]>(untrack(() => props.subagents.map((item) => create(item, 100))))
   const [now, setNow] = createSignal(Date.now())
   const band = new Spring(rows().length > 0 ? 100 : 0)
   const expand = new Spring(rows().length > 0 && untrack(() => props.open) ? 100 : 0)
+  // The inline status item's width in px; it snaps to its first measurement.
+  const width = new Spring(0)
+  let natural = -1
   let root: HTMLDivElement | undefined
   let spacer: HTMLDivElement | undefined
   let surface: HTMLDivElement | undefined
@@ -87,6 +95,8 @@ export function SessionActivitySheet(props: {
   let header: HTMLDivElement | undefined
   let chevron: HTMLSpanElement | undefined
   let hairline: HTMLDivElement | undefined
+  let statusBox: HTMLDivElement | undefined
+  let statusButton: HTMLButtonElement | undefined
   let stop: (() => void) | undefined
 
   const live = createMemo(() => rows().filter((row) => !row.done()))
@@ -123,12 +133,15 @@ export function SessionActivitySheet(props: {
     band.set(present ? 100 : 0)
     tune(expand)
     expand.set(present && props.open ? 100 : 0)
+    tune(width)
+    width.set(present ? Math.max(0, natural) + GAP : 0)
 
     if (!present && props.open) props.onOpenChange(false)
 
     if (prefersReducedMotion()) {
       band.snap(band.target)
       expand.snap(expand.target)
+      width.snap(width.target)
       rows().forEach((row) => row.spring.snap(row.spring.target))
     }
 
@@ -189,6 +202,19 @@ export function SessionActivitySheet(props: {
   createEffect(on(() => props.open, retarget, { defer: true }))
 
   onMount(() => {
+    if (statusButton) {
+      const observer = new ResizeObserver(() => {
+        const first = natural < 0
+        natural = statusButton!.offsetWidth
+        retarget()
+
+        if (first) width.snap(width.target)
+        paint()
+      })
+      observer.observe(statusButton)
+      onCleanup(() => observer.disconnect())
+    }
+
     paint()
 
     makeEventListener(document, "pointerdown", (event) => {
@@ -211,6 +237,7 @@ export function SessionActivitySheet(props: {
   function step(dt: number) {
     band.step(dt)
     expand.step(dt)
+    width.step(dt)
     rows().forEach((row) => row.spring.step(dt))
     paint()
 
@@ -220,7 +247,7 @@ export function SessionActivitySheet(props: {
 
     if (gone.length > 0) setRows(rows().filter((row) => !gone.includes(row)))
 
-    if (band.resting && expand.resting && rows().every((row) => row.spring.resting)) {
+    if (band.resting && expand.resting && width.resting && rows().every((row) => row.spring.resting)) {
       stop = undefined
 
       return false
@@ -230,23 +257,36 @@ export function SessionActivitySheet(props: {
   }
 
   function paint() {
-    if (!spacer || !surface || !clip || !list || !header || !chevron || !hairline) return
+    if (!spacer || !surface || !clip || !list || !hairline) return
 
     const p = unit(band.value)
     const e = unit(expand.value)
     const content = rows().reduce((sum, row) => sum + unit(row.spring.value) * ROW, 0)
     const shown = Math.min(MAX, content > 0 ? content + INSET : 0) * e
-    const height = BAND * p
+    const height = inline ? 0 : BAND * p
 
     spacer.style.height = `${height}px`
     surface.style.top = `${-shown}px`
     clip.style.height = `${height + shown}px`
     list.style.height = `${Math.min(MAX, content + INSET)}px`
-    // The band's words wait until most of its height is out, so they never sit cut by the rising edge.
-    header.style.opacity = `${ease(Math.max(0, p - 0.4) / 0.6)}`
-    header.style.transform = `translateY(${(1 - p) * 6}px)`
-    hairline.style.opacity = `${p}`
-    chevron.style.transform = `rotate(${180 - e * 180}deg)`
+    hairline.style.opacity = `${inline ? ease(e) : p}`
+
+    if (header && chevron) {
+      // The band's words wait until most of its height is out, so they never sit cut by the rising edge.
+      header.style.opacity = `${ease(Math.max(0, p - 0.4) / 0.6)}`
+      header.style.transform = `translateY(${(1 - p) * 6}px)`
+      chevron.style.transform = `rotate(${180 - e * 180}deg)`
+    }
+
+    if (statusBox && statusButton) {
+      // The item widens leftward from the send button; its words ride in the same way and soften only at the
+      // moving edge, so a partly open item never shows a hard cut.
+      const full = Math.max(0, natural) + GAP
+      statusBox.style.width = `${Math.max(0, width.value)}px`
+      statusBox.toggleAttribute("data-clipping", width.value < full - 0.5)
+      statusButton.style.opacity = `${ease(p)}`
+      statusButton.style.transform = `translateX(${(1 - p) * -6}px)`
+    }
     list.inert = e === 0
     list.toggleAttribute("data-overflow", content + INSET > MAX)
 
@@ -270,6 +310,33 @@ export function SessionActivitySheet(props: {
     item.agent ? `${item.agent[0]!.toUpperCase()}${item.agent.slice(1)}` : language.t("ui.tool.agent.default")
 
   const clock = (seconds: number) => `${Math.floor(seconds / 60)}:${String(seconds % 60).padStart(2, "0")}`
+
+  const status = (
+    <div ref={statusBox} data-slot="composer-sheet-status" class="flex h-7 shrink-0 justify-end overflow-clip">
+      <button
+        ref={statusButton}
+        type="button"
+        data-slot="composer-sheet-toggle"
+        aria-expanded={props.open}
+        class="flex h-7 w-max shrink-0 items-center gap-1.5 rounded-md ps-1.5 pe-2 text-[13px] font-[440] tracking-[-0.04px] whitespace-nowrap text-v2-text-text-muted hover:bg-v2-overlay-simple-overlay-hover hover:text-v2-text-text-base focus-visible:outline-none focus-visible:bg-v2-overlay-simple-overlay-hover aria-expanded:bg-v2-overlay-simple-overlay-hover aria-expanded:text-v2-text-text-base"
+        style={{ "margin-inline-end": `${GAP}px` }}
+        onMouseDown={(event) => event.preventDefault()}
+        onClick={() => props.onOpenChange(!props.open)}
+      >
+        <SessionProgressIndicatorV2 class="shrink-0 text-v2-icon-icon-muted" />
+        <span class="flex items-baseline whitespace-pre tabular-nums">
+          {summary()[0]}
+          <AnimatedNumber value={count()} />
+          {summary()[1]}
+        </span>
+        <span class="flex items-baseline tabular-nums text-v2-text-text-faint">
+          <AnimatedNumber value={Math.floor(elapsed() / 60)} />:
+          <AnimatedNumber value={Math.floor((elapsed() % 60) / 10)} />
+          <AnimatedNumber value={elapsed() % 10} />
+        </span>
+      </button>
+    </div>
+  )
 
   return (
     <div ref={root} data-component="composer-sheet" data-open={props.open || undefined}>
@@ -339,34 +406,36 @@ export function SessionActivitySheet(props: {
               )}
             </For>
           </div>
-          <div ref={header} class="flex h-9 shrink-0 items-center px-2">
-            <button
-              type="button"
-              data-slot="composer-sheet-toggle"
-              aria-expanded={props.open}
-              class="flex h-7 w-full min-w-0 items-center gap-1.5 rounded-md ps-1.5 pe-1.5 text-start text-v2-text-text-base hover:bg-v2-overlay-simple-overlay-hover focus-visible:outline-none focus-visible:bg-v2-overlay-simple-overlay-hover"
-              onClick={() => props.onOpenChange(!props.open)}
-            >
-              <SessionProgressIndicatorV2 class="shrink-0 text-v2-icon-icon-muted" />
-              <span class="flex min-w-0 items-baseline truncate whitespace-pre tabular-nums">
-                {summary()[0]}
-                <AnimatedNumber value={count()} />
-                {summary()[1]}
-              </span>
-              <span class="flex-1" />
-              <span class="flex items-baseline tabular-nums text-v2-text-text-faint">
-                <AnimatedNumber value={Math.floor(elapsed() / 60)} />:
-                <AnimatedNumber value={Math.floor((elapsed() % 60) / 10)} />
-                <AnimatedNumber value={elapsed() % 10} />
-              </span>
-              <span ref={chevron} class="flex size-4 shrink-0 items-center justify-center text-v2-icon-icon-faint">
-                <Icon name="chevron-down" size="small" />
-              </span>
-            </button>
-          </div>
+          <Show when={!inline}>
+            <div ref={header} class="flex h-9 shrink-0 items-center px-2">
+              <button
+                type="button"
+                data-slot="composer-sheet-toggle"
+                aria-expanded={props.open}
+                class="flex h-7 w-full min-w-0 items-center gap-1.5 rounded-md ps-1.5 pe-1.5 text-start text-v2-text-text-base hover:bg-v2-overlay-simple-overlay-hover focus-visible:outline-none focus-visible:bg-v2-overlay-simple-overlay-hover"
+                onClick={() => props.onOpenChange(!props.open)}
+              >
+                <SessionProgressIndicatorV2 class="shrink-0 text-v2-icon-icon-muted" />
+                <span class="flex min-w-0 items-baseline truncate whitespace-pre tabular-nums">
+                  {summary()[0]}
+                  <AnimatedNumber value={count()} />
+                  {summary()[1]}
+                </span>
+                <span class="flex-1" />
+                <span class="flex items-baseline tabular-nums text-v2-text-text-faint">
+                  <AnimatedNumber value={Math.floor(elapsed() / 60)} />:
+                  <AnimatedNumber value={Math.floor((elapsed() % 60) / 10)} />
+                  <AnimatedNumber value={elapsed() % 10} />
+                </span>
+                <span ref={chevron} class="flex size-4 shrink-0 items-center justify-center text-v2-icon-icon-faint">
+                  <Icon name="chevron-down" size="small" />
+                </span>
+              </button>
+            </div>
+          </Show>
         </div>
       </div>
-      <div class="relative">{props.children}</div>
+      <div class="relative">{props.children(inline ? status : undefined)}</div>
     </div>
   )
 }
