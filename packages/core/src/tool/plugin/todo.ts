@@ -19,9 +19,6 @@ export const Info = Schema.Struct({
   status: Schema.Literals(["pending", "in_progress", "completed", "cancelled"]).annotate({
     description: "Current status of the task: pending, in_progress, completed, cancelled",
   }),
-  priority: Schema.Literals(["high", "medium", "low"])
-    .pipe(Schema.optional)
-    .annotate({ description: "Optional priority level of the task: high, medium, low" }),
 })
 export type Info = typeof Info.Type
 
@@ -59,7 +56,7 @@ export const reminder = (todos: ReadonlyArray<Info>) => {
     `The conversation was compacted. Your todo list still has open items${closed.length ? ` (${closed.join(", ")})` : ""}:`,
     ...todos
       .filter((todo) => todo.status === "pending" || todo.status === "in_progress")
-      .map((todo) => `- [${todo.status}] ${todo.content}${todo.priority ? ` (${todo.priority})` : ""}`),
+      .map((todo) => `- [${todo.status}] ${todo.content}`),
     `Continue from this list and keep it current with the ${name} tool.`,
     "</system-reminder>",
   ].join("\n")

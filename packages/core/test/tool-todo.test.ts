@@ -23,10 +23,10 @@ import { executeTool, registerToolPlugin, toolDefinitions, toolIdentity } from "
 const sessionID = Session.ID.make("ses_todo_tool_test")
 const enabled = new ConfigExperimental.Info({ todo: true })
 const todos = [
-  { content: "Write tests", status: "in_progress", priority: "high" },
+  { content: "Write tests", status: "in_progress" },
   { content: "Ship it", status: "pending" },
   { content: "Read the code", status: "completed" },
-  { content: "Rewrite everything", status: "cancelled", priority: "low" },
+  { content: "Rewrite everything", status: "cancelled" },
 ] as const
 
 const it = testEffect(AppNodeBuilder.build(Tool.node, [Image.node.replace(imagePassthrough)]))
@@ -156,7 +156,7 @@ describe("TodoTool compaction reminder", () => {
       const text = [
         "<system-reminder>",
         "The conversation was compacted. Your todo list still has open items (1 completed, 1 cancelled):",
-        "- [in_progress] Write tests (high)",
+        "- [in_progress] Write tests",
         "- [pending] Ship it",
         "Continue from this list and keep it current with the todowrite tool.",
         "</system-reminder>",

@@ -36,7 +36,7 @@ function TodoStory(props: { context: Plugin.Context }) {
           time: { created: 0, completed: 1 },
           state: {
             status: "completed",
-            input: { todos: todos().map((todo) => ({ ...todo, priority: "medium" })) },
+            input: { todos: todos() },
             content: [{ type: "text", text: "updated" }],
           },
         },
