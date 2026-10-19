@@ -31,7 +31,7 @@ import { useLanguage } from "~/context/language"
 import { LocaleLinks } from "~/component/locale-links"
 
 const models = [
-  { name: "Space Bunny", training: "go.faq.a5.notUsed", retention: "go.faq.a5.retention0" },
+  { name: "MiniMax M3.1 Flash Free", training: "go.faq.a5.notUsed", retention: "go.faq.a5.retention0" },
   { name: "LongCat 2.5 Preview Free", training: "go.faq.a5.notUsed", retention: "go.faq.a5.retention0" },
   { name: "Step 5 Preview", training: "go.faq.a5.notUsed", retention: "go.faq.a5.retention0" },
   { name: "Beam Free", training: "go.faq.a5.notUsed", retention: "go.faq.a5.retention30" },
@@ -97,7 +97,7 @@ export default function Home() {
             <div data-component="desktop-app-banner">
               <span data-slot="badge">{i18n.t("home.banner.badge")}</span>
               <div data-slot="content">
-                <span data-slot="text">{i18n.t("go.promo.step5")}</span>
+                <span data-slot="text">{i18n.t("go.promo.minimaxM31FlashFree")}</span>
               </div>
             </div>
             <Show when={searchParams.ref}>
