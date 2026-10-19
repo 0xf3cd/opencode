@@ -5,7 +5,7 @@ import { LocationServiceMap } from "@opencode/core/location-services"
 import { AbsolutePath } from "@opencode/core/schema"
 import { Session } from "@opencode/core/session"
 import { LocationNotFoundError, InvalidRequestError, ServiceUnavailableError } from "@opencode/protocol/errors"
-import { Effect, Layer, Schema } from "effect"
+import { Context, Effect, Layer, Option, Schema, Scope } from "effect"
 import { HttpServerRequest } from "effect/http"
 import { HttpApiMiddleware } from "effect/http-api"
 import { missingSession } from "./handlers/session-error"
@@ -67,6 +67,22 @@ export const sessionInfo = Effect.fnUntraced(function* (sessions: Session.Interf
   )
   return yield* sessions.get(id).pipe(Effect.catchTag("Session.NotFoundError", missingSession))
 })
+
+export function withLoadedLocationServices<A, E>(
+  locations: Context.Service.Shape<typeof LocationServiceMap.Service>,
+  ref: Location.Ref,
+  effect: Effect.Effect<A, E, LocationServices>,
+) {
+  return Effect.scopedWith((scope) =>
+    Effect.gen(function* () {
+      const context = yield* locations
+        .contextEffectOption(ref)
+        .pipe(Scope.provide(scope), Effect.option, Effect.map(Option.flatten))
+      if (Option.isNone(context)) return Option.none<A>()
+      return Option.some(yield* effect.pipe(Effect.provide(context.value)))
+    }),
+  )
+}
 
 export function requestRef(request: HttpServerRequest.HttpServerRequest): Location.Ref {
   const query = new URL(request.url, "http://localhost").searchParams
