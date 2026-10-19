@@ -54,6 +54,7 @@ type Active = {
   info: Info
   done: Deferred.Deferred<Info>
   backgrounded: Deferred.Deferred<Info>
+  notified: Deferred.Deferred<void>
   scope: Scope.Closeable
   blockingSessions: Map<SessionSchema.ID, number>
   isBackgrounded: boolean
@@ -133,6 +134,7 @@ export interface Interface {
   readonly backgroundAll: (input: BackgroundAllInput) => Effect.Effect<Info[]>
   readonly cancel: (id: string) => Effect.Effect<Info | undefined>
   readonly pendingBackground: Effect.Effect<readonly Background[]>
+  readonly awaitBackground: (sessionID: SessionSchema.ID) => Effect.Effect<boolean>
   readonly completeBackground: (notificationID: SessionMessage.ID) => Effect.Effect<void>
 }
 
@@ -255,6 +257,7 @@ export const make = Effect.gen(function* () {
         const started_at = yield* Clock.currentTimeMillis
         const done = yield* Deferred.make<Info>()
         const backgrounded = yield* Deferred.make<Info>()
+        const notified = yield* Deferred.make<void>()
         const result = yield* SynchronizedRef.modifyEffect(
           state.jobs,
           Effect.fnUntraced(function* (jobs): Effect.fn.Return<readonly [StartResult, Map<string, Active>]> {
@@ -262,6 +265,7 @@ export const make = Effect.gen(function* () {
             if (existing?.info.status === "running") {
               return [{ info: snapshot(existing) }, jobs]
             }
+            if (existing) Deferred.doneUnsafe(existing.notified, Exit.void)
             const scope = yield* Scope.fork(state.scope, "parallel")
             const job = {
               info: {
@@ -275,6 +279,7 @@ export const make = Effect.gen(function* () {
               },
               done,
               backgrounded,
+              notified,
               scope,
               blockingSessions: new Map<SessionSchema.ID, number>(),
               isBackgrounded: false,
@@ -449,16 +454,31 @@ export const make = Effect.gen(function* () {
     return recovered
   }).pipe(Effect.withSpan("Job.pendingBackground"))
 
+  const awaitBackground: Interface["awaitBackground"] = Effect.fn("Job.awaitBackground")(function* (sessionID) {
+    const pending = [...(yield* SynchronizedRef.get(state.jobs)).values()].flatMap((job) =>
+      job.isBackgrounded &&
+      job.recovery &&
+      (job.recovery.kind === "shell" ? job.recovery.sessionID : job.recovery.parentSessionID) === sessionID
+        ? [Deferred.await(job.notified)]
+        : [],
+    )
+    if (pending.length === 0) return false
+    yield* Effect.raceAll(pending)
+    return true
+  })
+
   const completeBackground: Interface["completeBackground"] = Effect.fn("Job.completeBackground")((notificationID) =>
-    SynchronizedRef.updateEffect(state.jobs, (jobs) =>
+    SynchronizedRef.modifyEffect(state.jobs, (jobs) =>
       Effect.gen(function* () {
         yield* kv.remove(`${backgroundPrefix}${notificationID}`)
         const entry = [...jobs].find(([, job]) => job.info.notificationID === notificationID)
-        if (!entry || entry[1].info.status === "running") return jobs
+        if (!entry || entry[1].info.status === "running") return [undefined, jobs] as const
         const next = new Map(jobs)
         next.delete(entry[0])
-        return next
+        return [entry[1].notified, next] as const
       }),
+    ).pipe(
+      Effect.flatMap((notified) => (notified ? Deferred.succeed(notified, undefined).pipe(Effect.asVoid) : Effect.void)),
     ),
   )
 
@@ -471,6 +491,7 @@ export const make = Effect.gen(function* () {
     backgroundAll,
     cancel,
     pendingBackground,
+    awaitBackground,
     completeBackground,
   })
 })

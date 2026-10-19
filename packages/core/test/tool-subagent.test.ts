@@ -33,7 +33,13 @@ import { SubagentJob } from "@opencode/core/session/subagent-job"
 import { Plugin } from "@opencode/core/plugin"
 import { PluginHooks } from "@opencode/core/plugin/hooks"
 import { PluginSupervisor } from "@opencode/core/plugin/supervisor"
+import { Environment } from "@opencode/core/environment/index"
+import { FileAccess } from "@opencode/core/file-access"
 import { Permission } from "@opencode/core/permission"
+import { Shell } from "@opencode/core/shell"
+import { ShellSelect } from "@opencode/core/shell/select"
+import { ID } from "@opencode/schema/shell"
+import { ShellTool } from "@opencode/core/tool/plugin/shell"
 import { SubagentTool } from "@opencode/core/tool/plugin/subagent"
 import { Tool } from "@opencode/core/tool"
 import { tmpdir } from "./fixture/tmpdir"
@@ -112,21 +118,60 @@ const executionNode = makeGlobalNode({
   deps: [Bus.node, SessionStore.node],
 })
 
+let awaitShell = (): Effect.Effect<void> => Effect.void
+
+const testShellLayer = Layer.succeed(
+  Shell.Service,
+  Shell.Service.of({
+    create: (input) =>
+      Effect.succeed({
+        id: ID.make("sh_subagent_bg"),
+        command: input.command,
+        cwd: input.cwd ?? "/tmp",
+        shell: input.shell ?? "/bin/sh",
+        file: "/tmp/sh_subagent_bg.out",
+        size: 0,
+        newlines: 0,
+        status: "running",
+        metadata: input.metadata ?? {},
+        time: { started: 0 },
+      }),
+    list: () => Effect.succeed([]),
+    get: (id) => Effect.fail(new Shell.NotFoundError({ id })),
+    wait: (id) => Effect.fail(new Shell.NotFoundError({ id })),
+    result: (info) =>
+      Effect.suspend(() => awaitShell()).pipe(
+        Effect.as({
+          info: { ...info, status: "exited" as const, exit: 0, time: { ...info.time, completed: 1 } },
+          capture: { output: "script finished", truncated: false },
+        }),
+      ),
+    timeout: (id) => Effect.fail(new Shell.NotFoundError({ id })),
+    output: (id) => Effect.fail(new Shell.NotFoundError({ id })),
+    remove: () => Effect.void,
+  }),
+)
+
 const subagentPluginSupervisor = makeLocationNode({
   name: "test/subagent-plugins",
   layer: Layer.effectDiscard(
     Effect.gen(function* () {
       const hooks = yield* PluginHooks.Service
       yield* registerToolPlugin(SubagentTool.Plugin, {}, (name, callback) => hooks.register("tool", name, callback))
+      yield* registerToolPlugin(ShellTool.Plugin)
     }),
   ),
   deps: [
     Agent.node,
     Config.node,
+    Environment.node,
+    FileAccess.node,
     Model.node,
     Permission.node,
     Session.node,
     Job.node,
+    Shell.node,
+    ShellSelect.node,
     SubagentJob.node,
     Tool.node,
     PluginHooks.node,
@@ -148,30 +193,39 @@ const replacements = [
 ] satisfies LayerNode.Replacements
 const productionIt = testEffect(AppNodeBuilder.build(nodes, replacements))
 const it = testEffect(
-  AppNodeBuilder.build(nodes, [...replacements, PluginSupervisor.node.replace(subagentPluginSupervisor)]),
-)
-const completionIt = testEffect(
-  AppNodeBuilder.build(LayerNode.group([nodes, SessionRestart.node, KV.node]), [
-    Global.node.replace(tempGlobalLayer),
-    offlineModels,
+  AppNodeBuilder.build(nodes, [
+    ...replacements,
+    Shell.node.replace(testShellLayer),
     PluginSupervisor.node.replace(subagentPluginSupervisor),
-    LayerNodePlatform.llmClient.replace(TestLLM.testLayer({ fallback: TestLLM.text(childText, "completion") })),
-    SessionRunnerModel.node.replace(
-      Layer.succeed(SessionRunnerModel.Service, {
-        resolve: () =>
-          Effect.succeed(
-            SessionRunnerModel.resolved(
-              LanguageModel.make({ id: "child", provider: "test", route: OpenAIChat.route }),
-              {
-                capabilities: { tools: true, input: ["text"], output: ["text"] },
-                cost: [],
-                limit: { context: 200_000, output: 32_000 },
-              },
-            ),
-          ),
-      }),
-    ),
   ]),
+)
+const completionLLM = TestLLM.testLayer({ fallback: TestLLM.text(childText, "completion") })
+const completionIt = testEffect(
+  Layer.merge(
+    completionLLM,
+    AppNodeBuilder.build(LayerNode.group([nodes, SessionRestart.node, KV.node]), [
+      Global.node.replace(tempGlobalLayer),
+      offlineModels,
+      Shell.node.replace(testShellLayer),
+      PluginSupervisor.node.replace(subagentPluginSupervisor),
+      LayerNodePlatform.llmClient.replace(completionLLM),
+      SessionRunnerModel.node.replace(
+        Layer.succeed(SessionRunnerModel.Service, {
+          resolve: () =>
+            Effect.succeed(
+              SessionRunnerModel.resolved(
+                LanguageModel.make({ id: "child", provider: "test", route: OpenAIChat.route }),
+                {
+                  capabilities: { tools: true, input: ["text"], output: ["text"] },
+                  cost: [],
+                  limit: { context: 200_000, output: 32_000 },
+                },
+              ),
+            ),
+        }),
+      ),
+    ]),
+  ),
 )
 
 const withSubagent = (location: Location.Ref) =>
@@ -282,6 +336,100 @@ describe("SubagentTool", () => {
       ),
     ),
   )
+
+  for (const background of [false, true]) {
+    completionIt.live(
+      `waits for a child's running background shell and follow-up turn before completing (background=${background})`,
+      () =>
+        Effect.acquireRelease(
+          Effect.promise(() => tmpdir()),
+          (dir) => Effect.promise(() => dir[Symbol.asyncDispose]()),
+        ).pipe(
+          Effect.flatMap((dir) =>
+            Effect.gen(function* () {
+              const sessions = yield* Session.Service
+              const jobs = yield* Job.Service
+              const bus = yield* Bus.Service
+              const llm = yield* TestLLM.Test
+              const parent = yield* sessions.create({
+                location: Location.Ref.make({ directory: AbsolutePath.make(dir.path) }),
+                model: parentModel,
+                title: "Background shell parent",
+              })
+              yield* withSubagent(parent.location)
+              const locations = yield* LocationServiceMap.Service
+              const registry = yield* Tool.Service.pipe(Effect.provide(locations.get(parent.location)))
+              const releaseShell = yield* Deferred.make<void>()
+              const interimTurnEnded = yield* Deferred.make<Session.ID>()
+              awaitShell = () => Deferred.await(releaseShell)
+              yield* Effect.addFinalizer(() =>
+                Effect.sync(() => {
+                  awaitShell = () => Effect.void
+                }),
+              )
+              yield* bus.project(SessionEvent.Execution.Succeeded, (event) =>
+                event.data.sessionID !== parent.id
+                  ? Deferred.succeed(interimTurnEnded, event.data.sessionID).pipe(Effect.asVoid)
+                  : Effect.void,
+              )
+              yield* llm.push(
+                TestLLM.tool("call-bg-shell", "shell", { command: "./triage.sh", background: true }),
+                TestLLM.text("The script is still working. I'll pick this up when it completes.", "interim"),
+                TestLLM.text(childText, "final"),
+              )
+
+              const call = executeTool(registry, {
+                sessionID: parent.id,
+                ...toolIdentity,
+                call: {
+                  type: "tool-call",
+                  id: `call-bg-shell-subagent-${background}`,
+                  name: SubagentTool.name,
+                  input: {
+                    agent: "reviewer",
+                    description: "worktree triage",
+                    prompt: "triage worktrees",
+                    background,
+                  },
+                },
+              })
+
+              if (!background) {
+                const running = yield* call.pipe(Effect.forkScoped({ startImmediately: true }))
+                const childID = yield* Deferred.await(interimTurnEnded)
+                yield* sessions.wait(childID)
+                yield* Effect.yieldNow
+                expect((yield* jobs.get(childID))?.status).toBe("running")
+                yield* Deferred.succeed(releaseShell, undefined)
+                const settled = yield* Fiber.join(running)
+                expect(settled.content).toEqual([{ type: "text", text: completedOutput(childID) }])
+                return
+              }
+
+              const launched = yield* call
+              const childID = outputSessionID(launched.metadata)
+              expect(yield* Deferred.await(interimTurnEnded)).toBe(childID)
+              yield* sessions.wait(childID)
+              yield* Effect.yieldNow
+              expect((yield* jobs.get(childID))?.status).toBe("running")
+              expect((yield* sessions.context(parent.id)).filter((message) => message.type === "synthetic")).toEqual([])
+
+              yield* Deferred.succeed(releaseShell, undefined)
+              yield* jobs.wait({ id: childID })
+              yield* jobs.pendingBackground.pipe(Effect.repeat({ until: (pending) => pending.length === 0 }))
+              yield* sessions.wait(parent.id)
+              const messages = (yield* sessions.context(parent.id)).filter((message) => message.type === "synthetic")
+              expect(messages).toEqual([
+                expect.objectContaining({
+                  description: "worktree triage",
+                  text: `<subagent sessionID="${childID}" state="completed" description="worktree triage">\n${childText}\n</subagent>`,
+                }),
+              ])
+            }),
+          ),
+        ),
+    )
+  }
 
   productionIt.live("registers globally while resolving agents from the caller location", () =>
     Effect.acquireRelease(

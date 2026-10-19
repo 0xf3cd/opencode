@@ -52,6 +52,18 @@ const make: Effect.Effect<Interface, never, Session.Service | Job.Service | Scop
           recovery,
           run: Effect.gen(function* () {
             yield* sessions.resume(recovery.childSessionID)
+            while (true) {
+              if ((yield* sessions.active).has(recovery.childSessionID)) {
+                yield* sessions.resume(recovery.childSessionID)
+                continue
+              }
+              if (!(yield* jobs.awaitBackground(recovery.childSessionID))) break
+              if (
+                (yield* sessions.active).has(recovery.childSessionID) ||
+                (yield* sessions.inbox(recovery.childSessionID)).some((item) => item.type === "synthetic")
+              )
+                yield* sessions.resume(recovery.childSessionID)
+            }
             const messages = yield* sessions.messages({ sessionID: recovery.childSessionID, order: "desc", limit: 20 })
             const assistant = messages.find(
               (message) =>

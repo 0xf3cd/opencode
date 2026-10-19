@@ -171,16 +171,27 @@ export const layer = (options?: Options) =>
           title: recovery.description,
           notificationID: background.notificationID,
           recovery,
-          run: execution.resume(recovery.childSessionID).pipe(
-            Effect.andThen(store.context(recovery.childSessionID)),
-            Effect.map((messages) => {
-              const assistant = messages.findLast(
-                (message) =>
-                  message.type === "assistant" && message.time.completed !== undefined && message.error === undefined,
+          run: Effect.gen(function* () {
+            yield* execution.resume(recovery.childSessionID)
+            while (true) {
+              if ((yield* execution.active).has(recovery.childSessionID)) {
+                yield* execution.resume(recovery.childSessionID)
+                continue
+              }
+              if (!(yield* jobs.awaitBackground(recovery.childSessionID))) break
+              if (
+                (yield* execution.active).has(recovery.childSessionID) ||
+                (yield* sessions.inbox(recovery.childSessionID)).some((item) => item.type === "synthetic")
               )
-              return SubagentCompletion.text(assistant)
-            }),
-          ),
+                yield* execution.resume(recovery.childSessionID)
+            }
+            const messages = yield* store.context(recovery.childSessionID)
+            const assistant = messages.findLast(
+              (message) =>
+                message.type === "assistant" && message.time.completed !== undefined && message.error === undefined,
+            )
+            return SubagentCompletion.text(assistant)
+          }),
         })
         yield* jobs.background(background.id)
         yield* jobs.wait({ id: background.id }).pipe(
