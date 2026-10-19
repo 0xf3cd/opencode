@@ -126,6 +126,19 @@ jobs:
           name: opencode-app-archive
           path: packages/cli/.cache
 
+      # build.ts looks up and downloads the Bun release through the REST API. An app token has its own rate limit, so 12
+      # legs don't spend the repository's GITHUB_TOKEN budget, which the desktop jobs poll artifacts with. It is
+      # read-only and scoped to this repository because the build runs dependency install scripts.
+      - name: Create Bun download token
+        id: bun-token
+        uses: actions/create-github-app-token@fee1f7d63c2ff003460e3d139729b119787bc349 # v2.2.2
+        with:
+          app-id: ${{ vars.OPENCODE_APP_ID }}
+          private-key: ${{ secrets.OPENCODE_APP_SECRET }}
+          owner: ${{ github.repository_owner }}
+          repositories: opencode
+          permission-contents: read
+
       - name: Build CLI
         run: ./packages/cli/script/build.ts --target=opencode-${{ matrix.target }} --app-archive=.cache/app-archive.bin
         env:
@@ -134,7 +147,7 @@ jobs:
           OPENCODE_RELEASE: ${{ needs.version.outputs.release }}
           OPENCODE_RELEASE_NOTES: ${{ (github.ref_name == 'dev' && inputs.release_notes) || '' }}
           GH_REPO: ${{ github.repository }}
-          GH_TOKEN: ${{ github.token }}
+          GH_TOKEN: ${{ steps.bun-token.outputs.token }}
 
       # The artifact must hold this target alone: publish merges every CLI artifact into one dist.
       - name: Check CLI output
@@ -447,9 +460,10 @@ jobs:
           VITE_SENTRY_RELEASE: desktop@${{ needs.version.outputs.version }}
           OPENCODE_CLI_TARGET: ${{ matrix.settings.target }}
 
-      # The job name is the one GitHub gives the build-cli leg for this target.
+      # The job name is the one GitHub gives the build-cli leg for this target. build-app-archive is the job it needs, so
+      # the wait keeps going while that runs.
       - name: Wait for the CLI
-        run: bun ./script/wait-for-artifact.ts cli-unsigned-${{ matrix.settings.cli }} "build-cli (${{ matrix.settings.cli }})"
+        run: bun ./script/wait-for-artifact.ts cli-unsigned-${{ matrix.settings.cli }} "build-cli (${{ matrix.settings.cli }})" build-app-archive
         env:
           GITHUB_TOKEN: ${{ github.token }}
 
