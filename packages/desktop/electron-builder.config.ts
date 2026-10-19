@@ -257,7 +257,12 @@ export function getConfig() {
           channel: "latest",
         },
         deb: { fpm: [metainfoFpm(appId), legacyDesktopEntryFpm] },
-        rpm: { packageName: "opencode", fpm: [metainfoFpm(appId), legacyDesktopEntryFpm] },
+        // fpm compresses rpm at xz -9 by default, which took 4.6 min on the Linux arm64 runner. -3, the deb's default,
+        // takes about a fifth of that and makes the rpm as large as the deb (17% larger than at -9).
+        rpm: {
+          packageName: "opencode",
+          fpm: ["--rpm-compression-level", "3", metainfoFpm(appId), legacyDesktopEntryFpm],
+        },
       }
     }
   }

@@ -359,6 +359,9 @@ jobs:
       AZURE_TRUSTED_SIGNING_ACCOUNT_NAME: ${{ secrets.AZURE_TRUSTED_SIGNING_ACCOUNT_NAME }}
       AZURE_TRUSTED_SIGNING_CERTIFICATE_PROFILE: ${{ secrets.AZURE_TRUSTED_SIGNING_CERTIFICATE_PROFILE }}
       AZURE_TRUSTED_SIGNING_ENDPOINT: ${{ secrets.AZURE_TRUSTED_SIGNING_ENDPOINT }}
+      # fpm passes the deb's xz level in XZ_OPT, which leaves xz single-threaded. xz also reads XZ_DEFAULTS, so the deb
+      # compresses on every CPU. rpm threads its payload compression on its own.
+      XZ_DEFAULTS: -T0
     strategy:
       fail-fast: false
       matrix:
