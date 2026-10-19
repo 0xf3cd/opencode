@@ -1,20 +1,28 @@
 import { describe, expect } from "bun:test"
 import { Message } from "@opencode/ai"
-import { Effect, Layer, Ref, Schema, Stream } from "effect"
+import { DateTime, Effect, Layer, Ref, Schema, Stream } from "effect"
 import { Agent } from "@opencode/core/agent"
 import { AppNodeBuilder } from "@opencode/core/effect/app-node-builder"
 import { Config } from "@opencode/core/config"
 import { Image } from "@opencode/core/image"
+import { Location } from "@opencode/core/location"
 import { Model } from "@opencode/core/model"
+import { Project } from "@opencode/core/project"
 import { Provider } from "@opencode/core/provider"
+import { Rpc } from "@opencode/core/rpc"
+import { AbsolutePath } from "@opencode/core/schema"
 import { Session } from "@opencode/core/session"
 import { SessionMessage } from "@opencode/core/session/message"
 import { Tool } from "@opencode/core/tool"
 import { TodoTool } from "@opencode/core/tool/plugin/todo"
+import { TodoRpc } from "@opencode/core/tool/plugin/todo-rpc"
+import { LayerNode } from "@opencode/util/effect/layer-node"
 import type { SessionHooks } from "@opencode/plugin/effect/session"
 import { Document, Info, type Entry } from "@opencode/schema/config"
+import { Money } from "@opencode/schema/money"
 import { ConfigExperimental } from "@opencode/schema/config/experimental"
 import { SessionInbox } from "@opencode/schema/session-inbox"
+import { location } from "./fixture/location"
 import { testEffect } from "./lib/effect"
 import { imagePassthrough } from "./lib/image"
 import { permissionLayer } from "./lib/permission"
@@ -29,13 +37,19 @@ const todos = [
   { content: "Rewrite everything", status: "cancelled" },
 ] as const
 
-const it = testEffect(AppNodeBuilder.build(Tool.node, [Image.node.replace(imagePassthrough)]))
+const it = testEffect(
+  AppNodeBuilder.build(LayerNode.group([Tool.node, Rpc.node]), [
+    Image.node.replace(imagePassthrough),
+    Location.node.replace(Layer.succeed(Location.Service, location({ directory: AbsolutePath.make("/workspace") }))),
+  ]),
+)
 
 const setup = (
   experimental: ConfigExperimental.Info | undefined,
-  options: { readonly history?: SessionMessage.Info[] } = {},
+  options: { readonly history?: SessionMessage.Info[]; readonly revert?: SessionMessage.ID } = {},
 ) =>
   Effect.gen(function* () {
+    const rpc = yield* Rpc.Service
     const history = yield* Ref.make(options.history ?? [])
     const synthetics: {
       sessionID: Session.ID
@@ -45,6 +59,7 @@ const setup = (
     }[] = []
     const hooks = new Map<string, (event: SessionHooks["context"]) => Effect.Effect<void>>()
     yield* registerToolPlugin(TodoTool.Plugin, {
+      rpc: Object.assign(rpc.client, { register: rpc.register }),
       event: { subscribe: () => Stream.never },
       session: {
         hook: (name, callback) =>
@@ -71,6 +86,18 @@ const setup = (
       Effect.provide(Layer.mock(Config.Service)({ entries: () => Effect.succeed([document(experimental)]) })),
       Effect.provide(
         Layer.mock(Session.Service)({
+          get: () =>
+            Effect.succeed(
+              Session.Info.make({
+                id: sessionID,
+                projectID: Project.ID.global,
+                cost: Money.USD.zero,
+                tokens: { input: 0, output: 0, reasoning: 0, cache: { read: 0, write: 0 } },
+                time: { created: DateTime.makeUnsafe(0), updated: DateTime.makeUnsafe(0) },
+                location: Location.Ref.make({ directory: AbsolutePath.make("/workspace") }),
+                revert: options.revert ? { messageID: options.revert } : undefined,
+              }),
+            ),
           messages: () => Ref.get(history).pipe(Effect.map((messages) => messages.toReversed())),
           context: () =>
             Ref.get(history).pipe(
@@ -102,6 +129,7 @@ const setup = (
       request,
       history,
       registry: yield* Tool.Service,
+      rpc: rpc.client(TodoRpc.Definition),
     }
   })
 
@@ -143,6 +171,20 @@ describe("TodoTool", () => {
         ],
         metadata: { todos },
       })
+    }),
+  )
+})
+
+describe("TodoTool rpc", () => {
+  it.effect("reads the latest list after the latest compaction and before the revert boundary", () =>
+    Effect.gen(function* () {
+      const reverted = assistant([{ content: "Reverted", status: "pending" }])
+      const history = [assistant([{ content: "Compacted away", status: "pending" }]), compaction()]
+      const fixture = yield* setup(enabled, { history: [...history, assistant(todos), reverted], revert: reverted.id })
+      expect(yield* fixture.rpc.get({ sessionID })).toEqual({ enabled: true, todos })
+
+      const empty = yield* setup(enabled, { history })
+      expect(yield* empty.rpc.get({ sessionID })).toEqual({ enabled: true, todos: [] })
     }),
   )
 })

@@ -10,17 +10,13 @@ import { ConfigEntryObserver } from "../../config/plugin/entry-observer.js"
 import { Permission } from "../../permission.js"
 import { Session } from "../../session.js"
 import DESCRIPTION from "../todowrite.txt"
+import { TodoRpc } from "./todo-rpc.js"
 
 export const name = "todowrite"
 export const REMINDER = "todo.reminder"
 
-export const Info = Schema.Struct({
-  content: Schema.String.annotate({ description: "Brief description of the task" }),
-  status: Schema.Literals(["pending", "in_progress", "completed", "cancelled"]).annotate({
-    description: "Current status of the task: pending, in_progress, completed, cancelled",
-  }),
-})
-export type Info = typeof Info.Type
+export const Info = TodoRpc.Todo
+export type Info = TodoRpc.Todo
 
 export const Input = Schema.Struct({
   todos: Schema.Array(Info).annotate({ description: "The updated todo list" }),
@@ -72,6 +68,26 @@ export const Plugin = {
     const loaded = yield* ConfigEntryObserver.observe(config, ctx.event, ctx.tool.reload())
     const enabled = () => Config.latest(loaded.entries, "experimental")?.todo === true
 
+    const rpc = yield* ctx.rpc
+      .register(TodoRpc.Definition, {
+        get: (input, call) =>
+          Effect.gen(function* () {
+            const session = yield* sessions
+              .get(input.sessionID)
+              .pipe(Effect.mapError(() => call.error("unavailable", "Session not found.", {})))
+            if (session.location.directory !== ctx.location.directory)
+              return yield* Effect.fail(call.error("unavailable", "Session belongs to another location.", {}))
+            if (!enabled()) return { enabled: false, todos: [] }
+            const history = yield* sessions.messages({ sessionID: input.sessionID, order: "desc" }).pipe(Effect.orDie)
+            return { enabled: true, todos: current(history, session.revert?.messageID) }
+          }),
+      })
+      .pipe(Effect.orDie)
+    const publish = (sessionID: Session.ID, todos: ReadonlyArray<Info>) =>
+      rpc.events
+        .emit("updated", { sessionID, todos })
+        .pipe(Effect.catch((error) => Effect.logWarning("failed to publish todo update", { sessionID, error })))
+
     yield* ctx.tool
       .transform((editor) => {
         if (!enabled()) return
@@ -93,6 +109,7 @@ export const Plugin = {
               })
               .pipe(
                 Effect.mapError((error) => new ToolFailure({ message: "Unable to update todos", error })),
+                Effect.andThen(publish(context.sessionID, input.todos)),
                 Effect.as({
                   output: { todos: input.todos },
                   content: summarize(input.todos),
@@ -114,12 +131,11 @@ export const Plugin = {
         if (handled.get(event.sessionID) === compaction.id) return
         handled.set(event.sessionID, compaction.id)
         if (visible.some((message) => latestTodos(message) !== undefined)) return
-        const history = yield* sessions.messages({ sessionID: event.sessionID, order: "desc" })
-        const todos = history.reduce<ReadonlyArray<Info> | undefined>(
-          (found, message) => found ?? latestTodos(message),
-          undefined,
-        )
-        if (!todos?.some((todo) => todo.status === "pending" || todo.status === "in_progress")) return
+        // Reads across compactions to carry the list forward.
+        const todos = latest(yield* sessions.messages({ sessionID: event.sessionID, order: "desc" }))
+        // The completed compaction now hides any earlier list from the sidebar.
+        if (!todos?.some((todo) => todo.status === "pending" || todo.status === "in_progress"))
+          return yield* publish(event.sessionID, [])
         const text = reminder(todos)
         // Before the user's prompt, matching where other reminders land.
         const at = event.messages.at(-1)?.role === "user" ? event.messages.length - 1 : event.messages.length
@@ -130,6 +146,7 @@ export const Plugin = {
           metadata: { kind: REMINDER, todos },
           resume: false,
         })
+        yield* publish(event.sessionID, todos)
       }).pipe(
         Effect.catch((error) =>
           Effect.logWarning("failed to restore todo list after compaction", { sessionID: event.sessionID, error }),
@@ -137,6 +154,17 @@ export const Plugin = {
       ),
     )
   }),
+}
+
+/** The latest list after the latest completed compaction and before the revert boundary, given newest-first history. */
+function current(history: ReadonlyArray<SessionMessage.Info>, boundary: SessionMessage.ID | undefined) {
+  const visible = history.slice(history.findIndex((message) => message.id === boundary) + 1)
+  const compaction = visible.findIndex((message) => message.type === "compaction" && message.status === "completed")
+  return latest(compaction === -1 ? visible : visible.slice(0, compaction)) ?? []
+}
+
+function latest(history: ReadonlyArray<SessionMessage.Info>) {
+  return history.reduce<ReadonlyArray<Info> | undefined>((found, message) => found ?? latestTodos(message), undefined)
 }
 
 function latestTodos(message: SessionMessage.Info): ReadonlyArray<Info> | undefined {

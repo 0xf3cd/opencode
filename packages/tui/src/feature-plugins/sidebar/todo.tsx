@@ -1,16 +1,43 @@
+import { TodoRpc } from "@opencode/core/tool/plugin/todo-rpc"
 import { Plugin } from "@opencode/plugin/tui"
-import { createMemo, For, Show } from "solid-js"
+import { createEffect, createMemo, createSignal, For, on, onCleanup, Show } from "solid-js"
 import { TodoItem } from "../../component/todo-item"
-import { sessionTodos } from "../../util/todo"
 
 export function SidebarTodo(props: { context: Plugin.Context; sessionID: string }) {
   const [view, updateView] = props.context.storage.store("view", { initial: { open: true } })
   const theme = props.context.theme
-  const list = createMemo(() =>
-    sessionTodos(
-      props.context.data.session.message.list(props.sessionID),
-      props.context.data.session.get(props.sessionID)?.revert?.messageID,
-    ),
+  const rpc = props.context.client.rpc(TodoRpc.Definition)
+  const directory = createMemo(() => props.context.data.session.get(props.sessionID)?.location.directory)
+  const revert = createMemo(() => props.context.data.session.get(props.sessionID)?.revert?.messageID)
+  const [state, setState] = createSignal<{ sessionID: string; todos: ReadonlyArray<TodoRpc.Todo> }>()
+  const list = createMemo(() => (state()?.sessionID === props.sessionID ? (state()?.todos ?? []) : []))
+  // Bumped by every request and update so a slower `get` cannot overwrite newer state.
+  let version = 0
+
+  onCleanup(
+    rpc.events.on("updated", (event) => {
+      if (event.data.sessionID !== props.sessionID) return
+      version++
+      setState({ sessionID: event.data.sessionID, todos: event.data.todos })
+    }),
+  )
+
+  createEffect(
+    on([() => props.sessionID, directory, revert], ([sessionID, path]) => {
+      if (!path) return
+      const requested = ++version
+      rpc
+        .get({ sessionID }, { location: { directory: path } })
+        .then((result) => {
+          if (requested !== version) return
+          setState({ sessionID, todos: result.enabled ? result.todos : [] })
+        })
+        .catch((error) => {
+          if (requested !== version) return
+          console.error("Failed to load todos", error)
+          setState({ sessionID, todos: [] })
+        })
+    }),
   )
   const remaining = createMemo(
     () => list().filter((item) => item.status === "pending" || item.status === "in_progress").length,
