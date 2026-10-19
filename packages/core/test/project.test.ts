@@ -7,10 +7,12 @@ import { AppNodeBuilder } from "@opencode/core/effect/app-node-builder"
 import { LayerNode } from "@opencode/util/effect/layer-node"
 import { Bus } from "@opencode/core/bus"
 import { Database } from "@opencode/core/database/database"
+import { Location } from "@opencode/core/location"
 import { Project } from "@opencode/core/project"
 import { ProjectSchema } from "@opencode/core/project/schema"
 import { ProjectTable } from "@opencode/core/project/sql"
 import { AbsolutePath } from "@opencode/core/schema"
+import { Worktree } from "@opencode/core/worktree"
 import { Hash } from "@opencode/util/hash"
 import { initGit } from "./fixture/git"
 import { tmpdir } from "./fixture/tmpdir"
@@ -745,6 +747,43 @@ describe("Project.resolve", () => {
         sandboxes: [abs("/preserved-sandbox")],
         time: { created: 1 },
       })
+    }),
+  )
+
+  it.live("publishes project.updated and worktree.resolved globally across locations", () =>
+    Effect.gen(function* () {
+      const tmp = yield* Effect.acquireRelease(
+        Effect.promise(() => tmpdir()),
+        (tmp) => Effect.promise(() => tmp[Symbol.asyncDispose]()),
+      )
+      yield* Effect.promise(() => initRepo(tmp.path, { commit: true, remote: "git@github.com:owner/repo.git" }))
+      const project = yield* Project.Service
+      const bus = yield* Bus.Service
+      const locA = Location.Service.of({
+        directory: abs("/loc-a"),
+        project: { id: Project.ID.make("a"), directory: abs("/loc-a"), canonical: abs("/loc-a") },
+      })
+      const locB = Location.Service.of({
+        directory: abs("/loc-b"),
+        project: { id: Project.ID.make("b"), directory: abs("/loc-b"), canonical: abs("/loc-b") },
+      })
+      const receivedByB: Array<string> = []
+      yield* bus
+        .subscribe([ProjectSchema.Event.Updated, Worktree.Event.Resolved])
+        .pipe(
+          Stream.runForEach((event) => Effect.sync(() => receivedByB.push(event.type))),
+          Effect.provideService(Location.Service, locB),
+          Effect.forkScoped({ startImmediately: true }),
+        )
+
+      const resolved = yield* project.resolve(abs(tmp.path)).pipe(Effect.provideService(Location.Service, locA))
+      yield* project
+        .update({ projectID: resolved.id, name: "Global Update" })
+        .pipe(Effect.provideService(Location.Service, locA))
+      yield* Effect.yieldNow
+
+      expect(receivedByB).toContain(Worktree.Event.Resolved.type)
+      expect(receivedByB).toContain(ProjectSchema.Event.Updated.type)
     }),
   )
 })

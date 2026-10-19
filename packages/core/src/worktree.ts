@@ -128,7 +128,7 @@ const layer = Layer.effect(
     })
 
     const changed = Effect.fnUntraced(function* (projectID: Project.ID, update: boolean) {
-      if (update) yield* bus.publish(Event.Updated, { projectID })
+      if (update) yield* bus.publish(Event.Updated, { projectID }, { global: true })
     })
 
     const ops = {

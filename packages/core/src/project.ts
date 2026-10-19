@@ -143,7 +143,7 @@ const layer = Layer.effect(
               .pipe(Effect.orDie)
           : undefined
       const changed = replaced ?? unarchived
-      if (changed) yield* bus.publish(ProjectSchema.Event.Updated, fromRow(changed))
+      if (changed) yield* bus.publish(ProjectSchema.Event.Updated, fromRow(changed), { global: true })
       if (!project.vcs) return project
       const directories: Array<{ projectID: ID; directory: AbsolutePath; strategy?: string }> = [
         { projectID: project.id, directory: project.canonical },
@@ -204,6 +204,7 @@ const layer = Layer.effect(
               ...(adopted.length ? { adopted: adopted.map((candidate) => candidate.id) } : {}),
             },
             {
+              global: true,
               commit: () =>
                 db
                   .insert(WorktreeTable)
@@ -251,7 +252,7 @@ const layer = Layer.effect(
         .pipe(Effect.orDie)
       if (!row) return yield* new NotFoundError({ projectID: input.projectID })
       const project = fromRow(row)
-      yield* bus.publish(ProjectSchema.Event.Updated, project)
+      yield* bus.publish(ProjectSchema.Event.Updated, project, { global: true })
       return project
     })
 
@@ -268,7 +269,7 @@ const layer = Layer.effect(
         .returning()
         .get()
         .pipe(Effect.orDie)
-      if (row) yield* bus.publish(ProjectSchema.Event.Updated, fromRow(row))
+      if (row) yield* bus.publish(ProjectSchema.Event.Updated, fromRow(row), { global: true })
     })
 
     const cached = Effect.fnUntraced(function* (dir: string) {
@@ -436,7 +437,7 @@ const layer = Layer.effect(
             .returning()
             .get()
             .pipe(Effect.orDie)
-          if (row) yield* bus.publish(ProjectSchema.Event.Updated, fromRow(row))
+          if (row) yield* bus.publish(ProjectSchema.Event.Updated, fromRow(row), { global: true })
         }),
         { concurrency: 8, discard: true },
       )

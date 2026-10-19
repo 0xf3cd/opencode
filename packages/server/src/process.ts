@@ -116,8 +116,9 @@ export const start = Effect.fn("ServerProcess.start")(function* <E, R>(
       address: bound.http.address,
       shutdown: shutdown.await,
       updateAvailable: (version: string) =>
-        bus.publish(InstallationEvent.UpdateAvailable, { version }).pipe(Effect.asVoid),
-      updated: (version: string) => bus.publish(InstallationEvent.Updated, { version }).pipe(Effect.asVoid),
+        bus.publish(InstallationEvent.UpdateAvailable, { version }, { global: true }).pipe(Effect.asVoid),
+      updated: (version: string) =>
+        bus.publish(InstallationEvent.Updated, { version }, { global: true }).pipe(Effect.asVoid),
     }
   }).pipe(
     Effect.catchCause((cause) => {

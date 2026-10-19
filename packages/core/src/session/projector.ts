@@ -1,10 +1,11 @@
 export * as SessionProjector from "./projector.js"
 
 import { and, asc, desc, eq, gt, gte, inArray, isNull, lt, lte, or, sql } from "drizzle-orm"
-import { DateTime, Effect, Layer, Schema, Stream } from "effect"
+import { Context, DateTime, Effect, Layer, Schema, Stream } from "effect"
 import path from "path"
 import { Database } from "../database/database.js"
 import { Bus } from "../bus.js"
+import { Location } from "../location.js"
 import { makeGlobalNode } from "@opencode/util/effect/app-node"
 import { Agent } from "@opencode/schema/agent"
 import { Model } from "@opencode/schema/model"
@@ -85,6 +86,7 @@ const publishSessionUsage = Effect.fn("SessionProjector.publishUsage")(function*
   db: DatabaseService,
   bus: Bus.Interface,
   sessionID: SessionSchema.ID,
+  location?: Bus.PublishOptions["location"],
 ) {
   const row = yield* db
     .select({
@@ -100,16 +102,20 @@ const publishSessionUsage = Effect.fn("SessionProjector.publishUsage")(function*
     .get()
     .pipe(Effect.orDie)
   if (!row) return
-  yield* bus.publish(SessionEvent.UsageUpdated, {
-    sessionID,
-    cost: Money.USD.make(row.cost),
-    tokens: {
-      input: row.input,
-      output: row.output,
-      reasoning: row.reasoning,
-      cache: { read: row.cacheRead, write: row.cacheWrite },
+  yield* bus.publish(
+    SessionEvent.UsageUpdated,
+    {
+      sessionID,
+      cost: Money.USD.make(row.cost),
+      tokens: {
+        input: row.input,
+        output: row.output,
+        reasoning: row.reasoning,
+        cache: { read: row.cacheRead, write: row.cacheWrite },
+      },
     },
-  })
+    location ? { location } : { global: true },
+  )
 })
 
 const projectFork = Effect.fn("SessionProjector.projectFork")(function* (
@@ -816,8 +822,9 @@ const layer = Layer.effectDiscard(
           (event.data.cost === undefined || event.data.tokens === undefined)
         )
           return Effect.void
-        return publishSessionUsage(db, bus, event.data.sessionID)
+        return publishSessionUsage(db, bus, event.data.sessionID, event.location)
       }),
+      Effect.updateContext((context: Context.Context<never>) => Context.omit(Location.Service)(context)),
       Effect.forkScoped({ startImmediately: true }),
     )
   }),

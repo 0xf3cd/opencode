@@ -50,7 +50,7 @@ export const VcsHandler = HttpApiBuilder.group(Api, "server.vcs", (handlers) =>
           yield* locations.invalidate(
             Location.Ref.make({ directory: location.directory, workspaceID: location.workspaceID }),
           )
-          yield* bus.publish(Worktree.Event.Updated, { projectID: resolved.id })
+          yield* bus.publish(Worktree.Event.Updated, { projectID: resolved.id }, { global: true })
           return HttpApiSchema.NoContent.make()
         }),
       )

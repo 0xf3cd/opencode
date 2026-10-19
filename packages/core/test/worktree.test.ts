@@ -992,4 +992,29 @@ describe("Worktree", () => {
       }
     }),
   )
+
+  it.live("publishes worktree.updated globally across locations", () =>
+    Effect.gen(function* () {
+      const input = yield* setup()
+      const worktree = yield* fixtureWorktree()
+      const bus = yield* Bus.Service
+      const otherLocation = Location.Service.of({
+        directory: abs("/other-location"),
+        project: { id: input.projectID, directory: abs("/other-location"), canonical: input.sourceDirectory },
+      })
+      const fiber = yield* bus
+        .subscribe(Worktree.Event.Updated)
+        .pipe(
+          Stream.take(1),
+          Stream.runCollect,
+          Effect.provideService(Location.Service, otherLocation),
+          Effect.forkScoped,
+        )
+      yield* Effect.yieldNow
+
+      const created = yield* worktree.create({ name: "cross-location" })
+      expect((yield* Fiber.join(fiber))[0]?.data).toEqual({ projectID: input.projectID })
+      yield* worktree.remove({ directory: created.directory, force: false })
+    }),
+  )
 })

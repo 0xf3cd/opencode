@@ -175,7 +175,7 @@ const makeLayer = (options: Options = {}) =>
         )
         if (response.type !== "created") return yield* unexpected(response)
         const terminal = toInfo(response.terminal)
-        yield* bus.publish(Added, { sessionID, terminal })
+        yield* bus.publish(Added, { sessionID, terminal }, { global: true })
         return terminal
       })
 
@@ -295,7 +295,7 @@ const makeLayer = (options: Options = {}) =>
         const response = yield* request(daemon, { op: "terminate", id: fromID(id) })
         if (response.type !== "ok") return yield* unexpected(response)
         if (current.get(terminal.sessionID) === id) current.delete(terminal.sessionID)
-        yield* bus.publish(Removed, { sessionID: terminal.sessionID, ptyID: id })
+        yield* bus.publish(Removed, { sessionID: terminal.sessionID, ptyID: id }, { global: true })
         return undefined
       })
 
