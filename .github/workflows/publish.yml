@@ -4,11 +4,8 @@ run-name: "${{ format('release {0}', inputs.bump) }}"
 on:
   push:
     branches:
-      - ci
       - dev
       - beta
-      - fix/npm-native-binary-install
-      - snapshot-*
   workflow_dispatch:
     inputs:
       bump:
@@ -34,6 +31,8 @@ permissions:
   id-token: write
   contents: write
   packages: write
+  # Desktop jobs poll this run's artifacts and jobs while the CLI builds.
+  actions: read
 
 env:
   OPENCODE_CHANNEL: ${{ (github.ref_name == 'dev' && !inputs.bump && !inputs.version && 'dev') || '' }}
@@ -44,8 +43,6 @@ jobs:
     if: github.repository == 'anomalyco/opencode'
     steps:
       - uses: actions/checkout@f43a0e5ff2bd294095638e18286ca9a3d1956744 # v3.6.0
-        with:
-          fetch-depth: 0
 
       - uses: ./.github/actions/setup-bun
 
@@ -56,10 +53,6 @@ jobs:
           opencode-app-id: ${{ vars.OPENCODE_APP_ID }}
           opencode-app-secret: ${{ secrets.OPENCODE_APP_SECRET }}
 
-      - name: Install OpenCode
-        if: inputs.bump || inputs.version
-        run: bun i -g opencode-ai
-
       - id: version
         run: |
           ./script/version.ts
@@ -67,17 +60,58 @@ jobs:
           GH_TOKEN: ${{ steps.committer.outputs.token }}
           OPENCODE_BUMP: ${{ inputs.bump }}
           OPENCODE_VERSION: ${{ inputs.version }}
-          OPENCODE_API_KEY: ${{ secrets.OPENCODE_API_KEY }}
     outputs:
       version: ${{ steps.version.outputs.version }}
       release: ${{ steps.version.outputs.release }}
       tag: ${{ steps.version.outputs.tag }}
 
-  build-cli:
+  # build-cli and build-node-cli embed the same web UI archive, so it builds once instead of in every CLI target's job.
+  build-app-archive:
     needs: version
     runs-on: blacksmith-4vcpu-ubuntu-2404
     timeout-minutes: 30
     if: github.repository == 'anomalyco/opencode'
+    steps:
+      - uses: actions/checkout@f43a0e5ff2bd294095638e18286ca9a3d1956744 # v3.6.0
+
+      - uses: ./.github/actions/setup-bun
+
+      - name: Build app archive
+        run: bun packages/cli/script/build-node.ts --app-archive-only --app-archive=.cache/app-archive.bin --skip-install
+        env:
+          OPENCODE_VERSION: ${{ needs.version.outputs.version }}
+          OPENCODE_RELEASE: ${{ needs.version.outputs.release }}
+
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: opencode-app-archive
+          path: packages/cli/.cache/app-archive.bin
+          if-no-files-found: error
+
+  # Each target builds in its own job and artifact, so signers and desktop jobs download only the CLIs they use.
+  build-cli:
+    needs:
+      - version
+      - build-app-archive
+    runs-on: blacksmith-4vcpu-ubuntu-2404
+    timeout-minutes: 30
+    if: github.repository == 'anomalyco/opencode'
+    strategy:
+      fail-fast: false
+      matrix:
+        target:
+          - darwin-arm64
+          - darwin-x64
+          - darwin-x64-baseline
+          - windows-arm64
+          - windows-x64
+          - windows-x64-baseline
+          - linux-arm64
+          - linux-x64
+          - linux-x64-baseline
+          - linux-arm64-musl
+          - linux-x64-musl
+          - linux-x64-baseline-musl
     steps:
       - uses: actions/checkout@f43a0e5ff2bd294095638e18286ca9a3d1956744 # v3.6.0
         with:
@@ -87,54 +121,36 @@ jobs:
         with:
           bun-version: 1.4.2
 
-      - name: Setup git committer
-        id: committer
-        uses: ./.github/actions/setup-git-committer
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
         with:
-          opencode-app-id: ${{ vars.OPENCODE_APP_ID }}
-          opencode-app-secret: ${{ secrets.OPENCODE_APP_SECRET }}
+          name: opencode-app-archive
+          path: packages/cli/.cache
 
-      - name: Build legacy CLI
-        if: github.ref_name != 'dev' && github.ref_name != 'beta'
-        run: ./packages/opencode/script/build.ts ${{ (github.ref_name == 'beta' && '--sourcemaps') || '' }}
-        env:
-          OPENCODE_VERSION: ${{ needs.version.outputs.version }}
-          OPENCODE_RELEASE: ${{ needs.version.outputs.release }}
-          GH_REPO: ${{ github.repository }}
-          GH_TOKEN: ${{ steps.committer.outputs.token }}
-
-      - name: Build preview CLI
-        id: build
-        run: ./packages/cli/script/build.ts ${{ (github.ref_name == 'beta' && '--sourcemaps') || '' }}
+      - name: Build CLI
+        run: ./packages/cli/script/build.ts --target=opencode-${{ matrix.target }} --app-archive=.cache/app-archive.bin
         env:
           BUN_COMPILE_RELEASE: bun-v1.4.2
           OPENCODE_VERSION: ${{ needs.version.outputs.version }}
           OPENCODE_RELEASE: ${{ needs.version.outputs.release }}
           OPENCODE_RELEASE_NOTES: ${{ (github.ref_name == 'dev' && inputs.release_notes) || '' }}
           GH_REPO: ${{ github.repository }}
-          GH_TOKEN: ${{ steps.committer.outputs.token }}
+          GH_TOKEN: ${{ github.token }}
 
-      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
-        if: github.ref_name != 'dev' && github.ref_name != 'beta'
-        with:
-          name: opencode-cli
-          path: |
-            packages/opencode/dist/opencode-darwin*
-            packages/opencode/dist/opencode-linux*
+      # The artifact must hold this target alone: publish merges every CLI artifact into one dist.
+      - name: Check CLI output
+        run: |
+          actual=$(ls packages/cli/dist)
+          if [ "$actual" != "cli-${{ matrix.target }}" ]; then
+            echo "Expected only cli-${{ matrix.target }} in packages/cli/dist, found: $actual"
+            exit 1
+          fi
 
-      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
-        if: github.ref_name != 'dev' && github.ref_name != 'beta'
-        with:
-          name: opencode-cli-windows
-          path: packages/opencode/dist/opencode-windows*
-
+      # The glob keeps the cli-<target>/ directory in the artifact.
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
-          name: opencode-preview-cli-unsigned
+          name: cli-unsigned-${{ matrix.target }}
           path: packages/cli/dist/cli-*
-
-    outputs:
-      version: ${{ needs.version.outputs.version }}
+          if-no-files-found: error
 
   sign-cli-macos:
     needs: build-cli
@@ -152,8 +168,9 @@ jobs:
 
       - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
         with:
-          name: opencode-preview-cli-unsigned
+          pattern: cli-unsigned-darwin-*
           path: packages/cli/dist
+          merge-multiple: true
 
       - name: Sign macOS CLI binaries
         run: |
@@ -187,36 +204,14 @@ jobs:
 
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
-          name: opencode-preview-cli-macos
-          path: packages/cli/dist/cli-*
-          if-no-files-found: error
-
-  build-node-app-archive:
-    needs: version
-    runs-on: blacksmith-4vcpu-ubuntu-2404
-    timeout-minutes: 30
-    if: github.repository == 'anomalyco/opencode' && github.ref_name != 'beta' && !(github.ref_name == 'dev' && (inputs.bump || inputs.version))
-    steps:
-      - uses: actions/checkout@f43a0e5ff2bd294095638e18286ca9a3d1956744 # v3.6.0
-
-      - uses: ./.github/actions/setup-bun
-
-      - name: Build app archive
-        run: bun packages/cli/script/build-node.ts --app-archive-only --app-archive=.cache/app-archive.bin --skip-install
-        env:
-          OPENCODE_VERSION: ${{ needs.version.outputs.version }}
-          OPENCODE_RELEASE: ${{ needs.version.outputs.release }}
-
-      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
-        with:
-          name: opencode-node-app-archive
-          path: packages/cli/.cache/app-archive.bin
+          name: cli-signed-darwin
+          path: packages/cli/dist/cli-darwin-*
           if-no-files-found: error
 
   build-node-cli:
     needs:
       - version
-      - build-node-app-archive
+      - build-app-archive
     if: github.repository == 'anomalyco/opencode' && github.ref_name != 'beta' && !(github.ref_name == 'dev' && (inputs.bump || inputs.version))
     strategy:
       fail-fast: false
@@ -250,7 +245,7 @@ jobs:
 
       - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
         with:
-          name: opencode-node-app-archive
+          name: opencode-app-archive
           path: packages/cli/.cache
 
       - name: Build
@@ -273,7 +268,7 @@ jobs:
 
   sign-cli-windows:
     needs:
-      - sign-cli-macos
+      - build-cli
     runs-on: blacksmith-4vcpu-windows-2025
     if: github.repository == 'anomalyco/opencode' && github.ref_name == 'dev'
     env:
@@ -284,12 +279,11 @@ jobs:
       AZURE_TRUSTED_SIGNING_CERTIFICATE_PROFILE: ${{ secrets.AZURE_TRUSTED_SIGNING_CERTIFICATE_PROFILE }}
       AZURE_TRUSTED_SIGNING_ENDPOINT: ${{ secrets.AZURE_TRUSTED_SIGNING_ENDPOINT }}
     steps:
-      - uses: actions/checkout@f43a0e5ff2bd294095638e18286ca9a3d1956744 # v3.6.0
-
       - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
         with:
-          name: opencode-preview-cli-macos
+          pattern: cli-unsigned-windows-*
           path: packages/cli/dist
+          merge-multiple: true
 
       - name: Azure login
         uses: azure/login@a457da9ea143d694b1b9c7c869ebb04ebe844ef5 # v2.3.0
@@ -336,15 +330,15 @@ jobs:
 
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
-          name: opencode-preview-cli
-          path: packages/cli/dist/cli-*
+          name: cli-signed-windows
+          path: packages/cli/dist/cli-windows-*
           if-no-files-found: error
 
   build-electron:
     # Desktop packaging re-signs the bundled CLI on macOS and Windows, so it starts from the unsigned build.
+    # It builds the app while build-cli runs and waits for its own CLI just before Prepare.
     needs:
       - version
-      - build-cli
     if: github.repository == 'anomalyco/opencode' && ((github.ref_name == 'dev' && needs.version.outputs.release != '') || github.ref_name == 'beta')
     continue-on-error: false
     env:
@@ -357,37 +351,38 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
+        # `cli` must be the build-cli target that packages/desktop/scripts/utils.ts bundles for `target`.
         settings:
-          - host: macos-26-intel
+          - host: macos-26
             target: x86_64-apple-darwin
+            cli: darwin-x64-baseline
             platform_flag: --mac --x64
-            bun_install_flags: --os=darwin --cpu=x64
+            bun_install_flags: --os=darwin --cpu=*
           - host: macos-26
             target: aarch64-apple-darwin
+            cli: darwin-arm64
             platform_flag: --mac --arm64
             bun_install_flags: --os=darwin --cpu=arm64
-          # github-hosted: blacksmith lacks ARM64 MSVC cross-compilation toolchain
-          - host: "windows-2025"
+          - host: "blacksmith-4vcpu-windows-2025"
             target: aarch64-pc-windows-msvc
+            cli: windows-arm64
             platform_flag: --win --arm64
             bun_install_flags: --cpu=*
           - host: "blacksmith-4vcpu-windows-2025"
             target: x86_64-pc-windows-msvc
+            cli: windows-x64-baseline
             platform_flag: --win
           - host: "blacksmith-4vcpu-ubuntu-2404"
             target: x86_64-unknown-linux-gnu
+            cli: linux-x64-baseline
             platform_flag: --linux
           - host: "blacksmith-4vcpu-ubuntu-2404-arm"
             target: aarch64-unknown-linux-gnu
+            cli: linux-arm64
             platform_flag: --linux --arm64
     runs-on: ${{ matrix.settings.host }}
     steps:
       - uses: actions/checkout@f43a0e5ff2bd294095638e18286ca9a3d1956744 # v3.6.0
-
-      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
-        with:
-          name: opencode-preview-cli-unsigned
-          path: packages/cli/dist
 
       - uses: apple-actions/import-codesign-certs@8f3fb608891dd2244cdab3d69cd68c0d37a7fe93 # v2.0.0
         if: runner.os == 'macOS'
@@ -403,14 +398,6 @@ jobs:
       - uses: ./.github/actions/setup-bun
         with:
           install-flags: ${{ matrix.settings.bun_install_flags }}
-
-      - name: Azure login
-        if: runner.os == 'Windows'
-        uses: azure/login@a457da9ea143d694b1b9c7c869ebb04ebe844ef5 # v2.3.0
-        with:
-          client-id: ${{ env.AZURE_CLIENT_ID }}
-          tenant-id: ${{ env.AZURE_TENANT_ID }}
-          subscription-id: ${{ env.AZURE_SUBSCRIPTION_ID }}
 
       - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
         with:
@@ -440,17 +427,10 @@ jobs:
           opencode-app-id: ${{ vars.OPENCODE_APP_ID }}
           opencode-app-secret: ${{ secrets.OPENCODE_APP_SECRET }}
 
-      - name: Prepare
-        run: bun ./scripts/prepare.ts
-        working-directory: packages/desktop
-        env:
-          OPENCODE_VERSION: ${{ needs.version.outputs.version }}
-          OPENCODE_CHANNEL: ${{ (github.ref_name == 'beta' && 'beta') || 'prod' }}
-          OPENCODE_CLI_TARGET: ${{ matrix.settings.target }}
-          OPENCODE_CLI_DIST: ${{ github.workspace }}/packages/cli/dist
-
-      - name: Build
-        run: bun run build
+      # The app builds before its CLI exists. `bun run build` would run the prebuild hook, which copies the CLI;
+      # Prepare runs it once the CLI is here.
+      - name: Build app
+        run: bun run electron-vite build
         working-directory: packages/desktop
         env:
           NODE_OPTIONS: --max-old-space-size=4096
@@ -464,10 +444,72 @@ jobs:
           VITE_SENTRY_ENVIRONMENT: ${{ (github.ref_name == 'beta' && 'beta') || 'production' }}
           VITE_SENTRY_RELEASE: desktop@${{ needs.version.outputs.version }}
           OPENCODE_CLI_TARGET: ${{ matrix.settings.target }}
+
+      # The job name is the one GitHub gives the build-cli leg for this target.
+      - name: Wait for the CLI
+        run: bun ./script/wait-for-artifact.ts cli-unsigned-${{ matrix.settings.cli }} "build-cli (${{ matrix.settings.cli }})"
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
+        with:
+          name: cli-unsigned-${{ matrix.settings.cli }}
+          path: packages/cli/dist
+
+      # az requests new Azure tokens with the GitHub OIDC token, which expires 5 minutes after login. Prepare requests
+      # the first signing token, so a login before a long wait would fail it with AADSTS700024.
+      - name: Azure login
+        if: runner.os == 'Windows'
+        uses: azure/login@a457da9ea143d694b1b9c7c869ebb04ebe844ef5 # v2.3.0
+        with:
+          client-id: ${{ env.AZURE_CLIENT_ID }}
+          tenant-id: ${{ env.AZURE_TENANT_ID }}
+          subscription-id: ${{ env.AZURE_SUBSCRIPTION_ID }}
+
+      - name: Prepare
+        run: bun ./scripts/prepare.ts
+        working-directory: packages/desktop
+        env:
+          OPENCODE_VERSION: ${{ needs.version.outputs.version }}
+          OPENCODE_CHANNEL: ${{ (github.ref_name == 'beta' && 'beta') || 'prod' }}
+          OPENCODE_CLI_TARGET: ${{ matrix.settings.target }}
           OPENCODE_CLI_DIST: ${{ github.workspace }}/packages/cli/dist
 
+      # A transient download, signing timestamp or notarization error in one leg fails the whole release, so a failed
+      # Package retries once below. Keep the retry identical to this step.
       - name: Package
+        id: package
         if: needs.version.outputs.release
+        continue-on-error: true
+        run: npx electron-builder ${{ matrix.settings.platform_flag }} --publish never --config electron-builder.config.ts
+        working-directory: packages/desktop
+        timeout-minutes: 60
+        env:
+          OPENCODE_CHANNEL: ${{ (github.ref_name == 'beta' && 'beta') || 'prod' }}
+          OPENCODE_CLI_TARGET: ${{ matrix.settings.target }}
+          GH_TOKEN: ${{ steps.committer.outputs.token }}
+          CSC_KEYCHAIN: build.keychain
+          APPLE_API_KEY: ${{ runner.temp }}/apple-api-key.p8
+          APPLE_API_KEY_ID: ${{ secrets.APPLE_API_KEY }}
+          APPLE_API_ISSUER: ${{ secrets.APPLE_API_ISSUER }}
+
+      # Only dist holds electron-builder output. It copies out/ (the app build) and resources/ (the CLI from Prepare)
+      # into dist rather than changing them, so the retry reuses both.
+      - name: Clean up failed Package
+        if: steps.package.outcome == 'failure'
+        shell: bash
+        run: |
+          echo "::warning::Package failed for ${{ matrix.settings.target }}; retrying once in 90 seconds"
+          rm -rf packages/desktop/dist
+          if [ "$RUNNER_OS" = "macOS" ]; then
+            for volume in /Volumes/OpenCode*; do
+              [ -d "$volume" ] && hdiutil detach "$volume" -force || true
+            done
+          fi
+          sleep 90
+
+      - name: Package (retry)
+        if: steps.package.outcome == 'failure'
         run: npx electron-builder ${{ matrix.settings.platform_flag }} --publish never --config electron-builder.config.ts
         working-directory: packages/desktop
         timeout-minutes: 60
@@ -526,10 +568,23 @@ jobs:
             }
           }
 
+      # publish merges these artifacts into OPENCODE_DESKTOP_DIST, and packages/desktop/scripts/publish.ts ships only
+      # its top-level *.{exe,blockmap,dmg,zip,AppImage,deb,rpm,app.tar.gz} files. @actions/glob has no brace expansion,
+      # so keep one line per extension in step with that glob. The installers are already compressed.
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
           name: opencode-desktop-${{ matrix.settings.target }}
-          path: packages/desktop/dist/*
+          path: |
+            packages/desktop/dist/*.exe
+            packages/desktop/dist/*.blockmap
+            packages/desktop/dist/*.dmg
+            packages/desktop/dist/*.zip
+            packages/desktop/dist/*.AppImage
+            packages/desktop/dist/*.deb
+            packages/desktop/dist/*.rpm
+            packages/desktop/dist/*.app.tar.gz
+          compression-level: 0
+          if-no-files-found: error
 
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         if: needs.version.outputs.release
@@ -537,15 +592,45 @@ jobs:
           name: latest-yml-${{ matrix.settings.target }}
           path: packages/desktop/dist/latest*.yml
 
+  # Builds and packs the npm libraries while the CLI builds, so publish only publishes them. It gets no secrets or
+  # id-token, so it cannot publish anything. Beta publishes no npm packages.
+  pack-npm:
+    needs: version
+    runs-on: blacksmith-4vcpu-ubuntu-2404
+    timeout-minutes: 30
+    if: github.repository == 'anomalyco/opencode' && github.ref_name != 'beta'
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@f43a0e5ff2bd294095638e18286ca9a3d1956744 # v3.6.0
+
+      # The same Bun and install as publish, so the tarballs match the ones publish would build.
+      - uses: ./.github/actions/setup-bun
+
+      - name: Pack npm libraries
+        run: ./script/pack-npm.ts
+        env:
+          OPENCODE_VERSION: ${{ needs.version.outputs.version }}
+          OPENCODE_NPM_PACK_DIR: /tmp/npm-libraries
+
+      # The tarballs are already gzipped.
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: npm-libraries
+          path: /tmp/npm-libraries/*.tgz
+          compression-level: 0
+          if-no-files-found: error
+
   publish:
     needs:
       - version
       - build-cli
       - sign-cli-macos
-      - build-node-app-archive
+      - build-app-archive
       - build-node-cli
       - sign-cli-windows
       - build-electron
+      - pack-npm
     if: always() && !failure() && !cancelled()
     runs-on: blacksmith-4vcpu-ubuntu-2404
     steps:
@@ -553,7 +638,9 @@ jobs:
 
       - uses: ./.github/actions/setup-bun
 
+      # Only releases push the Docker image (packages/cli/script/publish.ts).
       - name: Login to GitHub Container Registry
+        if: needs.version.outputs.release
         uses: docker/login-action@c94ce9fb468520275223c153574b00df6fe4bcc9 # v3.7.0
         with:
           registry: ghcr.io
@@ -561,9 +648,11 @@ jobs:
           password: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Set up QEMU
+        if: needs.version.outputs.release
         uses: docker/setup-qemu-action@c7c53464625b32c7a7e944ae62b3e17d2b600130 # v3.7.0
 
       - name: Set up Docker Buildx
+        if: needs.version.outputs.release
         uses: docker/setup-buildx-action@8d2750c68a42422c14e847fe6c8ac0403b4cbd6f # v3.12.0
 
       - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
@@ -572,28 +661,18 @@ jobs:
           registry-url: "https://registry.npmjs.org"
 
       - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
-        if: github.ref_name != 'dev' && github.ref_name != 'beta'
+        if: github.ref_name != 'beta'
         with:
-          name: opencode-cli
-          path: packages/opencode/dist
-
-      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
-        if: github.ref_name != 'dev' && github.ref_name != 'beta'
-        with:
-          name: opencode-cli-windows
-          path: packages/opencode/dist
-
-      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
-        if: github.ref_name != 'dev' && github.ref_name != 'beta'
-        with:
-          name: opencode-cli-signed-windows
-          path: packages/opencode/dist
+          pattern: cli-unsigned-linux-*
+          path: packages/cli/dist
+          merge-multiple: true
 
       - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
         if: github.ref_name != 'beta'
         with:
-          name: opencode-preview-cli
+          pattern: cli-signed-*
           path: packages/cli/dist
+          merge-multiple: true
 
       - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
         if: needs.build-node-cli.result == 'success'
@@ -601,6 +680,46 @@ jobs:
           pattern: opencode-node-cli-*
           path: packages/cli/dist/node
           merge-multiple: true
+
+      # packages/cli/script/publish.ts publishes every package in dist, and a pattern that matches nothing downloads
+      # nothing, so check that dist holds each target once and that no macOS binary is unsigned.
+      - name: Check CLI packages
+        if: github.ref_name != 'beta'
+        working-directory: packages/cli/dist
+        run: |
+          expected="cli-darwin-arm64 cli-darwin-x64 cli-darwin-x64-baseline cli-linux-arm64 cli-linux-arm64-musl cli-linux-x64 cli-linux-x64-baseline cli-linux-x64-baseline-musl cli-linux-x64-musl cli-windows-arm64 cli-windows-x64 cli-windows-x64-baseline"
+          actual=$(printf '%s\n' cli-* | LC_ALL=C sort | xargs)
+          if [ "$actual" != "$expected" ]; then
+            echo "Expected: $expected"
+            echo "Found: $actual"
+            exit 1
+          fi
+
+          for dir in $expected; do
+            binary="$dir/bin/opencode"
+            case "$dir" in cli-windows-*) binary="$binary.exe" ;; esac
+            if [ ! -f "$dir/package.json" ] || [ ! -s "$binary" ]; then
+              echo "$dir needs package.json and a non-empty $binary"
+              exit 1
+            fi
+          done
+
+          # Cross-compiled macOS binaries keep Bun's own, now invalid, Developer ID signature, so match the full name of
+          # the certificate sign-cli-macos signs with.
+          for binary in cli-darwin-*/bin/opencode; do
+            if ! LC_ALL=C grep -aqF "Developer ID Application: Anomaly Innovations, Inc. (5NZ4Q7NXJ4)" "$binary"; then
+              echo "$binary is not signed with the OpenCode Developer ID"
+              exit 1
+            fi
+          done
+
+      # script/publish.ts checks these tarballs before it publishes anything, and the library scripts publish them
+      # instead of building again.
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
+        if: github.ref_name != 'beta'
+        with:
+          name: npm-libraries
+          path: /tmp/npm-libraries
 
       - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
         if: needs.version.outputs.release
@@ -622,7 +741,9 @@ jobs:
           opencode-app-id: ${{ vars.OPENCODE_APP_ID }}
           opencode-app-secret: ${{ secrets.OPENCODE_APP_SECRET }}
 
+      # Only releases publish to AUR and Homebrew and make release commits, which use the git identity set below.
       - name: Cache apt packages (AUR)
+        if: needs.version.outputs.release
         uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.3.0
         with:
           path: /var/cache/apt/archives
@@ -631,6 +752,7 @@ jobs:
             ${{ runner.os }}-apt-aur-
 
       - name: Setup SSH for AUR
+        if: needs.version.outputs.release
         run: |
           sudo apt-get update
           sudo apt-get install -y pacman-package-manager
@@ -654,6 +776,7 @@ jobs:
           TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
           TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
           OPENCODE_DESKTOP_DIST: /tmp/desktop
+          OPENCODE_NPM_TARBALLS: /tmp/npm-libraries
           WINGET_GITHUB_TOKEN: ${{ secrets.WINGET_GITHUB_TOKEN }}
           CLOUDFLARE_ACCOUNT_ID: 15d29c8639fd3733b1b5486a2acfd968
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
