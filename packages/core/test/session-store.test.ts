@@ -1,13 +1,17 @@
 import { describe, expect } from "bun:test"
-import { Effect } from "effect"
+import { DateTime, Effect, Schema } from "effect"
 import { Bus } from "@opencode/core/bus"
 import { Database } from "@opencode/core/database/database"
 import { AppNodeBuilder } from "@opencode/core/effect/app-node-builder"
 import { ProjectTable } from "@opencode/core/project/sql"
 import { SessionProjector } from "@opencode/core/session/projector"
+import { SessionMessageTable } from "@opencode/core/session/sql"
 import { SessionStore } from "@opencode/core/session/store"
+import { Agent } from "@opencode/schema/agent"
 import { Event } from "@opencode/schema/event"
+import { Model } from "@opencode/schema/model"
 import { Project } from "@opencode/schema/project"
+import { Provider } from "@opencode/schema/provider"
 import { AbsolutePath } from "@opencode/schema/schema"
 import { Session } from "@opencode/schema/session"
 import { SessionEvent } from "@opencode/schema/session-event"
@@ -185,6 +189,109 @@ describe("SessionStore", () => {
           cursor: { id: SessionMessage.ID.make("msg_foreign"), direction: "next" },
         }),
       ).toEqual([])
+    }),
+  )
+
+  it.effect("omits inline data URIs on read tool parts in messages list while retaining them on message and context", () =>
+    Effect.gen(function* () {
+      const sessionID = Session.ID.make("ses_read_media")
+      yield* seedSessions([{ id: sessionID, updated: 0 }])
+      const database = yield* Database.Service
+      const store = yield* SessionStore.Service
+      const assistantMessageID = SessionMessage.ID.make("msg_step_start")
+      const inlineUri = `data:image/png;base64,${"A".repeat(4096)}`
+      const created = DateTime.makeUnsafe(100)
+      const encoded = Schema.encodeSync(SessionMessage.Info)(
+        SessionMessage.Assistant.make({
+          id: assistantMessageID,
+          type: "assistant",
+          agent: Agent.ID.make("build"),
+          model: { providerID: Provider.ID.make("anthropic"), id: Model.ID.make("claude-sonnet-4-5") },
+          time: { created, completed: DateTime.makeUnsafe(120) },
+          content: [
+            {
+              type: "tool",
+              id: "call_read_1",
+              name: "read",
+              time: { created, completed: DateTime.makeUnsafe(120) },
+              state: {
+                status: "completed",
+                input: { path: "screenshot.png" },
+                content: [
+                  { type: "text", text: "Image read successfully" },
+                  { type: "file", uri: inlineUri, mime: "image/png", name: "screenshot.png" },
+                ],
+              },
+            },
+          ],
+        }),
+      )
+      const { id, type, ...data } = encoded
+      yield* database.db
+        .insert(SessionMessageTable)
+        .values({
+          id: SessionMessage.ID.make(id),
+          session_id: sessionID,
+          type,
+          seq: 2,
+          time_created: 100,
+          data,
+        })
+        .run()
+
+      const listed = yield* store.messages({ sessionID })
+      expect(listed).toHaveLength(1)
+      const assistant = listed[0]!
+      expect(assistant.type).toBe("assistant")
+      if (assistant.type !== "assistant") return
+      expect(assistant.content).toMatchObject([
+        {
+          type: "tool",
+          name: "read",
+          state: {
+            status: "completed",
+            content: [{ type: "text", text: "Image read successfully" }],
+          },
+        },
+      ])
+
+      const single = yield* store.message(assistant.id)
+      expect(single?.message).toMatchObject({
+        type: "assistant",
+        content: [
+          {
+            type: "tool",
+            name: "read",
+            state: {
+              status: "completed",
+              content: [
+                { type: "text", text: "Image read successfully" },
+                { type: "file", uri: inlineUri, mime: "image/png", name: "screenshot.png" },
+              ],
+            },
+          },
+        ],
+      })
+
+      const context = yield* store.context(sessionID)
+      expect(context).toMatchObject([
+        {
+          type: "assistant",
+          content: [
+            {
+              type: "tool",
+              name: "read",
+              state: {
+                status: "completed",
+                content: [
+                  { type: "text", text: "Image read successfully" },
+                  { type: "file", uri: inlineUri, mime: "image/png", name: "screenshot.png" },
+                ],
+              },
+            },
+          ],
+        },
+      ])
     }),
   )
 })
