@@ -713,7 +713,7 @@ export function createTimelineVirtualizer(input: Input) {
     // (and cannot unpin) or ends above the tool. Commit the real size first.
     const opened = virtualContent?.querySelector<HTMLElement>(`[data-index="${found.index}"]`)
 
-    if (opened) resizeItem(found.index, opened.offsetHeight)
+    if (opened) resizeItem(found.index, opened.getBoundingClientRect().height)
     input.onUnpin()
     pinAnchor()
 
@@ -895,7 +895,8 @@ export function createTimelineVirtualizer(input: Input) {
       // normal measureElement path skips reads while scrolling; this gate needs
       // current boxes before expanding the estimated range or revealing it.
       virtualizer.elementsCache.forEach((element) => {
-        if (element.isConnected) virtualizer.resizeItem(virtualizer.indexFromElement(element), element.offsetHeight)
+        if (element.isConnected)
+          virtualizer.resizeItem(virtualizer.indexFromElement(element), element.getBoundingClientRect().height)
       })
 
       if (pendingSizes.size || pendingMeasurements()) return
@@ -1138,9 +1139,10 @@ export function createTimelineVirtualizer(input: Input) {
               queueMicrotask(() => {
                 if (!input.pinned() || !virtualContent?.isConnected) return
                 virtualizer.elementsCache.forEach((item) => {
-                  if (item.isConnected) virtualizer.resizeItem(virtualizer.indexFromElement(item), item.offsetHeight)
+                  if (item.isConnected)
+                    virtualizer.resizeItem(virtualizer.indexFromElement(item), item.getBoundingClientRect().height)
                 })
-                virtualizer.resizeItem(item().index, element.offsetHeight)
+                virtualizer.resizeItem(item().index, element.getBoundingClientRect().height)
                 virtualContent.style.height = `${virtualizer.getTotalSize()}px`
                 virtualizer.scrollToEnd()
               })
