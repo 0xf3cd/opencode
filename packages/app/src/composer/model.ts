@@ -501,6 +501,7 @@ export function createComposerModel(adapter: ComposerAdapter, options?: { queue?
       submit: {
         available,
         stopping,
+        held: submission.held,
         working: adapter.working,
         queue: options?.queue,
         onSubmit: (submitOptions) => {

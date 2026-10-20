@@ -17,6 +17,7 @@ import { createMediaQuery } from "@solid-primitives/media"
 import { FileIcon } from "@opencode/ui/file-icon"
 import { Icon } from "@opencode/ui/icon"
 import { IconButton } from "@opencode/ui/icon-button"
+import { Spinner } from "@opencode/ui/spinner"
 import { createAnimatedPresence } from "@/runtime/animated-presence"
 import { ProviderModelIcon } from "@/providers/models/provider-group"
 import { useI18n } from "@opencode/ui/context/i18n"
@@ -422,6 +423,7 @@ export function ComposerEditor(props: ComposerEditorProps) {
             <ComposerEditorSubmitButton
               mode={state.mode}
               stopping={view.submit.stopping()}
+              held={view.submit.held?.() ?? false}
               disabled={!props.controller.canSubmit()}
               sendLabel={i18n.t("ui.promptInput.send")}
               stopLabel={i18n.t("ui.promptInput.stop")}
@@ -1246,6 +1248,7 @@ function ComposerEditorAlternateDelivery(props: { controller: ComposerEditorMode
 export function ComposerEditorSubmitButton(props: {
   mode: ComposerMode
   stopping: boolean
+  held: boolean
   disabled: boolean
   sendLabel: string
   stopLabel: string
@@ -1263,7 +1266,14 @@ export function ComposerEditorSubmitButton(props: {
         type="button"
         disabled={!props.stopping && props.disabled}
         tabIndex={props.mode === "normal" ? undefined : -1}
-        icon={<Icon name={props.stopping ? "stop" : props.mode === "shell" ? "arrow-undo-down" : "arrow-up"} />}
+        icon={
+          props.held && !props.stopping ? (
+            <Spinner class="size-4" />
+          ) : (
+            <Icon name={props.stopping ? "stop" : props.mode === "shell" ? "arrow-undo-down" : "arrow-up"} />
+          )
+        }
+        aria-busy={props.held && !props.stopping}
         variant="submit"
         class="size-7 rounded-md p-[6px]"
         aria-label={props.stopping ? props.stopLabel : props.sendLabel}

@@ -43,6 +43,8 @@ export type ComposerEditorView = {
   submit: {
     available?: Accessor<boolean>
     stopping: Accessor<boolean>
+    /** A submitted prompt waits for the agent and model to load and sends once they do. */
+    held?: Accessor<boolean>
     working?: Accessor<boolean>
     queue?: ComposerQueue
     onSubmit: (options?: { alternate?: boolean }) => void

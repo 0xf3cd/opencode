@@ -170,6 +170,44 @@ test("an existing session's model never shows a fallback while its agent loads",
   expect(await page.evaluate(() => [...(window.__chipTexts ?? [])])).toEqual(["OpenCode / Alpha"])
 })
 
+test("a prompt sent before the agents load waits and sends once they do", async ({ page }) => {
+  const sessionID = "ses_send_before_agents"
+  await mockWorkspace(page, {
+    name: "SendBeforeAgents",
+    sessions: [{ id: sessionID, agent: "build", model: { id: "alpha", providerID: "opencode" } }],
+    provider: provider({ id: "alpha", name: "Alpha" }),
+  })
+  // Like a Location the server is still booting after a restart.
+  const agents = await holdRoute(page, /\/api\/agent\?/)
+
+  try {
+    await page.goto(sessionHref(sessionID))
+    await agents.arrived
+    const editor = page.locator('[data-component="composer-editor"]')
+    await expect(editor).toBeEditable()
+
+    const sent = page.waitForRequest(
+      (request) => request.method() === "POST" && new URL(request.url()).pathname === `/api/session/${sessionID}/prompt`,
+    )
+
+    await editor.click()
+    await page.keyboard.type("ship it")
+    await page.keyboard.press("Enter")
+
+    const submit = page.locator('[data-action="composer-submit"]')
+    await expect(submit).toHaveAttribute("aria-busy", "true")
+    await expect(editor).toHaveText("ship it")
+
+    agents.release()
+    expect((await sent).postDataJSON()).toMatchObject({ text: "ship it", metadata: { agent: "build" } })
+    await expect(submit).not.toHaveAttribute("aria-busy", "true")
+    await expect(editor).toHaveText("")
+    await expect(page.getByText("Select an agent and model")).toHaveCount(0)
+  } finally {
+    agents.release()
+  }
+})
+
 test("an opened session in another Location names its model from a loaded catalog before its agents load", async ({
   page,
 }) => {
