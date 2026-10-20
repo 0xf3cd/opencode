@@ -883,7 +883,7 @@ const fitOutput = (request: LLMRequest, limit: SessionContext.Loaded["model"]["l
   if (current === undefined) return request
   const maxTokens = Math.min(
     current,
-    SessionModelRequest.outputLimit(limit, "compaction", { measured: estimateRequest(request), estimated: 0 }),
+    SessionModelRequest.outputLimit(limit, { measured: estimateRequest(request), estimated: 0 }),
   )
   if (maxTokens === current) return request
   return LLMRequest.update(request, { generation: { ...request.generation, maxTokens } })
