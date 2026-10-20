@@ -21,14 +21,14 @@ export function SpringHeight(props: { when: boolean; class?: string; slot?: stri
     if (!element) return
 
     if (prefersReducedMotion()) return rest(element, to)
-    spring ??= Spring.fromDuration(element.offsetHeight, growthSpring())
+    spring ??= Spring.fromDuration(element.getBoundingClientRect().height, growthSpring())
     spring.set(to)
     element.style.overflow = "clip"
     stop ??= frameLoop.add((dt) => {
       const value = spring!.step(dt)
 
       if (!spring!.resting) {
-        element.style.height = `${value}px`
+        element.style.height = `${Math.round(value * 64) / 64}px`
 
         return true
       }
@@ -43,8 +43,10 @@ export function SpringHeight(props: { when: boolean; class?: string; slot?: stri
     stop?.()
     stop = undefined
     spring = undefined
-    element.style.removeProperty("overflow")
-    element.style.removeProperty("height")
+    element.style.overflow = "clip"
+    // Keep ownership at rest: child removal happens before its ResizeObserver
+    // delivery, so returning to auto height would expose that change for a frame.
+    element.style.height = `${size}px`
 
     if (size === 0 && !props.when) setPresent(false)
   }
@@ -54,7 +56,7 @@ export function SpringHeight(props: { when: boolean; class?: string; slot?: stri
       () => props.when,
       (when) => {
         // Back before it finished leaving: it grows again from where it is.
-        if (when && present()) return move(inner?.offsetHeight ?? 0)
+        if (when && present()) return move(inner?.getBoundingClientRect().height ?? 0)
 
         if (when) {
           // Mounts collapsed; the first measurement grows it.
@@ -86,11 +88,14 @@ export function SpringHeight(props: { when: boolean; class?: string; slot?: stri
         class={`flex flex-col justify-end ${props.class ?? ""}`}
       >
         <div
+          class="shrink-0"
           ref={(element) => {
             inner = element
 
             const observer = new ResizeObserver((entries) => {
-              const size = Math.round(entries[0]?.borderBoxSize[0]?.blockSize ?? element.offsetHeight)
+              const size =
+                Math.round((entries[0]?.borderBoxSize[0]?.blockSize ?? element.getBoundingClientRect().height) * 64) /
+                64
 
               if (size === measured || !props.when) return
 
@@ -98,6 +103,7 @@ export function SpringHeight(props: { when: boolean; class?: string; slot?: stri
               measured = size
 
               if (!first) move(size)
+              if (first && outer) rest(outer, size)
             })
 
             observer.observe(element)

@@ -19,13 +19,19 @@ import "./queue-panel.css"
 // composer background) so the two read as one attached surface.
 export function SessionQueuePanel(props: { queue: SessionQueueView }) {
   const language = useLanguage()
-  const count = () => props.queue.rows().length
+  // Keep the final row mounted while the pullout closes over it.
+  const rows = createMemo((previous: ReturnType<SessionQueueView["rows"]> | undefined) =>
+    props.queue.rows().length ? props.queue.rows() : (previous ?? []),
+  )
+  const view = { ...props.queue, rows }
+  const count = () => rows().length
   let listRef!: HTMLDivElement
 
   return (
-    <SpringHeight when={count() > 0} class="relative z-0">
+    <SpringHeight when={props.queue.rows().length > 0} class="relative z-0">
       <div
         data-component="session-queue-panel"
+        inert={!props.queue.rows().length}
         class="-mb-3 rounded-xl bg-v2-background-bg-base px-1.5 pt-1.5 shadow-[inset_0_0_0_0.5px_var(--v2-border-border-base)]"
         // Match the composer overlap so the scroll crop meets the input edge.
         classList={{ "pb-3": count() > 4, "pb-[18px]": count() <= 4 }}
@@ -78,8 +84,8 @@ export function SessionQueuePanel(props: { queue: SessionQueueView }) {
                   : undefined,
             }}
           >
-            <For each={props.queue.rows().map((row) => row.id)}>
-              {(id, index) => <SessionQueueRow queue={props.queue} id={id} index={index()} />}
+            <For each={rows().map((row) => row.id)}>
+              {(id, index) => <SessionQueueRow queue={view} id={id} index={index()} />}
             </For>
           </div>
         </DragDropProvider>

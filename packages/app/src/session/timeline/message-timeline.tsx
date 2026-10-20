@@ -329,15 +329,6 @@ function MessageTimelineView(
       .findLast((ref) => blocking.has(ref.partID))?.partID
   })
 
-  const [backgroundHintRef, setBackgroundHintRef] = createSignal<HTMLDivElement>()
-
-  const backgroundHintPresence = createAnimatedPresence(
-    backgroundHintPartID,
-    () => backgroundHintRef() ?? null,
-    sessionID,
-    1000,
-  )
-
   const showWorking = createMemo(() => {
     const id = sessionID()
 
@@ -397,70 +388,99 @@ function MessageTimelineView(
     })
   })
 
-  const [workingRef, setWorkingRef] = createSignal<HTMLDivElement>()
-
-  // Working fades as parts start and finish, but appears steady when switching sessions.
-  const workingPresence = createAnimatedPresence(
-    () => (showWorking() ? true : undefined),
-    () => workingRef() ?? null,
-    sessionID,
-  )
-
   // Undelivered input waits below the work the model has seen, so live status moves into the row above it.
   const activityRow = createMemo(() => projection.rows().some((row) => Predicate.isTagged(row, "Activity")))
   // Working fades in where it moves to, instead of appearing there at once.
   let movedAt = -Infinity
   createEffect(on(activityRow, () => (movedAt = performance.now()), { defer: true }))
+  const [bottomActivityRef, setBottomActivityRef] = createSignal<HTMLDivElement>()
+  const bottomActivityPresence = createAnimatedPresence(
+    () => (activityRow() ? undefined : true),
+    () => bottomActivityRef() ?? null,
+    sessionID,
+  )
 
   // The lane keeps its height while empty, so Working and the hint come and go without moving the rows around it.
-  const activity = () => (
-    <div
-      classList={{
-        "min-w-0 w-full max-w-full": true,
-        "md:max-w-session md:mx-auto": props.centered,
-      }}
-    >
-      <div class={`flex h-9 items-center gap-2 pt-3 text-[13px] font-[530] leading-text-compact ${turnPadding()}`}>
-        <Show when={workingPresence.present()}>
-          <div
-            ref={(element) => {
-              setWorkingRef(element)
+  function ActivityLane() {
+    const [workingRef, setWorkingRef] = createSignal<HTMLDivElement>()
+    const [backgroundHintRef, setBackgroundHintRef] = createSignal<HTMLDivElement>()
+    // Each location owns its exit. Relocating status must not detach the fading
+    // lane's observer or remove its content before its parent has disappeared.
+    const workingPresence = createAnimatedPresence(
+      () => (showWorking() ? true : undefined),
+      () => workingRef() ?? null,
+      sessionID,
+    )
+    const backgroundHintPresence = createAnimatedPresence(
+      backgroundHintPartID,
+      () => backgroundHintRef() ?? null,
+      sessionID,
+      1000,
+    )
 
-              if (performance.now() - movedAt < 100 && !prefersReducedMotion()) enter(element, { duration: 150 })
-            }}
-            data-component="session-working"
-            role="status"
-            classList={{
-              "animate-in fade-in duration-150 ease-[cubic-bezier(.2,.8,.2,1)]":
-                workingPresence.animate() && workingPresence.show(),
-              "animate-out fade-out fill-mode-forwards duration-[110ms] ease-[cubic-bezier(.4,0,1,1)]":
-                workingPresence.animate() && !workingPresence.show(),
-            }}
-          >
-            <TextShimmer text={language.t("session.timeline.working")} active />
-          </div>
-        </Show>
-        <Show when={backgroundHintPresence.present()}>
-          <div
-            ref={setBackgroundHintRef}
-            data-component="session-background-hint-row"
-            class="duration-150 motion-reduce:animate-none"
-            classList={{
-              "animate-in fade-in": backgroundHintPresence.animate() && backgroundHintPresence.show(),
-              "animate-out fade-out fill-mode-forwards":
-                backgroundHintPresence.animate() && !backgroundHintPresence.show(),
-            }}
-          >
-            <BackgroundMoveHint onMove={props.background.move} />
-          </div>
-        </Show>
+    return (
+      <div
+        classList={{
+          "min-w-0 w-full max-w-full": true,
+          "md:max-w-session md:mx-auto": props.centered,
+        }}
+      >
+        <div class={`flex h-9 items-center gap-2 pt-3 text-[13px] font-[530] leading-text-compact ${turnPadding()}`}>
+          <Show when={workingPresence.present()}>
+            <div
+              ref={(element) => {
+                setWorkingRef(element)
+
+                if (performance.now() - movedAt < 100 && !prefersReducedMotion()) enter(element, { duration: 150 })
+              }}
+              data-component="session-working"
+              role="status"
+              classList={{
+                "animate-in fade-in duration-150 ease-[cubic-bezier(.2,.8,.2,1)]":
+                  workingPresence.animate() && workingPresence.show(),
+                "animate-out fade-out fill-mode-forwards duration-[110ms] ease-[cubic-bezier(.4,0,1,1)]":
+                  workingPresence.animate() && !workingPresence.show(),
+              }}
+            >
+              <TextShimmer text={language.t("session.timeline.working")} active />
+            </div>
+          </Show>
+          <Show when={backgroundHintPresence.present()}>
+            <div
+              ref={setBackgroundHintRef}
+              data-component="session-background-hint-row"
+              class="duration-150 motion-reduce:animate-none"
+              classList={{
+                "animate-in fade-in": backgroundHintPresence.animate() && backgroundHintPresence.show(),
+                "animate-out fade-out fill-mode-forwards":
+                  backgroundHintPresence.animate() && !backgroundHintPresence.show(),
+              }}
+            >
+              <BackgroundMoveHint onMove={props.background.move} />
+            </div>
+          </Show>
+        </div>
       </div>
-    </div>
-  )
+    )
+  }
 
   return (
     <VirtualizedTimeline
-      bottomSpacer={<Show when={!activityRow()}>{activity()}</Show>}
+      bottomSpacer={
+        <Show when={bottomActivityPresence.present()}>
+          <div
+            ref={setBottomActivityRef}
+            class="duration-150"
+            classList={{
+              "animate-in fade-in": bottomActivityPresence.animate() && bottomActivityPresence.show(),
+              "animate-out fade-out fill-mode-forwards":
+                bottomActivityPresence.animate() && !bottomActivityPresence.show(),
+            }}
+          >
+            <ActivityLane />
+          </div>
+        </Show>
+      }
       deferred={(row) => {
         if (!Predicate.isTagged(row, "AssistantPart") || row.group.type !== "part") return false
         const content = Timeline.resolveContent(messageByID().get(row.group.ref.messageID), row.group.ref.partID)
@@ -472,7 +492,7 @@ function MessageTimelineView(
           when={Predicate.isTagged(row(), "Activity")}
           fallback={<rowRenderer.Row row={row} onSizeChange={onSizeChange} />}
         >
-          {activity()}
+          <ActivityLane />
         </Show>
       )}
       header={

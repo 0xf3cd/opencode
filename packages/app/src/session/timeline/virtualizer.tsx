@@ -174,7 +174,9 @@ export function createTimelineVirtualizer(input: Input) {
       }
 
       const following = previous.slice(index + 1).find((item) => keys.has(TimelineRow.key(item)))
-      const at = following ? result.findIndex((item) => TimelineRow.key(item) === TimelineRow.key(following)) : result.length
+      const at = following
+        ? result.findIndex((item) => TimelineRow.key(item) === TimelineRow.key(following))
+        : result.length
       result.splice(at, 0, row)
     })
 
@@ -359,7 +361,9 @@ export function createTimelineVirtualizer(input: Input) {
       return input.pinned() ? "end" : "start"
     },
     get followOnAppend() {
-      return input.pinned()
+      // Animated growth owns the followed offset. A second scroll-to-end here
+      // uses the previous DOM range while optimistic rows are still measuring.
+      return input.pinned() && !following()
     },
     scrollEndThreshold: 80,
     get scrollMargin() {
@@ -406,7 +410,8 @@ export function createTimelineVirtualizer(input: Input) {
         wrapper.style.overflow = progress === 1 ? "clip" : "visible"
 
         if (element) {
-          element.style.translate = progress === 1 ? "" : `0 ${Math.round(flight.distance * (1 - progress) * 64) / 64}px`
+          element.style.translate =
+            progress === 1 ? "" : `0 ${Math.round(flight.distance * (1 - progress) * 64) / 64}px`
         }
 
         if (progress === 1) flights.delete(key)
@@ -449,8 +454,7 @@ export function createTimelineVirtualizer(input: Input) {
     if (ride?.to !== target && lift + pending >= 1 && target > room && input.pinned())
       ride = { from: total, gap: Math.max(room - total, lift), to: target }
 
-    if (ride)
-      lift = ride.gap * (1 - Math.min(1, Math.max(0, (total - ride.from) / Math.max(1, ride.to - ride.from))))
+    if (ride) lift = ride.gap * (1 - Math.min(1, Math.max(0, (total - ride.from) / Math.max(1, ride.to - ride.from))))
 
     holdSpace(Math.round(lift * 64) / 64)
 
@@ -499,11 +503,17 @@ export function createTimelineVirtualizer(input: Input) {
       // The sent bubble starts behind the composer and rises on the row's own
       // growth progress, so scrolling and its flight cannot pull in opposite directions.
       if (element && Predicate.isTagged(rows()[index], "UserMessage")) {
-        const composer = listRoot()?.closest('[data-component="session-layout"]')?.querySelector('[data-component="composer-editor"]')
-          ?? document.querySelector('[data-component="composer-editor"]:not([contenteditable="false"])')
+        const composer =
+          listRoot()
+            ?.closest('[data-component="session-layout"]')
+            ?.querySelector('[data-component="composer-editor"]') ??
+          document.querySelector('[data-component="composer-editor"]:not([contenteditable="false"])')
 
         if (composer && size > 0) {
-          flights.set(key, { distance: Math.max(0, composer.getBoundingClientRect().top + 16 - element.getBoundingClientRect().top), height: size })
+          flights.set(key, {
+            distance: Math.max(0, composer.getBoundingClientRect().top + 16 - element.getBoundingClientRect().top),
+            height: size,
+          })
           const wrapper = element.parentElement
 
           if (wrapper) wrapper.style.overflow = "visible"
@@ -542,8 +552,8 @@ export function createTimelineVirtualizer(input: Input) {
   const streamsText = (row: TimelineRow.TimelineRow | undefined) =>
     Predicate.isTagged(row, "AssistantPart") &&
     row.group.type === "part" &&
-    Timeline.resolveContent(input.projection.messageByID().get(row.group.ref.messageID), row.group.ref.partID)
-      ?.type === "text"
+    Timeline.resolveContent(input.projection.messageByID().get(row.group.ref.messageID), row.group.ref.partID)?.type ===
+      "text"
 
   const pendingSizes = new Map<number, { key: string; size: number }>()
   let resizeScheduled = false
@@ -801,8 +811,7 @@ export function createTimelineVirtualizer(input: Input) {
       if (!active() || !root?.isConnected) return
 
       // Already following its end (sending a prompt resumes it): rows growing in keep growing.
-      if (behavior !== "smooth" && following() && !rendering.anchor && !rendering.scrollAdjustment)
-        return void (root.scrollTop = root.scrollHeight - root.clientHeight)
+      if (behavior !== "smooth" && following() && !rendering.anchor && !rendering.scrollAdjustment) return
       prepareNavigation()
       input.onPin()
 
@@ -1209,6 +1218,8 @@ export function createTimelineVirtualizer(input: Input) {
               height: `${virtualizer.getTotalSize() - rendering.scrollAdjustment}px`,
               position: "relative",
               width: "100%",
+              // A bubble flying out from behind the composer must not enlarge the native scroll range.
+              overflow: "clip",
               visibility: coldBottomMount ? "hidden" : undefined,
             }}
           >
