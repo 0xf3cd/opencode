@@ -143,6 +143,7 @@ export const ToolStateCompleted = Schema.Struct({
   input: Schema.Record(Schema.String, Schema.Unknown),
   content: Schema.NonEmptyArray(Content),
   metadata: Schema.Record(Schema.String, Schema.Json).pipe(optional),
+  native: Native.pipe(optional),
 }).annotate({ identifier: "Session.Message.ToolState.Completed" })
 
 export interface ToolStateError extends Schema.Schema.Type<typeof ToolStateError> {}
@@ -152,6 +153,7 @@ export const ToolStateError = Schema.Struct({
   error: SessionError.Error,
   content: Schema.NonEmptyArray(Content).pipe(optional),
   metadata: Schema.Record(Schema.String, Schema.Json).pipe(optional),
+  native: Native.pipe(optional),
 }).annotate({ identifier: "Session.Message.ToolState.Error" })
 
 export const ToolState = Schema.Union([ToolStateStreaming, ToolStateRunning, ToolStateCompleted, ToolStateError]).pipe(
@@ -166,7 +168,6 @@ export const AssistantTool = Schema.Struct({
   name: Schema.String,
   executed: Schema.Boolean.pipe(optional),
   native: Native.pipe(optional),
-  providerResultState: Native.pipe(optional),
   state: ToolState,
   time: Schema.Struct({
     created: DateTimeUtcFromMillis,

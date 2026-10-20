@@ -396,12 +396,12 @@ export async function runNonInteractivePrompt(input: Input) {
           name: current.tool,
           executed: event.data.executed,
           native: current.native,
-          providerResultState: event.data.resultState,
           state: {
             status: "completed",
             input: current.input,
             metadata: event.data.metadata,
             content: event.data.content,
+            native: event.data.native,
           },
           time: { created: current.timestamp, ran: current.timestamp, completed: time },
         }
@@ -421,7 +421,7 @@ export async function runNonInteractivePrompt(input: Input) {
               metadata: event.data.metadata,
               content: event.data.content,
               providerCall: current.provider,
-              providerResult: { executed: event.data.executed, state: event.data.resultState },
+              providerResult: { executed: event.data.executed, state: event.data.native },
               rawInput: current.raw,
             },
             time: { start: current.timestamp, end: time },
@@ -444,13 +444,13 @@ export async function runNonInteractivePrompt(input: Input) {
           name: current.tool,
           executed: event.data.executed,
           native: current.native,
-          providerResultState: event.data.resultState,
           state: {
             status: "error",
             input: current.input,
             metadata,
             content,
             error: event.data.error,
+            native: event.data.native,
           },
           time: { created: current.timestamp, ran: current.timestamp, completed: time },
         }
@@ -467,7 +467,7 @@ export async function runNonInteractivePrompt(input: Input) {
             error,
             metadata: {
               providerCall: current.provider,
-              providerResult: { executed: event.data.executed, state: event.data.resultState },
+              providerResult: { executed: event.data.executed, state: event.data.native },
               rawInput: current.raw,
             },
             time: { start: current.timestamp, end: time },

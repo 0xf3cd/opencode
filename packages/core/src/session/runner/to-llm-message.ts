@@ -123,7 +123,8 @@ const toolCall = (tool: SessionMessage.AssistantTool, providerMetadata: Provider
     providerMetadata,
   })
 
-const toolResult = (tool: SessionMessage.AssistantTool, providerMetadata: ProviderMetadata | undefined) => {
+// `providerMetadataKey` is set only when the result's native data may be replayed.
+const toolResult = (tool: SessionMessage.AssistantTool, providerMetadataKey: string | undefined) => {
   if (tool.state.status === "completed") {
     // TODO: Materialize remote and managed URIs before provider-history lowering.
     const content = tool.state.content
@@ -136,7 +137,7 @@ const toolResult = (tool: SessionMessage.AssistantTool, providerMetadata: Provid
           ? { type: "text" as const, value: single.text }
           : { type: "content" as const, value: content },
       providerExecuted: tool.executed,
-      providerMetadata,
+      providerMetadata: providerMetadataKey ? providerMetadata(providerMetadataKey, tool.state.native) : undefined,
     })
   }
   if (tool.state.status === "error") {
@@ -146,7 +147,7 @@ const toolResult = (tool: SessionMessage.AssistantTool, providerMetadata: Provid
       result: { error: tool.state.error, content: tool.state.content ?? [] },
       resultType: "error",
       providerExecuted: tool.executed,
-      providerMetadata,
+      providerMetadata: providerMetadataKey ? providerMetadata(providerMetadataKey, tool.state.native) : undefined,
     })
   }
 }
@@ -194,19 +195,9 @@ const assistant = (message: SessionMessage.Assistant, model: Model.Ref, provider
     )
     if (item.executed !== true) return [call]
     // Hosted tools (e.g. google_search) run inside the provider, so their
-    // result payload (`providerResultState`) is provider-format data rather
-    // than model-scoped proof: it stays replayable across models of the same
-    // provider. After a model switch, echo only that payload — never fall
-    // back to `native`, whose call-side values are bound to the old
-    // model.
-    const result = toolResult(
-      item,
-      reuseToolProviderMetadata
-        ? providerMetadata(providerMetadataKey, item.providerResultState ?? item.native)
-        : sameProvider && item.providerResultState !== undefined
-          ? providerMetadata(providerMetadataKey, item.providerResultState)
-          : undefined,
-    )
+    // result's native data is provider-format data rather than model-scoped
+    // proof: it stays replayable across models of the same provider.
+    const result = toolResult(item, sameProvider ? providerMetadataKey : undefined)
     return result ? [call, result] : [call]
   })
   const meaningful = content.filter((part) => {
@@ -216,14 +207,7 @@ const assistant = (message: SessionMessage.Assistant, model: Model.Ref, provider
   })
   const results = message.content
     .filter((item): item is SessionMessage.AssistantTool => item.type === "tool" && item.executed !== true)
-    .map((item) =>
-      toolResult(
-        item,
-        reuseProviderMetadata
-          ? providerMetadata(providerMetadataKey, item.providerResultState ?? item.native)
-          : undefined,
-      ),
-    )
+    .map((item) => toolResult(item, reuseProviderMetadata ? providerMetadataKey : undefined))
     .filter((message) => message !== undefined)
     .map(Message.tool)
   if (meaningful.length === 0) return results

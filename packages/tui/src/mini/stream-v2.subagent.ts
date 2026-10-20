@@ -853,7 +853,6 @@ export function createSubagentTracker(input: SubagentTrackerInput): SubagentTrac
           name: part?.name ?? "tool",
           executed: event.data.executed,
           native: part?.native,
-          providerResultState: event.data.resultState,
           state: failed
             ? {
                 status: "error",
@@ -861,12 +860,14 @@ export function createSubagentTracker(input: SubagentTrackerInput): SubagentTrac
                 metadata: event.data.metadata,
                 content: event.data.content,
                 error: event.data.error,
+                native: event.data.native,
               }
             : {
                 status: "completed",
                 input: part && part.state.status !== "streaming" ? part.state.input : {},
                 metadata: event.data.metadata,
                 content: event.data.content,
+                native: event.data.native,
               },
           time: {
             created: part?.time.created ?? event.created,

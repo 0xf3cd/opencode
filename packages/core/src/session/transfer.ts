@@ -280,9 +280,6 @@ function sanitizeMessage(message: SessionMessage.Info): SessionMessage.Info {
         return {
           ...content,
           native: content.native ? { redacted: `tool-native:${message.id}` } : undefined,
-          providerResultState: content.providerResultState
-            ? { redacted: `tool-provider-result-state:${message.id}` }
-            : undefined,
           state: sanitizeToolState(message.id, content.state),
         }
       }),
@@ -313,18 +310,21 @@ function sanitizeToolState(id: string, state: SessionMessage.ToolState): Session
   if (state.status === "running")
     return { ...state, input: { redacted: `tool-input:${id}` }, metadata: { redacted: `tool-metadata:${id}` } }
   const meta = state.metadata === undefined ? undefined : { redacted: `tool-metadata:${id}` }
+  const native = state.native ? { redacted: `tool-result-native:${id}` } : undefined
   if (state.status === "completed")
     return {
       ...state,
       input: { redacted: `tool-input:${id}` },
       content: map(state.content, (item) => sanitizeToolContent(id, item)),
       metadata: meta,
+      native,
     }
   return {
     ...state,
     input: { redacted: `tool-input:${id}` },
     content: state.content ? map(state.content, (item) => sanitizeToolContent(id, item)) : undefined,
     metadata: meta,
+    native,
   }
 }
 

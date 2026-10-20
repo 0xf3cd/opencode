@@ -957,6 +957,7 @@ export type SessionMessageToolStateCompleted = {
   input: { [x: string]: JsonValue }
   content: [ToolContent, ...Array<ToolContent>]
   metadata?: { [x: string]: JsonValue }
+  native?: SessionMessageNative
 }
 
 export type SessionMessageToolStateError = {
@@ -965,6 +966,7 @@ export type SessionMessageToolStateError = {
   error: SessionStructuredError
   content?: [ToolContent, ...Array<ToolContent>]
   metadata?: { [x: string]: JsonValue }
+  native?: SessionMessageNative
 }
 
 export type SessionAgentSelected = {
@@ -1872,7 +1874,7 @@ export type SessionToolSuccess = {
     content: [ToolContent1, ...Array<ToolContent1>]
     metadata?: { [x: string]: JsonValue }
     executed: boolean
-    resultState?: SessionMessageNative1
+    native?: SessionMessageNative1
   }
 }
 
@@ -1891,7 +1893,7 @@ export type SessionToolFailed = {
     content?: [ToolContent1, ...Array<ToolContent1>]
     metadata?: { [x: string]: JsonValue }
     executed: boolean
-    resultState?: SessionMessageNative1
+    native?: SessionMessageNative1
   }
 }
 
@@ -1900,6 +1902,7 @@ export type SessionMessageToolStateCompleted1 = {
   input: { [x: string]: any }
   content: [ToolContent1, ...Array<ToolContent1>]
   metadata?: { [x: string]: JsonValue }
+  native?: SessionMessageNative1
 }
 
 export type SessionMessageToolStateError1 = {
@@ -1908,6 +1911,7 @@ export type SessionMessageToolStateError1 = {
   error: SessionStructuredError
   content?: [ToolContent1, ...Array<ToolContent1>]
   metadata?: { [x: string]: JsonValue }
+  native?: SessionMessageNative1
 }
 
 export type FormField =
@@ -2341,7 +2345,6 @@ export type SessionMessageAssistantTool = {
   name: string
   executed?: boolean
   native?: SessionMessageNative
-  providerResultState?: SessionMessageNative
   state:
     | SessionMessageToolStateStreaming
     | SessionMessageToolStateRunning
@@ -2362,7 +2365,6 @@ export type SessionMessageAssistantTool1 = {
   name: string
   executed?: boolean
   native?: SessionMessageNative1
-  providerResultState?: SessionMessageNative1
   state:
     | SessionMessageToolStateStreaming
     | SessionMessageToolStateRunning1

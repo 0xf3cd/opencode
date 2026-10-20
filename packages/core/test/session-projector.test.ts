@@ -715,7 +715,7 @@ describe("SessionProjector", () => {
         content: [
           { type: "text", native: { signature: "text" } },
           { type: "reasoning", native: { signature: "reasoning" } },
-          { type: "tool", native: { call: "kept" }, providerResultState: { result: "kept" } },
+          { type: "tool", native: { call: "kept" }, state: { native: { result: "kept" } } },
         ],
       })
       expect(readCompaction).toMatchObject({ native: { compaction: "kept" } })
@@ -724,7 +724,7 @@ describe("SessionProjector", () => {
         (yield* Stream.runCollect(bus.log({ aggregateID: sessionID }))).filter((item) => !Bus.isSynced(item)),
       ).toMatchObject([
         { type: "session.tool.called", data: { native: { call: "kept" } } },
-        { type: "session.tool.success", data: { resultState: { result: "kept" } } },
+        { type: "session.tool.success", data: { native: { result: "kept" } } },
       ])
 
       // Re-delivering an event that is already stored in its legacy shape stays idempotent.
@@ -761,14 +761,70 @@ describe("SessionProjector", () => {
         content: [
           { type: "text", native: { signature: "text" } },
           { type: "reasoning", native: { signature: "reasoning" } },
-          { type: "tool", native: { call: "kept" }, providerResultState: { result: "kept" } },
+          { type: "tool", native: { call: "kept" }, state: { native: { result: "kept" } } },
         ],
       })
       expect(rewritten.content.map((part: Record<string, unknown>) => Object.keys(part).toSorted())).toEqual([
         ["native", "text", "type"],
         ["native", "text", "type"],
-        ["executed", "id", "name", "native", "providerResultState", "state", "time", "type"],
+        ["executed", "id", "name", "native", "state", "time", "type"],
       ])
+    }),
+  )
+
+  it.effect("projects tool result native data onto the finished state", () =>
+    Effect.gen(function* () {
+      const db = yield* seedSession()
+      const assistantMessageID = SessionMessage.ID.make("msg_tools")
+      yield* db.insert(SessionMessageTable).values(assistantRow(assistantMessageID, 0)).run().pipe(Effect.orDie)
+
+      const service = yield* Bus.Service
+      const call = (id: string) =>
+        Effect.gen(function* () {
+          yield* service.publish(SessionEvent.Tool.Input.Started, { sessionID, assistantMessageID, id, name: id })
+          yield* service.publish(SessionEvent.Tool.Called, {
+            sessionID,
+            assistantMessageID,
+            id,
+            input: {},
+            executed: true,
+            native: { call: id },
+          })
+        })
+      yield* call("succeeded")
+      yield* service.publish(SessionEvent.Tool.Success, {
+        sessionID,
+        assistantMessageID,
+        id: "succeeded",
+        content: [{ type: "text", text: "done" }],
+        executed: true,
+        native: { result: "succeeded" },
+      })
+      yield* call("failed")
+      yield* service.publish(SessionEvent.Tool.Failed, {
+        sessionID,
+        assistantMessageID,
+        id: "failed",
+        error: { type: "tool.execution", message: "failed" },
+        executed: true,
+      })
+
+      const row = yield* db
+        .select()
+        .from(SessionMessageTable)
+        .where(eq(SessionMessageTable.id, assistantMessageID))
+        .get()
+        .pipe(Effect.orDie)
+      expect(row?.data).toMatchObject({
+        content: [
+          {
+            id: "succeeded",
+            native: { call: "succeeded" },
+            state: { status: "completed", native: { result: "succeeded" } },
+          },
+          { id: "failed", native: { call: "failed" }, state: { status: "error" } },
+        ],
+      })
     }),
   )
 

@@ -763,6 +763,7 @@ Earlier work
               type: "tool",
               id: "completed",
               name: "read",
+              native: { signature: "local-call" },
               state: SessionMessage.ToolStateCompleted.make({
                 status: "completed",
                 input: { path: "README.md" },
@@ -784,9 +785,9 @@ Earlier work
               name: "web_search",
               executed: true,
               native: { continuation: "hosted-call" },
-              providerResultState: { continuation: "hosted-result" },
               state: SessionMessage.ToolStateCompleted.make({
                 status: "completed",
+                native: { continuation: "hosted-result" },
                 input: { query: "Effect" },
                 content: [{ type: "text", text: "Found it" }],
               }),
@@ -823,6 +824,7 @@ Earlier work
         id: "completed",
         name: "read",
         input: { path: "README.md" },
+        providerMetadata: { provider: { signature: "local-call" } },
       },
       {
         type: "tool-call",
@@ -853,7 +855,6 @@ Earlier work
         id: "hosted-failed",
         name: "write",
         providerExecuted: true,
-        providerMetadata: { provider: { continuation: "failed" } },
         result: {
           type: "error",
           value: { error: { type: "unknown", message: "Denied" }, content: [] },
@@ -954,9 +955,9 @@ Earlier work
               name: "web_search",
               executed: true,
               native: { itemId: "call_completed" },
-              providerResultState: { itemId: "result_completed" },
               state: SessionMessage.ToolStateCompleted.make({
                 status: "completed",
+                native: { itemId: "result_completed" },
                 input: { query: "Effect" },
                 content: [{ type: "text", text: '{"found":true}' }],
               }),
@@ -968,9 +969,9 @@ Earlier work
               name: "web_search",
               executed: true,
               native: { itemId: "call_failed" },
-              providerResultState: { itemId: "result_failed" },
               state: SessionMessage.ToolStateError.make({
                 status: "error",
+                native: { itemId: "result_failed" },
                 input: { query: "Effect" },
                 error: { type: "unknown", message: "Step interrupted" },
               }),
@@ -1083,9 +1084,9 @@ Earlier work
               name: "web_search",
               executed: true,
               native: { itemId: "hosted-old-model" },
-              providerResultState: { itemId: "hosted-old-model" },
               state: SessionMessage.ToolStateCompleted.make({
                 status: "completed",
+                native: { itemId: "hosted-old-model" },
                 input: { query: "Effect" },
                 content: [{ type: "text", text: '{"status":"completed"}' }],
               }),
@@ -1097,9 +1098,9 @@ Earlier work
               name: "read",
               executed: false,
               native: { call: "old" },
-              providerResultState: { result: "old" },
               state: SessionMessage.ToolStateCompleted.make({
                 status: "completed",
+                native: { result: "old" },
                 input: { path: "README.md" },
                 content: [{ type: "text", text: "Hello" }],
               }),

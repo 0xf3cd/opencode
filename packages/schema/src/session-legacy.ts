@@ -2,9 +2,9 @@ export * as SessionLegacy from "./session-legacy.js"
 
 /**
  * Storage and wire compatibility for current-architecture data written before v2.1 (not V1 contracts). Native data
- * was then named `state` or `providerState`, and summary compactions stored the text of the messages they kept in
- * `recent`. Stored events, projected messages, and exported transcripts keep whichever shape they were written with,
- * so these upgrade them before decoding.
+ * was then named `state` or `providerState`, a tool's result native data `resultState` or `providerResultState`, and
+ * summary compactions stored the text of the messages they kept in `recent`. Stored events, projected messages, and
+ * exported transcripts keep whichever shape they were written with, so these upgrade them before decoding.
  */
 
 const renames: Record<string, readonly [string, string]> = {
@@ -14,6 +14,8 @@ const renames: Record<string, readonly [string, string]> = {
   "session.tool.called": ["state", "native"],
   "session.step.ended": ["providerState", "native"],
   "session.step.failed": ["providerState", "native"],
+  "session.tool.success": ["resultState", "native"],
+  "session.tool.failed": ["resultState", "native"],
 }
 
 /** Upgrades a durable event payload by event type. */
@@ -48,7 +50,7 @@ function part(value: unknown) {
   if (!isRecord(value)) return value
   if (value.type === "text" || value.type === "reasoning") return rename(value, "state", "native")
   // A tool part's own `state` is its lifecycle status, not native data.
-  if (value.type === "tool") return rename(value, "providerState", "native")
+  if (value.type === "tool") return toolResult(rename(value, "providerState", "native"))
   return value
 }
 
@@ -65,6 +67,15 @@ function omit(value: Record<string, unknown>, key: string) {
   if (!(key in value)) return value
   const { [key]: _, ...rest } = value
   return rest
+}
+
+// Result data now lives on the finished state; an unfinished tool had none to keep.
+function toolResult(value: Record<string, unknown>) {
+  if (!("providerResultState" in value)) return value
+  const { providerResultState, ...rest } = value
+  const state = rest.state
+  if (!isRecord(state) || (state.status !== "completed" && state.status !== "error") || "native" in state) return rest
+  return { ...rest, state: { ...state, native: providerResultState } }
 }
 
 // The current name wins when a payload carries both.

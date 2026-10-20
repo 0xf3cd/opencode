@@ -75,7 +75,6 @@ type ToolSeed = {
   messageID?: string
   executed?: boolean
   native?: Record<string, unknown>
-  providerResultState?: Record<string, unknown>
   state:
     | { status: "streaming"; input: Record<string, unknown>; raw: string }
     | {
@@ -870,7 +869,6 @@ function messageContent(
     },
     ...(part.executed === undefined ? {} : { executed: part.executed }),
     ...(part.native ? { native: jsonRecord(part.native) } : {}),
-    ...(part.providerResultState ? { providerResultState: jsonRecord(part.providerResultState) } : {}),
   }
 
   if (state.status === "streaming") return { ...base, state: { status: "streaming", input: state.raw } }
@@ -983,7 +981,6 @@ function toolEvents(part: ToolSeed, messageID: string): readonly OpenCodeEvent[]
         error: { type: "ToolError", message: part.state.error },
         metadata: jsonRecord(part.state.metadata),
         executed: part.executed ?? true,
-        resultState: jsonRecord(part.providerResultState),
       }),
     )
     toolStates.set(part.id, part.state.status)
@@ -999,7 +996,6 @@ function toolEvents(part: ToolSeed, messageID: string): readonly OpenCodeEvent[]
       content: [{ type: "text", text: part.state.output }],
       metadata: jsonRecord(part.state.metadata),
       executed: part.executed ?? true,
-      resultState: jsonRecord(part.providerResultState),
     }),
   )
   toolStates.set(part.id, part.state.status)
