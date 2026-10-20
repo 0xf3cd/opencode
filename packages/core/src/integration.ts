@@ -404,14 +404,12 @@ const layer = Layer.effect(
         ),
       )
 
-    const delegatedOAuth = (entry: Entry | undefined, lookup: (id: ID) => readonly Credential.Info[]) => {
+    const delegatedCredentials = (entry: Entry | undefined, lookup: (id: ID) => readonly Credential.Info[]) => {
       const seen = new Set<Credential.ID>()
       const result: Credential.Info[] = []
-      for (const method of entry?.methods ?? []) {
-        if (method.type !== "oauth" || !method.integrationID || method.integrationID === entry?.ref.id) continue
-        for (const credential of lookup(method.integrationID)) {
-          if (credential.value.type !== "oauth" || credential.value.methodID !== method.id || seen.has(credential.id))
-            continue
+      for (const target of delegatedTargets(entry)) {
+        for (const credential of lookup(target)) {
+          if (seen.has(credential.id)) continue
           seen.add(credential.id)
           result.push(credential)
         }
@@ -428,7 +426,7 @@ const layer = Layer.effect(
           credentials.list(target).pipe(Effect.map((items) => [target, items] as const)),
         ),
       )
-      return delegatedOAuth(entry, (target) => byID.get(target) ?? [])
+      return delegatedCredentials(entry, (target) => byID.get(target) ?? [])
     })
 
     const resolveConnections = (entry: Entry | undefined, saved: readonly Credential.Info[]) => {
@@ -456,7 +454,7 @@ const layer = Layer.effect(
         connections: connections.map((connection) => {
           const status =
             statuses.get(statusKey(entry.ref.id, connection)) ??
-            (connection.type === "credential" && connection.method === "oauth"
+            (connection.type === "credential"
               ? delegatedTargets(entry)
                   .map((id) => statuses.get(statusKey(id, connection)))
                   .find(Boolean)
@@ -757,7 +755,7 @@ const layer = Layer.effect(
         const saved = Map.groupBy(yield* credentials.all(), (credential) => credential.integrationID)
         return Array.from(state.get().integrations.values(), (entry) => {
           const own = saved.get(entry.ref.id) ?? []
-          const items = own.length > 0 ? own : delegatedOAuth(entry, (target) => saved.get(target) ?? [])
+          const items = own.length > 0 ? own : delegatedCredentials(entry, (target) => saved.get(target) ?? [])
           return project(entry, resolveConnections(entry, items))
         }).toSorted((a, b) => a.name.localeCompare(b.name))
       }),

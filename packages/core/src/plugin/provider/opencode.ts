@@ -218,7 +218,10 @@ export const OpencodePlugin = define<HttpClient.HttpClient | Bus.Service | Manag
         return { config: undefined, connection, hasGoKey: false, organization: undefined, mcp: undefined }
       }
       const goConnection = yield* ctx.integration.connection.active(goIntegrationID)
-      const hasGoKey = goConnection?.type === "credential" && goConnection.method === "key"
+      const hasGoKey =
+        goConnection?.type === "credential" &&
+        goConnection.method === "key" &&
+        (connection.type !== "credential" || goConnection.id !== connection.id)
       const status = (status: IntegrationConnection.Status | undefined) => {
         reported = status
         return ctx.integration.connection.status({ integrationID: consoleIntegrationID, connection, status })

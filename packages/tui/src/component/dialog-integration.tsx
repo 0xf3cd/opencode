@@ -97,6 +97,20 @@ export function connectionSummary(integration: IntegrationInfo) {
   return connection.type === "credential" ? connection.label : `$${connection.name}`
 }
 
+export function goConnectionSource(
+  integration: IntegrationInfo,
+  list: readonly IntegrationInfo[] = [],
+): string | undefined {
+  if (integration.id !== "opencode-go") return undefined
+  const active = credentialConnections(integration)[0]
+  if (!active) return undefined
+  const targetID = integration.methods.find((method) => method.type === "oauth")?.integrationID ?? "opencode"
+  const canonical = list.find((item) => item.id === targetID)
+  const delegated = canonical ? credentialConnections(canonical).some((item) => item.id === active.id) : false
+  if (!delegated && active.method === "key") return "Using your Go API key"
+  return "Using your OpenCode account"
+}
+
 export function DialogIntegration(
   props: { onConnected?: OnIntegrationConnected; integrationID?: string; autoConnect?: boolean } = {},
 ) {
@@ -131,10 +145,12 @@ export function DialogIntegration(
       if (integration.id in INTEGRATION_PRIORITY) category = "Popular"
       if (integration.metadata?.source === "mcp") category = "MCP"
       const status = integration.connections[0]?.status
+      const allIntegrations = data.location.integration.list(location) ?? []
       return {
         title: integration.name,
         value: integration.id,
-        description: methods.length === 0 ? "Environment only" : undefined,
+        description:
+          methods.length === 0 ? "Environment only" : goConnectionSource(integration, allIntegrations),
         footer: status ? "Sign in required →" : connectionSummary(integration) || undefined,
         footerColor: status ? theme.text.feedback.warning.base : undefined,
         category,
@@ -213,11 +229,17 @@ function manageConnections(
             .toSorted((a, b) => a.label.localeCompare(b.label) || a.id.localeCompare(b.id))
             .map((connection) => {
               const confirming = deleting() === connection.id
+              const currentIntegration = current() ?? integration
+              const isActive = credentialConnections(currentIntegration)[0]?.id === connection.id
+              const source = isActive
+                ? goConnectionSource(currentIntegration, data.location.integration.list(location) ?? [])
+                : undefined
               return {
                 title: confirming
                   ? `Press ${shortcuts.get("dialog.integration.delete")} again to confirm`
                   : connection.label,
                 value: connection.id,
+                description: confirming ? undefined : source,
                 footer: connection.status ? "Sign in required →" : undefined,
                 footerColor: connection.status ? theme.text.feedback.warning.base : undefined,
                 category: "Connected accounts",
@@ -266,11 +288,22 @@ function manageConnections(
             disabled: (option) => !option || option.value === "add",
             onTrigger: (option) => {
               if (deleting() !== option.value) return setDeleting(option.value)
-              const final = credentialConnections(current() ?? integration).length === 1
+              const currentIntegration = current() ?? integration
+              const targetID = currentIntegration.methods.find((m) => m.type === "oauth")?.integrationID ?? "opencode"
+              const canonical = data.location.integration.list(location)?.find((item) => item.id === targetID)
+              const fallsBackToAccount =
+                currentIntegration.id === "opencode-go" &&
+                credentialConnections(currentIntegration).length === 1 &&
+                Boolean(canonical && credentialConnections(canonical).some((item) => item.id !== option.value))
+              const final = credentialConnections(currentIntegration).length === 1 && !fallsBackToAccount
               void client.api.credential
                 .remove({ credentialID: option.value })
                 .then(() => {
                   setDeleting(undefined)
+                  if (fallsBackToAccount) {
+                    toast.show({ variant: "success", message: "Using your OpenCode account" })
+                    return
+                  }
                   if (!final) return
                   toast.show({ variant: "success", message: `Disconnected ${integration.name}` })
                   dialog.clear()

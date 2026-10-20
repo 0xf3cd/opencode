@@ -52,7 +52,7 @@ import {
 import { ConsoleAuthorization } from "./console"
 import { DialogChatGPTPlanWelcome } from "./chatgpt-welcome"
 import { authServerName, RemoteAuthNotice } from "./remote"
-import { providerAccounts, type ProviderAccount } from "@/settings/providers/accounts"
+import { goAccountSource, providerAccounts, type ProviderAccount } from "@/settings/providers/accounts"
 import { AccountNameInput } from "@/settings/providers/account-name"
 import { useProviderAccountActions } from "@/settings/providers/account-actions"
 import { IconButton } from "@opencode/ui/icon-button"
@@ -274,6 +274,12 @@ function ProviderPicker(props: { directory?: string; onSelect: (provider: string
   const accountCount = (provider: { id: string }) =>
     providerAccounts(integrations.list().find((integration) => integration.id === provider.id)).length
 
+  const goSource = (provider: { id: string }) =>
+    goAccountSource(
+      integrations.list().find((integration) => integration.id === provider.id),
+      integrations.list(),
+    )
+
   let picker: HTMLDivElement | undefined
   let search: HTMLInputElement | undefined
 
@@ -360,6 +366,17 @@ function ProviderPicker(props: { directory?: string; onSelect: (provider: string
                           >
                             {accountCount(provider)}
                           </Badge>
+                        </Show>
+                        <Show when={goSource(provider)}>
+                          {(source) => (
+                            <span class="min-w-0 truncate font-[440] text-v2-text-text-muted">
+                              {language.t(
+                                source() === "api"
+                                  ? "dialog.provider.opencodeGo.usingApiKey"
+                                  : "dialog.provider.opencodeGo.usingAccount",
+                              )}
+                            </span>
+                          )}
                         </Show>
                         <Show when={CONSOLE_PROVIDERS.has(provider.id) && accountCount(provider) === 0}>
                           <span class="min-w-0 truncate font-[440] text-v2-text-text-muted">
@@ -1190,19 +1207,42 @@ function ProviderConnection(props: {
   }
 
   const removeAccount = async (account: ProviderAccount) => {
+    const current = integrations.list().find((integration) => integration.id === props.provider)
+    const targetID = current?.methods.find((method) => method.type === "oauth")?.integrationID ?? "opencode"
+    const canonical = integrations.list().find((integration) => integration.id === targetID)
+
+    const fallsBackToAccount =
+      props.provider === "opencode-go" &&
+      accounts().length === 1 &&
+      Boolean(canonical && providerAccounts(canonical).some((item) => item.id !== account.id))
+
     setState({ switching: account.id, confirming: undefined })
     await accountActions.remove({
       integrationID: props.provider,
       provider: provider().name,
       account,
-      final: accounts().length === 1,
+      final: accounts().length === 1 && !fallsBackToAccount,
     })
     setState("switching", undefined)
   }
 
   function AccountsView() {
+    const current = () => integrations.list().find((integration) => integration.id === props.provider)
+    const goSource = () => goAccountSource(current(), integrations.list())
+
     return (
       <div data-component="provider-accounts" class="flex flex-col gap-3">
+        <Show when={goSource()}>
+          {(source) => (
+            <div class="px-3 text-[13px] font-[440] leading-text-compact tracking-[-0.04px] text-v2-text-text-muted">
+              {language.t(
+                source() === "api"
+                  ? "dialog.provider.opencodeGo.usingApiKey"
+                  : "dialog.provider.opencodeGo.usingAccount",
+              )}
+            </div>
+          )}
+        </Show>
         <section class="flex flex-col">
           <div class="px-3 pb-2 text-[13px] font-[440] leading-text-compact tracking-[-0.04px] text-v2-text-text-muted">
             {language.t("dialog.provider.accounts.connected")}

@@ -371,9 +371,12 @@ export const layer = Layer.effect(
     const aisdk = yield* AISDK.Service
     const load = Effect.fn("ModelResolver.resolveModel")(function* (selected: Info, variant?: VariantID) {
       const provider = yield* providers.get(selected.providerID)
-      const connection = yield* integrations.connection.active(
-        provider?.integrationID ?? Integration.ID.make(selected.providerID),
-      )
+      const publicFallback = selected.providerID === Provider.ID.opencode && provider?.settings?.apiKey === "public"
+      const connection = publicFallback
+        ? undefined
+        : yield* integrations.connection.active(
+            provider?.integrationID ?? Integration.ID.make(selected.providerID),
+          )
       const credential = connection ? yield* integrations.connection.resolve(connection) : undefined
       const selectedVariant = yield* withVariant(selected, variant)
       const runtimeInfo: RuntimeInfo = {
