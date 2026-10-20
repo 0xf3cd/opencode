@@ -2330,6 +2330,7 @@ export type ConfigEntry =
         experimental?: {
           portable_shell_scanner?: boolean
           todo?: boolean
+          precompute_compaction?: boolean
           subagent_depth?: number
           policies?: Array<{
             action: "provider.use" | "tool.use" | "integration.use"
