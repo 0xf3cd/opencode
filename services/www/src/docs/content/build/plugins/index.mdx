@@ -1395,8 +1395,7 @@ differently:
 
 - `context` runs for the agent loop, including tool-driven continuations.
 - `compaction` runs for checkpoint summaries. `messages` is the transcript being summarized; OpenCode appends its
-  summary prompt after hooks run. Set `result` to record the compaction yourself and skip the model call; it takes the
-  same fields as a completed compaction message.
+  summary prompt after hooks run. Set `result` to record the compaction yourself and skip the model call.
 - `generate` runs for transient `ctx.session.generate` calls.
 - `title` runs for title generation. It has no `agent` or `tools`. Set `result` to supply the title yourself.
 
@@ -1409,7 +1408,13 @@ await ctx.session.hook("context", (event) => {
 })
 
 await ctx.session.hook("compaction", async (event) => {
-  event.result = { summary: await summarize(event.messages) }
+  event.result = {
+    summary: await summarize(event.messages),
+    // Optional:
+    // metadata: { keepID } - first message to keep verbatim after the summary; defaults to OpenCode's choice
+    // native: { messages } - a provider replacement window, replayed instead of `summary` on the same model
+    // tokens - usage of your summary request, included in session totals
+  }
 })
 ```
 
