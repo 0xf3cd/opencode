@@ -1,6 +1,7 @@
 import { createSignal, lazy, Show, Suspense } from "solid-js"
-import { Command, Slot, type Setup } from "../sdk"
+import { Command, createKeyed, Slot, type Setup } from "../sdk"
 import type Debug from "./index"
+import { simulated } from "./simulated"
 
 const setup: Setup<typeof Debug> = (ctx) => {
   const DebugBar = lazy(() => import("./bar"))
@@ -14,6 +15,20 @@ const setup: Setup<typeof Debug> = (ctx) => {
 
   const [motion, setMotion] = createSignal(false)
   const [demo, setDemo] = createSignal(false)
+
+  // Routing a session on Drive's simulated model opens the bar with its Demo panel, so the controls are in view.
+  if (tools)
+    createKeyed(
+      () => {
+        const session = ctx.sessions.current()
+
+        return session?.location && simulated({ ...session, location: session.location }) ? session.key : undefined
+      },
+      () => {
+        setVisible(true)
+        setDemo(true)
+      },
+    )
 
   const toggle = () => {
     setVisible((value) => !value)
