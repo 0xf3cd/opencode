@@ -1,87 +1,160 @@
 import { onCleanup, onMount } from "solid-js"
 
 const PATTERNS = '[data-page="stats"] [data-slot$="-pattern"]'
-const RIPPLE = {
-  duration: 4400,
-  brightness: 50,
-  trail: 400,
-  trailBody: 100,
-  front: 90,
-  ease: 4,
-  fade: 3.3,
-  reach: 1.3,
-  rearm: 400,
+
+// Speeds are px/s and times are seconds. Each ring is a bright front with a trail that decays by the time since the
+// front passed, so dots keep glowing briefly after the wave moves on.
+export const RIPPLE = {
+  speed: 480,
+  minTravel: 0.9,
+  maxTravel: 2.6,
+  ease: 1.6,
+  reach: 1.1,
+  decay: 0.45,
+  soft: 6,
+  falloff: 1.2,
+  brightness: 30,
+  rings: 1,
+  gap: 0.2,
+  ratio: 0.55,
+  color: "var(--stats-text)",
+  tint: "var(--stats-text)",
 }
 
-type Ripple = { x: number; y: number; radius: number; start: number }
+type Ripple = { x: number; y: number; radius: number; travel: number; start: number }
 
-// Plays one soft wave of light across a dot pattern when the cursor moves onto its visible dots.
+// Clicking the visible dots of a pattern sends a wave of light across them. Waves overlap instead of replacing each other.
 export function PatternRipple() {
   onMount(() => {
-    if (matchMedia("(prefers-reduced-motion: reduce)").matches) return
-
-    const ripples = new Map<HTMLElement, Ripple>()
-    const leftAt = new WeakMap<HTMLElement, number>()
-    const state = { current: undefined as HTMLElement | undefined, primed: false, running: false }
+    const reduced = matchMedia("(prefers-reduced-motion: reduce)").matches
+    const ripples = new Map<HTMLElement, Ripple[]>()
+    const state = { running: false }
 
     const frame = (now: number) => {
-      ripples.forEach((ripple, el) => {
-        const progress = (now - ripple.start) / RIPPLE.duration
-        if (progress >= 1) {
+      ripples.forEach((list, el) => {
+        const live = list.filter((ripple) => (now - ripple.start) / 1000 < lifetime(ripple, reduced))
+        if (live.length === 0) {
           ripples.delete(el)
           el.style.removeProperty("--dot-ripple")
           return
         }
-        el.style.setProperty("--dot-ripple", rippleGradient(ripple, progress))
+        ripples.set(el, live)
+        el.style.setProperty(
+          "--dot-ripple",
+          live.map((ripple) => rippleGradient(ripple, (now - ripple.start) / 1000, reduced)).join(", "),
+        )
       })
       if (ripples.size > 0) return requestAnimationFrame(frame)
       state.running = false
     }
 
-    const start = (el: HTMLElement, clientX: number, clientY: number) => {
-      const box = el.getBoundingClientRect()
-      const visible = visibleBox(el)
-      ripples.set(el, {
-        x: clientX - box.left,
-        y: clientY - box.top,
-        radius: Math.hypot(
-          Math.max(clientX - visible.left, visible.right - clientX),
-          Math.max(clientY - visible.top, visible.bottom - clientY),
-        ),
-        start: performance.now(),
-      })
+    // The pattern must be the top element under the pointer, so text cut-outs over a pattern don't count.
+    const down = (event: PointerEvent) => {
+      if (event.button !== 0) return
+      const hit = document.elementFromPoint(event.clientX, event.clientY)
+      if (!(hit instanceof HTMLElement) || !hit.matches(PATTERNS)) return
+      const box = hit.getBoundingClientRect()
+      const visible = visibleBox(hit)
+      const radius =
+        Math.hypot(
+          Math.max(event.clientX - visible.left, visible.right - event.clientX),
+          Math.max(event.clientY - visible.top, visible.bottom - event.clientY),
+        ) * RIPPLE.reach
+      ripples.set(hit, [
+        ...(ripples.get(hit) ?? []),
+        {
+          x: event.clientX - box.left,
+          y: event.clientY - box.top,
+          radius,
+          travel: Math.min(RIPPLE.maxTravel, Math.max(RIPPLE.minTravel, radius / RIPPLE.speed)),
+          start: performance.now(),
+        },
+      ])
       if (state.running) return
       state.running = true
       requestAnimationFrame(frame)
     }
 
-    // The pattern must be the top element under the cursor, so text cut-outs over a pattern count as off the dots.
-    // A cursor already resting on a pattern when the page loads does not trigger a ripple.
-    const move = (event: PointerEvent) => {
-      const now = performance.now()
-      const hit = document.elementFromPoint(event.clientX, event.clientY)
-      const el = hit instanceof HTMLElement && hit.matches(PATTERNS) ? hit : undefined
-      if (el !== state.current) {
-        if (state.current) leftAt.set(state.current, now)
-        if (el && state.primed && now - (leftAt.get(el) ?? -Infinity) >= RIPPLE.rearm) start(el, event.clientX, event.clientY)
-        state.current = el
-      }
-      state.primed = true
-    }
-
-    document.addEventListener("pointermove", move, { passive: true })
-    onCleanup(() => document.removeEventListener("pointermove", move))
+    document.addEventListener("pointerdown", down, { passive: true })
+    onCleanup(() => document.removeEventListener("pointerdown", down))
   })
 
   return null
 }
 
-function rippleGradient(ripple: Ripple, progress: number) {
-  const r = ripple.radius * RIPPLE.reach * (1 - (1 - progress) ** RIPPLE.ease)
-  const alpha = RIPPLE.brightness * (1 - progress) ** RIPPLE.fade
-  const mix = (amount: number) => `color-mix(in srgb, var(--stats-text) ${amount.toFixed(1)}%, transparent)`
-  const at = (offset: number) => `${Math.max(0, r + offset).toFixed(1)}px`
-  return `radial-gradient(circle at ${ripple.x}px ${ripple.y}px, transparent ${at(-RIPPLE.trail)}, ${mix((alpha * RIPPLE.trailBody) / 100)} ${at(-RIPPLE.trail / 2)}, ${mix(alpha)} ${at(0)}, transparent ${at(RIPPLE.front)})`
+const STILL = { radius: 72, duration: 0.2 }
+
+function lifetime(ripple: Ripple, reduced: boolean) {
+  if (reduced) return STILL.duration
+  return ripple.travel + (RIPPLE.rings - 1) * RIPPLE.gap + RIPPLE.decay * 5
+}
+
+function rippleGradient(ripple: Ripple, t: number, reduced: boolean) {
+  const mix = (color: string, amount: number) =>
+    `color-mix(in srgb, ${color} ${Math.min(100, amount).toFixed(1)}%, transparent)`
+  const at = `circle at ${ripple.x.toFixed(1)}px ${ripple.y.toFixed(1)}px`
+  // Reduced motion keeps a brief glow at the click without any travel.
+  if (reduced) {
+    const alpha = RIPPLE.brightness * (1 - t / STILL.duration)
+    return `radial-gradient(${at}, ${mix(RIPPLE.color, alpha)} 0px, transparent ${STILL.radius}px)`
+  }
+
+  const fronts = Array.from({ length: RIPPLE.rings }, (_, k) => t - k * RIPPLE.gap)
+    .filter((local) => local > 0)
+    .map((local) => ({
+      r: front(ripple, local),
+      width: front(ripple, local) - front(ripple, local - RIPPLE.decay),
+    }))
+  if (fronts.length === 0) return "none"
+  const outer = Math.max(...fronts.map((item) => item.r)) + RIPPLE.soft
+  const samples = [
+    ...Array.from({ length: 24 }, (_, i) => (outer * i) / 23),
+    ...fronts.flatMap((item) => [
+      item.r + RIPPLE.soft,
+      item.r,
+      ...[0.15, 0.35, 0.6, 1, 1.5, 2.2, 3.2, 4.5].map((m) => item.r - item.width * m),
+    ]),
+  ]
+    .filter((d) => d >= 0 && d <= outer)
+    .sort((a, b) => a - b)
+
+  const stops = samples.map((d) => {
+    const light = intensity(ripple, d, t)
+    const color = light.fresh ? RIPPLE.color : RIPPLE.tint
+    return `${mix(color, RIPPLE.brightness * light.value)} ${d.toFixed(1)}px`
+  })
+  return `radial-gradient(${at}, ${stops.join(", ")}, transparent ${(outer + 1).toFixed(1)}px)`
+}
+
+function front(ripple: Ripple, local: number) {
+  const progress = Math.min(1, Math.max(0, local / ripple.travel))
+  return ripple.radius * (1 - (1 - progress) ** RIPPLE.ease)
+}
+
+// The inverse of `front`: when the wave reached distance `d`.
+function passed(ripple: Ripple, d: number) {
+  if (d >= ripple.radius) return Infinity
+  return ripple.travel * (1 - (1 - d / ripple.radius) ** (1 / RIPPLE.ease))
+}
+
+function intensity(ripple: Ripple, d: number, t: number) {
+  const fade = Math.max(0, 1 - d / ripple.radius) ** RIPPLE.falloff
+  const rings = Array.from({ length: RIPPLE.rings }, (_, k) => {
+    const local = t - k * RIPPLE.gap
+    if (local <= 0) return { value: 0, age: Infinity }
+    const r = front(ripple, local)
+    const strength = RIPPLE.ratio ** k * fade
+    if (d > r) return { value: strength * Math.max(0, 1 - (d - r) / RIPPLE.soft), age: 0 }
+    const age = local - passed(ripple, d)
+    return { value: strength * Math.exp(-age / RIPPLE.decay), age }
+  })
+  return {
+    value: Math.min(
+      1,
+      rings.reduce((sum, ring) => sum + ring.value, 0),
+    ),
+    fresh: Math.min(...rings.map((ring) => ring.age)) < RIPPLE.decay * 0.5,
+  }
 }
 
 // Some patterns are larger than their clipping container, so the ripple only needs to reach the visible part.
