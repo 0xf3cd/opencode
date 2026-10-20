@@ -365,9 +365,10 @@ export function createSessionTimelineInteraction(session: SessionModel) {
       if (next === state.inset) return
       const delta = next - state.inset
 
-      // Measured before the new inset applies: a shrinking region also keeps a reader whose end it uncovers.
+      // Measured before the new inset applies: a shrinking region also keeps a reader whose end it uncovers. A
+      // following timeline keeps its own end, without landing rows that are still growing.
       const stick = scroller
-        ? pinned() || scroller.scrollHeight - scroller.clientHeight - scroller.scrollTop < 10 + Math.max(0, -delta)
+        ? !pinned() && scroller.scrollHeight - scroller.clientHeight - scroller.scrollTop < 10 + Math.max(0, -delta)
         : false
 
       setState("inset", next)

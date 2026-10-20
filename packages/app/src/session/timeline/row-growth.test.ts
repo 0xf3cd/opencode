@@ -4,15 +4,20 @@ import { createRowGrowth } from "./row-growth"
 function setup() {
   const wrapper = document.createElement("div")
   const sizes: number[] = []
+  const frames: { pending: number; held: number }[] = []
 
-  const growth = createRowGrowth((key, size) => {
-    if (key !== "row") return false
-    sizes.push(size)
+  const growth = createRowGrowth({
+    measure: () => {},
+    resize: (key, size) => {
+      if (key !== "row") return false
+      sizes.push(size)
 
-    return wrapper
+      return wrapper
+    },
+    settle: (state) => frames.push(state),
   })
 
-  return { growth, sizes, wrapper }
+  return { growth, sizes, wrapper, frames }
 }
 
 async function settle(growth: ReturnType<typeof createRowGrowth>) {
@@ -50,6 +55,30 @@ describe("row growth", () => {
 
     await settle(growth)
     expect(sizes.at(-1)).toBe(200)
+  })
+
+  test("reports once per frame how far the rows still have to grow", async () => {
+    const { growth, frames } = setup()
+    growth.grow("row", 0, 80)
+
+    await settle(growth)
+    expect(frames[0]!.pending).toBeGreaterThan(0)
+    expect(frames.at(-1)).toEqual({ pending: 0, held: 0 })
+    expect(frames.every((frame, index) => frame.pending <= (frames[index - 1]?.pending ?? Infinity))).toBe(true)
+  })
+
+  test("closes a held gap on the same spring", async () => {
+    const { growth, frames } = setup()
+    growth.hold(40)
+
+    const deadline = performance.now() + 3000
+
+    while (frames.at(-1)?.held !== 0 && performance.now() < deadline)
+      await new Promise((resolve) => setTimeout(resolve, 16))
+    expect(frames[0]!.held).toBeGreaterThan(0)
+    expect(frames[0]!.held).toBeLessThanOrEqual(40)
+    expect(frames.at(-1)!.held).toBe(0)
+    expect(frames.every((frame, index) => frame.held <= (frames[index - 1]?.held ?? 40))).toBe(true)
   })
 
   test("lands rows at once", () => {

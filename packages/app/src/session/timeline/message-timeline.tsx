@@ -10,6 +10,7 @@ import { InlineInput } from "@opencode/ui/inline-input"
 import { Keybind } from "@opencode/ui/keybind"
 import { Menu } from "@opencode/ui/menu"
 import { TextShimmer } from "@opencode/ui/text-shimmer"
+import { enter, prefersReducedMotion } from "@opencode/ui/motion"
 import type { BackgroundTask, MountedSession, SessionScreen } from "@opencode/gui-extensions/sdk"
 import { ExtensionSlot } from "@/runtime/extension/render"
 import { useLanguage } from "@/runtime/i18n/language"
@@ -407,6 +408,9 @@ function MessageTimelineView(
 
   // Undelivered input waits below the work the model has seen, so live status moves into the row above it.
   const activityRow = createMemo(() => projection.rows().some((row) => Predicate.isTagged(row, "Activity")))
+  // Working fades in where it moves to, instead of appearing there at once.
+  let movedAt = -Infinity
+  createEffect(on(activityRow, () => (movedAt = performance.now()), { defer: true }))
 
   // The lane keeps its height while empty, so Working and the hint come and go without moving the rows around it.
   const activity = () => (
@@ -419,7 +423,11 @@ function MessageTimelineView(
       <div class={`flex h-9 items-center gap-2 pt-3 text-[13px] font-[530] leading-text-compact ${turnPadding()}`}>
         <Show when={workingPresence.present()}>
           <div
-            ref={setWorkingRef}
+            ref={(element) => {
+              setWorkingRef(element)
+
+              if (performance.now() - movedAt < 100 && !prefersReducedMotion()) enter(element, { duration: 150 })
+            }}
             data-component="session-working"
             role="status"
             classList={{

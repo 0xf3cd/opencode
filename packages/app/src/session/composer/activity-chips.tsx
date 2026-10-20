@@ -2,8 +2,9 @@ import { Icon } from "@opencode/ui/icon"
 import { IconButton } from "@opencode/ui/icon-button"
 import { Menu } from "@opencode/ui/menu"
 import { SessionProgressIndicatorV2 } from "@opencode/session-ui/v2/session-progress-indicator-v2"
-import { createEffect, createSignal, For, Show } from "solid-js"
+import { createEffect, createMemo, createSignal, For, Show } from "solid-js"
 import { useLanguage } from "@/runtime/i18n/language"
+import { createAnimatedPresence } from "@/runtime/animated-presence"
 import "./activity-chips.css"
 
 export type SessionActivityItem = {
@@ -66,8 +67,14 @@ export function SessionActivityChips(props: {
     </Show>
   )
 
-  const label = () => language.activitySummary({ subagents: props.subagents.length, shells: props.shells.length })
   const active = () => props.subagents.length > 0 || props.shells.length > 0
+
+  // The capsule keeps naming the last work while it leaves.
+  const label = createMemo<string>(
+    (previous) =>
+      active() ? language.activitySummary({ subagents: props.subagents.length, shells: props.shells.length }) : previous,
+    "",
+  )
 
   // Each session mounts its own composer, so a capsule that is already there on a switch stays at rest; only work
   // that starts while the session is open fades in.
@@ -76,8 +83,16 @@ export function SessionActivityChips(props: {
     if (!active()) setEnter(true)
   })
 
+  // Leaving, it fades out before it unmounts.
+  const [chip, setChip] = createSignal<HTMLElement>()
+
+  const presence = createAnimatedPresence(
+    () => (active() ? true : undefined),
+    () => chip() ?? null,
+  )
+
   return (
-    <Show when={active()}>
+    <Show when={presence.present()}>
       <div
         data-component="session-activity-chips"
         class="pointer-events-none absolute inset-x-0 bottom-full flex items-center pb-2"
@@ -86,9 +101,13 @@ export function SessionActivityChips(props: {
           <Menu.Trigger
             as="button"
             type="button"
+            ref={setChip}
             data-slot="session-activity-chip"
             class="pointer-events-auto flex h-7 min-w-0 max-w-full items-center gap-1.5 rounded-full border border-v2-border-border-base bg-v2-background-bg-base ps-2 pe-2.5 text-[13px] font-[530] leading-text-compact tracking-[-0.04px] whitespace-nowrap tabular-nums text-v2-text-text-base shadow-[var(--v2-elevation-raised)] outline-none duration-150 ease-out motion-reduce:animate-none hover:bg-v2-background-bg-layer-01 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-v2-border-border-focus"
-            classList={{ "animate-in fade-in": enter() }}
+            classList={{
+              "animate-in fade-in": enter() && active(),
+              "animate-out fade-out fill-mode-forwards duration-[110ms] ease-[cubic-bezier(.4,0,1,1)]": !active(),
+            }}
           >
             <SessionProgressIndicatorV2 class="shrink-0" />
             <span class="truncate">{label()}</span>
