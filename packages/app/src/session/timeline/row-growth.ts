@@ -50,8 +50,7 @@ export function createRowGrowth(input: {
         const value = growth.spring.step(dt)
         const target = growth.spring.target
         const resting = growth.spring.resting
-        // Whole pixels, like the scroll offset that rides them, so the end never shimmers between two of them.
-        const shown = resting ? target : Math.round(value)
+        const shown = resting ? target : Math.round(value * 64) / 64
         const wrapper = input.resize(key, shown)
 
         if (wrapper === false) return growths.delete(key)
@@ -59,7 +58,8 @@ export function createRowGrowth(input: {
         if (resting) growths.delete(key)
         pending += target - shown
 
-        if (wrapper) paintEdge(wrapper, resting ? 0 : Math.min(softEdge(), target - value, value - growth.start))
+        if (wrapper)
+          paintEdge(wrapper, resting ? 0 : Math.min(softEdge(), Math.abs(target - value), Math.abs(value - growth.start)))
       }),
     )
     const space = held ? Math.max(0, Math.round(held.step(dt))) : 0
