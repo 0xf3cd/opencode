@@ -91,11 +91,15 @@ type ServerEntry = {
 
 // A client-hosted MCP server attached over a connection the client opened. Internal: never listed,
 // never reconciled against config, and removed entirely once its scope or connection closes.
+// Connections attached under one name stack; the most recent live one serves the name's tools.
 type AttachedEntry = {
   readonly scope: Scope.Closeable
   readonly client: McpClient.Connection
   tools: ReadonlyArray<Tool>
 }
+
+// Bounds re-listing the tools of an attached connection that takes over the top of its stack.
+const FALLBACK_LIST_TIMEOUT = "5 seconds"
 
 // MCP elicitations are Location-scoped, not Session-scoped: the server cannot attribute them to a
 // persisted session row, so their forms are owned by this opaque sentinel session identifier.
@@ -127,7 +131,8 @@ export interface Interface extends State.Transformable<Editor> {
   readonly remove: (server: ServerName | string) => Effect.Effect<void, NotFoundError>
   /**
    * Attaches a client-hosted MCP server for the lifetime of the calling scope. Its tools are named after
-   * `name` like any server's; attaching a name again replaces the previous attachment.
+   * `name` like any server's. Attaching a name again stacks the new connection on top: it serves the
+   * name until it closes, then the most recent remaining connection takes over.
    */
   readonly attach: (name: string, transport: Transport) => Effect.Effect<void, McpClient.ConnectError, Scope.Scope>
   readonly tools: () => Effect.Effect<Tool[]>
@@ -178,7 +183,7 @@ export const layer = (options?: Options) =>
       const fork = yield* FiberSet.makeRuntime<never, void, never>()
 
       const entries = new Map<ServerName, ServerEntry>()
-      const attached = new Map<ServerName, AttachedEntry>()
+      const attached = new Map<ServerName, AttachedEntry[]>()
       // Serializes lifecycle operations per server. Anything taking this lock from a connection
       // callback must stay forked: lifecycle operations close scopes while holding it, firing onClose.
       const locks = KeyedMutex.makeUnsafe<ServerName>()
@@ -550,15 +555,30 @@ export const layer = (options?: Options) =>
       const attachedLock = (name: ServerName) => locks.withLock(ServerName.make(`client:${name}`))
 
       const detach = Effect.fnUntraced(function* (name: ServerName, entry: AttachedEntry) {
-        if (attached.get(name) !== entry) return
-        attached.delete(name)
+        const stack = attached.get(name) ?? []
+        if (!stack.includes(entry)) return
+        const remaining = stack.filter((item) => item !== entry)
+        const next = remaining.at(-1)
+        // Unlocked reads must never pick a closing connection, so update the stack before closing it.
+        if (next) attached.set(name, remaining)
+        else attached.delete(name)
         yield* Scope.close(entry.scope, Exit.void)
-        yield* bus.publish(McpEvent.ToolsChanged, { server: name })
+        if (!next) return yield* bus.publish(McpEvent.ToolsChanged, { server: name })
+        // Closing an idle connection changes nothing visible.
+        if (stack.at(-1) !== entry) return
+        // Idle connections ignore tool list changes, so the one taking over lists its tools again. A short
+        // timeout keeps a half-open connection from holding the lock; it then keeps its stored tools.
+        yield* next.client.tools().pipe(
+          Effect.timeout(FALLBACK_LIST_TIMEOUT),
+          Effect.map((tools) => {
+            next.tools = tools.map((tool): Tool => ({ ...tool, server: name }))
+          }),
+          Effect.ignore,
+        )
+        if (!isDeepStrictEqual(entry.tools, next.tools)) yield* bus.publish(McpEvent.ToolsChanged, { server: name })
       })
 
       const attach = Effect.fnUntraced(function* (name: ServerName, transport: Transport) {
-        const previous = attached.get(name)
-        if (previous) yield* detach(name, previous)
         const { McpClient } = yield* Effect.promise(() => import("./client.js"))
         const scope = yield* Scope.fork(root)
         const result = yield* McpClient.connect(
@@ -584,24 +604,17 @@ export const layer = (options?: Options) =>
           client: result.connection,
           tools: result.tools.map((tool): Tool => ({ ...tool, server: name })),
         }
-        attached.set(name, entry)
-        const live = <E>(effect: Effect.Effect<void, E>) =>
-          fork(
-            Effect.suspend(() => (attached.get(name) === entry ? effect : Effect.void)).pipe(
-              attachedLock(name),
-              Effect.ignore,
-            ),
-          )
-        result.connection.onClose(() => live(detach(name, entry)))
+        attached.set(name, [...(attached.get(name) ?? []), entry])
+        const locked = <E>(effect: Effect.Effect<void, E>) => fork(effect.pipe(attachedLock(name), Effect.ignore))
+        result.connection.onClose(() => locked(detach(name, entry)))
+        const refresh = result.connection.tools().pipe(
+          Effect.map((tools) => {
+            entry.tools = tools.map((tool): Tool => ({ ...tool, server: name }))
+          }),
+          Effect.andThen(bus.publish(McpEvent.ToolsChanged, { server: name })),
+        )
         result.connection.onToolsChanged(() =>
-          live(
-            result.connection.tools().pipe(
-              Effect.map((tools) => {
-                entry.tools = tools.map((tool): Tool => ({ ...tool, server: name }))
-              }),
-              Effect.andThen(bus.publish(McpEvent.ToolsChanged, { server: name })),
-            ),
-          ),
+          locked(Effect.suspend(() => (attached.get(name)?.at(-1) === entry ? refresh : Effect.void))),
         )
         yield* Effect.logInfo("mcp client attached", { server: name, tools: entry.tools.length })
         yield* bus.publish(McpEvent.ToolsChanged, { server: name })
@@ -747,12 +760,12 @@ export const layer = (options?: Options) =>
         tools: Effect.fn("MCP.tools")(function* () {
           return [
             ...Array.from(entries.values()).flatMap((entry) => entry.tools ?? []),
-            ...Array.from(attached.values()).flatMap((entry) => entry.tools),
+            ...Array.from(attached.values()).flatMap((stack) => stack.at(-1)?.tools ?? []),
           ].toSorted((a, b) => a.server.localeCompare(b.server) || a.name.localeCompare(b.name))
         }),
         callTool: Effect.fn("MCP.callTool")(function* (input) {
           // An attached client owns the tools it lists, even when a configured server shares its name.
-          const client = attached.get(ServerName.make(input.server))
+          const client = attached.get(ServerName.make(input.server))?.at(-1)
           if (client?.tools.some((tool) => tool.name === input.name)) {
             const result = yield* client.client
               .callTool({ name: input.name, args: input.args, sessionID: input.sessionID })

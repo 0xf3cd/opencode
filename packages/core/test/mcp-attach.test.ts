@@ -1,5 +1,5 @@
 import { expect } from "bun:test"
-import { InMemoryTransport } from "@modelcontextprotocol/client"
+import { InMemoryTransport, type JSONRPCMessage, type Transport } from "@modelcontextprotocol/client"
 import { McpServer } from "@modelcontextprotocol/server"
 import { ConfigMCP } from "@opencode/schema/config/mcp"
 import { McpEvent } from "@opencode/schema/mcp-event"
@@ -70,6 +70,26 @@ const clientServer = (label: string, tools: ReadonlyArray<string>) =>
     )
     return { server, client, sessions }
   })
+
+/** Forwards a transport, answering `tools/list` with an error while `state.fail` is set. */
+const failingList = (inner: Transport) => {
+  const state = { fail: false }
+  const transport: Transport = {
+    start: () => inner.start(),
+    close: () => inner.close(),
+    send: async (message: JSONRPCMessage, options) => {
+      if (!state.fail || !("method" in message) || message.method !== "tools/list" || !("id" in message))
+        return inner.send(message, options)
+      queueMicrotask(() =>
+        transport.onmessage?.({ jsonrpc: "2.0", id: message.id, error: { code: -32603, message: "list failed" } }),
+      )
+    },
+  }
+  inner.onmessage = (message, extra) => transport.onmessage?.(message, extra)
+  inner.onclose = () => transport.onclose?.()
+  inner.onerror = (error) => transport.onerror?.(error)
+  return { transport, state }
+}
 
 const toolsChanged = Effect.gen(function* () {
   const bus = yield* Bus.Service
@@ -167,7 +187,7 @@ it.live("removes an attached entry when the client closes the connection", () =>
   }),
 )
 
-it.live("replaces an attached entry when the same client attaches again", () =>
+it.live("stacks a second attach under the same name and keeps the first connected", () =>
   Effect.gen(function* () {
     const mcp = yield* Mcp.Service
     const first = yield* clientServer("first", ["old_tool", "shared"])
@@ -182,8 +202,145 @@ it.live("replaces an attached entry when the same client attaches again", () =>
     const result = yield* call("tui.shared")
     expect(result.output?.output).toBe("second:shared")
     expect(first.sessions).toEqual([])
-    // The replaced client's connection is closed, not left dangling.
+    expect(first.server.isConnected()).toBe(true)
+  }),
+)
+
+it.live("falls back to the previous connection when the top one closes", () =>
+  Effect.gen(function* () {
+    const mcp = yield* Mcp.Service
+    const changes = yield* toolsChanged
+    const first = yield* clientServer("first", ["shared"])
+    const second = yield* clientServer("second", ["shared"])
+
+    yield* mcp.attach("tui", first.client)
+    yield* mcp.attach("tui", second.client)
+    // Changes on an idle connection stay hidden until it takes over.
+    first.server.registerTool("added", { description: "first added" }, () => ({
+      content: [{ type: "text", text: "first:added" }],
+    }))
+    yield* registered("tui_shared")
+    expect((yield* mcp.tools()).map((tool) => tool.name)).toEqual(["shared"])
+    const before = changes.length
+
+    yield* Effect.promise(() => second.server.close())
+    yield* waitUntil(() => changes.length > before)
+    expect((yield* mcp.tools()).map((tool) => tool.name)).toEqual(["added", "shared"])
+    yield* registered("tui_added")
+    expect((yield* call("tui.shared")).output?.output).toBe("first:shared")
+    expect((yield* call("tui.added")).output?.output).toBe("first:added")
+  }),
+)
+
+it.live("falls back to a connection with the same tools without publishing a change", () =>
+  Effect.gen(function* () {
+    const mcp = yield* Mcp.Service
+    const changes = yield* toolsChanged
+    // Same label, so both list identical tools; the recorded sessions tell them apart.
+    const first = yield* clientServer("same", ["shared"])
+    const second = yield* clientServer("same", ["shared"])
+    const marker = yield* clientServer("marker", ["done"])
+    const scope = yield* Scope.make()
+
+    yield* mcp.attach("tui", first.client)
+    yield* mcp.attach("tui", second.client).pipe(Scope.provide(scope))
+    yield* waitUntil(() => changes.length === 2)
+    yield* registered("tui_shared")
+
+    yield* Scope.close(scope, Exit.void)
+    yield* call("tui.shared", Session.ID.make("ses_fallback"))
+    expect(first.sessions).toEqual(["ses_fallback"])
+    expect(second.sessions).toEqual([])
+    // Events arrive in order, so once the marker's attach shows up any fallback event would have too.
+    yield* mcp.attach("marker", marker.client)
+    yield* waitUntil(() => changes.includes("marker"))
+    expect(changes).toEqual(["tui", "tui", "marker"])
+  }),
+)
+
+it.live("keeps the stored tools when the fallback re-list fails", () =>
+  Effect.gen(function* () {
+    const mcp = yield* Mcp.Service
+    const changes = yield* toolsChanged
+    const first = yield* clientServer("first", ["kept"])
+    const second = yield* clientServer("second", ["newer"])
+    const failing = failingList(first.client)
+    const scope = yield* Scope.make()
+
+    yield* mcp.attach("tui", failing.transport)
+    yield* mcp.attach("tui", second.client).pipe(Scope.provide(scope))
+    first.server.registerTool("hidden", { description: "first hidden" }, () => ({
+      content: [{ type: "text", text: "first:hidden" }],
+    }))
+    failing.state.fail = true
+    yield* waitUntil(() => changes.length === 2)
+
+    yield* Scope.close(scope, Exit.void)
+    expect((yield* mcp.tools()).map((tool) => tool.name)).toEqual(["kept"])
+    yield* waitUntil(() => changes.length === 3)
+    yield* registered("tui_kept")
+    expect((yield* call("tui.kept")).output?.output).toBe("first:kept")
+  }),
+)
+
+it.live("refreshes the top connection's tools when it reports a change", () =>
+  Effect.gen(function* () {
+    const mcp = yield* Mcp.Service
+    const changes = yield* toolsChanged
+    const first = yield* clientServer("first", ["below"])
+    const second = yield* clientServer("second", ["top"])
+
+    yield* mcp.attach("tui", first.client)
+    yield* mcp.attach("tui", second.client)
+    yield* waitUntil(() => changes.length === 2)
+
+    second.server.registerTool("added", { description: "second added" }, () => ({
+      content: [{ type: "text", text: "second:added" }],
+    }))
+    yield* waitUntil(() => changes.length === 3)
+    expect((yield* mcp.tools()).map((tool) => tool.name)).toEqual(["added", "top"])
+    yield* registered("tui_added")
+    expect((yield* call("tui.added")).output?.output).toBe("second:added")
+  }),
+)
+
+it.live("closing a connection below the top changes nothing visible", () =>
+  Effect.gen(function* () {
+    const mcp = yield* Mcp.Service
+    const changes = yield* toolsChanged
+    const first = yield* clientServer("first", ["old_tool"])
+    const second = yield* clientServer("second", ["shared"])
+    const scope = yield* Scope.make()
+
+    yield* mcp.attach("tui", first.client).pipe(Scope.provide(scope))
+    yield* mcp.attach("tui", second.client)
+    yield* waitUntil(() => changes.length === 2)
+    yield* registered("tui_shared")
+
+    yield* Scope.close(scope, Exit.void)
     yield* waitUntil(() => !first.server.isConnected())
+    expect(changes).toHaveLength(2)
+    expect((yield* mcp.tools()).map((tool) => tool.name)).toEqual(["shared"])
+    expect((yield* call("tui.shared")).output?.output).toBe("second:shared")
+  }),
+)
+
+it.live("removes the entry once every stacked connection closes", () =>
+  Effect.gen(function* () {
+    const mcp = yield* Mcp.Service
+    const first = yield* clientServer("first", ["shared"])
+    const second = yield* clientServer("second", ["shared"])
+
+    yield* mcp.attach("tui", first.client)
+    yield* mcp.attach("tui", second.client)
+    yield* registered("tui_shared")
+
+    yield* Effect.promise(() => second.server.close())
+    yield* Effect.promise(() => first.server.close())
+    yield* waitUntil(() => !first.server.isConnected() && !second.server.isConnected())
+    yield* registered("tui_shared", false)
+    expect(yield* mcp.tools()).toEqual([])
+    expect(yield* mcp.callTool({ server: "tui", name: "shared" }).pipe(Effect.flip)).toBeInstanceOf(Mcp.NotFoundError)
   }),
 )
 
