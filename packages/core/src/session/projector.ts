@@ -224,15 +224,15 @@ const projectFork = Effect.fn("SessionProjector.projectFork")(function* (
           data: row.data,
         }
         // A summary references the first message it kept, which the fork copied under a new ID.
-        const firstKept = row.type === "compaction" ? row.data.metadata?.firstKeptMessageID : undefined
-        if (typeof firstKept !== "string") return copy
+        const keepFrom = row.type === "compaction" ? row.data.metadata?.keepFrom : undefined
+        if (typeof keepFrom !== "string") return copy
         const kept = yield* db
           .select({ seq: SessionMessageTable.seq })
           .from(SessionMessageTable)
           .where(
             and(
               eq(SessionMessageTable.session_id, event.data.parentID),
-              eq(SessionMessageTable.id, SessionMessage.ID.make(firstKept)),
+              eq(SessionMessageTable.id, SessionMessage.ID.make(keepFrom)),
             ),
           )
           .get()
@@ -240,7 +240,7 @@ const projectFork = Effect.fn("SessionProjector.projectFork")(function* (
         if (!kept) return copy
         return {
           ...copy,
-          data: { ...row.data, metadata: { ...row.data.metadata, firstKeptMessageID: forkedID(kept.seq) } },
+          data: { ...row.data, metadata: { ...row.data.metadata, keepFrom: forkedID(kept.seq) } },
         }
       }),
     )

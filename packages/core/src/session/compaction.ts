@@ -70,7 +70,7 @@ export interface Interface extends State.Transformable<Editor> {
 export class Service extends Context.Service<Service, Interface>()("@opencode/SessionCompaction") {}
 
 /**
- * A summary fills `text`, and references the messages it keeps verbatim with `metadata.firstKeptMessageID`; history
+ * A summary fills `text`, and references the messages it keeps verbatim with `metadata.keepFrom`; history
  * rebuilds their text from that. A native compaction fills `providerContext`.
  */
 type Result = {
@@ -328,11 +328,11 @@ export const layer = Layer.effect(
       const fit = trigger.reason === "overflow" ? budget : Math.max(budget, summaryRoom(context.model.limit))
       const result = yield* deliver(trigger, prepared, budget - overhead, send, {
         fit: fit - overhead,
-        history: withoutTail(prepared.request, split.firstKept),
+        history: withoutTail(prepared.request, split.keepFrom),
       })
-      if (!split.firstKept) return result
+      if (!split.keepFrom) return result
       // A compaction hook may choose its own kept range.
-      return { ...result, metadata: { firstKeptMessageID: split.firstKept, ...result.metadata } }
+      return { ...result, metadata: { keepFrom: split.keepFrom, ...result.metadata } }
     })
 
     /**
@@ -729,7 +729,7 @@ const transcript = (context: SessionContext.Loaded, messages: ReadonlyArray<Sess
   })
 
 /**
- * The newest messages within `keep` tokens, from `firstKept` on, are kept verbatim beside the summary.
+ * The newest messages within `keep` tokens, from `keepFrom` on, are kept verbatim beside the summary.
  * Undefined when there is nothing to compact.
  */
 const splitConversation = (messages: ReadonlyArray<SessionMessage.Info>, keep: number) => {
@@ -741,7 +741,7 @@ const splitConversation = (messages: ReadonlyArray<SessionMessage.Info>, keep: n
 
   const first = entries[recentStart(entries, keep, previousCompaction(messages))]
   return {
-    firstKept: first?.message.id,
+    keepFrom: first?.message.id,
   }
 }
 

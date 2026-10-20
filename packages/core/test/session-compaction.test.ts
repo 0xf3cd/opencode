@@ -195,7 +195,7 @@ it.effect("forks rebuild the recent text of a summary they copied", () =>
     })
     const [child] = yield* store.context(childID)
     expect(child).toMatchObject({ type: "compaction", metadata: { recent: "[User]: Kept question" } })
-    expect(child.metadata?.firstKeptMessageID).not.toBe(parent.metadata?.firstKeptMessageID)
+    expect(child.metadata?.keepFrom).not.toBe(parent.metadata?.keepFrom)
   }),
 )
 
@@ -618,7 +618,7 @@ it.effect("summary updates include the retained tail in compaction hooks and the
     expect(requests[0].messages.at(-1)?.content).toEqual([{ type: "text", text: SessionCompaction.buildPrompt(true) }])
     const store = yield* SessionStore.Service
     expect(yield* store.context(session.id)).toMatchObject([
-      { type: "compaction", metadata: { firstKeptMessageID: messages[1].id } },
+      { type: "compaction", metadata: { keepFrom: messages[1].id } },
     ])
   }),
 )

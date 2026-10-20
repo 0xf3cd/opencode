@@ -3159,7 +3159,7 @@ describe("SessionRunnerLLM", () => {
       .orderBy(desc(SessionMessageTable.seq))
       .get()
       .pipe(Effect.orDie)
-    expect(stored?.data).toMatchObject({ metadata: { firstKeptMessageID: kept?.id } })
+    expect(stored?.data).toMatchObject({ metadata: { keepFrom: kept?.id } })
     expect(stored?.data).not.toHaveProperty("recent")
 
     s.requests.length = 0
