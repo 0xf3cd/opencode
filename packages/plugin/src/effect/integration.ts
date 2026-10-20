@@ -3,6 +3,7 @@ import type { IntegrationApi } from "@opencode/client/effect/api"
 import { Connection } from "@opencode/schema/connection"
 import { Credential } from "@opencode/schema/credential"
 import { Form } from "@opencode/schema/form"
+import { Integration } from "@opencode/schema/integration"
 import type { Effect, Scope } from "effect"
 import type { Transform } from "./registration.js"
 
@@ -12,6 +13,7 @@ export interface IntegrationOAuthMethod {
   readonly id: string
   readonly type: "oauth"
   readonly label: string
+  readonly integrationID?: Integration.ID
   readonly form?: Form.Fields
 }
 

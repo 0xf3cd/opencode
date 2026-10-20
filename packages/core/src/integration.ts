@@ -393,6 +393,44 @@ const layer = Layer.effect(
       return yield* credentials.create({ ...input, label })
     })
 
+    const delegatedTargets = (entry: Entry | undefined) =>
+      Array.from(
+        new Set(
+          (entry?.methods ?? []).flatMap((method) =>
+            method.type === "oauth" && method.integrationID && method.integrationID !== entry?.ref.id
+              ? [method.integrationID]
+              : [],
+          ),
+        ),
+      )
+
+    const delegatedOAuth = (entry: Entry | undefined, lookup: (id: ID) => readonly Credential.Info[]) => {
+      const seen = new Set<Credential.ID>()
+      const result: Credential.Info[] = []
+      for (const method of entry?.methods ?? []) {
+        if (method.type !== "oauth" || !method.integrationID || method.integrationID === entry?.ref.id) continue
+        for (const credential of lookup(method.integrationID)) {
+          if (credential.value.type !== "oauth" || credential.value.methodID !== method.id || seen.has(credential.id))
+            continue
+          seen.add(credential.id)
+          result.push(credential)
+        }
+      }
+      return result
+    }
+
+    const loadSaved = Effect.fnUntraced(function* (entry: Entry | undefined, id: ID) {
+      const own = yield* credentials.list(id)
+      const targets = own.length > 0 ? [] : delegatedTargets(entry)
+      if (targets.length === 0) return own
+      const byID = new Map(
+        yield* Effect.forEach(targets, (target) =>
+          credentials.list(target).pipe(Effect.map((items) => [target, items] as const)),
+        ),
+      )
+      return delegatedOAuth(entry, (target) => byID.get(target) ?? [])
+    })
+
     const resolveConnections = (entry: Entry | undefined, saved: readonly Credential.Info[]) => {
       const credentials = saved
         .map((credential) => ({
@@ -416,7 +454,13 @@ const layer = Layer.effect(
         ...(entry.ref.metadata === undefined ? {} : { metadata: entry.ref.metadata }),
         methods: entry.methods,
         connections: connections.map((connection) => {
-          const status = statuses.get(statusKey(entry.ref.id, connection))
+          const status =
+            statuses.get(statusKey(entry.ref.id, connection)) ??
+            (connection.type === "credential" && connection.method === "oauth"
+              ? delegatedTargets(entry)
+                  .map((id) => statuses.get(statusKey(id, connection)))
+                  .find(Boolean)
+              : undefined)
           return status ? { ...connection, status } : connection
         }),
       })
@@ -461,7 +505,7 @@ const layer = Layer.effect(
             .integrations.get(attempt.integrationID)
             ?.implementations.get(attempt.methodID)
           return createCredential({
-            integrationID: attempt.integrationID,
+            integrationID: implementation?.method.integrationID ?? attempt.integrationID,
             label: attempt.label ?? implementation?.label?.(exit.value),
             value: exit.value,
           })
@@ -707,18 +751,20 @@ const layer = Layer.effect(
       get: Effect.fn("Integration.get")(function* (id) {
         const entry = state.get().integrations.get(id)
         if (!entry) return undefined
-        return project(entry, resolveConnections(entry, yield* credentials.list(id)))
+        return project(entry, resolveConnections(entry, yield* loadSaved(entry, id)))
       }),
       list: Effect.fn("Integration.list")(function* () {
         const saved = Map.groupBy(yield* credentials.all(), (credential) => credential.integrationID)
-        return Array.from(state.get().integrations.values(), (entry) =>
-          project(entry, resolveConnections(entry, saved.get(entry.ref.id) ?? [])),
-        ).toSorted((a, b) => a.name.localeCompare(b.name))
+        return Array.from(state.get().integrations.values(), (entry) => {
+          const own = saved.get(entry.ref.id) ?? []
+          const items = own.length > 0 ? own : delegatedOAuth(entry, (target) => saved.get(target) ?? [])
+          return project(entry, resolveConnections(entry, items))
+        }).toSorted((a, b) => a.name.localeCompare(b.name))
       }),
       connection: {
         active: Effect.fn("Integration.connection.active")(function* (id) {
           const entry = state.get().integrations.get(id)
-          return resolveConnections(entry, yield* credentials.list(id))[0]
+          return resolveConnections(entry, yield* loadSaved(entry, id))[0]
         }),
         resolve: Effect.fn("Integration.connection.resolve")(function* (connection) {
           if (connection.type === "env") {

@@ -2447,7 +2447,13 @@ export type FormDetail = {
   state: FormState
 }
 
-export type IntegrationOAuthMethod = { id: IntegrationMethodID; type: "oauth"; label: string; form?: FormFields }
+export type IntegrationOAuthMethod = {
+  id: IntegrationMethodID
+  type: "oauth"
+  label: string
+  integrationID?: IntegrationID
+  form?: FormFields
+}
 
 export type IntegrationKeyMethod = { type: "key"; label?: string; form?: FormFields }
 

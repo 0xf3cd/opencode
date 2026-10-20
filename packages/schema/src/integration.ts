@@ -20,6 +20,7 @@ export const OAuthMethod = Schema.Struct({
   id: MethodID,
   type: Schema.Literal("oauth"),
   label: Schema.String,
+  integrationID: optional(ID),
   form: optional(Form.Fields),
 }).annotate({ identifier: "Integration.OAuthMethod" })
 

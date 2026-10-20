@@ -21,6 +21,8 @@ import { Money } from "@opencode/schema/money"
 const defaultServer = "https://opencode.ai/console"
 const clientID = "opencode-cli"
 const methodID = Integration.MethodID.make("device")
+const consoleIntegrationID = Integration.ID.make("opencode")
+const goIntegrationID = Integration.ID.make("opencode-go")
 // Drop statements whose action or effect is a value this version does not know, so a newer Console can
 // extend either enum. Malformed statements still fail validation.
 const RemotePolicies = Schema.Array(Schema.Unknown).pipe(
@@ -103,13 +105,14 @@ class SignedOutError extends Schema.TaggedError<SignedOutError>()("OpencodeConso
   }
 }
 
-function oauth(http: HttpClient.HttpClient) {
+function oauth(http: HttpClient.HttpClient, integrationID = consoleIntegrationID) {
   return {
-    integrationID: Integration.ID.make("opencode"),
+    integrationID,
     method: {
       id: methodID,
       type: "oauth",
-      label: "OpenCode Console account",
+      label: "Sign in with your OpenCode account",
+      ...(integrationID === consoleIntegrationID ? {} : { integrationID: consoleIntegrationID }),
       form: [
         {
           key: "server",
@@ -197,34 +200,38 @@ export const OpencodePlugin = define<HttpClient.HttpClient | Bus.Service | Manag
     let snapshot: {
       config: typeof RemoteResponse.Type | undefined
       connection: ActiveConnection
+      hasGoKey: boolean
       organization: string | undefined
       // Console MCP servers carry the credential in their headers, so a rotated token changes the snapshot.
       mcp:
         | { servers: NonNullable<typeof RemoteResponse.Type.mcp>["servers"]; headers: Record<string, string> }
         | undefined
-    } = { config: undefined, connection: undefined, organization: undefined, mcp: undefined }
+    } = { config: undefined, connection: undefined, hasGoKey: false, organization: undefined, mcp: undefined }
     // Status last reported for the active connection, so inference failures can name the fix.
     let reported: IntegrationConnection.Status | undefined
     let explainers: Effect.Success<ReturnType<typeof ctx.session.hook>>[] = []
 
     const load = Effect.fn("OpencodePlugin.load")(function* () {
-      const connection = yield* ctx.integration.connection.active("opencode")
+      const connection = yield* ctx.integration.connection.active(consoleIntegrationID)
       if (!connection) {
         reported = undefined
-        return { config: undefined, connection, organization: undefined, mcp: undefined }
+        return { config: undefined, connection, hasGoKey: false, organization: undefined, mcp: undefined }
       }
+      const goConnection = yield* ctx.integration.connection.active(goIntegrationID)
+      const hasGoKey = goConnection?.type === "credential" && goConnection.method === "key"
       const status = (status: IntegrationConnection.Status | undefined) => {
         reported = status
-        return ctx.integration.connection.status({ integrationID: "opencode", connection, status })
+        return ctx.integration.connection.status({ integrationID: consoleIntegrationID, connection, status })
       }
       return yield* ctx.integration.connection.resolve(connection).pipe(
         Effect.flatMap((credential) => {
           if (!credential || credential.type === "external")
-            return Effect.succeed({ config: undefined, connection, organization: undefined, mcp: undefined })
+            return Effect.succeed({ config: undefined, connection, hasGoKey, organization: undefined, mcp: undefined })
           return fetchConfig(http, credential).pipe(
             Effect.map((config) => ({
               config,
               connection,
+              hasGoKey,
               organization: organizationName(credential),
               mcp: config?.mcp && { servers: config.mcp.servers, headers: credentialHeaders(credential) },
             })),
@@ -240,8 +247,8 @@ export const OpencodePlugin = define<HttpClient.HttpClient | Bus.Service | Manag
             // A load that fails for the connection already in place keeps its last config: dropping it
             // would lift organization policy while personal credentials keep working.
             return IntegrationConnection.key(connection) === IntegrationConnection.key(snapshot.connection)
-              ? { config: snapshot.config, connection, organization: snapshot.organization, mcp: snapshot.mcp }
-              : { config: undefined, connection, organization: undefined, mcp: undefined }
+              ? { config: snapshot.config, connection, hasGoKey, organization: snapshot.organization, mcp: snapshot.mcp }
+              : { config: undefined, connection, hasGoKey, organization: undefined, mcp: undefined }
           }),
         ),
       )
@@ -254,22 +261,42 @@ export const OpencodePlugin = define<HttpClient.HttpClient | Bus.Service | Manag
       })
 
     yield* ctx.integration.transform((editor) => {
-      editor.update("opencode", (integration) => {
+      editor.update(consoleIntegrationID, (integration) => {
         integration.name = "OpenCode Console"
       })
-      editor.method.update(oauth(http))
-      editor.method.update({ integrationID: "opencode", method: { type: "key", label: "API key (service account)" } })
+      editor.method.remove(consoleIntegrationID, { type: "key" })
+      editor.method.update(oauth(http, consoleIntegrationID))
+      editor.method.update({
+        integrationID: consoleIntegrationID,
+        method: { type: "key", label: "API key (service account)" },
+      })
+
+      editor.update(goIntegrationID, (integration) => {
+        integration.name = "OpenCode Go"
+      })
+      editor.method.remove(goIntegrationID, { type: "key" })
+      editor.method.update(oauth(http, goIntegrationID))
+      editor.method.update({ integrationID: goIntegrationID, method: { type: "key", label: "Use an API key" } })
     })
+
+    const hasConsoleKey = () =>
+      Boolean(
+        snapshot.connection &&
+          (snapshot.config?.providers[Provider.ID.opencode] !== undefined ||
+            snapshot.connection.type !== "credential" ||
+            snapshot.connection.method !== "oauth"),
+      )
 
     snapshot = yield* load()
     yield* publish(snapshot)
     yield* ctx.provider.transform((providers) => {
       for (const [providerID, item] of Object.entries(snapshot.config?.providers ?? {})) {
+        if (providerID === goIntegrationID && snapshot.hasGoKey) continue
         const source = providers.get(item.canonical ?? providerID)
         providers.update(providerID, (provider) => {
           if (source && source.provider !== provider)
             Object.assign(provider, structuredClone(source.provider), { id: provider.id })
-          provider.integrationID = Integration.ID.make("opencode")
+          provider.integrationID = consoleIntegrationID
           if (item.canonical !== undefined) provider.canonical = item.canonical
           if (item.name !== undefined) provider.name = item.name
           provider.package = item.package ?? provider.package
@@ -346,7 +373,7 @@ export const OpencodePlugin = define<HttpClient.HttpClient | Bus.Service | Manag
 
       const item = providers.get(Provider.ID.opencode)
       if (!item) return
-      const hasKey = Boolean(process.env.OPENCODE_API_KEY || snapshot.connection || item.provider.settings?.apiKey)
+      const hasKey = Boolean(process.env.OPENCODE_API_KEY || hasConsoleKey() || item.provider.settings?.apiKey)
       providers.update(item.provider.id, (provider) => {
         if (!hasKey) {
           provider.activation = "enabled"
@@ -359,7 +386,7 @@ export const OpencodePlugin = define<HttpClient.HttpClient | Bus.Service | Manag
       if (!item) return
       const hasKey = Boolean(
         process.env.OPENCODE_API_KEY ||
-          snapshot.connection ||
+          hasConsoleKey() ||
           (item.provider.settings?.apiKey && item.provider.settings.apiKey !== "public"),
       )
       if (hasKey) return
@@ -478,8 +505,11 @@ export const OpencodePlugin = define<HttpClient.HttpClient | Bus.Service | Manag
     // Hooks are scoped per provider so requests to unrelated providers skip the HTTP hook path.
     const guard = Effect.fn("OpencodePlugin.guard")(function* (next: typeof snapshot) {
       yield* Effect.forEach(explainers, (registration) => registration.dispose, { discard: true })
+      const providers = Object.keys(next.config?.providers ?? {}).filter(
+        (providerID) => !(providerID === goIntegrationID && next.hasGoKey),
+      )
       explainers = yield* Effect.forEach(
-        next.connection ? new Set([Provider.ID.opencode, ...Object.keys(next.config?.providers ?? {})]) : [],
+        next.connection ? new Set([Provider.ID.opencode, ...providers]) : [],
         (providerID) => ctx.session.hook("http.response", explain, { providerID }).pipe(Scope.provide(scope)),
       )
     })
@@ -496,7 +526,11 @@ export const OpencodePlugin = define<HttpClient.HttpClient | Bus.Service | Manag
       })
     })
     yield* bus.subscribe(Credential.Event.Switched).pipe(
-      Stream.filter((event) => event.data.integrationID === Integration.ID.make("opencode")),
+      Stream.filter(
+        (event) =>
+          event.data.integrationID === consoleIntegrationID ||
+          (event.data.integrationID === goIntegrationID && Boolean(snapshot.connection)),
+      ),
       Stream.runForEach(() => refresh().pipe(Effect.andThen(poll()))),
       Effect.forkScoped({ startImmediately: true }),
     )

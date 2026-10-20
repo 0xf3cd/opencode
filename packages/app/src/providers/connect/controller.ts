@@ -79,8 +79,6 @@ export function createProviderConnectionController(options: {
     return directory ? { directory } : undefined
   }
 
-  const isConsole = () => options.provider() === CONSOLE_INTEGRATION
-
   // Not createResource: the dialog is owned by whichever page opened it, so reading a pending
   // resource here would suspend that page's <Suspense> and blank the screen behind the dialog.
   const [integration, setIntegration] = createStore<{ loading: boolean; latest?: IntegrationInfo }>({
@@ -146,6 +144,15 @@ export function createProviderConnectionController(options: {
   const currentMethod = createMemo(() =>
     store.methodIndex === undefined ? undefined : methods().at(store.methodIndex),
   )
+
+  const isConsole = () => {
+    const method = currentMethod()
+
+    return (
+      options.provider() === CONSOLE_INTEGRATION ||
+      (method?.type === "oauth" && method.integrationID === CONSOLE_INTEGRATION)
+    )
+  }
 
   const autoIndex = createMemo(() => {
     if (integration.loading || options.manual?.()) return undefined

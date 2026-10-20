@@ -132,18 +132,39 @@ const cost = (input: number, output = 0) => [
 describe("OpencodePlugin", () => {
   it.effect("registers account and service account methods", () =>
     Effect.gen(function* () {
-      yield* addPlugin()
       const integrations = yield* Integration.Service
+      // Mirror ModelsDevPlugin registering `key` and `env` before OpencodePlugin runs.
+      for (const id of [Integration.ID.make("opencode"), Integration.ID.make("opencode-go")]) {
+        yield* integrations.transform((editor) => {
+          editor.method.update({ integrationID: id, method: { type: "key" } })
+          editor.method.update({ integrationID: id, method: { type: "env", names: ["OPENCODE_API_KEY"] } })
+        })
+      }
+      yield* addPlugin()
       expect((yield* integrations.get(Integration.ID.make("opencode")))?.methods).toEqual([
+        { type: "env", names: ["OPENCODE_API_KEY"] },
         {
           id: Integration.MethodID.make("device"),
           type: "oauth",
-          label: "OpenCode Console account",
+          label: "Sign in with your OpenCode account",
           form: [
             { key: "server", type: "string", format: "uri", hidden: true, default: "https://opencode.ai/console" },
           ],
         },
         { type: "key", label: "API key (service account)" },
+      ])
+      expect((yield* integrations.get(Integration.ID.make("opencode-go")))?.methods).toEqual([
+        { type: "env", names: ["OPENCODE_API_KEY"] },
+        {
+          id: Integration.MethodID.make("device"),
+          type: "oauth",
+          label: "Sign in with your OpenCode account",
+          integrationID: Integration.ID.make("opencode"),
+          form: [
+            { key: "server", type: "string", format: "uri", hidden: true, default: "https://opencode.ai/console" },
+          ],
+        },
+        { type: "key", label: "Use an API key" },
       ])
     }),
   )
@@ -1948,4 +1969,516 @@ describe("OpencodePlugin", () => {
       }),
     ),
   )
+
+  describe("OpenCode Go account sign-in and API-key precedence", () => {
+    const consoleID = Integration.ID.make("opencode")
+    const goID = Integration.ID.make("opencode-go")
+    const goProviderID = Provider.ID.make("opencode-go")
+
+    function seedGoCatalog(baseURL: string) {
+      return Effect.gen(function* () {
+        const integrations = yield* Integration.Service
+        const providers = yield* Provider.Service
+        yield* integrations.transform((editor) => {
+          editor.update(consoleID, (integration) => (integration.name = "OpenCode"))
+          editor.method.update({ integrationID: consoleID, method: { type: "key" } })
+          editor.method.update({ integrationID: consoleID, method: { type: "env", names: ["OPENCODE_API_KEY"] } })
+
+          editor.update(goID, (integration) => (integration.name = "OpenCode Go"))
+          editor.method.update({ integrationID: goID, method: { type: "key" } })
+          editor.method.update({ integrationID: goID, method: { type: "env", names: ["OPENCODE_API_KEY"] } })
+        })
+        yield* providers.transform((editor) => {
+          editor.update(Provider.ID.opencode, (provider) => {
+            provider.name = "OpenCode"
+            provider.integrationID = consoleID
+            provider.package = "@opencode/ai/providers/openai-compatible"
+            provider.settings = { baseURL: `${baseURL}/zen/v1` }
+          })
+          editor.models.update(Provider.ID.opencode, Model.ID.make("big-pickle"), (model) => {
+            model.name = "Big Pickle"
+            model.cost = cost(0)
+            model.capabilities = { tools: true, input: ["text"], output: ["text"] }
+          })
+          editor.models.update(Provider.ID.opencode, Model.ID.make("paid-zen"), (model) => {
+            model.name = "Paid Zen"
+            model.cost = cost(1, 2)
+            model.capabilities = { tools: true, input: ["text"], output: ["text"] }
+          })
+
+          editor.update(goProviderID, (provider) => {
+            provider.name = "OpenCode Go"
+            provider.integrationID = goID
+            provider.package = "@opencode/ai/providers/openai-compatible"
+            provider.settings = { baseURL: `${baseURL}/zen/go/v1` }
+          })
+          editor.models.update(goProviderID, Model.ID.make("glm-5.3"), (model) => {
+            model.name = "GLM-5.3"
+            model.modelID = Model.ID.make("glm-5.3")
+            model.cost = cost(1.4, 4.4)
+            model.capabilities = { tools: true, input: ["text"], output: ["text"] }
+            model.settings = { baseURL: `${baseURL}/zen/go/v1`, provider: "opencode-go" }
+          })
+        })
+      })
+    }
+
+    function createGoServer() {
+      const configCalls: Array<{ authorization: string | null; orgID: string | null }> = []
+      const inferenceCalls: Array<{ path: string; authorization: string | null; orgID: string | null }> = []
+      const state = {
+        accessToken: "go-account-token-1",
+        refreshToken: "go-account-refresh-1",
+        orgID: "org-alpha",
+        orgName: "Alpha",
+        ssoRequired: false,
+        policies: {} as Record<string, unknown[]>,
+        goEntitled: true,
+      }
+      const server = Bun.serve({
+        port: 0,
+        fetch: async (request) => {
+          const url = new URL(request.url)
+          const origin = url.origin
+          if (url.pathname === "/auth/device/code") {
+            return Response.json({
+              device_code: "dev_code",
+              user_code: "ABCD-EFGH",
+              verification_uri_complete: "/device?user_code=ABCD-EFGH",
+              expires_in: 60,
+              interval: 0,
+            })
+          }
+          if (url.pathname === "/auth/device/token") {
+            const body = (await request.json()) as Record<string, string>
+            if (body.grant_type === "refresh_token") {
+              return Response.json({
+                access_token: "go-account-token-rotated",
+                refresh_token: "go-account-refresh-rotated",
+                expires_in: 600,
+                org_id: state.orgID,
+              })
+            }
+            return Response.json({
+              access_token: state.accessToken,
+              refresh_token: state.refreshToken,
+              expires_in: 600,
+              org_id: state.orgID,
+            })
+          }
+          if (url.pathname === "/api/user") return Response.json({ id: "usr_1", email: "kit@example.com" })
+          if (url.pathname === "/api/orgs") return Response.json([{ id: state.orgID, name: state.orgName }])
+          if (url.pathname === "/api/v2/config") {
+            const orgID = request.headers.get("x-org-id")
+            configCalls.push({ authorization: request.headers.get("authorization"), orgID })
+            if (state.ssoRequired) {
+              return Response.json(
+                { _tag: "SsoRequired", orgId: orgID ?? state.orgID, connectionId: "sso_1" },
+                { status: 403 },
+              )
+            }
+            const policies = orgID ? state.policies[orgID] : undefined
+            return Response.json({
+              providers: state.goEntitled
+                ? {
+                    "opencode-go": {
+                      name: "OpenCode Go",
+                      package: "aisdk:@ai-sdk/openai-compatible",
+                      settings: { baseURL: `${origin}/inference/go/openai/v1` },
+                      headers: orgID ? { "x-opencode-org-id": orgID } : {},
+                      models: {
+                        "glm-5.3": { name: "GLM-5.3", modelID: "glm-5.3" },
+                      },
+                    },
+                  }
+                : {},
+              ...(policies ? { policies } : {}),
+            })
+          }
+          if (
+            url.pathname === "/inference/go/openai/v1/chat/completions" ||
+            url.pathname === "/zen/go/v1/chat/completions"
+          ) {
+            inferenceCalls.push({
+              path: url.pathname,
+              authorization: request.headers.get("authorization"),
+              orgID: request.headers.get("x-opencode-org-id"),
+            })
+            const sse = [
+              'data: {"id":"chatcmpl-1","object":"chat.completion.chunk","created":1,"model":"glm-5.3","choices":[{"index":0,"delta":{"role":"assistant","content":"hi"},"finish_reason":null}]}',
+              'data: {"id":"chatcmpl-1","object":"chat.completion.chunk","created":1,"model":"glm-5.3","choices":[{"index":0,"delta":{},"finish_reason":"stop"}],"usage":{"prompt_tokens":5,"completion_tokens":1,"total_tokens":6}}',
+              "data: [DONE]",
+              "",
+            ].join("\n\n")
+            return new Response(sse, { headers: { "content-type": "text/event-stream" } })
+          }
+          return new Response("Not found", { status: 404 })
+        },
+      })
+      return { server, configCalls, inferenceCalls, state }
+    }
+
+    const requestGo = Effect.gen(function* () {
+      const resolver = yield* ModelResolver.Service
+      const resolved = required(
+        yield* resolver.resolve(Model.Ref.make({ providerID: goProviderID, id: Model.ID.make("glm-5.3") })),
+      )
+      yield* LLMClient.stream(LLM.request({ model: resolved.model, prompt: "hello" })).pipe(
+        Stream.runDrain,
+        Effect.provide(LLMClient.layer.pipe(Layer.provide(RequestExecutor.layer))),
+      )
+    })
+
+    it.live(
+      "Go-only account sign-in stores the canonical opencode credential, keeps free Zen models, sends the account token, and refreshes it",
+      () =>
+        withEnv({ OPENCODE_API_KEY: undefined }, () =>
+          Effect.acquireUseRelease(
+            Effect.sync(() => createGoServer()),
+            ({ server, configCalls, inferenceCalls }) =>
+              Effect.gen(function* () {
+                yield* seedGoCatalog(server.url.origin)
+                yield* addPlugin()
+
+                const integrations = yield* Integration.Service
+                const credentials = yield* Credential.Service
+                const providers = yield* Provider.Service
+                const models = yield* Model.Service
+
+                const attempt = yield* integrations.oauth.connect({
+                  integrationID: goID,
+                  methodID: Integration.MethodID.make("device"),
+                  answer: { server: server.url.origin },
+                })
+                const status = yield* eventually(
+                  integrations.oauth.status({ integrationID: goID, attemptID: attempt.attemptID }),
+                  (current) => current.status !== "pending",
+                )
+                expect(status.status).toBe("complete")
+
+                // Stored once under canonical `opencode`, projected onto both rows.
+                expect(yield* credentials.list(goID)).toEqual([])
+                const stored = required((yield* credentials.list(consoleID))[0])
+                expect((yield* integrations.get(consoleID))?.connections[0]).toMatchObject({
+                  id: stored.id,
+                  label: "Alpha",
+                  method: "oauth",
+                })
+                expect((yield* integrations.get(goID))?.connections[0]).toMatchObject({
+                  id: stored.id,
+                  label: "Alpha",
+                  method: "oauth",
+                })
+
+                yield* eventually(
+                  providers.get(goProviderID),
+                  (provider) => provider?.integrationID === consoleID,
+                )
+                expect(configCalls).toEqual([{ authorization: "Bearer go-account-token-1", orgID: "org-alpha" }])
+
+                // Free `opencode` models (Big Pickle) stay available and enabled on `public`; paid Zen models stay disabled.
+                expect(required(yield* providers.get(Provider.ID.opencode)).activation).toBe("enabled")
+                expect(required(yield* providers.get(Provider.ID.opencode)).settings?.apiKey).toBe("public")
+                expect((yield* providers.available()).map((p) => p.id)).toContain(Provider.ID.opencode)
+                expect(required(yield* models.get(Provider.ID.opencode, Model.ID.make("big-pickle"))).enabled).toBe(
+                  true,
+                )
+                expect(required(yield* models.get(Provider.ID.opencode, Model.ID.make("paid-zen"))).enabled).toBe(
+                  false,
+                )
+
+                // Go inference carries the account token and workspace header.
+                yield* requestGo
+                expect(inferenceCalls).toEqual([
+                  {
+                    path: "/inference/go/openai/v1/chat/completions",
+                    authorization: "Bearer go-account-token-1",
+                    orgID: "org-alpha",
+                  },
+                ])
+
+                // Token refresh updates the canonical credential and serves the rotated token to Go inference.
+                if (stored.value.type !== "oauth") throw new Error("Expected oauth")
+                yield* credentials.update(stored.id, {
+                  value: Credential.OAuth.make({ ...stored.value, expires: 0 }),
+                })
+                yield* requestGo
+                expect(inferenceCalls[1]).toEqual({
+                  path: "/inference/go/openai/v1/chat/completions",
+                  authorization: "Bearer go-account-token-rotated",
+                  orgID: "org-alpha",
+                })
+              }).pipe(Effect.provide(ModelResolver.layer)),
+            ({ server }) => Effect.promise(() => server.stop(true)),
+          ),
+        ),
+    )
+
+    it.live(
+      "existing Go API-key user is unchanged and a dedicated Go key takes precedence over a shared OpenCode account",
+      () =>
+        withEnv({ OPENCODE_API_KEY: undefined }, () =>
+          Effect.acquireUseRelease(
+            Effect.sync(() => createGoServer()),
+            ({ server, configCalls, inferenceCalls }) =>
+              Effect.gen(function* () {
+                yield* seedGoCatalog(server.url.origin)
+                yield* addPlugin()
+
+                const integrations = yield* Integration.Service
+                const credentials = yield* Credential.Service
+                const providers = yield* Provider.Service
+                const models = yield* Model.Service
+
+                // 1. Existing Go key-only user: no Console config fetch, free Zen intact, Go key used.
+                yield* integrations.connection.key({ integrationID: goID, key: "go-personal-key" })
+                yield* Effect.yieldNow
+                expect(configCalls).toEqual([])
+                expect(required(yield* providers.get(Provider.ID.opencode)).settings?.apiKey).toBe("public")
+                expect(required(yield* models.get(Provider.ID.opencode, Model.ID.make("big-pickle"))).enabled).toBe(
+                  true,
+                )
+                expect((yield* integrations.get(goID))?.connections[0]).toMatchObject({
+                  label: "OpenCode Go",
+                  method: "key",
+                })
+
+                yield* requestGo
+                expect(inferenceCalls).toEqual([
+                  {
+                    path: "/zen/go/v1/chat/completions",
+                    authorization: "Bearer go-personal-key",
+                    orgID: null,
+                  },
+                ])
+
+                // 2. Also sign in with an OpenCode account (with Go entitlement): dedicated Go key still wins on Go.
+                const account = yield* credentials.create({
+                  integrationID: consoleID,
+                  label: "Alpha",
+                  value: Credential.OAuth.make({
+                    type: "oauth",
+                    methodID: Integration.MethodID.make("device"),
+                    access: "go-account-token-1",
+                    refresh: "go-account-refresh-1",
+                    expires: Date.now() + 600_000,
+                    metadata: { server: server.url.origin, orgID: "org-alpha", orgName: "Alpha" },
+                  }),
+                })
+                yield* eventually(
+                  Effect.sync(() => configCalls.length),
+                  (count) => count === 1,
+                )
+                expect((yield* integrations.get(consoleID))?.connections[0]).toMatchObject({
+                  id: account.id,
+                  label: "Alpha",
+                  method: "oauth",
+                })
+                expect((yield* integrations.get(goID))?.connections[0]).toMatchObject({
+                  label: "OpenCode Go",
+                  method: "key",
+                })
+
+                yield* requestGo
+                expect(inferenceCalls[1]).toEqual({
+                  path: "/zen/go/v1/chat/completions",
+                  authorization: "Bearer go-personal-key",
+                  orgID: null,
+                })
+
+                // 3. Removing the dedicated Go key falls back to the active OpenCode account on Go.
+                const goKey = required((yield* credentials.list(goID))[0])
+                yield* credentials.remove(goKey.id)
+                yield* eventually(
+                  providers.get(goProviderID),
+                  (provider) => provider?.integrationID === consoleID,
+                )
+                expect((yield* integrations.get(goID))?.connections[0]).toMatchObject({
+                  id: account.id,
+                  label: "Alpha",
+                  method: "oauth",
+                })
+
+                yield* requestGo
+                expect(inferenceCalls[2]).toEqual({
+                  path: "/inference/go/openai/v1/chat/completions",
+                  authorization: "Bearer go-account-token-1",
+                  orgID: "org-alpha",
+                })
+              }).pipe(Effect.provide(ModelResolver.layer)),
+            ({ server }) => Effect.promise(() => server.stop(true)),
+          ),
+        ),
+    )
+
+    it.live("preserves the original Go error when Console sign-in fails alongside an independent Go key", () =>
+      withEnv({ OPENCODE_API_KEY: undefined }, () =>
+        Effect.acquireUseRelease(
+          Effect.sync(() => createGoServer()),
+          ({ server, state }) =>
+            Effect.gen(function* () {
+              yield* seedGoCatalog(server.url.origin)
+              state.ssoRequired = true
+
+              const credentials = yield* Credential.Service
+              const integrations = yield* Integration.Service
+              const hooks = yield* PluginHooks.Service
+
+              yield* credentials.create({
+                integrationID: goID,
+                value: Credential.Key.make({ type: "key", key: "go-independent-key" }),
+              })
+              yield* credentials.create({
+                integrationID: consoleID,
+                label: "Alpha",
+                value: Credential.OAuth.make({
+                  type: "oauth",
+                  methodID: Integration.MethodID.make("device"),
+                  access: "expired-sso-token",
+                  refresh: "refresh",
+                  expires: Date.now() + 600_000,
+                  metadata: { server: server.url.origin, orgID: "org-alpha", orgName: "Alpha" },
+                }),
+              })
+
+              yield* addPlugin()
+              expect((yield* integrations.get(consoleID))?.connections[0]?.status).toMatchObject({
+                status: "needs_auth",
+                message: "Sign in with SSO again to use Alpha",
+              })
+              expect((yield* integrations.get(goID))?.connections[0]?.status).toBeUndefined()
+
+              const rejected = (providerID: Provider.ID, message: string) =>
+                hooks
+                  .trigger("session", "http.response", {
+                    sessionID: Session.ID.make("ses_go_error"),
+                    agent: Agent.ID.make("build"),
+                    model: Model.Ref.make({ providerID, id: Model.ID.make("glm-5.3") }),
+                    kind: "primary",
+                    request: new Request("https://opencode.ai/zen/go/v1/chat/completions"),
+                    response: Response.json({ error: { message } }, { status: 403 }),
+                  })
+                  .pipe(Effect.flatMap((event) => Effect.promise(() => event.response.json())))
+
+              expect(yield* rejected(goProviderID, "Invalid Go API key")).toEqual({
+                error: { message: "Invalid Go API key" },
+              })
+              expect(yield* rejected(Provider.ID.opencode, "Workspace access denied")).toEqual({
+                error: {
+                  type: "authentication_error",
+                  message: "Sign in with SSO again to use Alpha.",
+                },
+              })
+            }),
+          ({ server }) => Effect.promise(() => server.stop(true)),
+        ),
+      ),
+    )
+
+    it.live("keeps effective token, displayed account on both rows, and policy in sync across switching and disconnect", () =>
+      withEnv({ OPENCODE_API_KEY: undefined }, () =>
+        Effect.acquireUseRelease(
+          Effect.sync(() => createGoServer()),
+          ({ server, inferenceCalls, state }) =>
+            Effect.gen(function* () {
+              yield* seedGoCatalog(server.url.origin)
+              const sudo: ConfigPolicy.Info = { action: "tool.use", resource: "shell:sudo *", effect: "deny" }
+              const env: ConfigPolicy.Info = { action: "tool.use", resource: "edit:*.env", effect: "deny" }
+              state.policies = { "org-alpha": [sudo], "org-beta": [env] }
+
+              const credentials = yield* Credential.Service
+              const integrations = yield* Integration.Service
+              const managed = yield* ManagedPolicy.Service
+
+              const alpha = yield* credentials.create({
+                integrationID: consoleID,
+                label: "Alpha",
+                value: Credential.OAuth.make({
+                  type: "oauth",
+                  methodID: Integration.MethodID.make("device"),
+                  access: "token-alpha",
+                  refresh: "refresh-alpha",
+                  expires: Date.now() + 600_000,
+                  metadata: { server: server.url.origin, orgID: "org-alpha", orgName: "Alpha" },
+                }),
+              })
+
+              yield* addPlugin()
+              expect(managed.current()).toEqual({ statements: [sudo], organization: "Alpha" })
+
+              const labels = (id: Integration.ID) =>
+                integrations
+                  .get(id)
+                  .pipe(Effect.map((info) => info?.connections.map((c) => (c.type === "credential" ? c.label : c.name))))
+
+              // Sign in to Beta from the Go row: stored under canonical `opencode` and becomes active on both rows.
+              state.accessToken = "token-beta"
+              state.refreshToken = "refresh-beta"
+              state.orgID = "org-beta"
+              state.orgName = "Beta"
+              const attempt = yield* integrations.oauth.connect({
+                integrationID: goID,
+                methodID: Integration.MethodID.make("device"),
+                answer: { server: server.url.origin },
+              })
+              yield* eventually(
+                integrations.oauth.status({ integrationID: goID, attemptID: attempt.attemptID }),
+                (current) => current.status === "complete",
+              )
+              yield* eventually(
+                Effect.sync(() => managed.current().organization),
+                (org) => org === "Beta",
+              )
+              expect(managed.current()).toEqual({ statements: [env], organization: "Beta" })
+              expect(yield* labels(consoleID)).toEqual(["Beta", "Alpha"])
+              expect(yield* labels(goID)).toEqual(["Beta", "Alpha"])
+
+              yield* requestGo
+              expect(inferenceCalls.at(-1)).toEqual({
+                path: "/inference/go/openai/v1/chat/completions",
+                authorization: "Bearer token-beta",
+                orgID: "org-beta",
+              })
+
+              // Switch back to Alpha: both rows, policy, and Go inference switch together.
+              yield* credentials.activate(alpha.id)
+              yield* eventually(
+                Effect.sync(() => managed.current().organization),
+                (org) => org === "Alpha",
+              )
+              expect(managed.current()).toEqual({ statements: [sudo], organization: "Alpha" })
+              expect((yield* labels(consoleID))?.[0]).toBe("Alpha")
+              expect((yield* labels(goID))?.[0]).toBe("Alpha")
+
+              yield* requestGo
+              expect(inferenceCalls.at(-1)).toEqual({
+                path: "/inference/go/openai/v1/chat/completions",
+                authorization: "Bearer token-alpha",
+                orgID: "org-alpha",
+              })
+
+              // Disconnect Alpha: falls back to Beta on both rows; disconnecting Beta signs out both rows.
+              const betaID = required((yield* integrations.get(goID))?.connections[1])
+              if (betaID.type !== "credential") throw new Error("Expected credential")
+              yield* credentials.remove(alpha.id)
+              yield* eventually(
+                Effect.sync(() => managed.current().organization),
+                (org) => org === "Beta",
+              )
+              expect(yield* labels(goID)).toEqual(["Beta"])
+
+              yield* credentials.remove(betaID.id)
+              yield* eventually(
+                Effect.sync(() => managed.current().organization),
+                (org) => org === undefined,
+              )
+              expect(managed.current()).toEqual({ statements: [], organization: undefined })
+              expect((yield* integrations.get(consoleID))?.connections).toEqual([])
+              expect((yield* integrations.get(goID))?.connections).toEqual([])
+            }).pipe(Effect.provide(ModelResolver.layer)),
+          ({ server }) => Effect.promise(() => server.stop(true)),
+        ),
+      ),
+    )
+  })
 })

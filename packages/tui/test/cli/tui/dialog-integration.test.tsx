@@ -247,6 +247,112 @@ test("uses the active location for integration data without scoping credential r
   }
 })
 
+test("lists OpenCode Console above OpenCode Go, whose sign-in comes before an API key", async () => {
+  const events = createEventStream()
+  const oauth: unknown[] = []
+  const calls = createFetch(async (url, request) => {
+    const directory = process.cwd()
+    const location = { directory, project: { id: "proj_test", directory, canonical: directory } }
+    if (url.pathname === "/api/integration")
+      return json({
+        location,
+        data: [
+          {
+            id: "opencode-go",
+            name: "OpenCode Go",
+            methods: [
+              { type: "key", label: "Use an API key" },
+              {
+                type: "oauth",
+                id: "device",
+                integrationID: "opencode",
+                label: "Sign in with your OpenCode account",
+              },
+            ],
+            connections: [],
+          },
+          {
+            id: "opencode",
+            name: "OpenCode Console",
+            methods: [{ type: "oauth", id: "device", label: "Sign in with your OpenCode account" }],
+            connections: [],
+          },
+          { id: "anthropic", name: "Anthropic", methods: [{ type: "key", label: "API key" }], connections: [] },
+        ],
+      })
+    if (url.pathname === "/api/integration/opencode-go/connect/oauth" && request.method === "POST") {
+      oauth.push(await request.json())
+      return json({
+        location,
+        data: {
+          attemptID: "attempt_go",
+          mode: "auto",
+          url: "https://opencode.ai/console/device?user_code=ABCD-EFGH",
+          instructions: "Enter code: ABCD-EFGH",
+        },
+      })
+    }
+    if (url.pathname === "/api/integration/opencode-go/connect/oauth/attempt_go") {
+      if (request.method === "DELETE") return new Response(null, { status: 204 })
+      return json({ location, data: { status: "pending" } })
+    }
+    if (url.pathname === "/api/model" || url.pathname === "/api/provider") return json({ location, data: [] })
+    return undefined
+  }, events)
+
+  function Probe() {
+    const data = useData()
+    const dialog = useDialog()
+    onMount(() => void data.location.integration.sync().then(() => dialog.replace(() => <DialogIntegration />)))
+    return null
+  }
+
+  const app = await testRender(
+    () => (
+      <TestTuiContexts>
+        <ConfigProvider config={createTuiResolvedConfig()}>
+          <Keymap.Provider>
+            <ToastProvider>
+              <ClientProvider api={createApi(calls.fetch)}>
+                <DataProvider directory={process.cwd()}>
+                  <LocationProvider>
+                    <ThemeProvider mode="dark" source={emptyThemeSource}>
+                      <DialogProvider>
+                        <Probe />
+                      </DialogProvider>
+                    </ThemeProvider>
+                  </LocationProvider>
+                </DataProvider>
+              </ClientProvider>
+            </ToastProvider>
+          </Keymap.Provider>
+        </ConfigProvider>
+      </TestTuiContexts>
+    ),
+    { width: 100, height: 30, kittyKeyboard: true },
+  )
+
+  try {
+    app.renderer.start()
+    await app.waitForFrame((frame) => frame.includes("Anthropic"))
+    const frame = app.captureCharFrame()
+    expect(frame.indexOf("OpenCode Console")).toBeLessThan(frame.indexOf("OpenCode Go"))
+
+    app.mockInput.pressArrow("down")
+    app.mockInput.pressEnter()
+    await app.waitForFrame((frame) => frame.includes("Sign in with your OpenCode account"))
+    const methods = app.captureCharFrame()
+    expect(methods).toContain("Connect OpenCode Go")
+    expect(methods.indexOf("Sign in with your OpenCode account")).toBeLessThan(methods.indexOf("Use an API key"))
+
+    app.mockInput.pressEnter()
+    await app.waitForFrame((frame) => frame.includes("ABCD-EFGH"))
+    expect(oauth).toEqual([{ methodID: "device" }])
+  } finally {
+    app.renderer.destroy()
+  }
+})
+
 async function renderIntegration(activeLocation?: LocationRef, form?: FormFields) {
   const events = createEventStream()
   const requests: Array<{ method: string; path: string; body?: unknown }> = []
