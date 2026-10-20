@@ -2,14 +2,16 @@ import { describe, expect } from "bun:test"
 import { LLM } from "@opencode/ai"
 import { LLMClient, RequestExecutor } from "@opencode/ai/route"
 import { ConfigPolicy } from "@opencode/schema/config/policy"
+import { Document, Info as ConfigInfo } from "@opencode/schema/config"
 import { Money } from "@opencode/schema/money"
-import { Effect, Layer, Stream } from "effect"
+import { Effect, Layer, Schema, Stream } from "effect"
 import { TestClock } from "effect/testing"
 import { HttpClient, HttpClientRequest, HttpClientResponse } from "effect/http"
 import { Agent } from "@opencode/core/agent"
 import { App } from "@opencode/core/app"
 import { Config } from "@opencode/core/config"
 import { ConfigPolicyPlugin } from "@opencode/core/config/plugin/policy"
+import { ConfigProviderPlugin } from "@opencode/core/config/plugin/provider"
 import { Credential } from "@opencode/core/credential"
 import { Integration } from "@opencode/core/integration"
 import { ManagedPolicy } from "@opencode/core/managed-policy"
@@ -2036,6 +2038,7 @@ describe("OpencodePlugin", () => {
         rejectRefresh: false,
         policies: {} as Record<string, unknown[]>,
         goEntitled: true,
+        consoleEntitled: false,
       }
       const server = Bun.serve({
         port: 0,
@@ -2084,24 +2087,44 @@ describe("OpencodePlugin", () => {
             }
             const policies = orgID ? state.policies[orgID] : undefined
             return Response.json({
-              providers: state.goEntitled
-                ? {
-                    "opencode-go": {
-                      name: "OpenCode Go",
-                      package: "aisdk:@ai-sdk/openai-compatible",
-                      settings: { baseURL: `${origin}/inference/go/openai/v1` },
-                      headers: orgID ? { "x-opencode-org-id": orgID } : {},
-                      models: {
-                        "glm-5.3": { name: "GLM-5.3", modelID: "glm-5.3" },
+              providers: {
+                ...(state.goEntitled
+                  ? {
+                      "opencode-go": {
+                        name: "OpenCode Go",
+                        package: "aisdk:@ai-sdk/openai-compatible",
+                        settings: { baseURL: `${origin}/inference/go/openai/v1` },
+                        headers: orgID ? { "x-opencode-org-id": orgID } : {},
+                        models: {
+                          "glm-5.3": { name: "GLM-5.3", modelID: "glm-5.3" },
+                        },
                       },
-                    },
-                  }
-                : {},
+                    }
+                  : {}),
+                ...(state.consoleEntitled
+                  ? {
+                      opencode: {
+                        name: "OpenCode Zen",
+                        package: "aisdk:@ai-sdk/openai-compatible",
+                        settings: { baseURL: `${origin}/inference/zen/openai/v1` },
+                        headers: orgID ? { "x-opencode-org-id": orgID } : {},
+                        models: {
+                          "paid-zen": {
+                            name: "Paid Zen",
+                            modelID: "paid-zen",
+                            cost: { input: 5, output: 5 },
+                          },
+                        },
+                      },
+                    }
+                  : {}),
+              },
               ...(policies ? { policies } : {}),
             })
           }
           if (
             url.pathname === "/inference/go/openai/v1/chat/completions" ||
+            url.pathname === "/inference/zen/openai/v1/chat/completions" ||
             url.pathname === "/zen/go/v1/chat/completions" ||
             url.pathname === "/zen/v1/chat/completions"
           ) {
@@ -2637,6 +2660,84 @@ describe("OpencodePlugin", () => {
                   authorization: "Bearer console-key-beta",
                   orgID: "org-beta",
                 })
+              }).pipe(Effect.provide(ModelResolver.layer)),
+            ({ server }) => Effect.promise(() => server.stop(true)),
+          ),
+        ),
+    )
+
+    it.live(
+      "sends the canonical account token for an account-discovered opencode provider even when user config sets apiKey to public",
+      () =>
+        withEnv({ OPENCODE_API_KEY: undefined }, () =>
+          Effect.acquireUseRelease(
+            Effect.sync(() => createGoServer()),
+            ({ server, inferenceCalls, state }) =>
+              Effect.gen(function* () {
+                state.consoleEntitled = true
+                yield* seedGoCatalog(server.url.origin)
+
+                const credentials = yield* Credential.Service
+                const providers = yield* Provider.Service
+                const plugin = yield* Plugin.Service
+
+                yield* credentials.create({
+                  integrationID: consoleID,
+                  label: "Alpha",
+                  value: Credential.OAuth.make({
+                    type: "oauth",
+                    methodID: Integration.MethodID.make("device"),
+                    access: "token-alpha",
+                    refresh: "refresh-alpha",
+                    expires: Date.now() + 600_000,
+                    metadata: { server: server.url.origin, orgID: "org-alpha", orgName: "Alpha" },
+                  }),
+                })
+
+                const host = yield* PluginHost.make(plugin)
+                yield* OpencodePlugin.effect(host)
+                // User config sets providers.opencode.settings.apiKey = "public" after OpencodePlugin discovers `opencode`.
+                yield* ConfigProviderPlugin.Plugin.effect(host).pipe(
+                  Effect.provide(
+                    Config.testLayer([
+                      new Document({
+                        type: "document",
+                        info: Schema.decodeUnknownSync(ConfigInfo)({
+                          providers: {
+                            opencode: {
+                              settings: { apiKey: "public" },
+                            },
+                          },
+                        }),
+                      }),
+                    ]),
+                  ),
+                )
+
+                yield* eventually(
+                  providers.get(Provider.ID.opencode),
+                  (provider) =>
+                    provider?.integrationID === consoleID && provider?.settings?.apiKey === "public",
+                )
+
+                const resolver = yield* ModelResolver.Service
+                const resolved = required(
+                  yield* resolver.resolve(
+                    Model.Ref.make({ providerID: Provider.ID.opencode, id: Model.ID.make("paid-zen") }),
+                  ),
+                )
+                yield* LLMClient.stream(LLM.request({ model: resolved.model, prompt: "hello" })).pipe(
+                  Stream.runDrain,
+                  Effect.provide(LLMClient.layer.pipe(Layer.provide(RequestExecutor.layer))),
+                )
+
+                expect(inferenceCalls).toEqual([
+                  {
+                    path: "/inference/zen/openai/v1/chat/completions",
+                    authorization: "Bearer token-alpha",
+                    orgID: "org-alpha",
+                  },
+                ])
               }).pipe(Effect.provide(ModelResolver.layer)),
             ({ server }) => Effect.promise(() => server.stop(true)),
           ),

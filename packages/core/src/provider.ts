@@ -289,6 +289,16 @@ export type Definition = {
   readonly sourceConnection?: IntegrationConnection.Info
 }
 
+const publicFallbackProviders = new WeakSet<Info>()
+
+export function markPublicFallback(provider: Info) {
+  publicFallbackProviders.add(provider)
+}
+
+export function isPublicFallback(provider: Info | undefined) {
+  return provider !== undefined && publicFallbackProviders.has(provider)
+}
+
 export interface Editor {
   readonly list: () => readonly Definition[]
   readonly get: (providerID: ID) => Definition | undefined

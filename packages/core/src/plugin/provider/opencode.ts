@@ -381,6 +381,7 @@ export const OpencodePlugin = define<HttpClient.HttpClient | Bus.Service | Manag
         if (!hasKey) {
           provider.activation = "enabled"
           provider.settings = { ...provider.settings, apiKey: "public" }
+          Provider.markPublicFallback(provider)
         }
       })
     })

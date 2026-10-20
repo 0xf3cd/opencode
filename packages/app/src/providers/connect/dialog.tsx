@@ -52,7 +52,12 @@ import {
 import { ConsoleAuthorization } from "./console"
 import { DialogChatGPTPlanWelcome } from "./chatgpt-welcome"
 import { authServerName, RemoteAuthNotice } from "./remote"
-import { goAccountSource, providerAccounts, type ProviderAccount } from "@/settings/providers/accounts"
+import {
+  goAccountSource,
+  isFinalProviderAccountRemoval,
+  providerAccounts,
+  type ProviderAccount,
+} from "@/settings/providers/accounts"
 import { AccountNameInput } from "@/settings/providers/account-name"
 import { useProviderAccountActions } from "@/settings/providers/account-actions"
 import { IconButton } from "@opencode/ui/icon-button"
@@ -1208,20 +1213,12 @@ function ProviderConnection(props: {
 
   const removeAccount = async (account: ProviderAccount) => {
     const current = integrations.list().find((integration) => integration.id === props.provider)
-    const targetID = current?.methods.find((method) => method.type === "oauth")?.integrationID ?? "opencode"
-    const canonical = integrations.list().find((integration) => integration.id === targetID)
-
-    const fallsBackToAccount =
-      props.provider === "opencode-go" &&
-      accounts().length === 1 &&
-      Boolean(canonical && providerAccounts(canonical).some((item) => item.id !== account.id))
-
     setState({ switching: account.id, confirming: undefined })
     await accountActions.remove({
       integrationID: props.provider,
       provider: provider().name,
       account,
-      final: accounts().length === 1 && !fallsBackToAccount,
+      final: isFinalProviderAccountRemoval(current, integrations.list(), account),
     })
     setState("switching", undefined)
   }

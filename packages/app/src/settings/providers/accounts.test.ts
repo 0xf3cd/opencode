@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test"
 import type { IntegrationInfo } from "@opencode/client/promise"
-import { activeProviderAccount, goAccountSource, providerAccounts } from "./accounts"
+import { activeProviderAccount, goAccountSource, isFinalProviderAccountRemoval, providerAccounts } from "./accounts"
 
 const integration = (connections: IntegrationInfo["connections"]): IntegrationInfo => ({
   id: "openai",
@@ -90,5 +90,28 @@ describe("goAccountSource", () => {
     })
 
     expect(goAccountSource(go, [consoleWithKey, go])).toBe("account")
+  })
+
+  test("keeps the Go account view open when removing a Go API key falls back to the OpenCode account", () => {
+    const goKey = { type: "credential" as const, method: "key" as const, id: "cred_go", label: "OpenCode Go" }
+    const alpha = { type: "credential" as const, method: "oauth" as const, id: "cred_alpha", label: "Alpha" }
+
+    const goWithKey = namedIntegration({
+      id: "opencode-go",
+      name: "OpenCode Go",
+      methods: [
+        { type: "oauth", id: "device", integrationID: "opencode", label: "Sign in with your OpenCode account" },
+        { type: "key", label: "Use an API key" },
+      ],
+      connections: [goKey],
+    })
+
+    const goWithAccount = namedIntegration({
+      ...goWithKey,
+      connections: [alpha],
+    })
+
+    expect(isFinalProviderAccountRemoval(goWithKey, [consoleAccount, goWithKey], goKey)).toBe(false)
+    expect(isFinalProviderAccountRemoval(goWithAccount, [consoleAccount, goWithAccount], alpha)).toBe(true)
   })
 })
