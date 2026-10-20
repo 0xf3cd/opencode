@@ -1,7 +1,7 @@
 import { Project } from "@opencode/schema/project"
 import { Schema, SchemaGetter, Struct } from "effect"
-import { HttpApiEndpoint, HttpApiGroup, OpenApi } from "effect/http-api"
-import { ProjectNotFoundError } from "../errors.js"
+import { HttpApiEndpoint, HttpApiGroup, HttpApiSchema, OpenApi } from "effect/http-api"
+import { FileNotFoundError, ProjectNotFoundError } from "../errors.js"
 
 const root = "/api/project"
 const UpdatePayload = Schema.Struct(Struct.omit(Project.UpdateInput.fields, ["projectID"]))
@@ -22,6 +22,20 @@ export const ProjectGroup = HttpApiGroup.make("server.project")
         identifier: "project.list",
         summary: "List projects",
         description: "List known projects. Archived projects are excluded unless archived=true.",
+      }),
+    ),
+  )
+  .add(
+    HttpApiEndpoint.get("project.icon", `${root}/:projectID/icon`, {
+      params: { projectID: Project.ID },
+      query: Schema.Struct({ v: Schema.String.pipe(Schema.optional) }),
+      success: Schema.Uint8Array.pipe(HttpApiSchema.asUint8Array()),
+      error: [ProjectNotFoundError, FileNotFoundError],
+    }).annotateMerge(
+      OpenApi.annotations({
+        identifier: "project.icon",
+        summary: "Get project icon",
+        description: "Serve the discovered icon file of the project.",
       }),
     ),
   )

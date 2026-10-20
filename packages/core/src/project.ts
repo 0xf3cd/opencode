@@ -2,7 +2,7 @@ export * as Project from "./project.js"
 
 import { Context, Duration, Effect, Layer, Schedule, Schema } from "effect"
 import { ChildProcess } from "effect/process"
-import { and, asc, desc, eq, gte, isNotNull, isNull, lt, lte, ne, sql } from "drizzle-orm"
+import { and, asc, desc, eq, gte, isNotNull, isNull, lt, lte, ne, or, sql } from "drizzle-orm"
 import path from "path"
 import { AbsolutePath } from "./schema.js"
 import { Bus } from "./bus.js"
@@ -13,6 +13,7 @@ import { Git } from "./git.js"
 import { AppProcess } from "@opencode/util/process"
 import { makeGlobalNode } from "@opencode/util/effect/app-node"
 import { Hash } from "@opencode/util/hash"
+import { ProjectIcon } from "./project/icon.js"
 import { ProjectSchema } from "./project/schema.js"
 import { ProjectTable, upsertProject } from "./project/sql.js"
 import { WorktreeTable } from "./worktree/sql.js"
@@ -67,12 +68,14 @@ export interface ListInput {
 
 export interface Interface {
   readonly list: (input?: ListInput) => Effect.Effect<ReadonlyArray<Info>>
+  /** The discovered icon file of a Project, or nothing when it has none or uses a remote URL. */
+  readonly icon: (projectID: ID) => Effect.Effect<ProjectIcon.Image | undefined, NotFoundError>
   readonly update: (input: UpdateInput) => Effect.Effect<Info, NotFoundError>
   /** Records Project activity for recency ordering, at most once per minute per Project. */
   readonly activate: (projectID: ID) => Effect.Effect<void>
   /** Resolves and persists the owning Project. */
   readonly resolve: (input: AbsolutePath) => Effect.Effect<Resolved>
-  /** Archives Projects whose known directories are all gone; resolving a Project unarchives it. */
+  /** Archives Projects whose known directories are all gone and refreshes discovered icons; resolving a Project unarchives it. */
   readonly sweep: () => Effect.Effect<void>
 }
 
@@ -82,7 +85,7 @@ function fromRow(row: typeof ProjectTable.$inferSelect): Info {
   const icon =
     row.icon_url || row.icon_url_override || row.icon_color
       ? {
-          url: row.icon_url ?? undefined,
+          url: row.icon_url?.split("&path=")[0] ?? undefined,
           override: row.icon_url_override ?? undefined,
           color: row.icon_color ?? undefined,
         }
@@ -113,10 +116,17 @@ const layer = Layer.effect(
     const bus = yield* Bus.Service
     const db = (yield* Database.Service).db
 
+    const discoverIcon = (id: ID, root: AbsolutePath) =>
+      ProjectIcon.discover(fs, root).pipe(
+        Effect.map((c) => c && ("url" in c ? c.url : `/api/project/${encodeURIComponent(id)}/icon?v=${c.hash}&path=${encodeURIComponent(c.path)}`)),
+      )
+    const setIcon = (id: ID, icon_url: string | null) =>
+      db.update(ProjectTable).set({ icon_url, time_updated: sql`${ProjectTable.time_updated}` }).where(eq(ProjectTable.id, id)).returning().get().pipe(Effect.orDie)
+
     const announcing = new Set<string>()
     const persist = Effect.fnUntraced(function* (project: Resolved) {
       const previous = yield* db
-        .select({ canonical: ProjectTable.worktree })
+        .select({ canonical: ProjectTable.worktree, icon_url: ProjectTable.icon_url })
         .from(ProjectTable)
         .where(eq(ProjectTable.id, project.id))
         .get()
@@ -129,6 +139,9 @@ const layer = Layer.effect(
         .returning()
         .get()
         .pipe(Effect.orDie)
+      const icon_url =
+        project.id !== ID.global && !previous?.icon_url ? yield* discoverIcon(project.id, project.canonical) : undefined
+      const backfilled = icon_url ? yield* setIcon(project.id, icon_url) : undefined
       // Clones share a project ID; only replace a canonical directory that is gone.
       const replaced =
         previous &&
@@ -142,7 +155,7 @@ const layer = Layer.effect(
               .get()
               .pipe(Effect.orDie)
           : undefined
-      const changed = replaced ?? unarchived
+      const changed = replaced ?? (previous || !project.vcs ? backfilled : undefined) ?? unarchived
       if (changed) yield* bus.publish(ProjectSchema.Event.Updated, fromRow(changed))
       if (!project.vcs) return project
       const directories: Array<{ projectID: ID; directory: AbsolutePath; strategy?: string }> = [
@@ -227,6 +240,15 @@ const layer = Layer.effect(
         .all()
         .pipe(Effect.orDie)
       return rows.map(fromRow)
+    })
+
+    const icon = Effect.fn("Project.icon")(function* (projectID: ID) {
+      const row = yield* db.select().from(ProjectTable).where(eq(ProjectTable.id, projectID)).get().pipe(Effect.orDie)
+      if (!row) return yield* new NotFoundError({ projectID })
+      const relative = row.icon_url?.startsWith("/api/project/")
+        ? new URL(row.icon_url, "http://localhost").searchParams.get("path")
+        : null
+      return relative ? yield* ProjectIcon.read(fs, row.worktree, relative) : undefined
     })
 
     const update = Effect.fn("Project.update")(function* (input: UpdateInput) {
@@ -440,9 +462,25 @@ const layer = Layer.effect(
         }),
         { concurrency: 8, discard: true },
       )
+      const recent = yield* db
+        .select()
+        .from(ProjectTable)
+        .where(and(isNull(ProjectTable.time_archived), ne(ProjectTable.id, ID.global), or(gte(ProjectTable.time_active, cutoff), gte(ProjectTable.time_updated, cutoff))))
+        .all()
+        .pipe(Effect.orDie)
+      yield* Effect.forEach(
+        recent,
+        Effect.fnUntraced(function* (project) {
+          if (project.icon_url && !project.icon_url.startsWith("/api/project/")) return
+          const next = (yield* discoverIcon(project.id, project.worktree)) ?? null
+          const updated = next !== project.icon_url ? yield* setIcon(project.id, next) : undefined
+          if (updated) yield* bus.publish(ProjectSchema.Event.Updated, fromRow(updated))
+        }),
+        { concurrency: 4, discard: true },
+      )
     })
 
-    return Service.of({ list, update, activate, resolve, sweep })
+    return Service.of({ list, icon, update, activate, resolve, sweep })
   }),
 )
 

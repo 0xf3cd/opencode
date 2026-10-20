@@ -5,7 +5,8 @@ import { getFilename } from "@opencode/util/path"
 import { retry } from "@opencode/util/retry"
 import { reconcile, type SetStoreFunction, type Store } from "solid-js/store"
 import type { State } from "./types"
-import { normalizeProjectInfo } from "./utils"
+import { normalizeProjectInfo, type ProjectIconHttp } from "./utils"
+import type { ServerConnection } from "@/runtime/server/registry"
 import { formatServerError } from "@/runtime/server/errors"
 import { QueryClient, queryOptions } from "@tanstack/solid-query"
 import type { ServerScope } from "@/runtime/server/scope"
@@ -58,30 +59,37 @@ export const loadGlobalConfigQuery = (scope: ServerScope) =>
 
 type ProjectApi = {
   readonly list: () => Promise<ProjectListOutput>
+  readonly icon?: (input: { projectID: string; v?: string }) => Promise<Uint8Array>
 }
 
 type LocationApi = { readonly get: (input?: LocationGetInput) => Promise<LocationGetOutput> }
 
 // Metadata only, in the server's order (most recently active first). Worktree inventories load per project when a
 // view shows it (see workspaces/inventory).
-export const loadProjectsQuery = (scope: ServerScope, projects: ProjectApi) =>
+export const loadProjectsQuery = (scope: ServerScope, projects: ProjectApi, http?: ProjectIconHttp) =>
   queryOptions({
     queryKey: [scope, "project"],
     queryFn: () =>
       retry(() =>
         projects
           .list()
-          .then((items) => items.flatMap((project) => (project?.id ? [normalizeProjectInfo(project)] : []))),
+          .then((items) => items.flatMap((project) => (project?.id ? [normalizeProjectInfo(project, http)] : []))),
       ),
   })
 
 export function loadProjects(input: {
   scope: ServerScope
   project: ProjectApi
+  http?: ServerConnection.HttpBase
   setGlobalStore: SetStoreFunction<GlobalStore>
   queryClient: QueryClient
 }) {
-  return input.queryClient.fetchQuery(loadProjectsQuery(input.scope, input.project)).then((data) =>
+  const http = input.http && {
+    ...input.http,
+    icon: input.project.icon,
+    onIcon: (id: string, url: string) => input.setGlobalStore("project", (item) => item.id === id, "icon", "url", url),
+  }
+  return input.queryClient.fetchQuery(loadProjectsQuery(input.scope, input.project, http)).then((data) =>
     input.setGlobalStore(
       "project",
       data.map((project) =>
@@ -96,6 +104,7 @@ export async function bootstrapGlobal(input: {
     readonly location: LocationApi
     readonly project: ProjectApi
   }
+  http?: ServerConnection.HttpBase
   scope: ServerScope
   setGlobalStore: SetStoreFunction<GlobalStore>
   queryClient: QueryClient
@@ -107,6 +116,7 @@ export async function bootstrapGlobal(input: {
       loadProjects({
         scope: input.scope,
         project: input.serverAPI.project,
+        http: input.http,
         setGlobalStore: input.setGlobalStore,
         queryClient: input.queryClient,
       }),

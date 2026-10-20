@@ -1715,6 +1715,10 @@ export type ProjectListInput = { readonly archived?: boolean | undefined }
 export type ProjectListOutput = ReadonlyArray<Project.Info>
 export type ProjectListOperation<E = never> = (input?: ProjectListInput) => Effect.Effect<ProjectListOutput, E>
 
+export type ProjectIconInput = { readonly projectID: Project.ID; readonly v?: string | undefined }
+export type ProjectIconOutput = globalThis.Uint8Array
+export type ProjectIconOperation<E = never> = (input: ProjectIconInput) => Effect.Effect<ProjectIconOutput, E>
+
 export type ProjectUpdateInput = {
   readonly projectID: Project.ID
   readonly canonical?: AbsolutePath | undefined
@@ -1727,6 +1731,7 @@ export type ProjectUpdateOperation<E = never> = (input: ProjectUpdateInput) => E
 
 export interface ProjectApi<E = never> {
   readonly list: ProjectListOperation<E>
+  readonly icon: ProjectIconOperation<E>
   readonly update: ProjectUpdateOperation<E>
 }
 

@@ -2192,6 +2192,7 @@ export type ConfigEntry =
         share?: "manual" | "auto" | "disabled"
         enterprise?: { url?: string }
         username?: string
+        icon?: string
         permissions?: PermissionRuleset
         policies?: Array<{
           action: "provider.use" | "tool.use" | "integration.use"
@@ -2873,6 +2874,10 @@ export type ProjectNotFoundError = {
 export const isProjectNotFoundError = (value: unknown): value is ProjectNotFoundError =>
   typeof value === "object" && value !== null && "_tag" in value && value["_tag"] === "ProjectNotFoundError"
 
+export type FileNotFoundError = { readonly _tag: "FileNotFoundError"; readonly path: string; readonly message: string }
+export const isFileNotFoundError = (value: unknown): value is FileNotFoundError =>
+  typeof value === "object" && value !== null && "_tag" in value && value["_tag"] === "FileNotFoundError"
+
 export type PermissionNotFoundError = {
   readonly _tag: "PermissionNotFoundError"
   readonly requestID: string
@@ -2880,10 +2885,6 @@ export type PermissionNotFoundError = {
 }
 export const isPermissionNotFoundError = (value: unknown): value is PermissionNotFoundError =>
   typeof value === "object" && value !== null && "_tag" in value && value["_tag"] === "PermissionNotFoundError"
-
-export type FileNotFoundError = { readonly _tag: "FileNotFoundError"; readonly path: string; readonly message: string }
-export const isFileNotFoundError = (value: unknown): value is FileNotFoundError =>
-  typeof value === "object" && value !== null && "_tag" in value && value["_tag"] === "FileNotFoundError"
 
 export type RpcError = {
   readonly _tag: "RpcError"
@@ -6283,6 +6284,13 @@ export type CredentialRemoveOutput = void
 export type ProjectListInput = { readonly archived?: { readonly archived?: boolean | undefined }["archived"] }
 
 export type ProjectListOutput = Array<Project>
+
+export type ProjectIconInput = {
+  readonly projectID: { readonly projectID: string }["projectID"]
+  readonly v?: { readonly v?: string | undefined }["v"]
+}
+
+export type ProjectIconOutput = globalThis.Uint8Array
 
 export type ProjectUpdateInput = {
   readonly projectID: { readonly projectID: string }["projectID"]

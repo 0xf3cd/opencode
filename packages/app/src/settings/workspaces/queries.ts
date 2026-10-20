@@ -34,7 +34,10 @@ export function workspaceInventoryQuery(
 
             if (shouldRefresh) void context.sync.worktrees.refresh(project.id)
 
-            return normalizeProjectInfo({ ...project, worktrees })
+            return normalizeProjectInfo(
+              { ...project, worktrees },
+              { ...context.sdk.server.http, icon: context.sdk.api.project.icon },
+            )
           }),
       ),
     staleTime: 30_000,

@@ -13,6 +13,7 @@ const projectLayer = Layer.succeed(
   Project.Service,
   Project.Service.of({
     list: () => Effect.succeed([]),
+    icon: () => Effect.succeed(undefined),
     update: () => Effect.die("not implemented"),
     activate: () => Effect.void,
     sweep: () => Effect.void,

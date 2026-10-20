@@ -119,6 +119,7 @@ export function createServerSyncContextInner(serverSDK: ServerSDK, data: Data) {
     queryFn: async () => {
       await bootstrapGlobal({
         serverAPI: serverSDK.api,
+        http: serverSDK.server.http,
         scope: serverSDK.scope,
         setGlobalStore,
         queryClient,
@@ -241,12 +242,20 @@ export function createServerSyncContextInner(serverSDK: ServerSDK, data: Data) {
     setGlobalStore("project", (projects) => {
       const rest = projects.filter((project) => project.id !== update.id)
 
-      if (update.time.archived) return rest
+      if (update.time.archived) {
+        normalizeProjectInfo({ ...update, icon: undefined }, serverSDK.server.http)
+        return rest
+      }
 
       const previous = projects.find((project) => project.id === update.id)
+      const http = {
+        ...serverSDK.server.http,
+        icon: serverSDK.api.project.icon,
+        onIcon: (id: string, url: string) => setGlobalStore("project", (item) => item.id === id, "icon", "url", url),
+      }
       // The wire payload carries no worktrees; keep the inventory this project already loaded.
       const next = withWorktreeInventory(
-        previous ? updateProjectInfo(previous, update) : normalizeProjectInfo(update),
+        previous ? updateProjectInfo(previous, update, http) : normalizeProjectInfo(update, http),
         worktrees.cached(update.id),
       )
 
@@ -258,7 +267,7 @@ export function createServerSyncContextInner(serverSDK: ServerSDK, data: Data) {
 
   // Observes the list the bootstrap loads without fetching it again, so readers can tell "no projects" from "not loaded".
   const projectsQuery = useQuery(() => ({
-    ...loadProjectsQuery(serverSDK.scope, serverSDK.api.project),
+    ...loadProjectsQuery(serverSDK.scope, serverSDK.api.project, serverSDK.server.http),
     enabled: false,
   }))
 

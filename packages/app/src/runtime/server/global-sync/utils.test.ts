@@ -92,6 +92,54 @@ describe("normalizeProjectInfo", () => {
     expect(normalizeProjectInfo({ ...project, vcs: "hg" } as Project).vcs).toBe("hg")
     expect(normalizeProjectInfo(project as Project).vcs).toBeUndefined()
   })
+
+  test("resolves unauthenticated server icon routes directly and fetches password-protected icons into blobs without leaking credentials", async () => {
+    const base: Project = { id: "prj", canonical: "/repo", time: { created: 1, updated: 1, active: 1 }, sandboxes: [] }
+    expect(
+      normalizeProjectInfo({ ...base, icon: { url: "https://example.com/a.svg" } }, { url: "http://127.0.0.1:4096" })
+        .icon?.url,
+    ).toBe("https://example.com/a.svg")
+    expect(
+      normalizeProjectInfo({ ...base, icon: { url: "/api/project/prj/icon?v=v1" } }, { url: "http://127.0.0.1:4096" })
+        .icon?.url,
+    ).toBe("http://127.0.0.1:4096/api/project/prj/icon?v=v1")
+
+    const loaded: string[] = []
+    const http = {
+      url: "http://remote:4096",
+      password: "secret",
+      icon: async () => new TextEncoder().encode("<svg />"),
+      onIcon: (_id: string, url: string) => loaded.push(url),
+    }
+    const initial = normalizeProjectInfo({ ...base, icon: { url: "/api/project/prj/icon?v=v1" } }, http)
+    expect(initial.icon?.url).toBeUndefined()
+    await Promise.resolve()
+    const cached = normalizeProjectInfo({ ...base, icon: { url: "/api/project/prj/icon?v=v1" } }, http).icon?.url
+    expect(cached).toStartWith("blob:")
+    expect(cached).not.toContain("secret")
+    expect(cached).not.toContain(btoa("opencode:secret"))
+    expect(loaded).toEqual([cached!])
+
+    normalizeProjectInfo({ ...base, icon: { url: "/api/project/prj/icon?v=v2" } }, http)
+    await Promise.resolve()
+    expect(loaded[1]).toStartWith("blob:")
+    expect(loaded[1]).not.toBe(cached)
+    normalizeProjectInfo({ ...base, icon: undefined }, http)
+
+    let attempts = 0
+    const failing = {
+      url: "http://remote:4096",
+      password: "secret",
+      icon: async () => {
+        attempts += 1
+        throw new Error("missing")
+      },
+    }
+    normalizeProjectInfo({ ...base, icon: { url: "/api/project/prj/icon?v=bad" } }, failing)
+    await Promise.resolve()
+    normalizeProjectInfo({ ...base, icon: { url: "/api/project/prj/icon?v=bad" } }, failing)
+    expect(attempts).toBe(1)
+  })
 })
 
 test.each([

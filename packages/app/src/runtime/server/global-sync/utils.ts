@@ -1,6 +1,7 @@
 import type { AgentListOutput, ModelListOutput, ProviderListOutput } from "@opencode/client/promise"
 import type { Agent, Project, Provider, ProviderListResponse } from "@/runtime/server/types"
 import type { Project as CurrentProject } from "@opencode/client/promise"
+import type { ServerConnection } from "@/runtime/server/registry"
 import { unwrap } from "solid-js/store"
 
 export { pathKey as directoryKey, type PathKey as DirectoryKey } from "@/workspaces/path-key"
@@ -136,20 +137,63 @@ export function normalizeProviderList(
   return result
 }
 
-export function normalizeProjectInfo(project: Project | CurrentProject): Project {
+export type ProjectIconHttp = ServerConnection.HttpBase & {
+  readonly icon?: (input: { projectID: string; v?: string }) => Promise<Uint8Array>
+  readonly onIcon?: (projectID: string, url: string) => void
+}
+
+const iconBlobs = new Map<string, string>()
+
+function resolveProjectIcon(projectID: string, icon: CurrentProject["icon"], http?: ProjectIconHttp) {
+  const raw = icon?.url
+  const key = raw?.startsWith("/") && http?.url && http.password ? `${http.url}${raw}` : undefined
+  const prefix = http?.url ? `${http.url}/api/project/${encodeURIComponent(projectID)}/icon` : undefined
+  if (prefix) {
+    for (const [k, blob] of iconBlobs) {
+      if (k !== key && k.startsWith(prefix)) {
+        if (blob) URL.revokeObjectURL(blob)
+        iconBlobs.delete(k)
+      }
+    }
+  }
+  if (!raw?.startsWith("/")) return icon
+  if (!http?.url) return { ...icon, url: undefined }
+  if (!http.password) return { ...icon, url: new URL(raw, http.url).toString() }
+  const cached = key ? iconBlobs.get(key) : undefined
+  if (key && !iconBlobs.has(key) && http.icon) {
+    iconBlobs.set(key, "")
+    const v = new URL(raw, http.url).searchParams.get("v") ?? undefined
+    void http
+      .icon({ projectID, v })
+      .then((bytes) => {
+        const blob = URL.createObjectURL(
+          new Blob([new Uint8Array(bytes)], bytes[0] === 0x3c ? { type: "image/svg+xml" } : undefined),
+        )
+        if (iconBlobs.get(key) !== "") return URL.revokeObjectURL(blob)
+        iconBlobs.set(key, blob)
+        http.onIcon?.(projectID, blob)
+      })
+      .catch(() => undefined)
+  }
+  return { ...icon, url: cached || undefined }
+}
+
+export function normalizeProjectInfo(project: Project | CurrentProject, http?: ProjectIconHttp): Project {
   const worktree = "canonical" in project ? project.canonical : project.worktree
 
   return {
     ...project,
+    icon: resolveProjectIcon(project.id, project.icon, http),
     worktree,
     worktrees: "worktrees" in project ? project.worktrees : [{ directory: worktree }],
   }
 }
 
-export function updateProjectInfo(project: Project, update: CurrentProject): Project {
+export function updateProjectInfo(project: Project, update: CurrentProject, http?: ProjectIconHttp): Project {
   return {
     ...project,
     ...update,
+    icon: resolveProjectIcon(update.id, update.icon, http),
     worktree: update.canonical,
     worktrees: project.worktrees,
   }

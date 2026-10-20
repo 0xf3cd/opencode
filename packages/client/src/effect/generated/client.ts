@@ -168,6 +168,8 @@ import type {
   CredentialRemoveOutput,
   ProjectListInput,
   ProjectListOutput,
+  ProjectIconInput,
+  ProjectIconOutput,
   ProjectUpdateInput,
   ProjectUpdateOutput,
   FormListInput,
@@ -1134,6 +1136,13 @@ const EndpointProjectList = (raw: RawClient["server.project"]) => (input?: Proje
     raw["project.list"]({ query: { archived: input?.["archived"] } }).pipe(Effect.mapError(mapClientError)),
   )
 
+const EndpointProjectIcon = (raw: RawClient["server.project"]) => (input: ProjectIconInput) =>
+  preserveEffect<ProjectIconOutput>()(
+    raw["project.icon"]({ params: { projectID: input["projectID"] }, query: { v: input["v"] } }).pipe(
+      Effect.mapError(mapClientError),
+    ),
+  )
+
 const EndpointProjectUpdate = (raw: RawClient["server.project"]) => (input: ProjectUpdateInput) =>
   preserveEffect<ProjectUpdateOutput>()(
     raw["project.update"]({
@@ -1144,6 +1153,7 @@ const EndpointProjectUpdate = (raw: RawClient["server.project"]) => (input: Proj
 
 const adaptGroupProject = (raw: RawClient["server.project"]) => ({
   list: EndpointProjectList(raw),
+  icon: EndpointProjectIcon(raw),
   update: EndpointProjectUpdate(raw),
 })
 
