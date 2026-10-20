@@ -29,6 +29,7 @@ export function normalizeAction(action: string) {
   if (action === "write" || action === "patch") return "edit"
   if (action === "task") return "subagent"
   if (action === "bash") return "shell"
+  if (action === "todowrite") return "todo"
   return action
 }
 

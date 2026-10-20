@@ -118,7 +118,7 @@ type ToolName =
   | "patch"
   | "batch"
   | "subagent"
-  | "todowrite"
+  | "todo"
   | "question"
   | "read"
   | "glob"
@@ -994,7 +994,7 @@ const TOOL_RULES = {
       final: scrollTaskFinal,
     },
   },
-  todowrite: {
+  todo: {
     view: {
       output: false,
       final: true,

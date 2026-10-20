@@ -44,7 +44,7 @@ describe("TodoTool", () => {
     }),
   )
 
-  it.effect("registers todowrite on the native tool list and summarizes the update", () =>
+  it.effect("registers todo on the native tool list and summarizes the update", () =>
     Effect.gen(function* () {
       const registry = yield* setup(enabled)
       const definition = (yield* toolDefinitions(registry)).find((tool) => tool.name === TodoTool.name)

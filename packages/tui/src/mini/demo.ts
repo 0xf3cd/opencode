@@ -573,7 +573,7 @@ function emitTodo(state: State): void {
     { content: "Tune tool formatting", status: "pending" },
     { content: "Rewrite the renderer", status: "cancelled" },
   ]
-  const ref = make(state, "todowrite", { todos })
+  const ref = make(state, "todo", { todos })
   doneTool(state, ref, { output: "1 completed, 1 in progress, 1 pending, 1 cancelled", metadata: { todos } })
 }
 

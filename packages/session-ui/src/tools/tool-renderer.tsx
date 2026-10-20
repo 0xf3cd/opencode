@@ -1349,7 +1349,7 @@ export function ToolDisplay(
   const data = useData()
   const i18n = useI18n()
 
-  if (props.tool === "todowrite") return null
+  if (props.tool === "todo" || props.tool === "todowrite") return null
   const hideQuestion = () => props.tool === "question" && (props.status === "streaming" || props.status === "running")
 
   const taskId = createMemo(() => {

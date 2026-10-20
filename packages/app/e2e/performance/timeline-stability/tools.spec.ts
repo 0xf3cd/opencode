@@ -48,7 +48,7 @@ test.describe("timeline tool state stability", () => {
     const initial = [
       ...ids.map((id) => toolPart(`prt_state_${id}`, names[id], "streaming", inputs[id])),
       toolPart(questionID, "question", "streaming", questionInput()),
-      toolPart(todoID, "todowrite", "streaming", { todos: [{ content: "Hidden", status: "pending" }] }),
+      toolPart(todoID, "todo", "streaming", { todos: [{ content: "Hidden", status: "pending" }] }),
       textPart("prt_state_following", "Following lightweight tools"),
     ]
 

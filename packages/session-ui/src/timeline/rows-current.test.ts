@@ -725,6 +725,13 @@ describe("current session timeline rows", () => {
           {
             type: "tool",
             id: "tool_todo",
+            name: "todo",
+            state: { status: "running", input: {}, metadata: {} },
+            time: { created: 4 },
+          },
+          {
+            type: "tool",
+            id: "tool_todo_legacy",
             name: "todowrite",
             state: { status: "running", input: {}, metadata: {} },
             time: { created: 4 },

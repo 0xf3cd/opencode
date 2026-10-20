@@ -267,7 +267,7 @@ const CompleteAgentWorkflow = {
             metadata: { files: [storyPatchFile("src/a.ts")] },
           },
         ),
-        storyTool("tool_family_todo", "todowrite", "completed", { todos: [{ content: "Hidden", status: "pending" }] }),
+        storyTool("tool_family_todo", "todo", "completed", { todos: [{ content: "Hidden", status: "pending" }] }),
         storyTool("tool_family_question", "question", "completed", questions, { metadata: { answers: [["Yes"]] } }),
         storyTool("tool_family_skill", "skill", "completed", { name: "stability" }),
         storyTool("tool_family_custom", "custom_mcp_tool", "completed", { target: "timeline" }),
@@ -311,7 +311,7 @@ const RecoverFromToolFailures = {
           storyTool("tool_error_question_transport", "question", "error", questions, {
             error: "Question transport failed",
           }),
-          storyTool("tool_error_todo", "todowrite", "error", { todos: [] }, { error: "Hidden todo failure" }),
+          storyTool("tool_error_todo", "todo", "error", { todos: [] }, { error: "Hidden todo failure" }),
         ])}
         width="860px"
       />

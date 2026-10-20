@@ -4,6 +4,7 @@ import type {
   SessionMessageToolStateCompleted,
 } from "@opencode/client"
 import { isRecord } from "./record"
+import { canonicalToolName } from "./tool-display"
 
 export type TodoStatus = "pending" | "in_progress" | "completed" | "cancelled"
 
@@ -29,7 +30,7 @@ export function todoMarker(status: TodoStatus, ascii = false) {
   return "[ ]"
 }
 
-/** The current list is the input of the latest completed `todowrite` call before the revert boundary. */
+/** The current list is the input of the latest completed `todo` call before the revert boundary. */
 export function sessionTodos(messages: ReadonlyArray<SessionMessageInfo>, boundary?: string): Todo[] {
   const boundaryIndex = boundary ? messages.findIndex((message) => message.id === boundary) : -1
   const tool = messages
@@ -37,7 +38,7 @@ export function sessionTodos(messages: ReadonlyArray<SessionMessageInfo>, bounda
     .flatMap((message) => (message.type === "assistant" ? message.content : []))
     .findLast(
       (item): item is SessionMessageAssistantTool & { state: SessionMessageToolStateCompleted } =>
-        item.type === "tool" && item.name === "todowrite" && item.state.status === "completed",
+        item.type === "tool" && canonicalToolName(item.name) === "todo" && item.state.status === "completed",
     )
   return parseTodos(tool?.state.input.todos)
 }

@@ -11,8 +11,8 @@ const statuses: TodoStatus[] = ["pending", "in_progress", "completed", "cancelle
 
 const initial = [
   { content: "Read the existing sidebar plugins", status: "completed" as TodoStatus },
-  { content: "Derive the current list from the latest todowrite call", status: "in_progress" as TodoStatus },
-  { content: "Render the todowrite tool part like V1", status: "pending" as TodoStatus },
+  { content: "Derive the current list from the latest todo call", status: "in_progress" as TodoStatus },
+  { content: "Render the todo tool part like V1", status: "pending" as TodoStatus },
   { content: "Add a database table for todos", status: "cancelled" as TodoStatus },
 ]
 
@@ -31,8 +31,8 @@ function TodoStory(props: { context: Plugin.Context }) {
       content: [
         {
           type: "tool",
-          id: "fixture-todowrite",
-          name: "todowrite",
+          id: "fixture-todo",
+          name: "todo",
           time: { created: 0, completed: 1 },
           state: {
             status: "completed",
@@ -125,7 +125,7 @@ function TodoStory(props: { context: Plugin.Context }) {
     <box width={dimensions().width} height={dimensions().height} backgroundColor={theme.background.base}>
       <box flexDirection="row" flexGrow={1} paddingTop={1} paddingLeft={2} paddingRight={2} gap={4}>
         <box flexGrow={1} flexDirection="column">
-          <text fg={theme.text.base}>Fixture todowrite input</text>
+          <text fg={theme.text.base}>Fixture todo input</text>
           <box height={1} />
           <For each={todos()}>
             {(todo, index) => (

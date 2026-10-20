@@ -6,9 +6,9 @@ import { Effect, Schema } from "effect"
 import { Config } from "../../config.js"
 import { ConfigEntryObserver } from "../../config/plugin/entry-observer.js"
 import { Permission } from "../../permission.js"
-import DESCRIPTION from "../todowrite.txt"
+import DESCRIPTION from "../todo.txt"
 
-export const name = "todowrite"
+export const name = "todo"
 
 export const Info = Schema.Struct({
   content: Schema.String.annotate({ description: "Brief description of the task" }),

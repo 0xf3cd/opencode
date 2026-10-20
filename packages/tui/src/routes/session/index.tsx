@@ -2472,8 +2472,8 @@ function ToolPart(props: { part: SessionMessageAssistantTool; images?: boolean }
       <Match when={display() === "patch"}>
         <ApplyPatch {...toolprops} />
       </Match>
-      <Match when={display() === "todowrite"}>
-        <TodoWrite {...toolprops} />
+      <Match when={display() === "todo"}>
+        <Todo {...toolprops} />
       </Match>
       <Match when={display() === "question"}>
         <Question {...toolprops} />
@@ -3471,7 +3471,7 @@ function ApplyPatch(props: ToolProps) {
   )
 }
 
-function TodoWrite(props: ToolProps) {
+function Todo(props: ToolProps) {
   const theme = useTheme()
   const todos = createMemo(() => parseTodos(props.input.todos))
   return (
