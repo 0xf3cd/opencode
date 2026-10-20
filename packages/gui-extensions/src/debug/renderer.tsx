@@ -4,14 +4,16 @@ import type Debug from "./index"
 
 const setup: Setup<typeof Debug> = (ctx) => {
   const DebugBar = lazy(() => import("./bar"))
-  // Motion tuning lives only in the debug bar, on the dev server and in Beta. Both are fixed at build time, so other
-  // builds, prod included, drop the import and never contain knobs.
-  const motionTools = import.meta.env.DEV || import.meta.env.VITE_OPENCODE_CHANNEL === "beta"
-  const Motion = motionTools ? lazy(() => import("./motion")) : undefined
+  // Motion tuning and the demo session live only in the debug bar, on the dev server and in Beta. Both are fixed at
+  // build time, so other builds, prod included, drop the imports and never contain knobs.
+  const tools = import.meta.env.DEV || import.meta.env.VITE_OPENCODE_CHANNEL === "beta"
+  const Motion = tools ? lazy(() => import("./motion")) : undefined
+  const Demo = tools ? lazy(() => import("./demo")) : undefined
   // Window-local; every window starts with the bar hidden.
   const [visible, setVisible] = createSignal(false)
 
   const [motion, setMotion] = createSignal(false)
+  const [demo, setDemo] = createSignal(false)
 
   const toggle = () => {
     setVisible((value) => !value)
@@ -19,6 +21,10 @@ const setup: Setup<typeof Debug> = (ctx) => {
 
   const toggleMotion = () => {
     setMotion((value) => !value)
+  }
+
+  const toggleDemo = () => {
+    setDemo((value) => !value)
   }
 
   ctx.add(
@@ -41,6 +47,7 @@ const setup: Setup<typeof Debug> = (ctx) => {
             <DebugBar
               diagnostics={import.meta.env.DEV}
               motion={Motion ? { open: motion(), toggle: toggleMotion } : undefined}
+              demo={Demo ? { open: demo(), toggle: toggleDemo } : undefined}
               inline
             />
           </Suspense>
@@ -50,6 +57,13 @@ const setup: Setup<typeof Debug> = (ctx) => {
           <Show when={visible() && motion()}>
             <Suspense>
               <Motion title={ctx.t("motion.title")} />
+            </Suspense>
+          </Show>
+        )}
+        {Demo && (
+          <Show when={visible() && demo()}>
+            <Suspense>
+              <Demo />
             </Suspense>
           </Show>
         )}
