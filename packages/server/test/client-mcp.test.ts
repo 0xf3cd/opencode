@@ -127,21 +127,37 @@ it.live(
         Effect.runPromise(server.inLocation(registryIDs)).then((ids) => ids.includes("tui_open_terminal")),
       )
 
-      const result = yield* server.inLocation(
-        Mcp.Service.use((mcp) =>
-          mcp.callTool({ server: "tui", name: "open_terminal", sessionID: Session.ID.make("ses_client_mcp") }),
-        ),
-      )
+      const call = (sessionID: string) =>
+        Effect.runPromise(
+          server.inLocation(
+            Mcp.Service.use((mcp) =>
+              mcp.callTool({ server: "tui", name: "open_terminal", sessionID: Session.ID.make(sessionID) }),
+            ),
+          ),
+        )
+      const result = yield* Effect.promise(() => call("ses_client_mcp"))
       expect(result.content).toEqual([{ type: "text", text: "opened" }])
       expect(client.sessions).toEqual(["ses_client_mcp"])
 
-      // The last client to attach a name wins; the replaced socket closes normally.
-      const replacement = yield* connectClient(server.url({ name: "tui" }), { authorization })
-      yield* until(() => client.state.closed)
-      expect(client.state.code).toBe(1000)
-      yield* until(async () => (await tools()).length > 0)
+      // A second client with the same name stacks on top: it takes the calls while the first stays open.
+      const newer = yield* connectClient(server.url({ name: "tui" }), { authorization })
+      yield* until(() => call("ses_newer").then(() => newer.sessions.length > 0))
+      expect(newer.sessions.every((session) => session === "ses_newer")).toBeTrue()
+      expect(client.state.closed).toBeFalse()
 
-      replacement.socket.close()
+      // Once the newest closes, calls fall back to the earlier client.
+      const before = client.sessions.length
+      newer.socket.close()
+      yield* until(() => newer.state.closed)
+      yield* until(() =>
+        call("ses_fallback").then(
+          () => client.sessions.length > before,
+          () => false,
+        ),
+      )
+      expect(client.sessions.at(-1)).toBe("ses_fallback")
+
+      client.socket.close()
       yield* until(async () => (await tools()).length === 0)
       yield* until(() =>
         Effect.runPromise(server.inLocation(registryIDs)).then((ids) => !ids.includes("tui_open_terminal")),
