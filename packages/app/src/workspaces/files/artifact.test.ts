@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test"
-import { fileContentFromBytes, MAX_MEDIA_BYTES } from "./artifact"
+import { fileContentFromBytes, MAX_MEDIA_BYTES, sameFileContent } from "./artifact"
 import { approxBytes } from "./content-cache"
 
 describe("fileContentFromBytes", () => {
@@ -43,5 +43,24 @@ describe("fileContentFromBytes", () => {
 
   test("marks unknown binaries without keeping bytes", () => {
     expect(fileContentFromBytes("a.bin", new Uint8Array([1, 0, 2]))).toEqual({ type: "binary", content: "", size: 3 })
+  })
+})
+
+describe("sameFileContent", () => {
+  test("matches rereads of unchanged text and media", () => {
+    const text = new TextEncoder().encode("const a = 1")
+    expect(sameFileContent(fileContentFromBytes("a.ts", text), fileContentFromBytes("a.ts", text.slice()))).toBe(true)
+
+    const png = new Uint8Array([137, 80, 78, 71])
+    expect(sameFileContent(fileContentFromBytes("a.png", png), fileContentFromBytes("a.png", png.slice()))).toBe(true)
+  })
+
+  test("detects changed content", () => {
+    const before = fileContentFromBytes("a.ts", new TextEncoder().encode("const a = 1"))
+    expect(sameFileContent(before, fileContentFromBytes("a.ts", new TextEncoder().encode("const a = 2")))).toBe(false)
+    expect(sameFileContent(undefined, before)).toBe(false)
+
+    const png = fileContentFromBytes("a.png", new Uint8Array([137, 80, 78, 71]))
+    expect(sameFileContent(png, fileContentFromBytes("a.png", new Uint8Array([137, 80, 78, 72])))).toBe(false)
   })
 })

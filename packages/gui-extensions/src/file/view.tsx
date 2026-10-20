@@ -16,6 +16,8 @@ import ArtifactView from "./artifact-view"
 import { useShared } from "./context"
 import { fileTabPath } from "./path"
 
+const REFRESH_MS = 2000
+
 type FileSelection = { startLine: number; endLine: number; startChar: number; endChar: number }
 
 function selectionFromLines(range: LineRange): FileSelection {
@@ -406,6 +408,32 @@ export function SessionFileView(props: { session: MountedSession; screen: Sessio
       commentsUi.note.openComment(focus.target.id, focus.target.selection, { cancelDraft: true })
       requestAnimationFrame(() => comment.focus.set(null))
     },
+  )
+
+  const [hidden, setHidden] = createSignal(document.visibilityState === "hidden")
+
+  makeEventListener(document, "visibilitychange", () => setHidden(document.visibilityState === "hidden"))
+
+  // The server does not watch workspace files, so the shown file rereads while the window is visible. Unchanged
+  // rereads keep the current content; binary files, which can be large, only reread on agent edits.
+  createKeyed(
+    () => {
+      const p = path()
+
+      if (!p || hidden() || layout.state(key(), props.session) !== "visible") return
+
+      if (current()?.content?.type === "binary") return
+
+      return { path: p }
+    },
+    (target) => {
+      const sync = () => void file.sync(target.path, { force: true, silent: true })
+      const timer = setInterval(sync, REFRESH_MS)
+
+      sync()
+      onCleanup(() => clearInterval(timer))
+    },
+    { equals: (previous, next) => previous?.path === next?.path },
   )
 
   const previous = { loaded: false, ready: false, active: false }

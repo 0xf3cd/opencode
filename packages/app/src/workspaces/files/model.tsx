@@ -4,12 +4,13 @@ import { isFileNotFoundError } from "@opencode/client/promise"
 import { createSimpleContext } from "@opencode/ui/context"
 import { showToast } from "@/shell/notifications/toast"
 import { useParams } from "@solidjs/router"
+import { debounce } from "@solid-primitives/scheduled"
 import { getDirectory, getFilename } from "@opencode/util/path"
 import { useWorkspaceLocation } from "@/workspaces/location"
 import { useLanguage } from "@/runtime/i18n/language"
 import { useExtensionAttachment } from "@/runtime/extension/host-apis"
 import { createPathHelpers } from "./path"
-import { fileContentFromBytes } from "./artifact"
+import { fileContentFromBytes, sameFileContent } from "./artifact"
 import {
   approxBytes,
   evictContentLru,
@@ -30,6 +31,8 @@ import {
   type FileViewState,
   type SelectedLineRange,
 } from "./types"
+
+const REFRESH_MAX_BYTES = 8 * 1024 * 1024
 
 export type { FileSelection, SelectedLineRange, FileViewState, FileState }
 
@@ -186,7 +189,8 @@ export const { use: useFile, provider: FileProvider } = createSimpleContext({
         return pending.promise
       }
 
-      setLoading(file)
+      // A reread keeps what the file shows, its content or the missing file, until the reply lands.
+      if (!current?.loaded && !current?.notFound) setLoading(file)
 
       // Files outside the workspace are read from their own directory, like markdown images.
       // The trailing separator from getDirectory keeps "/" and "C:/" valid, like readLocalImage.
@@ -204,6 +208,9 @@ export const { use: useFile, provider: FileProvider } = createSimpleContext({
         .then((data) => {
           if (scope() !== directory) return
           const content = fileContentFromBytes(file, data)
+
+          if (store.file[file]?.loaded && sameFileContent(store.file[file]?.content, content)) return
+
           setLoaded(file, content)
           touchFileContent(file, approxBytes(content))
           evictContent(new Set([file]))
@@ -278,6 +285,27 @@ export const { use: useFile, provider: FileProvider } = createSimpleContext({
       })
 
       onCleanup(stop)
+    })
+
+    // Agent tools can change any open file; reread them once a burst of tool calls settles. Large media keeps what it
+    // loaded.
+    const refreshOpened = debounce(() => {
+      for (const file of extensions.files.opened()) {
+        const content = store.file[file]?.content
+
+        if (content?.type === "binary" && (content.bytes?.byteLength ?? content.size ?? 0) > REFRESH_MAX_BYTES) continue
+        void load(file, { force: true, silent: true })
+      }
+    }, 250)
+
+    createEffect(() => {
+      const event = sdk().event
+      const stops = [event.on("session.tool.success", refreshOpened), event.on("session.tool.failed", refreshOpened)]
+
+      onCleanup(() => {
+        refreshOpened.clear()
+        stops.forEach((stop) => stop())
+      })
     })
 
     const get = (input: string) => {

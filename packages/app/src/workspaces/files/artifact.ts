@@ -36,3 +36,18 @@ export function fileContentFromBytes(path: string, bytes: Uint8Array): FileConte
 
   return { type: "text", content: new TextDecoder().decode(bytes), mimeType }
 }
+
+const sameBytes = (a: Uint8Array | undefined, b: Uint8Array | undefined) =>
+  a === b || (!!a && !!b && a.length === b.length && a.every((byte, index) => byte === b[index]))
+
+/** Whether a reread found what is already shown, so the viewer can keep its content. */
+export function sameFileContent(a: FileContent | undefined, b: FileContent) {
+  return (
+    !!a &&
+    a.type === b.type &&
+    a.content === b.content &&
+    a.size === b.size &&
+    a.mimeType === b.mimeType &&
+    sameBytes(a.bytes, b.bytes)
+  )
+}
