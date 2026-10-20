@@ -126,6 +126,24 @@ describe("SessionLegacy", () => {
     })
   })
 
+  test("moves a provider compaction's window from providerContext into native", () => {
+    const messages = [{ role: "assistant", content: [{ type: "compaction", provider: "openai", encrypted: "opaque" }] }]
+    const providerContext = { version: 1, provenance: { providerID: "openai" }, messages }
+    expect(
+      SessionLegacy.message("compaction", {
+        status: "completed",
+        summary: "",
+        native: { step: true },
+        providerContext,
+      }),
+    ).toEqual({ status: "completed", summary: "", native: { messages } })
+    expect(SessionLegacy.event("session.compaction.ended", { reason: "auto", text: "", providerContext })).toEqual({
+      reason: "auto",
+      text: "",
+      native: { messages },
+    })
+  })
+
   test("upgrades exported messages before decoding", () => {
     const message = {
       id: "msg_legacy",

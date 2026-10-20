@@ -25,8 +25,8 @@ import type { Workspace } from "@opencode/schema/workspace"
 import type { Instruction } from "@opencode/schema/instruction"
 import type { Snapshot } from "@opencode/schema/snapshot"
 import type { Shell } from "@opencode/schema/shell"
-import type { Provider } from "@opencode/schema/provider"
 import type { Form } from "@opencode/schema/form"
+import type { Provider } from "@opencode/schema/provider"
 import type { Integration } from "@opencode/schema/integration"
 import type { Mcp } from "@opencode/schema/mcp"
 import type { Credential } from "@opencode/schema/credential"
@@ -1119,20 +1119,6 @@ export type SessionLogOutput =
             readonly reason: "auto" | "manual"
             readonly model?: Model.Ref | undefined
             readonly native?: SessionMessage.Native | undefined
-            readonly providerContext?:
-              | {
-                  readonly version: 1
-                  readonly provenance: {
-                    readonly providerID: Provider.ID
-                    readonly provider: string
-                    readonly modelID: string
-                    readonly route: string
-                    readonly protocol: string
-                    readonly endpoint: string
-                  }
-                  readonly messages: Schema.Json
-                }
-              | undefined
             readonly text: string
             readonly cost?: Money.USD | undefined
             readonly tokens?:

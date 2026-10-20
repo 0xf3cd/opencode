@@ -1,5 +1,7 @@
 import { and, asc, desc, eq, gte, lt, or, sql } from "drizzle-orm"
+import { Message } from "@opencode/ai"
 import { Effect, Schema } from "effect"
+import type { Model } from "@opencode/schema/model"
 import { SessionLegacy } from "@opencode/schema/session-legacy"
 import { Database } from "../database/database.js"
 import { MessageDecodeError } from "./error.js"
@@ -7,7 +9,6 @@ import { SessionMessage } from "./message.js"
 import { SessionSchema } from "./schema.js"
 import { Instructions } from "../instructions/index.js"
 import { InstructionState } from "./instruction-state.js"
-import { SessionProviderContext } from "./provider-context.js"
 import { SessionRecentText } from "./recent-text.js"
 import { SessionMessageTable } from "./sql.js"
 
@@ -19,14 +20,24 @@ const decodeSync = Schema.decodeUnknownSync(SessionMessage.Info)
 /**
  * Which completed compactions bound a history read. Local summaries always do. Native
  * windows do for model-neutral readers (`latest`), never for the original transcript
- * (`local`), and only when the target model can replay them (a provenance).
+ * (`local`), and only when the target model can replay them.
  */
-export type Boundary = "latest" | "local" | SessionProviderContext.Provenance
+export type Boundary = "latest" | "local" | Model.Ref
 
+/** A completed provider compaction, which replays `native.messages` instead of a summary. */
+export const isNativeCompaction = (
+  message: SessionMessage.Info,
+): message is SessionMessage.CompactionCompleted & { readonly native: { readonly messages: unknown } } =>
+  message.type === "compaction" && message.status === "completed" && message.native?.messages !== undefined
+
+/** A native compaction's window: canonical AI messages, stored as JSON. */
+export const NativeWindow = Schema.toCodecJson(Schema.Array(Message))
+
+// Like other native data, a window only replays on the model that made it.
 const replayable = (message: SessionMessage.Info, boundary: Boundary) =>
-  !SessionProviderContext.isCheckpoint(message) ||
+  !isNativeCompaction(message) ||
   boundary === "latest" ||
-  (boundary !== "local" && SessionProviderContext.compatible(message.providerContext.provenance, boundary))
+  (boundary !== "local" && message.model?.providerID === boundary.providerID && message.model.id === boundary.id)
 
 export const latestCompaction = Effect.fnUntraced(function* (
   db: DatabaseService,
@@ -44,14 +55,13 @@ export const latestCompaction = Effect.fnUntraced(function* (
         boundary === "latest"
           ? undefined
           : or(
-              sql`json_extract(${SessionMessageTable.data}, '$.providerContext') is null`,
+              // Rows written before v2.1 hold the window in `providerContext`.
+              sql`coalesce(json_extract(${SessionMessageTable.data}, '$.native.messages'), json_extract(${SessionMessageTable.data}, '$.providerContext')) is null`,
               boundary === "local"
                 ? undefined
                 : and(
-                    ...Object.entries(boundary).map(
-                      ([key, value]) =>
-                        sql`json_extract(${SessionMessageTable.data}, ${`$.providerContext.provenance.${key}`}) = ${value}`,
-                    ),
+                    sql`json_extract(${SessionMessageTable.data}, '$.model.providerID') = ${boundary.providerID}`,
+                    sql`json_extract(${SessionMessageTable.data}, '$.model.id') = ${boundary.id}`,
                   ),
             ),
       ),
@@ -74,9 +84,7 @@ export const decodeMessageRowSync = (row: typeof SessionMessageTable.$inferSelec
 export const decodeMessageRow = (row: typeof SessionMessageTable.$inferSelect) =>
   decode(rowInput(row)).pipe(
     Effect.tap((message) =>
-      SessionProviderContext.isCheckpoint(message)
-        ? SessionProviderContext.validate(message.providerContext)
-        : Effect.void,
+      isNativeCompaction(message) ? Schema.decodeUnknownEffect(NativeWindow)(message.native.messages) : Effect.void,
     ),
     Effect.mapError(
       () =>
@@ -112,7 +120,7 @@ const messageEntries = Effect.fnUntraced(function* (
   // Re-expansion may cross a native checkpoint whose completion already advanced the instruction
   // epoch: the baseline supersedes the chronological updates before it. Forks seed their baseline
   // at sequence 0 but retain parent sequences, so the copied checkpoint still retires them.
-  const native = entries.findLast((entry) => SessionProviderContext.isCheckpoint(entry.message))
+  const native = entries.findLast((entry) => isNativeCompaction(entry.message))
   // Skipped native checkpoints are not textual summaries. Their original transcript remains available.
   return entries.filter(
     (entry) =>

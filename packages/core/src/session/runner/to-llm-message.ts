@@ -11,7 +11,7 @@ import type { Model } from "@opencode/schema/model"
 import { Option, Schema } from "effect"
 import { fileURLToPath } from "url"
 import { SessionMessage } from "../message.js"
-import { SessionProviderContext } from "../provider-context.js"
+import { SessionHistory } from "../history.js"
 import { SessionRecentText } from "../recent-text.js"
 import type { FileAttachment } from "@opencode/schema/prompt"
 
@@ -291,8 +291,8 @@ function toLLMMessage(message: SessionMessage.Info, model: Model.Ref, providerMe
     case "compaction": {
       if (message.status !== "completed") return []
       // History selection only keeps native windows the target model can replay.
-      if (SessionProviderContext.isCheckpoint(message))
-        return [...SessionProviderContext.decode(message.providerContext)]
+      if (message.native?.messages !== undefined)
+        return [...Schema.decodeUnknownSync(SessionHistory.NativeWindow)(message.native.messages)]
       const kept = SessionRecentText.kept(message)
       return [
         Message.make({

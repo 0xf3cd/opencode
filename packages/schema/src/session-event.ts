@@ -622,7 +622,6 @@ export namespace Compaction {
       reason: Started.data.fields.reason,
       model: SessionMessage.CompactionCompleted.fields.model,
       native: SessionMessage.CompactionCompleted.fields.native,
-      providerContext: SessionMessage.CompactionCompleted.fields.providerContext,
       text: Schema.String,
       // Repeats the internal `session.usage.recorded` figures: that event never reaches clients, and it
       // stays the accounting source for session totals and stats.

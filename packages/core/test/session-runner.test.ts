@@ -42,7 +42,6 @@ import { SessionCompaction } from "@opencode/core/session/compaction"
 import { SessionInbox } from "@opencode/core/session/inbox"
 import { SessionMessage } from "@opencode/core/session/message"
 import { SessionModelTransport } from "@opencode/core/session/model-transport"
-import { SessionProviderContext } from "@opencode/core/session/provider-context"
 import { Money } from "@opencode/schema/money"
 import { SessionProjector } from "@opencode/core/session/projector"
 import { SessionExecution } from "@opencode/core/session/execution"
@@ -1514,23 +1513,19 @@ describe("SessionRunnerLLM", () => {
       yield* s.runPrompt("Original request")
       s.systemBaseline = "Checkpoint instructions"
       yield* s.runPrompt("Before checkpoint")
-      const target = SessionProviderContext.provenance({
-        model: s.currentModel,
-        ref: Model.Ref.make({
-          id: Model.ID.make(s.currentModel.id),
-          providerID: Provider.ID.make(s.currentModel.provider),
-        }),
-      })
-      if (!target) throw new Error("Expected concrete fixture endpoint")
       const replacement = [
         Message.assistant(CompactionPart.make({ provider: s.currentModel.provider, encrypted: "checkpoint" })),
       ]
-      const providerContext = SessionProviderContext.encode(target, replacement)
+      const native = { messages: JSON.parse(JSON.stringify(replacement)) }
       yield* s.bus.publish(SessionEvent.Compaction.Ended, {
         sessionID,
         reason: "manual",
+        model: Model.Ref.make({
+          id: Model.ID.make(s.currentModel.id),
+          providerID: Provider.ID.make(s.currentModel.provider),
+        }),
         text: "",
-        providerContext,
+        native,
       })
       const checkpoint = (yield* s.messages).find((message) => message.type === "compaction")
       if (!checkpoint) throw new Error("Expected checkpoint")
@@ -1553,7 +1548,7 @@ describe("SessionRunnerLLM", () => {
       ])
       expect(
         (yield* s.session.messages({ sessionID: forked.id })).find((message) => message.type === "compaction"),
-      ).toMatchObject({ providerContext })
+      ).toMatchObject({ native })
 
       const original = s.currentModel
       s.currentModel = LanguageModel.update(original, { id: "different-deployment" })
@@ -1576,18 +1571,7 @@ describe("SessionRunnerLLM", () => {
       expect(s.requests.at(-1)?.messages[0]?.content).toEqual([Message.text("Original request")])
       expect(
         (yield* s.session.messages({ sessionID: forked.id })).find((message) => message.type === "compaction"),
-      ).toMatchObject({ providerContext })
-
-      const hooks = yield* PluginHooks.Service
-      yield* hooks.register("session", "model.request", (event) =>
-        Effect.sync(() => {
-          event.baseURL = "https://another-deployment.example/v1"
-        }),
-      )
-      const before = s.requests.length
-      yield* s.session.prompt({ sessionID: forked.id, text: "Changed route", resume: false })
-      expect(yield* s.session.resume(forked.id).pipe(Effect.exit)).toMatchObject({ _tag: "Failure" })
-      expect(s.requests).toHaveLength(before)
+      ).toMatchObject({ native })
     },
   )
 
@@ -2601,10 +2585,10 @@ describe("SessionRunnerLLM", () => {
         expect(compact.system.map((part) => part.text)).toContain("Review the project carefully.")
         expect(requestAgents[2]).toBe(agentID)
         expect(s.executions).toEqual(["x".repeat(4_000)])
-        expect((yield* s.messages).find((message) => message.type === "compaction")).toMatchObject({
-          model: { id: s.currentModel.id, providerID: s.currentModel.provider, variant },
-          native: { responseId: "summary" },
-        })
+        const stored = (yield* s.messages).find((message) => message.type === "compaction")
+        expect(stored).toMatchObject({ model: { id: s.currentModel.id, providerID: s.currentModel.provider, variant } })
+        // The summary call's provider metadata is never replayed, so it is not stored.
+        expect(stored).not.toHaveProperty("native")
 
         // Compare wire content without the cache breakpoints that move to the new final message.
         const before = yield* compileRequest(LLMRequest.update(normal, { cache: "none" }))
@@ -3209,7 +3193,7 @@ describe("SessionRunnerLLM", () => {
     expect(s.executions).toEqual(["continue"])
     expect(JSON.stringify(s.requests[2].messages)).toContain("first")
     const installed = (yield* s.messages).filter((message) => message.type === "compaction")
-    expect(installed).toMatchObject([{ status: "completed", reason: "auto", providerContext: { version: 1 } }])
+    expect(installed).toMatchObject([{ status: "completed", reason: "auto", native: { messages: expect.any(Array) } }])
     // New input without a post-checkpoint usage anchor must not retrigger compaction.
     yield* s.llm.push(TestLLM.textWithUsage("Measured", "measured", 10_000))
     yield* s.runPrompt("Third real request")
@@ -3258,7 +3242,7 @@ describe("SessionRunnerLLM", () => {
     expect(JSON.stringify(s.requests[2].messages)).toContain("recovered-window")
     expect(JSON.stringify(s.requests[2].messages)).not.toContain('"encrypted":"native-window"')
     expect(yield* s.context).toMatchObject([
-      { type: "compaction", status: "completed", providerContext: { version: 1 } },
+      { type: "compaction", status: "completed", native: { messages: expect.any(Array) } },
       { type: "assistant" },
     ])
   })

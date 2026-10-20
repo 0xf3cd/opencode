@@ -2,9 +2,10 @@ export * as SessionLegacy from "./session-legacy.js"
 
 /**
  * Storage and wire compatibility for current-architecture data written before v2.1 (not V1 contracts). Native data
- * was then named `state` or `providerState`, a tool's result native data `resultState` or `providerResultState`, and
- * summary compactions stored the text of the messages they kept in `recent`. Stored events, projected messages, and
- * exported transcripts keep whichever shape they were written with, so these upgrade them before decoding.
+ * was then named `state` or `providerState`, a tool's result native data `resultState` or `providerResultState`,
+ * summary compactions stored the text of the messages they kept in `recent`, and provider compactions stored their
+ * replacement window in `providerContext`. Stored events, projected messages, and exported transcripts keep whichever
+ * shape they were written with, so these upgrade them before decoding.
  */
 
 const renames: Record<string, readonly [string, string]> = {
@@ -24,7 +25,8 @@ export function event(type: string, data: unknown) {
   if (type === "session.message.content.updated") return content(data)
   // Messages carry a legacy compaction's kept text; its events have no reader for it.
   if (type === "session.compaction.started") return omit(data, "recent")
-  if (type === "session.compaction.ended") return omit(rename(data, "providerState", "native"), "recent")
+  if (type === "session.compaction.ended")
+    return providerContext(omit(rename(data, "providerState", "native"), "recent"))
   const entry = renames[type]
   return entry ? rename(data, entry[0], entry[1]) : data
 }
@@ -32,7 +34,7 @@ export function event(type: string, data: unknown) {
 /** Upgrades a projected message's data by message type. */
 export function message(type: unknown, data: Record<string, unknown>) {
   if (type === "assistant") return content(rename(data, "providerState", "native"))
-  if (type === "compaction") return recent(rename(data, "providerState", "native"))
+  if (type === "compaction") return providerContext(recent(rename(data, "providerState", "native")))
   return data
 }
 
@@ -61,6 +63,31 @@ function recent(data: Record<string, unknown>) {
   if (typeof text !== "string" || !text) return rest
   const metadata = isRecord(rest.metadata) ? rest.metadata : {}
   return { ...rest, metadata: { recent: text, ...metadata } }
+}
+
+/** The window moves to `native.messages`; the `native` stored beside it was never replayed. */
+function providerContext(data: Record<string, unknown>) {
+  const context = data.providerContext
+  const rest = omit(data, "providerContext")
+  if (!isRecord(context)) return rest
+  return {
+    ...rest,
+    native: { messages: Array.isArray(context.messages) ? context.messages.map(media) : context.messages },
+  }
+}
+
+/** Before 2.0.15, window media parts stored `mediaType` and base64 `data` directly. */
+function media(message: unknown) {
+  if (!isRecord(message) || !Array.isArray(message.content)) return message
+  return {
+    ...message,
+    content: message.content.map((part: unknown) => {
+      if (!isRecord(part) || part.type !== "media" || part.media !== undefined || typeof part.data !== "string")
+        return part
+      const { mediaType, data, ...rest } = part
+      return { ...rest, media: { source: { type: "base64", data, mediaType } } }
+    }),
+  }
 }
 
 function omit(value: Record<string, unknown>, key: string) {

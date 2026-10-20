@@ -1,7 +1,6 @@
 export * as SessionMessage from "./session-message.js"
 
 import { Schema } from "effect"
-import { SessionProviderContext } from "./session-provider-context.js"
 import { optional } from "./schema.js"
 import { Content } from "./tool.js"
 import { Location } from "./location.js"
@@ -261,9 +260,9 @@ export const CompactionCompleted = Schema.Struct({
   status: Schema.tag("completed"),
   reason: Schema.Literals(["auto", "manual"]),
   model: Model.Ref.pipe(optional),
+  /** A provider compaction stores its replacement window in `native.messages`, replayed instead of `summary`. */
   native: Native.pipe(optional),
   summary: Schema.String,
-  providerContext: SessionProviderContext.Info.pipe(optional),
   ...CompactionUsage,
 }).annotate({ identifier: "Session.Message.Compaction.Completed" })
 

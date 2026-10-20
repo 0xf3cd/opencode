@@ -31,7 +31,6 @@ import { SessionEvent } from "./event.js"
 import { SessionHistory } from "./history.js"
 import type { SessionMessage } from "./message.js"
 import { SessionModelRequest } from "./model-request.js"
-import { SessionProviderContext } from "./provider-context.js"
 import { SessionRunnerModel } from "./runner/model.js"
 import { SessionRunnerRetry } from "./runner/retry.js"
 import { toLLMMessages } from "./runner/to-llm-message.js"
@@ -71,13 +70,11 @@ export class Service extends Context.Service<Service, Interface>()("@opencode/Se
 
 /**
  * A summary fills `text`, and references the messages it keeps verbatim with `metadata.keepID`; history
- * rebuilds their text from that. A native compaction fills `providerContext`.
+ * rebuilds their text from that. A native compaction fills `native.messages` with its replacement window.
  */
 type Result = {
   readonly text: string
-  // todo: consolidate these 2
   readonly native?: SessionMessage.Native
-  readonly providerContext?: SessionProviderContext.Info
   readonly metadata?: Record<string, unknown>
 }
 
@@ -89,7 +86,6 @@ type Prepared = Effect.Success<ReturnType<SessionModelRequest.Interface["compact
 
 type Streamed = {
   readonly text: string
-  readonly native?: SessionMessage.Native
 }
 
 const NOTHING_TO_COMPACT: Failure = { error: { type: "compaction.unavailable", message: "Nothing to compact yet" } }
@@ -253,7 +249,7 @@ export const layer = Layer.effect(
       if (last?.type === "compaction" && last.status === "completed") return false
       // An encrypted native window estimates as nothing, so wait for a response to measure it.
       const measured = messages.findLastIndex((message) => hasMeasuredPrompt(message, context.model.ref))
-      if (measured < messages.findLastIndex(SessionProviderContext.isCheckpoint)) return false
+      if (measured < messages.findLastIndex(SessionHistory.isNativeCompaction)) return false
       return estimateContext(context) >= ceiling
     }
 
@@ -345,7 +341,7 @@ export const layer = Layer.effect(
      *   [U U][item][new messages…]
      *
      * window = the previous compaction and everything since. item = one encrypted compaction item, which only
-     * replays on the endpoint that made it. U = a user message as typed.
+     * replays on the model that made it. U = a user message as typed.
      */
     const compactNatively = Effect.fnUntraced(function* (
       trigger: Trigger,
@@ -358,21 +354,12 @@ export const layer = Layer.effect(
         Effect.fail<Failure>({ error: { type: "provider.unsupported-operation", message } })
       const prepared = yield* prepare(context, context.messages, budget, "session")
 
-      // History is selected before request hooks, so a hook that reroutes the request cannot be honored here.
-      const provenance = SessionProviderContext.provenance(context.model)
-      if (!provenance) return yield* unsupported("Provider compaction requires a stable, configured endpoint")
-      const routed = SessionProviderContext.provenance({ model: prepared.request.model, ref: context.model.ref })
-      if (!SessionProviderContext.compatible(provenance, routed)) {
-        return yield* unsupported(
-          "Provider compaction requires the endpoint in provider/model settings, not a model.request rewrite",
-        )
-      }
-
       const toResult = (window: ReadonlyArray<Message>, usage: Usage | undefined) =>
         spend(context.session.id, usage && SessionUsage.record(usage, context.model.cost)).pipe(
           Effect.as<Result>({
             text: "",
-            providerContext: SessionProviderContext.encode(provenance, window),
+            // Plain JSON, not the schema encoder: provider metadata can hold undefined entries, which it rejects.
+            native: { messages: JSON.parse(JSON.stringify(window)) },
           }),
         )
 
@@ -504,7 +491,7 @@ export const layer = Layer.effect(
             (previous !== undefined && message.id === previous.id) ||
             message.content.some((part) => part.type === "compaction"),
         ) + 1
-      const summary = previous !== undefined && !SessionProviderContext.isCheckpoint(previous) ? previous : undefined
+      const summary = previous !== undefined && !SessionHistory.isNativeCompaction(previous) ? previous : undefined
       // TODO: Read the previous summary from the hooked request once it no longer merges summary and recent into one
       // message. Until then it is rebuilt from storage, which drops a compaction hook's edits to that message.
       const lead = summary
@@ -540,7 +527,6 @@ export const layer = Layer.effect(
 
     const stream = (context: SessionContext.Loaded, request: LLMRequest, options: StreamOptions) => {
       const sessionID = context.session.id
-      const metadataKey = context.model.model.route.providerMetadataKey ?? context.model.model.provider
       const unusable = (error: SessionError.Error) => Effect.fail<Failure>({ error })
 
       return llm.stream(request, options).pipe(
@@ -564,9 +550,7 @@ export const layer = Layer.effect(
             }
 
             if (LLMEvent.is.stepFinish(event)) {
-              return spend(sessionID, SessionUsage.record(event.usage, context.model.cost)).pipe(
-                Effect.as({ ...streamed, native: event.providerMetadata?.[metadataKey] }),
-              )
+              return spend(sessionID, SessionUsage.record(event.usage, context.model.cost)).pipe(Effect.as(streamed))
             }
 
             if (!LLMEvent.is.finish(event)) return Effect.succeed(streamed)
@@ -681,7 +665,6 @@ export const layer = Layer.effect(
           reason,
           model: context.model.ref,
           native: outcome.native,
-          providerContext: outcome.providerContext,
           text: outcome.text,
           ...usage,
         },
