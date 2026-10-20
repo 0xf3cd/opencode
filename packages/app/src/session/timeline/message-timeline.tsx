@@ -111,7 +111,11 @@ export function MessageTimeline(props: MessageTimelineProps) {
   }
 
   return (
-    <MessageTimelineView {...props} data={controller.data} action={controller.action} pending={controller.pending} />
+    <Show when={controller.data.sessionID()} keyed>
+      {() => (
+        <MessageTimelineView {...props} data={controller.data} action={controller.action} pending={controller.pending} />
+      )}
+    </Show>
   )
 }
 
