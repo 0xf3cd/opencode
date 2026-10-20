@@ -1,6 +1,6 @@
 import { Mcp } from "@opencode/schema/mcp"
 import { Location } from "@opencode/schema/location"
-import { PtyTicket } from "@opencode/schema/pty-ticket"
+import { ConnectTicket } from "@opencode/schema/connect-ticket"
 import { Schema } from "effect"
 import { HttpApiEndpoint, HttpApiGroup, HttpApiSchema, OpenApi } from "effect/http-api"
 import { ForbiddenError, McpServerNotFoundError } from "../errors.js"
@@ -117,7 +117,7 @@ export const McpGroup = HttpApiGroup.make("server.mcp")
     HttpApiEndpoint.post("mcp.clientToken", `${MCP_CLIENT_PATH}/token`, {
       query: McpClientQuery,
       headers: Schema.Struct({ [PTY_CONNECT_TOKEN_HEADER]: Schema.optional(Schema.String) }),
-      success: Location.response(PtyTicket.ConnectToken),
+      success: Location.response(ConnectTicket.Token),
       error: ForbiddenError,
     })
       .annotateMerge(locationQueryOpenApi)
