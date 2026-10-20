@@ -38,9 +38,10 @@ export const { use: useSessionTerminals, provider: SessionTerminalsProvider } = 
       })
     }
 
-    const selectTerminal = async (sessionID: string, ptyID: string | null) => {
+    // `focus: false` shows the terminal without moving keyboard focus into it, for terminals the user didn't open.
+    const selectTerminal = async (sessionID: string, ptyID: string | null, options?: { focus?: boolean }) => {
       if (ptyID !== null && !terminals[sessionID]?.some((terminal) => terminal.id === ptyID)) return
-      setFocus(ptyID ?? undefined)
+      if (options?.focus !== false) setFocus(ptyID ?? undefined)
       await update((draft) => {
         draft.sessions[sessionID] = ptyID
       })
@@ -88,7 +89,7 @@ export const { use: useSessionTerminals, provider: SessionTerminalsProvider } = 
       },
       refresh,
       selectTerminal,
-      async newTerminal(sessionID: string): Promise<PersistentPtyInfo> {
+      async newTerminal(sessionID: string, options?: { focus?: boolean }): Promise<PersistentPtyInfo> {
         const session = data.session.get(sessionID)
         const terminal = await client.api.experimental.persistentPty.create({
           sessionID,
@@ -98,7 +99,7 @@ export const { use: useSessionTerminals, provider: SessionTerminalsProvider } = 
           env: {},
         })
         await refresh(sessionID)
-        await selectTerminal(sessionID, terminal.id)
+        await selectTerminal(sessionID, terminal.id, options)
         return terminal
       },
       shouldFocus(ptyID: string) {
