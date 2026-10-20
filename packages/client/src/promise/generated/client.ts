@@ -151,6 +151,8 @@ import type {
   McpDisconnectOutput,
   McpResourceCatalogInput,
   McpResourceCatalogOutput,
+  McpClientTokenInput,
+  McpClientTokenOutput,
   CredentialListOutput,
   CredentialCreateInput,
   CredentialCreateOutput,
@@ -1432,6 +1434,21 @@ export function make(options: ClientOptions) {
               query: { location: input?.["location"] },
               successStatus: 200,
               declaredStatuses: [400, 401, 404],
+              empty: false,
+            },
+            requestOptions,
+          ),
+      },
+      client: {
+        token: (input: McpClientTokenInput, requestOptions?: RequestOptions) =>
+          request<McpClientTokenOutput>(
+            {
+              method: "POST",
+              path: `/api/experimental/client-mcp/token`,
+              query: { location: input["location"], name: input["name"] },
+              headers: { "x-opencode-ticket": input["x-opencode-ticket"] },
+              successStatus: 200,
+              declaredStatuses: [400, 401, 403, 404],
               empty: false,
             },
             requestOptions,
