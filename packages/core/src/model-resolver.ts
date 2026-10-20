@@ -370,12 +370,9 @@ export const layer = Layer.effect(
     const npm = yield* Npm.Service
     const aisdk = yield* AISDK.Service
     const load = Effect.fn("ModelResolver.resolveModel")(function* (selected: Info, variant?: VariantID) {
-      const snapshot = yield* providers.snapshot()
-      const record = snapshot.records.get(selected.providerID)
-      const provider = record?.provider
+      const provider = yield* providers.get(selected.providerID)
       const publicFallback = Boolean(
         Provider.isPublicFallback(provider) &&
-          !record?.sourceConnection &&
           provider?.settings?.apiKey === "public" &&
           selected.enabled &&
           !selected.cost.some((cost) => cost.input > 0),
