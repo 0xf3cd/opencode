@@ -1,4 +1,4 @@
-import { createEffect, createMemo, createSignal, on, onCleanup, Show, type Accessor, type JSX } from "solid-js"
+import { createComputed, createEffect, createMemo, createSignal, on, onCleanup, Show, type Accessor, type JSX } from "solid-js"
 import { createStore } from "solid-js/store"
 import { Predicate } from "effect"
 import { createAnimatedPresence } from "@/runtime/animated-presence"
@@ -21,6 +21,7 @@ import { createSessionTimelineRowRenderer } from "@opencode/session-ui/timeline/
 import { getReadyMarkdown, preloadMarkdown } from "@opencode/session-ui/markdown-cache"
 import { createTimelineController, type TimelineController, type TimelineSessionSource } from "./controller"
 import { createTimelineVirtualizer } from "./virtualizer"
+import { leaveInPlace } from "./leave"
 import { containsDirectory } from "@opencode/util/path"
 import { isWorkspaceDirectory } from "@/workspaces/paths"
 import { parseCommentNote, readPromptPresentation } from "@/composer/comment-note"
@@ -110,8 +111,18 @@ export function MessageTimeline(props: MessageTimelineProps) {
     }
   }
 
+  // Motion state belongs to one session; another one starts from a fresh view.
   return (
-    <MessageTimelineView {...props} data={controller.data} action={controller.action} pending={controller.pending} />
+    <Show when={controller.data.sessionID()} keyed>
+      {(_id) => (
+        <MessageTimelineView
+          {...props}
+          data={controller.data}
+          action={controller.action}
+          pending={controller.pending}
+        />
+      )}
+    </Show>
   )
 }
 
@@ -408,9 +419,21 @@ function MessageTimelineView(
 
   // Undelivered input waits below the work the model has seen, so live status moves into the row above it.
   const activityRow = createMemo(() => projection.rows().some((row) => Predicate.isTagged(row, "Activity")))
-  // Working fades in where it moves to, instead of appearing there at once.
+  // Working fades in where it moves to, instead of appearing there at once, and the one it leaves fades where it was.
+  // This runs before the move renders, while the old one is still on screen.
   let movedAt = -Infinity
-  createEffect(on(activityRow, () => (movedAt = performance.now()), { defer: true }))
+  createComputed(
+    on(
+      activityRow,
+      () => {
+        movedAt = performance.now()
+        const element = workingRef()
+
+        if (element?.isConnected && workingPresence.show() && !prefersReducedMotion()) leaveInPlace(element)
+      },
+      { defer: true },
+    ),
+  )
 
   // The lane keeps its height while empty, so Working and the hint come and go without moving the rows around it.
   const activity = () => (
@@ -426,10 +449,12 @@ function MessageTimelineView(
             ref={(element) => {
               setWorkingRef(element)
 
-              if (performance.now() - movedAt < 100 && !prefersReducedMotion()) enter(element, { duration: 150 })
+              // After the copy it replaces has faded, so two never show at once.
+              if (performance.now() - movedAt < 100) enter(element, { duration: 150, delay: 110 })
             }}
             data-component="session-working"
             role="status"
+            class="motion-reduce:animate-none"
             classList={{
               "animate-in fade-in duration-150 ease-[cubic-bezier(.2,.8,.2,1)]":
                 workingPresence.animate() && workingPresence.show(),
