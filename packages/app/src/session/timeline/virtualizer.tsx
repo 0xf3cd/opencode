@@ -141,14 +141,13 @@ export function createTimelineVirtualizer(input: Input) {
 
     if (!previous || !active() || !following()) return next
     const keys = new Set(next.map(TimelineRow.key))
+    keys.forEach((key) => gone.delete(key))
     const result = [...next]
 
     previous.forEach((row, index) => {
       const key = TimelineRow.key(row)
 
       if (keys.has(key)) {
-        gone.delete(key)
-
         if (exiting.delete(key))
           queueMicrotask(() => {
             const element = virtualizer.elementsCache.get(key)
@@ -459,13 +458,18 @@ export function createTimelineVirtualizer(input: Input) {
 
     holdSpace(Math.round(lift * 64) / 64)
 
-    if (root && endBefore && input.pinned()) {
-      const offset = Math.max(0, topOffset() + total + bottomInset() + heldSpace - root.clientHeight)
-      root.scrollTop = offset
-      // Native scroll offsets round to device pixels. Keep that rounding out of the drawn row edges.
+    if (root && endBefore && input.pinned()) pinEnd()
+  }
 
-      if (virtualContent) virtualContent.style.translate = `0 ${Math.round((root.scrollTop - offset) * 64) / 64}px`
-    }
+  function pinEnd() {
+    const root = listRoot()
+
+    if (!root) return
+    const offset = Math.max(0, topOffset() + virtualizer.getTotalSize() + bottomInset() + heldSpace - root.clientHeight)
+    root.scrollTop = offset
+    // Native scroll offsets round to device pixels. Both row growth and composer
+    // growth keep that rounding out of the drawn row edges.
+    if (virtualContent) virtualContent.style.translate = `0 ${Math.round((root.scrollTop - offset) * 64) / 64}px`
   }
 
   const holdSpace = (space: number) => {
@@ -479,6 +483,10 @@ export function createTimelineVirtualizer(input: Input) {
   // Lands every growing row and closes any gap or space held at the end at once.
   const landGrowth = () => {
     growth.finish()
+    if (exiting.size) {
+      setRetired((value) => new Set([...value, ...exiting.keys()]))
+      exiting.clear()
+    }
     ride = undefined
     lift = 0
     holdSpace(0)
@@ -487,7 +495,11 @@ export function createTimelineVirtualizer(input: Input) {
 
   const commitSize = (index: number, key: string, size: number) => {
     const measured = virtualizer.itemSizeCache.get(key)
+    const arriving = measured === undefined && arrivals.has(key)
     const shown = measured ?? (arrivals.delete(key) ? 0 : undefined)
+
+    if (arriving && !coldPending && prefersReducedMotion())
+      virtualizer.elementsCache.get(key)?.animate([{ opacity: 0 }, { opacity: 1 }], { duration: 110 })
 
     if (shown === undefined || !grows(index, shown, size)) {
       if (growth.target(key) !== undefined) return growth.land(key, size)
@@ -833,7 +845,7 @@ export function createTimelineVirtualizer(input: Input) {
         reportRect?.(rootRect ?? { width: root.offsetWidth, height: root.offsetHeight })
 
         // The composer region moved its edge: the followed end rides it in the same frame.
-        if (input.pinned()) queueMicrotask(() => (root.scrollTop = root.scrollHeight - root.clientHeight))
+        if (input.pinned()) queueMicrotask(pinEnd)
       },
       { defer: true },
     ),

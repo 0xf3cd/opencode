@@ -103,7 +103,7 @@ export function SessionActivityChips(props: {
             type="button"
             ref={setChip}
             data-slot="session-activity-chip"
-            class="pointer-events-auto flex h-7 min-w-0 max-w-full items-center gap-1.5 rounded-full border border-v2-border-border-base bg-v2-background-bg-base ps-2 pe-2.5 text-[13px] font-[530] leading-text-compact tracking-[-0.04px] whitespace-nowrap tabular-nums text-v2-text-text-base shadow-[var(--v2-elevation-raised)] outline-none duration-150 ease-out motion-reduce:animate-none hover:bg-v2-background-bg-layer-01 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-v2-border-border-focus"
+            class="pointer-events-auto flex h-7 min-w-0 max-w-full items-center gap-1.5 rounded-full border border-v2-border-border-base bg-v2-background-bg-base ps-2 pe-2.5 text-[13px] font-[530] leading-text-compact tracking-[-0.04px] whitespace-nowrap tabular-nums text-v2-text-text-base shadow-[var(--v2-elevation-raised)] outline-none duration-150 ease-out hover:bg-v2-background-bg-layer-01 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-v2-border-border-focus"
             classList={{
               "animate-in fade-in": enter() && active(),
               "animate-out fade-out fill-mode-forwards duration-[110ms] ease-[cubic-bezier(.4,0,1,1)]": !active(),

@@ -402,18 +402,17 @@ function MessageTimelineView(
 
   // The lane keeps its height while empty, so Working and the hint come and go without moving the rows around it.
   function ActivityLane() {
-    const [workingRef, setWorkingRef] = createSignal<HTMLDivElement>()
-    const [backgroundHintRef, setBackgroundHintRef] = createSignal<HTMLDivElement>()
+    const [refs, setRefs] = createStore<{ working?: HTMLDivElement; backgroundHint?: HTMLDivElement }>({})
     // Each location owns its exit. Relocating status must not detach the fading
     // lane's observer or remove its content before its parent has disappeared.
     const workingPresence = createAnimatedPresence(
       () => (showWorking() ? true : undefined),
-      () => workingRef() ?? null,
+      () => refs.working ?? null,
       sessionID,
     )
     const backgroundHintPresence = createAnimatedPresence(
       backgroundHintPartID,
-      () => backgroundHintRef() ?? null,
+      () => refs.backgroundHint ?? null,
       sessionID,
       1000,
     )
@@ -429,7 +428,7 @@ function MessageTimelineView(
           <Show when={workingPresence.present()}>
             <div
               ref={(element) => {
-                setWorkingRef(element)
+                setRefs("working", element)
 
                 if (performance.now() - movedAt < 100 && !prefersReducedMotion()) enter(element, { duration: 150 })
               }}
@@ -447,9 +446,9 @@ function MessageTimelineView(
           </Show>
           <Show when={backgroundHintPresence.present()}>
             <div
-              ref={setBackgroundHintRef}
+              ref={(element) => setRefs("backgroundHint", element)}
               data-component="session-background-hint-row"
-              class="duration-150 motion-reduce:animate-none"
+              class="duration-150"
               classList={{
                 "animate-in fade-in": backgroundHintPresence.animate() && backgroundHintPresence.show(),
                 "animate-out fade-out fill-mode-forwards":
