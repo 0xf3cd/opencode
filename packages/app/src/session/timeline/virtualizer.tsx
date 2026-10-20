@@ -263,6 +263,7 @@ export function createTimelineVirtualizer(input: Input) {
   // The list root's last observed size; the composer region moving its edge does not resize it.
   let rootRect: { width: number; height: number } | undefined
   let batchingColdSizes = false
+  let coldPending = coldBottomMount
 
   const virtualizer = createVirtualizer<HTMLDivElement, HTMLDivElement>({
     get count() {
@@ -838,7 +839,6 @@ export function createTimelineVirtualizer(input: Input) {
     ),
   )
 
-  let coldPending = coldBottomMount
   let settleQueued = false
   let contentObserver: MutationObserver | undefined
   let viewportObserver: ResizeObserver | undefined
