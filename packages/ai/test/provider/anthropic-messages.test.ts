@@ -2219,9 +2219,9 @@ describe("Anthropic Messages route", () => {
     }),
   )
 
-  it.effect("rejects round-trip for unknown server tool names", () =>
+  it.effect("keeps unknown server tool results as readable history", () =>
     Effect.gen(function* () {
-      const error = yield* compileRequest(
+      const prepared = yield* compileRequest(
         LLM.request({
           id: "req_unknown_server_tool",
           model,
@@ -2237,9 +2237,11 @@ describe("Anthropic Messages route", () => {
             ]),
           ],
         }),
-      ).pipe(Effect.flip)
+      )
 
-      expect(error.message).toContain("future_server_tool")
+      expect(prepared.body.messages).toMatchObject([
+        { role: "assistant", content: [{ type: "text", text: "Provider tool future_server_tool returned:\n{}" }] },
+      ])
     }),
   )
 

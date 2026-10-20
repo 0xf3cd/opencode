@@ -616,6 +616,24 @@ const lowerServerToolResult = Effect.fnUntraced(function* (part: ToolResultPart,
   } satisfies AnthropicServerToolResultBlock
 })
 
+const canReplayServerTool = (part: ToolCallPart | ToolResultPart, providerMetadataKey: string) => {
+  const wireType = serverToolResultType(part.name)
+  if (!wireType) return false
+  if (part.type === "tool-call") return true
+  if (part.providerMetadata?.[providerMetadataKey]?.["result"] !== undefined) return true
+  // Direct AI callers can replay raw native blocks without the metadata Core uses to retain them.
+  if (part.result.type !== "json") return false
+  const value = part.result.value
+  if (Array.isArray(value)) return true
+  if (!ProviderShared.isRecord(value)) return false
+  if (value.type === `${wireType}_error`) return true
+  if (part.name === "web_fetch") return value.type === "web_fetch_result"
+  return (
+    part.name === "code_execution" &&
+    (value.type === "code_execution_result" || value.type === "encrypted_code_execution_result")
+  )
+}
+
 const fileIdFromMetadata = (metadata: MediaPart["metadata"]): string | undefined => {
   if (!ProviderShared.isRecord(metadata)) return undefined
   const anthropic = metadata.anthropic
@@ -872,6 +890,9 @@ const appendToUserTurn = (messages: AnthropicMessage[], block: AnthropicUserBloc
 const lowerMessages = Effect.fnUntraced(function* (request: LLMRequest, breakpoints: Cache.Breakpoints) {
   const messages: AnthropicMessage[] = []
   const providerMetadataKey = request.model.route.providerMetadataKey ?? String(request.model.provider)
+  const history = ProviderShared.hostedToolHistory(request.messages, (part) =>
+    canReplayServerTool(part, providerMetadataKey),
+  )
   // Text updates stay where they are unless a user turn follows them; then they move after the latest
   // user turn, the nearest spot where Anthropic accepts a native system message.
   const holdUpdates = supportsNativeSystemUpdates(request)
@@ -884,7 +905,7 @@ const lowerMessages = Effect.fnUntraced(function* (request: LLMRequest, breakpoi
     }
   })
 
-  for (const [index, message] of request.messages.entries()) {
+  for (const [index, message] of history.entries()) {
     if (message.role === "system") {
       const update = effortUpdate(message)
       if (update) {
@@ -892,7 +913,7 @@ const lowerMessages = Effect.fnUntraced(function* (request: LLMRequest, breakpoi
         messages.push({ role: "system", content: [], output_config: { effort: update.effort ?? DEFAULT_EFFORT } })
         continue
       }
-      if (splitsLocalToolResults(request.messages, index))
+      if (splitsLocalToolResults(history, index))
         return yield* invalid("Anthropic Messages system updates cannot split a local tool call from its tool result")
       if (holdUpdates) held.push(message)
       else appendToUserTurn(messages, yield* lowerWrappedSystemUpdate(message, breakpoints))

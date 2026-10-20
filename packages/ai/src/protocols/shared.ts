@@ -17,6 +17,7 @@ import {
   type RequestEncoding,
   type TextPart,
   type ToolEntry,
+  type ToolCallPart,
   type ToolResultPart,
 } from "../schema/index.js"
 import { Json, decodeJson, encodeJson } from "../utils/json.js"
@@ -278,6 +279,60 @@ export const toolResultText = (part: ToolResultPart) => {
     return structured && isJson(value) ? encodeJson(value) : String(value)
   }
   return encodeJson(part.result.value)
+}
+
+/** Keep unsupported hosted history readable without emitting a client tool call that cannot be answered. */
+export function hostedToolHistory(
+  messages: ReadonlyArray<Message>,
+  supports: (part: ToolCallPart | ToolResultPart) => boolean = () => false,
+) {
+  const fallback = new Set(
+    messages
+      .filter((message) => message.role === "assistant")
+      .flatMap((message) =>
+        message.content.flatMap((part) =>
+          (part.type === "tool-call" || part.type === "tool-result") && part.providerExecuted && !supports(part)
+            ? [part.id]
+            : [],
+        ),
+      ),
+  )
+  if (fallback.size === 0) return messages
+  const output: Message[] = []
+  const media: MediaPart[] = []
+  const flush = () => {
+    if (media.length > 0) output.push(Message.user(media.splice(0)))
+  }
+  for (const message of messages) {
+    // Keep local tool calls and their answers adjacent; attachments follow the tool-result group.
+    if (message.role !== "tool") flush()
+    if (message.role !== "assistant") {
+      output.push(message)
+      continue
+    }
+    const content = message.content.flatMap((part): ContentPart[] => {
+      if (
+        (part.type !== "tool-call" && part.type !== "tool-result") ||
+        !part.providerExecuted ||
+        !fallback.has(part.id)
+      )
+        return [part]
+      if (part.type === "tool-call")
+        return [{ type: "text", text: `Provider tool ${part.name} called with: ${encodeJson(part.input)}` }]
+      if (part.result.type === "content") {
+        const text = part.result.value.flatMap((item) => {
+          if (item.type === "text") return [item.text]
+          media.push(toolFileMedia(item))
+          return []
+        })
+        return [{ type: "text", text: `Provider tool ${part.name} returned:\n${text.join("\n")}` }]
+      }
+      return [{ type: "text", text: `Provider tool ${part.name} returned:\n${toolResultText(part)}` }]
+    })
+    output.push(new Message({ ...message, content }))
+  }
+  flush()
+  return output
 }
 
 export const errorText = (error: unknown) => {

@@ -230,7 +230,7 @@ const signature = (metadata: ProviderMetadata | undefined, key: string) => {
 const lowerMessages = Effect.fnUntraced(function* (request: LLMRequest) {
   const steps: InputStep[] = []
   const key = request.model.route.providerMetadataKey ?? String(request.model.provider)
-  for (const message of request.messages) {
+  for (const message of ProviderShared.hostedToolHistory(request.messages)) {
     if (message.role === "system") {
       const part = yield* ProviderShared.wrappedSystemUpdate("Google Interactions", message)
       steps.push({ type: "user_input", content: [{ type: "text", text: part.text }] })

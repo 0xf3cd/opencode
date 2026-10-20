@@ -343,7 +343,7 @@ const lowerMessages = Effect.fnUntraced(function* (
     pendingImages.length = 0
   }
 
-  for (const message of request.messages) {
+  for (const message of ProviderShared.hostedToolHistory(request.messages)) {
     if (message.role !== "tool") flushImages()
     if (message.role === "system") {
       const part = yield* ProviderShared.wrappedSystemUpdate("Bedrock Converse", message)

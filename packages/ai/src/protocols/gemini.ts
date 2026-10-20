@@ -324,7 +324,7 @@ const lowerMessages = Effect.fnUntraced(function* (request: LLMRequest) {
     pendingMedia = undefined
   }
 
-  for (const message of request.messages) {
+  for (const message of ProviderShared.hostedToolHistory(request.messages)) {
     if (message.role !== "tool") flushMedia()
     if (message.role === "system") {
       const part = yield* ProviderShared.wrappedSystemUpdate("Gemini", message)

@@ -349,7 +349,8 @@ const lowerMessages = Effect.fnUntraced(function* (request: LLMRequest) {
                 : request.system.map((part) => ({ type: "text", text: part.text })),
           },
         ]
-  for (const message of request.messages) {
+  const history = ProviderShared.hostedToolHistory(request.messages)
+  for (const message of history) {
     if (message.role === "system") {
       const update = yield* ProviderShared.wrappedSystemUpdate("Mistral Chat", message)
       messages.push({
@@ -371,7 +372,7 @@ const lowerMessages = Effect.fnUntraced(function* (request: LLMRequest) {
         .flatMap((part) => (part.type === "text" || part.type === "reasoning" ? [part.text] : []))
         .join("")
       if (!hasToolCalls && !hasNativeThinking && text.trim() === "") continue
-      messages.push(yield* lowerAssistant(message, normalizeID, !hasToolCalls && message === request.messages.at(-1)))
+      messages.push(yield* lowerAssistant(message, normalizeID, !hasToolCalls && message === history.at(-1)))
       continue
     }
     messages.push(...(yield* lowerToolResults(message, normalizeID)))
