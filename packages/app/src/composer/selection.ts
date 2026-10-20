@@ -1,4 +1,4 @@
-import { batch, createEffect, createMemo, on } from "solid-js"
+import { batch, createEffect, createMemo, on, onCleanup } from "solid-js"
 import { createStore } from "solid-js/store"
 import type { ComposerControls } from "./adapter"
 import { useLocal, type ModelKey, type ModelSelection } from "@/providers/models/selection"
@@ -21,12 +21,49 @@ export function createComposerControls(input: { model?: ModelSelection } = {}) {
   const models = useGlobal().models
 
   const providerName = (providerID: string, catalog = providers.all()) => composerProviderName(providerID, catalog)
+  const [agents, setAgents] = createStore({ retrying: false })
+  const noAgents = createMemo(() => data.location.agent.list({ directory: sdk().directory })?.length === 0)
+
+  // A server older than this client answers with no agents while its Location's plugins activate. Ask again a few
+  // times before believing the Location has none.
+  createEffect(() => {
+    const directory = sdk().directory
+
+    if (!noAgents()) return setAgents("retrying", false)
+    setAgents("retrying", true)
+    let attempt = 0
+    let timer: ReturnType<typeof setTimeout> | undefined
+    let stale = false
+
+    const retry = () => {
+      if (stale) return
+      const delay = agentRetryDelays[attempt++]
+
+      if (delay === undefined) return setAgents("retrying", false)
+      timer = setTimeout(() => {
+        data.location.agent.invalidate({ directory })
+        void data.location.agent
+          .sync({ directory })
+          .catch(() => undefined)
+          .finally(retry)
+      }, delay)
+    }
+
+    retry()
+    onCleanup(() => {
+      stale = true
+      clearTimeout(timer)
+    })
+  })
 
   const loading = () => {
     const selection = input.model ?? local.model
 
     return (
-      !selection.ready() || data.location.agent.list({ directory: sdk().directory }) === undefined || !providers.ready()
+      !selection.ready() ||
+      data.location.agent.list({ directory: sdk().directory }) === undefined ||
+      (noAgents() && agents.retrying) ||
+      !providers.ready()
     )
   }
 
@@ -92,6 +129,8 @@ export function createComposerControls(input: { model?: ModelSelection } = {}) {
     }
   })
 }
+
+const agentRetryDelays = [250, 500, 1_000, 2_000, 4_000, 8_000]
 
 // Like the model picker, a Console-managed provider drops its "Workspace / " prefix unless the
 // same provider is also connected directly and the workspace is what tells them apart.
