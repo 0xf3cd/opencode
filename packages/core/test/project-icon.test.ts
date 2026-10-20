@@ -11,7 +11,7 @@ import { Project } from "@opencode/core/project"
 import { ProjectIcon } from "@opencode/core/project/icon"
 import { ProjectSchema } from "@opencode/core/project/schema"
 import { ProjectTable } from "@opencode/core/project/sql"
-import { AbsolutePath } from "@opencode/core/schema"
+import { AbsolutePath, RelativePath } from "@opencode/core/schema"
 import { FSUtil } from "@opencode/util/fs-util"
 import { tmpdir } from "./fixture/tmpdir"
 import { testEffect } from "./lib/effect"
@@ -96,6 +96,10 @@ describe("ProjectIcon", () => {
       expect(firstUrl).toMatch(new RegExp(`^/api/project/${resolved.id}/icon\\?v=[0-9a-f]{16}$`))
       expect(events.at(-1)?.icon?.url).toBe(firstUrl)
       expect(yield* readText()).toBe(SVG)
+      expect((yield* project.icons(root)).map((item) => item.path)).toEqual([
+        RelativePath.make("public/favicon.svg"),
+        RelativePath.make("assets/logo.svg"),
+      ])
 
       yield* Effect.promise(() => writeFile(root, "public/favicon.svg", SVG_ALT))
       yield* project.sweep()

@@ -4,7 +4,7 @@ import { Context, Duration, Effect, Layer, Schedule, Schema } from "effect"
 import { ChildProcess } from "effect/process"
 import { and, asc, desc, eq, gte, isNotNull, isNull, lt, lte, ne, or, sql } from "drizzle-orm"
 import path from "path"
-import { AbsolutePath } from "./schema.js"
+import { AbsolutePath, RelativePath } from "./schema.js"
 import { Bus } from "./bus.js"
 import { Database } from "./database/database.js"
 import { Worktree } from "@opencode/schema/worktree"
@@ -29,6 +29,9 @@ export type Current = ProjectSchema.Current
 
 export const Info = ProjectSchema.Info
 export interface Info extends Schema.Schema.Type<typeof Info> {}
+
+export const IconCandidate = ProjectSchema.IconCandidate
+export type IconCandidate = ProjectSchema.IconCandidate
 
 export const UpdateInput = ProjectSchema.UpdateInput
 export type UpdateInput = ProjectSchema.UpdateInput
@@ -68,6 +71,7 @@ export interface ListInput {
 
 export interface Interface {
   readonly list: (input?: ListInput) => Effect.Effect<ReadonlyArray<Info>>
+  readonly icons: (directory: AbsolutePath) => Effect.Effect<ReadonlyArray<IconCandidate>>
   /** The discovered icon file of a Project, or nothing when it has none or uses a remote URL. */
   readonly icon: (projectID: ID) => Effect.Effect<ProjectIcon.Image | undefined, NotFoundError>
   readonly update: (input: UpdateInput) => Effect.Effect<Info, NotFoundError>
@@ -240,6 +244,18 @@ const layer = Layer.effect(
         .all()
         .pipe(Effect.orDie)
       return rows.map(fromRow)
+    })
+
+    const icons = Effect.fn("Project.icons")(function* (directory: AbsolutePath) {
+      const candidates = yield* ProjectIcon.list(fs, directory)
+      return candidates.map((item) =>
+        "url" in item
+          ? { path: RelativePath.make("opencode.json"), url: item.url }
+          : {
+              path: RelativePath.make(item.path),
+              url: `data:${item.type};base64,${Buffer.from(item.bytes).toString("base64")}`,
+            },
+      )
     })
 
     const icon = Effect.fn("Project.icon")(function* (projectID: ID) {
@@ -480,7 +496,7 @@ const layer = Layer.effect(
       )
     })
 
-    return Service.of({ list, icon, update, activate, resolve, sweep })
+    return Service.of({ list, icons, icon, update, activate, resolve, sweep })
   }),
 )
 

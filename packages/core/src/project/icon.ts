@@ -32,11 +32,24 @@ const CANDIDATES = [
 const decodeConfig = Schema.decodeUnknownOption(Schema.Struct({ icon: Schema.String }))
 
 export const discover = Effect.fn("ProjectIcon.discover")(function* (fs: FSUtil.Interface, root: AbsolutePath) {
+  return (yield* list(fs, root, 1))[0]
+})
+
+export const list = Effect.fn("ProjectIcon.list")(function* (
+  fs: FSUtil.Interface,
+  root: AbsolutePath,
+  limit = Infinity,
+): Effect.fn.Return<ReadonlyArray<Candidate>> {
+  const found: Candidate[] = []
   for (const name of ["opencode.jsonc", "opencode.json"]) {
     const text = yield* fs.readFileString(path.join(root, name)).pipe(Effect.orElseSucceed(() => undefined))
     const val = text !== undefined ? Option.getOrUndefined(decodeConfig(parse(text)))?.icon.trim() : undefined
     const hit = val ? (/^https?:/i.test(val) ? { url: val } : yield* read(fs, root, val)) : undefined
-    if (hit) return hit
+    if (hit) {
+      found.push(hit)
+      if (found.length >= limit) return found
+      break
+    }
   }
   for (const candidate of CANDIDATES) {
     const entries = candidate.endsWith(".appiconset")
@@ -47,8 +60,12 @@ export const discover = Effect.fn("ProjectIcon.discover")(function* (fs: FSUtil.
       .toSorted()
     const picked = files ? (files.find((n) => /128|256/.test(n)) ?? files[0]) : undefined
     const image = entries ? (picked ? yield* read(fs, root, `${candidate}/${picked}`) : undefined) : yield* read(fs, root, candidate)
-    if (image) return image
+    if (image && !found.some((prev) => "path" in prev && prev.path === image.path)) {
+      found.push(image)
+      if (found.length >= limit) return found
+    }
   }
+  return found
 })
 
 export const read = Effect.fn("ProjectIcon.read")(function* (fs: FSUtil.Interface, root: AbsolutePath, relative: string) {

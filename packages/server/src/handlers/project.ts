@@ -1,3 +1,4 @@
+import { Location } from "@opencode/core/location"
 import { Project } from "@opencode/core/project"
 import { Effect } from "effect"
 import { HttpServerResponse } from "effect/http"
@@ -11,6 +12,13 @@ const notFound = (projectID: Project.ID) =>
 export const ProjectHandler = HttpApiBuilder.group(Api, "server.project", (handlers) =>
   handlers
     .handle("project.list", (ctx) => Project.Service.use((project) => project.list(ctx.query)))
+    .handle("project.icons", () =>
+      Effect.gen(function* () {
+        const location = yield* Location.Service
+        const project = yield* Project.Service
+        return yield* project.icons(location.project.directory)
+      }),
+    )
     .handleRaw("project.icon", (ctx) =>
       Effect.gen(function* () {
         const project = yield* Project.Service
