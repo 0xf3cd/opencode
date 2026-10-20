@@ -952,12 +952,14 @@ const summaryRoom = (limit: SessionContext.Loaded["model"]["limit"]) =>
   Math.max(0, (limit.input || limit.context) - RESERVE_MIN)
 
 /**
- * Another provider's count may describe a native window this model cannot replay. History then holds the original
- * messages that window stood for, which the count leaves out, so only the current provider's counts are trusted.
+ * Another model's count may come from a different tokenizer, or describe a native window this model cannot replay.
+ * History then holds the original messages that window stood for, which the count leaves out, so only the current
+ * model's counts are trusted.
  */
 const hasMeasuredPrompt = (message: SessionMessage.Info, model: SessionContext.Loaded["model"]["ref"]) =>
   message.type === "assistant" &&
   message.model.providerID === model.providerID &&
+  message.model.id === model.id &&
   !message.error &&
   message.tokens !== undefined &&
   message.tokens.input + message.tokens.cache.read + message.tokens.cache.write > 0

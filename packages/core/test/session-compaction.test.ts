@@ -23,6 +23,7 @@ import { Project } from "@opencode/core/project"
 import { ProjectTable } from "@opencode/core/project/sql"
 import { App } from "@opencode/core/app"
 import { Agent } from "@opencode/core/agent"
+import { Model } from "@opencode/core/model"
 import { Provider } from "@opencode/core/provider"
 import { AbsolutePath } from "@opencode/core/schema"
 import { Money } from "@opencode/schema/money"
@@ -243,9 +244,11 @@ it.effect("auto compaction estimates current content against the buffered prompt
     expect(SessionCompaction.estimateContext({ ...grown, messages: [...grown.messages, interrupted] })).toBe(90_001)
     // Without provider usage, include 20 tokens for the system prompt, instructions, and tool definition.
     expect(SessionCompaction.estimateContext({ ...grown, messages: [interrupted] })).toBe(21)
-    // Another provider's usage is not trusted either.
+    // Another model's usage is not trusted either, even from the same provider.
     const foreign = { ...assistant, model: { ...assistant.model, providerID: Provider.ID.make("other") } }
     expect(SessionCompaction.estimateContext({ ...grown, messages: [foreign] })).toBe(21)
+    const sibling = { ...assistant, model: { ...assistant.model, id: Model.ID.make("other") } }
+    expect(SessionCompaction.estimateContext({ ...grown, messages: [sibling] })).toBe(21)
     expect(
       SessionCompaction.estimateContext({
         ...grown,

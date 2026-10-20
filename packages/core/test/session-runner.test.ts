@@ -3120,10 +3120,10 @@ describe("SessionRunnerLLM", () => {
 
   scenario("automatically compacts into a completed summary and retained recent turn", function* (s) {
     const store = yield* SessionStore.Service
+    s.currentModel = compactModel
     yield* s.llm.push(TestLLM.textWithUsage("Earlier answer", "text-first", 3_950))
     yield* s.runPrompt("Earlier question ".repeat(180))
 
-    s.currentModel = compactModel
     s.requests.length = 0
     yield* s.llm.push(
       TestLLM.text("## Objective\n- Preserve the task", "text-summary"),
@@ -3262,10 +3262,10 @@ describe("SessionRunnerLLM", () => {
   })
 
   scenario("stops after required automatic compaction fails", function* (s) {
+    s.currentModel = compactModel
     yield* s.llm.push(TestLLM.textWithUsage("Earlier answer", "text-before-failed-compaction", 3_950))
     yield* s.runPrompt("Earlier question ".repeat(180))
 
-    s.currentModel = compactModel
     s.requests.length = 0
     yield* s.llm.push(
       [LLMEvent.providerError({ message: "Unsupported parameter: max_output_tokens" })],
