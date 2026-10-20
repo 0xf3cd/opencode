@@ -82,7 +82,8 @@ export function NewSessionView(props: {
               <div
                 data-slot="new-session-composer"
                 classList={{
-                  "rounded-xl border border-v2-border-border-base bg-v2-background-bg-deep": !!props.project.selected(),
+                  "rounded-[14px] bg-v2-background-bg-base px-1 pt-1 shadow-[inset_0_0_0_0.5px_var(--v2-border-border-base)]":
+                    !!props.project.selected(),
                 }}
               >
                 <Composer model={props.composer} borderUnderlay={!!props.project.selected()} />
@@ -256,7 +257,7 @@ function NewSessionTips(props: {
   )
 }
 
-/** The tray under the Composer: the location picker on the left and the session's directory on the right. */
+/** The tray row under the Composer: the location picker on the `+` column and the session's directory on the send column. */
 function NewSessionLocation(props: {
   project: PromptProject
   /** "main", "create", or a worktree directory. */
@@ -283,7 +284,7 @@ function NewSessionLocation(props: {
   }
 
   return (
-    <div class="flex h-9 min-w-0 items-center gap-3 ps-2 pe-2 text-[13px] font-[440] leading-[var(--line-height-compact)] tracking-[-0.04px]">
+    <div class="flex h-9 min-w-0 items-center gap-3 px-2 text-[13px] font-[440] leading-[var(--line-height-compact)] tracking-[-0.04px]">
       <div class="flex min-w-0 max-w-[60%] shrink-0 @max-[560px]:max-w-full">
         <Tooltip
           appearance={props.onboarding ? "large" : undefined}
@@ -310,7 +311,7 @@ function NewSessionLocation(props: {
             data-action="prompt-project"
             aria-haspopup="dialog"
             aria-description={language.t("session.new.workspace.trigger.tooltip")}
-            class="flex h-6 min-w-0 max-w-full items-center gap-1.5 rounded-md text-start ps-1 pe-2 text-v2-text-text-muted transition-colors hover:bg-v2-overlay-simple-overlay-hover hover:text-v2-text-text-base focus-visible:bg-v2-overlay-simple-overlay-hover focus-visible:text-v2-text-text-base focus-visible:outline-none"
+            class="flex h-7 min-w-0 max-w-full items-center gap-1.5 rounded-md text-start ps-1.5 pe-2 text-v2-text-text-muted transition-colors hover:bg-v2-overlay-simple-overlay-hover hover:text-v2-text-text-base focus-visible:bg-v2-overlay-simple-overlay-hover focus-visible:text-v2-text-text-base focus-visible:outline-none"
             onClick={props.onClick}
           >
             <ProjectAvatar
