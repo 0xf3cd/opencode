@@ -5,7 +5,7 @@ import type { SessionMessage } from "./message.js"
 const TOOL_OUTPUT_MAX_CHARS = 1_250
 
 /**
- * The text of the messages a summary compaction kept verbatim. History rebuilds it from `metadata.keepFrom`;
+ * The text of the messages a summary compaction kept verbatim. History rebuilds it from `metadata.keepID`;
  * compactions written before that reference carry the text they stored.
  */
 export const kept = (message: SessionMessage.CompactionCompleted) =>

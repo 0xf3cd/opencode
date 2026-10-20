@@ -54,7 +54,7 @@ function part(value: unknown) {
   return value
 }
 
-/** Kept text a summary compaction stored before it referenced `metadata.keepFrom`; replay still reads it. */
+/** Kept text a summary compaction stored before it referenced `metadata.keepID`; replay still reads it. */
 function recent(data: Record<string, unknown>) {
   const text = data.recent
   const rest = omit(data, "recent")

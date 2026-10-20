@@ -121,7 +121,7 @@ const messageEntries = Effect.fnUntraced(function* (
 })
 
 /**
- * A summary compaction references its kept messages by `metadata.keepFrom` instead of storing them, so
+ * A summary compaction references its kept messages by `metadata.keepID` instead of storing them, so
  * history rebuilds their text from the messages between that one and the compaction, in memory only (see
  * `SessionRecentText.kept`). Compactions written before the reference have none and keep the text they stored.
  */
@@ -133,13 +133,13 @@ const withRecentText = Effect.fnUntraced(function* (
   const first = entries[0]
   const compaction = first?.message
   if (compaction?.type !== "compaction" || compaction.status !== "completed") return entries
-  const keepFrom = compaction.metadata?.keepFrom
-  if (typeof keepFrom !== "string") return entries
+  const keepID = compaction.metadata?.keepID
+  if (typeof keepID !== "string") return entries
   const start = yield* db
     .select({ seq: SessionMessageTable.seq })
     .from(SessionMessageTable)
     .where(
-      and(eq(SessionMessageTable.session_id, sessionID), eq(SessionMessageTable.id, SessionMessage.ID.make(keepFrom))),
+      and(eq(SessionMessageTable.session_id, sessionID), eq(SessionMessageTable.id, SessionMessage.ID.make(keepID))),
     )
     .get()
     .pipe(Effect.orDie)
