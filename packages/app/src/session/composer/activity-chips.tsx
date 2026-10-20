@@ -5,7 +5,10 @@ import { SessionProgressIndicatorV2 } from "@opencode/session-ui/v2/session-prog
 import { createEffect, createMemo, createSignal, For, onCleanup, Show } from "solid-js"
 import { useLanguage } from "@/runtime/i18n/language"
 import { useSettings } from "@/settings/model"
+import { createAnimatedPresence } from "@/runtime/animated-presence"
 import "./activity-chips.css"
+
+const placements = { center: "top", start: "top-start", end: "top-end" } as const
 
 export type SessionActivityItem = {
   key: string
@@ -52,16 +55,20 @@ export function SessionActivityChips(props: {
 }) {
   const language = useLanguage()
   const settings = useSettings()
+
   const active = () =>
     settings.general.backgroundActivity() !== "off" && (props.subagents.length > 0 || props.shells.length > 0)
+
   const alignment = createMemo(() => {
     const value = settings.general.backgroundActivity()
+
     if (value === "center") return "center"
 
     // Left/right are physical positions; Kobalte and flex alignment use logical start/end.
     return (value === "left") !== (language.direction() === "rtl") ? "start" : "end"
   })
-  const placement = () => (alignment() === "center" ? "top" : alignment() === "end" ? "top-end" : "top-start")
+
+  const placement = () => placements[alignment()]
 
   // A subagent can only be interrupted once its child session exists.
   const stoppable = (item: SessionActivityItem) => item.type === "shell" || !!item.sessionID
@@ -126,7 +133,13 @@ export function SessionActivityChips(props: {
     </Show>
   )
 
-  const label = () => language.activitySummary({ subagents: props.subagents.length, shells: props.shells.length })
+  // The capsule keeps naming the last work while it leaves.
+  const counts = createMemo<{ subagents: number; shells: number }>(
+    (previous) => (active() ? { subagents: props.subagents.length, shells: props.shells.length } : previous),
+    { subagents: 0, shells: 0 },
+  )
+
+  const label = () => language.activitySummary(counts())
 
   // Each session mounts its own composer, so a capsule that is already there on a switch stays at rest; only work
   // that starts while the session is open fades in.
@@ -137,15 +150,26 @@ export function SessionActivityChips(props: {
     setOpen(false)
   })
 
+  // Leaving, it fades out before it unmounts.
+  const [capsule, setCapsule] = createSignal<HTMLElement>()
+
+  const presence = createAnimatedPresence(
+    () => (active() ? true : undefined),
+    () => capsule() ?? null,
+  )
+
   return (
-    <Show when={active()}>
+    <Show when={presence.present()}>
       <div
+        ref={setCapsule}
+        inert={!active() || undefined}
         data-component="session-activity-chips"
         class="pointer-events-none absolute inset-x-0 bottom-full flex items-center pb-2.5"
         classList={{
           "justify-start": alignment() === "start",
           "justify-center": alignment() === "center",
           "justify-end": alignment() === "end",
+          "animate-out fade-out fill-mode-forwards duration-[110ms] ease-[cubic-bezier(.4,0,1,1)]": !active(),
         }}
       >
         <Menu gutter={8} placement={placement()} onOpenChange={setOpen}>
@@ -154,19 +178,16 @@ export function SessionActivityChips(props: {
             type="button"
             data-slot="session-activity-chip"
             aria-label={label()}
-            class="pointer-events-auto flex h-7 min-w-0 max-w-full items-center gap-2 rounded-[12px] border-[0.5px] border-v2-border-border-muted bg-v2-background-bg-base ps-2.5 pe-2.5 text-[13px] font-[530] leading-text-compact tracking-[-0.04px] whitespace-nowrap tabular-nums text-v2-text-text-base shadow-[var(--v2-elevation-raised)] outline-none duration-150 ease-out motion-reduce:animate-none hover:bg-v2-background-bg-layer-01 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-v2-border-border-focus"
+            class="pointer-events-auto flex h-7 min-w-0 max-w-full items-center gap-2 rounded-[12px] border-[0.5px] border-v2-border-border-muted bg-v2-background-bg-base ps-2.5 pe-2.5 text-[13px] font-[530] leading-text-compact tracking-[-0.04px] whitespace-nowrap tabular-nums text-v2-text-text-base shadow-[var(--v2-elevation-raised)] outline-none duration-150 ease-out hover:bg-v2-background-bg-layer-01 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-v2-border-border-focus"
             classList={{ "animate-in fade-in": enter() }}
           >
             <SessionProgressIndicatorV2 class="shrink-0" />
             <span data-slot="session-activity-summary" class="flex min-w-0 items-center gap-2 overflow-hidden">
-              {language.activitySummaryRich(
-                { subagents: props.subagents.length, shells: props.shells.length },
-                (text) => (
-                  <span class="truncate">
-                    <bdi>{text}</bdi>
-                  </span>
-                ),
-              )}
+              {language.activitySummaryRich(counts(), (text) => (
+                <span class="truncate">
+                  <bdi>{text}</bdi>
+                </span>
+              ))}
             </span>
           </Menu.Trigger>
           <Menu.Portal>
@@ -176,6 +197,7 @@ export function SessionActivityChips(props: {
               onFocusIn={(event: FocusEvent) => {
                 if (!(event.target instanceof HTMLElement)) return
                 const row = event.target.closest<HTMLElement>('[data-component="menu-v2-item"]')
+
                 if (!row) return
                 // Kobalte's scroll adjustment ignores scroll-padding; native scrolling keeps the ring clear of the edge.
                 queueMicrotask(() => row.scrollIntoView({ block: "nearest", inline: "nearest" }))
