@@ -4,6 +4,7 @@ import { Mcp } from "@opencode/schema/mcp"
 import { McpEvent } from "@opencode/schema/mcp-event"
 import { ephemeral } from "@opencode/schema/event"
 import type { Session } from "@opencode/schema/session"
+import type { Transport } from "@modelcontextprotocol/client"
 import { createHash } from "node:crypto"
 import { isDeepStrictEqual } from "node:util"
 import { Cause, Context, Effect, Exit, FiberSet, Latch, Layer, Schema, Scope, Semaphore, Stream, Types } from "effect"
@@ -88,6 +89,14 @@ type ServerEntry = {
   registration?: State.Registration
 }
 
+// A client-hosted MCP server attached over a connection the client opened. Internal: never listed,
+// never reconciled against config, and removed entirely once its scope or connection closes.
+type AttachedEntry = {
+  readonly scope: Scope.Closeable
+  readonly client: McpClient.Connection
+  tools: ReadonlyArray<Tool>
+}
+
 // MCP elicitations are Location-scoped, not Session-scoped: the server cannot attribute them to a
 // persisted session row, so their forms are owned by this opaque sentinel session identifier.
 const GLOBAL_ELICITATION_SESSION_ID = "global"
@@ -116,6 +125,11 @@ export interface Interface extends State.Transformable<Editor> {
   readonly connect: (server: ServerName | string) => Effect.Effect<void, NotFoundError>
   readonly disconnect: (server: ServerName | string) => Effect.Effect<void, NotFoundError>
   readonly remove: (server: ServerName | string) => Effect.Effect<void, NotFoundError>
+  /**
+   * Attaches a client-hosted MCP server for the lifetime of the calling scope. Its tools are named after
+   * `name` like any server's; attaching a name again replaces the previous attachment.
+   */
+  readonly attach: (name: string, transport: Transport) => Effect.Effect<void, McpClient.ConnectError, Scope.Scope>
   readonly tools: () => Effect.Effect<Tool[]>
   readonly callTool: (input: {
     readonly server: ServerName | string
@@ -164,6 +178,7 @@ export const layer = (options?: Options) =>
       const fork = yield* FiberSet.makeRuntime<never, void, never>()
 
       const entries = new Map<ServerName, ServerEntry>()
+      const attached = new Map<ServerName, AttachedEntry>()
       // Serializes lifecycle operations per server. Anything taking this lock from a connection
       // callback must stay forked: lifecycle operations close scopes while holding it, firing onClose.
       const locks = KeyedMutex.makeUnsafe<ServerName>()
@@ -531,6 +546,68 @@ export const layer = (options?: Options) =>
         yield* bus.publish(McpEvent.StatusChanged, { server: name })
       })
 
+      // Attached entries lock under their own key so a configured server of the same name never contends.
+      const attachedLock = (name: ServerName) => locks.withLock(ServerName.make(`client:${name}`))
+
+      const detach = Effect.fnUntraced(function* (name: ServerName, entry: AttachedEntry) {
+        if (attached.get(name) !== entry) return
+        attached.delete(name)
+        yield* Scope.close(entry.scope, Exit.void)
+        yield* bus.publish(McpEvent.ToolsChanged, { server: name })
+      })
+
+      const attach = Effect.fnUntraced(function* (name: ServerName, transport: Transport) {
+        const previous = attached.get(name)
+        if (previous) yield* detach(name, previous)
+        const { McpClient } = yield* Effect.promise(() => import("./client.js"))
+        const scope = yield* Scope.fork(root)
+        const result = yield* McpClient.connect(
+          name,
+          { type: "attached", transport },
+          location.directory,
+          undefined,
+          elicitation,
+          options?.clientInfo,
+        ).pipe(
+          Effect.flatMap((connection) => connection.tools().pipe(Effect.map((tools) => ({ connection, tools })))),
+          Effect.provideService(Environment.Service, environment),
+          Scope.provide(scope),
+          Effect.onError(() => Scope.close(scope, Exit.void)),
+          Effect.mapError((error) =>
+            error instanceof McpClient.ConnectError
+              ? error
+              : new McpClient.ConnectError({ server: name, message: error.message }),
+          ),
+        )
+        const entry: AttachedEntry = {
+          scope,
+          client: result.connection,
+          tools: result.tools.map((tool): Tool => ({ ...tool, server: name })),
+        }
+        attached.set(name, entry)
+        const live = <E>(effect: Effect.Effect<void, E>) =>
+          fork(
+            Effect.suspend(() => (attached.get(name) === entry ? effect : Effect.void)).pipe(
+              attachedLock(name),
+              Effect.ignore,
+            ),
+          )
+        result.connection.onClose(() => live(detach(name, entry)))
+        result.connection.onToolsChanged(() =>
+          live(
+            result.connection.tools().pipe(
+              Effect.map((tools) => {
+                entry.tools = tools.map((tool): Tool => ({ ...tool, server: name }))
+              }),
+              Effect.andThen(bus.publish(McpEvent.ToolsChanged, { server: name })),
+            ),
+          ),
+        )
+        yield* Effect.logInfo("mcp client attached", { server: name, tools: entry.tools.length })
+        yield* bus.publish(McpEvent.ToolsChanged, { server: name })
+        return entry
+      })
+
       let applied: Map<ServerName, Mcp.ServerConfig> | undefined
       const overrides = new Map<ServerName, Mcp.ServerConfig | false>()
       const reconcileLock = Semaphore.makeUnsafe(1)
@@ -660,13 +737,37 @@ export const layer = (options?: Options) =>
           overrides.set(name, false)
           yield* state.reload()
         }),
+        attach: Effect.fn("MCP.attach")(function* (client, transport) {
+          const name = ServerName.make(client)
+          yield* Effect.acquireRelease(attach(name, transport).pipe(attachedLock(name)), (entry) =>
+            detach(name, entry).pipe(attachedLock(name)),
+          )
+        }),
         // Reads report what is connected now; servers still starting contribute once they publish a change.
         tools: Effect.fn("MCP.tools")(function* () {
-          return Array.from(entries.values())
-            .flatMap((entry) => entry.tools ?? [])
-            .toSorted((a, b) => a.server.localeCompare(b.server) || a.name.localeCompare(b.name))
+          return [
+            ...Array.from(entries.values()).flatMap((entry) => entry.tools ?? []),
+            ...Array.from(attached.values()).flatMap((entry) => entry.tools),
+          ].toSorted((a, b) => a.server.localeCompare(b.server) || a.name.localeCompare(b.name))
         }),
         callTool: Effect.fn("MCP.callTool")(function* (input) {
+          // An attached client owns the tools it lists, even when a configured server shares its name.
+          const client = attached.get(ServerName.make(input.server))
+          if (client?.tools.some((tool) => tool.name === input.name)) {
+            const result = yield* client.client
+              .callTool({ name: input.name, args: input.args, sessionID: input.sessionID })
+              .pipe(
+                Effect.mapError(
+                  (error) =>
+                    new ToolCallError({
+                      server: ServerName.make(input.server),
+                      tool: input.name,
+                      message: `MCP tool "${input.name}" on client "${input.server}" failed: ${error.message}`,
+                    }),
+                ),
+              )
+            return { ...result, server: ServerName.make(input.server), tool: input.name }
+          }
           const target = yield* requireServer(input.server)
           yield* target.entry.startup.await
           if (!target.entry.client)

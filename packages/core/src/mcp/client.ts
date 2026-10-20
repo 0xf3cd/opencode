@@ -34,6 +34,7 @@ import { McpStdio } from "./stdio.js"
 const DEFAULT_STARTUP_TIMEOUT = 30_000
 const DEFAULT_CATALOG_TIMEOUT = 30_000
 const DEFAULT_EXECUTION_TIMEOUT = 12 * 60 * 60 * 1_000 // 12 hours
+const ATTACHED_EXECUTION_TIMEOUT = 10 * 60 * 1_000 // 10 minutes
 const TERMINATE_TIMEOUT = 1_000
 const toError = (error: unknown) => (error instanceof Error ? error : new Error(String(error)))
 
@@ -137,6 +138,12 @@ export interface Connection {
   readonly onResourcesChanged: (callback: () => void) => void
 }
 
+/** An MCP server reached over a transport someone else already opened, such as a client socket. */
+export interface Attached {
+  readonly type: "attached"
+  readonly transport: Transport
+}
+
 /**
  * Connects an MCP server; closing the calling scope tears down the transport and any spawned process.
  * A stdio server is spawned through the location's `Environment`, so it runs wherever the location's
@@ -144,7 +151,7 @@ export interface Connection {
  */
 export const connect = Effect.fnUntraced(function* (
   server: string,
-  config: typeof ConfigMCP.Server.Type,
+  config: typeof ConfigMCP.Server.Type | Attached,
   directory: string,
   // Remote only. A provider with no stored token and a no-op redirect ends in UnauthorizedError → needs_auth.
   authProvider?: OAuthClientProvider,
@@ -153,6 +160,10 @@ export const connect = Effect.fnUntraced(function* (
 ) {
   // The SDK takes list-changed handlers at construction, but consumers register after connect. On a
   // modern connection the SDK opens the subscriptions/listen stream behind these itself.
+  const timeout: (typeof ConfigMCP.Server.Type)["timeout"] =
+    config.type === "attached" ? { execution: ATTACHED_EXECUTION_TIMEOUT } : config.timeout
+  // Attached clients run ordinary SDK servers over the initialize handshake.
+  const protocol = config.type === "attached" ? "legacy" : config.protocol
   const changed = { tools: () => {}, prompts: () => {}, resources: () => {} }
   const listChanged = (key: keyof typeof changed) => ({
     autoRefresh: false,
@@ -190,7 +201,7 @@ export const connect = Effect.fnUntraced(function* (
         // Some legacy servers refuse to run without one (https://github.com/anomalyco/opencode/issues/2308).
         roots: {},
       },
-      versionNegotiation: negotiation(config.protocol),
+      versionNegotiation: negotiation(protocol),
       listChanged: {
         tools: listChanged("tools"),
         prompts: listChanged("prompts"),
@@ -214,8 +225,7 @@ export const connect = Effect.fnUntraced(function* (
     }
 
     yield* Effect.tryPromise({
-      try: (signal) =>
-        client.connect(transport, { timeout: config.timeout?.startup ?? DEFAULT_STARTUP_TIMEOUT, signal }),
+      try: (signal) => client.connect(transport, { timeout: timeout?.startup ?? DEFAULT_STARTUP_TIMEOUT, signal }),
       catch: (error) => error,
     }).pipe(Effect.onError(() => Effect.promise(() => transport.close()).pipe(Effect.ignore)))
     return client
@@ -244,6 +254,7 @@ export const connect = Effect.fnUntraced(function* (
   }
 
   const exit = yield* Effect.gen(function* () {
+    if (config.type === "attached") return yield* initialize(config.transport)
     if (config.type === "local") {
       const [command, ...args] = config.command
       const transport = yield* McpStdio.make({
@@ -278,7 +289,7 @@ export const connect = Effect.fnUntraced(function* (
     })
 
     // Every attempt opens a fresh transport; no retry starts once the startup timeout has passed.
-    const deadline = (yield* Clock.currentTimeMillis) + (config.timeout?.startup ?? DEFAULT_STARTUP_TIMEOUT)
+    const deadline = (yield* Clock.currentTimeMillis) + (timeout?.startup ?? DEFAULT_STARTUP_TIMEOUT)
     return yield* retrying(
       "MCP connect",
       open(url).pipe(
@@ -315,8 +326,8 @@ export const connect = Effect.fnUntraced(function* (
         yield* Effect.tryPromise(() => client.close()).pipe(Effect.ignore)
       }),
     )
-    const catalog = { timeout: config.timeout?.catalog ?? DEFAULT_CATALOG_TIMEOUT }
-    const execution = config.timeout?.execution ?? DEFAULT_EXECUTION_TIMEOUT
+    const catalog = { timeout: timeout?.catalog ?? DEFAULT_CATALOG_TIMEOUT }
+    const execution = timeout?.execution ?? DEFAULT_EXECUTION_TIMEOUT
     const request = <A>(what: string, run: (signal: AbortSignal) => Promise<A>) =>
       Effect.tryPromise({ try: run, catch: failure }).pipe(
         Effect.tapError((error) => Effect.logWarning(`failed to ${what}`, { server, error: error.message })),
