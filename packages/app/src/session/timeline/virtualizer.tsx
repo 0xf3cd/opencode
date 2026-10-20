@@ -541,8 +541,6 @@ export function createTimelineVirtualizer(input: Input) {
 
     if ((known ?? (arrivals.has(key) ? undefined : fallbackItemSize)) === size) {
       pendingSizes.delete(index)
-      // The cold reveal may have committed this size from the rect already; its delivery must still settle the gate.
-      if (coldPending) settleColdBottom()
 
       return
     }

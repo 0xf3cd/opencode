@@ -28,18 +28,19 @@ async function settle(growth: ReturnType<typeof createRowGrowth>) {
 }
 
 describe("row growth", () => {
-  test("eases a row to its measured height in whole pixels, behind a soft edge that clears when it lands", async () => {
+  test("eases a row on the layout grid, behind a soft edge that clears when it lands", async () => {
     const { growth, sizes, wrapper } = setup()
-    growth.grow("row", 0, 120)
-    expect(growth.target("row")).toBe(120)
+    growth.grow("row", 0, 120.5)
+    expect(growth.target("row")).toBe(120.5)
 
     await new Promise((resolve) => setTimeout(resolve, 50))
     expect(wrapper.style.getPropertyValue("mask-image")).toContain("linear-gradient")
 
     await settle(growth)
     expect(growth.target("row")).toBeUndefined()
-    expect(sizes.at(-1)).toBe(120)
-    expect(sizes.every((size, index) => Number.isInteger(size) && size >= (sizes[index - 1] ?? 0))).toBe(true)
+    expect(sizes.at(-1)).toBe(120.5)
+    expect(sizes.every((size, index) => Number.isInteger(size * 64) && size >= (sizes[index - 1] ?? 0))).toBe(true)
+    expect(sizes.slice(0, -1).some((size) => !Number.isInteger(size))).toBe(true)
     expect(wrapper.style.getPropertyValue("mask-image")).toBe("")
   })
 

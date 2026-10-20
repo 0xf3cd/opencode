@@ -23,21 +23,26 @@ export function SpringHeight(props: { when: boolean; class?: string; slot?: stri
     if (!element) return
 
     if (prefersReducedMotion()) return rest(element)
+    const last = inner?.lastElementChild
+    const skirt = last ? Math.max(0, -parseFloat(getComputedStyle(last).marginBottom) || 0) : 0
 
     if (!spring) {
-      // A skirt tucked under the card below (a negative bottom margin) stays drawn; only what is past it is cut.
-      const last = inner?.lastElementChild
-      const skirt = last ? Math.max(0, -parseFloat(getComputedStyle(last).marginBottom) || 0) : 0
-      element.style.clipPath = `inset(0 0 ${-skirt}px 0)`
-      spring = Spring.fromDuration(element.getBoundingClientRect().height, growthSpring())
+      const from = measured >= 0 ? measured : element.getBoundingClientRect().height
+      spring = Spring.fromDuration(from, growthSpring())
     }
     spring.set(to)
-    element.style.height = `${grid(spring.value)}px`
+    const initial = grid(spring.value)
+    element.style.overflow = "clip"
+    element.style.overflowClipMargin = `${Math.min(skirt, Math.max(0, initial))}px`
+    element.style.height = `${initial}px`
     stop ??= frameLoop.add((dt) => {
       const value = spring!.step(dt)
 
       if (!spring!.resting) {
-        element.style.height = `${grid(value)}px`
+        const shown = grid(value)
+        // A skirt tucked under the card below (a negative bottom margin) stays drawn; only what is past it is cut.
+        element.style.overflowClipMargin = `${Math.min(skirt, Math.max(0, shown))}px`
+        element.style.height = `${shown}px`
 
         return true
       }
@@ -53,8 +58,9 @@ export function SpringHeight(props: { when: boolean; class?: string; slot?: stri
     stop?.()
     stop = undefined
     spring = undefined
+    element.style.removeProperty("overflow")
+    element.style.removeProperty("overflow-clip-margin")
     element.style.removeProperty("height")
-    element.style.removeProperty("clip-path")
 
     if (!props.when) setPresent(false)
   }
@@ -89,6 +95,7 @@ export function SpringHeight(props: { when: boolean; class?: string; slot?: stri
 
           if (measured === 0) {
             element.style.height = "0px"
+            element.style.overflow = "clip"
           }
         }}
         data-slot={props.slot}
@@ -105,9 +112,9 @@ export function SpringHeight(props: { when: boolean; class?: string; slot?: stri
               if (size === measured || !props.when) return
 
               const first = measured < 0
-              measured = size
 
               if (!first) move(size)
+              measured = size
             })
 
             observer.observe(element, { box: "border-box" })

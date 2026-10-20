@@ -5,6 +5,7 @@ import { SessionProgressIndicatorV2 } from "@opencode/session-ui/v2/session-prog
 import { createEffect, createMemo, createSignal, For, Show } from "solid-js"
 import { useLanguage } from "@/runtime/i18n/language"
 import { createAnimatedPresence } from "@/runtime/animated-presence"
+import { prefersReducedMotion } from "@opencode/ui/motion"
 import "./activity-chips.css"
 
 export type SessionActivityItem = {
@@ -89,6 +90,8 @@ export function SessionActivityChips(props: {
   const presence = createAnimatedPresence(
     () => (active() ? true : undefined),
     () => chip() ?? null,
+    undefined,
+    prefersReducedMotion() ? 0 : 110,
   )
 
   return (

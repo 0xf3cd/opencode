@@ -340,15 +340,6 @@ function MessageTimelineView(
       .findLast((ref) => blocking.has(ref.partID))?.partID
   })
 
-  const [backgroundHintRef, setBackgroundHintRef] = createSignal<HTMLDivElement>()
-
-  const backgroundHintPresence = createAnimatedPresence(
-    backgroundHintPartID,
-    () => backgroundHintRef() ?? null,
-    sessionID,
-    1000,
-  )
-
   const showWorking = createMemo(() => {
     const id = sessionID()
 
@@ -409,12 +400,25 @@ function MessageTimelineView(
   })
 
   const [workingRef, setWorkingRef] = createSignal<HTMLDivElement>()
+  const [backgroundHintRef, setBackgroundHintRef] = createSignal<HTMLDivElement>()
+
+  const backgroundHintPresence = createAnimatedPresence(
+    backgroundHintPartID,
+    () => backgroundHintRef() ?? null,
+    sessionID,
+    prefersReducedMotion() ? 0 : 1000,
+  )
 
   // Working fades as parts start and finish, but appears steady when switching sessions.
   const workingPresence = createAnimatedPresence(
     () => (showWorking() ? true : undefined),
     () => workingRef() ?? null,
     sessionID,
+  )
+
+  // If the background hint appeared beside Working, keep Working's width reserved until the hint leaves so the hint never jumps sideways.
+  const holdWorkingSlot = createMemo<boolean>((held) =>
+    workingPresence.present() ? true : Boolean(held && backgroundHintPresence.present()),
   )
 
   // Undelivered input waits below the work the model has seen, so live status moves into the row above it.
@@ -444,7 +448,7 @@ function MessageTimelineView(
       }}
     >
       <div class={`flex h-9 items-center gap-2 pt-3 text-[13px] font-[530] leading-text-compact ${turnPadding()}`}>
-        <Show when={workingPresence.present()}>
+        <Show when={holdWorkingSlot()}>
           <div
             ref={(element) => {
               setWorkingRef(element)
@@ -452,14 +456,16 @@ function MessageTimelineView(
               // After the copy it replaces has faded, so two never show at once.
               if (performance.now() - movedAt < 100) enter(element, { duration: 150, delay: 110 })
             }}
-            data-component="session-working"
-            role="status"
+            data-component={workingPresence.present() ? "session-working" : undefined}
+            role={workingPresence.present() ? "status" : undefined}
+            aria-hidden={!workingPresence.present() || undefined}
             class="motion-reduce:animate-none"
             classList={{
+              "invisible pointer-events-none": !workingPresence.present(),
               "animate-in fade-in duration-150 ease-[cubic-bezier(.2,.8,.2,1)]":
-                workingPresence.animate() && workingPresence.show(),
+                workingPresence.present() && workingPresence.animate() && workingPresence.show(),
               "animate-out fade-out fill-mode-forwards duration-[110ms] ease-[cubic-bezier(.4,0,1,1)]":
-                workingPresence.animate() && !workingPresence.show(),
+                workingPresence.present() && workingPresence.animate() && !workingPresence.show(),
             }}
           >
             <TextShimmer text={language.t("session.timeline.working")} active />
