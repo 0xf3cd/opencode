@@ -1,11 +1,17 @@
 import { Show, createMemo, onMount, type JSX } from "solid-js"
 import { createStore } from "solid-js/store"
 import type { ModelSelection } from "@/providers/models/selection"
-import { STORY_MODEL, emptySessionDocument, pendingAndQueuedDocument } from "@opencode/session-ui/storybook"
+import {
+  STORY_MODEL,
+  emptySessionDocument,
+  largeCompletedDocument,
+  pendingAndQueuedDocument,
+} from "@opencode/session-ui/storybook"
 import { Composer } from "./composer"
 import type { ComposerModel } from "./model"
 import { createComposerEditor } from "./editor/interaction"
 import type { ComposerPersistedState, ComposerSuggestion } from "./types"
+import { composerLayouts, type ComposerLayout } from "./editor/editor"
 import { buildPromptRequest } from "./request"
 import { promptLength } from "./prompt-parts"
 import { SessionPreview } from "@/session/story-model"
@@ -61,6 +67,9 @@ function ComposerStory(props: {
   alternate?: "queue" | "steer"
   manySuggestions?: boolean
   suggestionBoundary?: () => HTMLElement | undefined
+  layout?: ComposerLayout
+  // Matches the composer in Kit's capture: Anthropic / Claude Opus 5.5 at the High variant.
+  opus?: boolean
 }) {
   const [draft, setDraft] = createStore<ComposerPersistedState>({
     prompt: props.prompt ?? [{ type: "text", content: "", start: 0, end: 0 }],
@@ -71,12 +80,16 @@ function ComposerStory(props: {
 
   const [story, setStory] = createStore({
     activity: props.label ?? "Ready",
-    variant: STORY_MODEL.variant,
+    variant: props.opus ? "high" : STORY_MODEL.variant,
   })
 
   const modelOption = createMemo(() => ({
     ...selectedModel,
-    name: props.longLabels ? "Claude Sonnet with an unusually long model name" : selectedModel.name,
+    name: props.longLabels
+      ? "Claude Sonnet with an unusually long model name"
+      : props.opus
+        ? "Claude Opus 5.5"
+        : selectedModel.name,
   }))
 
   const modelSelection = {
@@ -152,14 +165,17 @@ function ComposerStory(props: {
     readImage: async () => pixel,
     view: {
       placeholder: () => "Ask anything, / for commands, @ for context...",
-      agent: {
-        options: () => [
-          { id: "build", label: props.longLabels ? "Build agent with an unusually long name" : "build" },
-          { id: "review", label: "review" },
-        ],
-        current: () => "build",
-        onSelect: (agent) => setStory("activity", `Selected ${agent}`),
-      },
+      // Kit's composer hides the agent picker (custom agents are off by default).
+      agent: props.opus
+        ? undefined
+        : {
+            options: () => [
+              { id: "build", label: props.longLabels ? "Build agent with an unusually long name" : "build" },
+              { id: "review", label: "review" },
+            ],
+            current: () => "build",
+            onSelect: (agent) => setStory("activity", `Selected ${agent}`),
+          },
       variant: {
         options: () => [
           { id: "default", label: "default" },
@@ -221,7 +237,12 @@ function ComposerStory(props: {
 
   const model = {
     ...editor,
-    model: { selection: modelSelection, paid: true, loading: false },
+    model: {
+      selection: modelSelection,
+      paid: true,
+      loading: false,
+      providerName: props.opus ? selectedModel.provider.name : undefined,
+    },
   } satisfies ComposerModel
 
   onMount(() => {
@@ -235,7 +256,7 @@ function ComposerStory(props: {
       <output class="text-12-regular text-text-weak" aria-live="polite">
         {story.activity}
       </output>
-      <Composer model={model} borderUnderlay suggestionBoundary={props.suggestionBoundary} />
+      <Composer model={model} borderUnderlay suggestionBoundary={props.suggestionBoundary} layout={props.layout} />
     </div>
   )
 }
@@ -404,6 +425,84 @@ export const ToolbarOverflow = {
         alternate={args.alternate === "none" ? undefined : args.alternate}
       />
     </div>
+  ),
+}
+
+const layoutScenarios = ["empty", "text", "long", "multiline", "attachments", "longName"] as const
+
+function LayoutStory(props: { layout: ComposerLayout; scenario: (typeof layoutScenarios)[number]; width: number }) {
+  const prompt = () => {
+    if (props.scenario === "text") return text("Explain this change")
+
+    if (props.scenario === "long")
+      return text(
+        "Walk through the composer's padding rules and tell me which ones leave empty space between the text and the controls",
+      )
+
+    if (props.scenario === "multiline") return text("Review the implementation\nThen run the focused tests\nThen push")
+
+    if (props.scenario === "attachments")
+      return [
+        ...text("Match this layout"),
+        {
+          type: "image" as const,
+          id: "image-story",
+          filename: "layout.png",
+          mime: "image/png",
+          blob: { id: "image-story", url: "data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///ywAAAAAAQABAAACAUwAOw==" },
+        },
+      ]
+
+    return undefined
+  }
+
+  return (
+    <div data-slot="composer-layout-story" style={{ width: `${props.width + 48}px` }}>
+      <Show when={`${props.layout}:${props.scenario}`} keyed>
+        <ComposerStory opus longLabels={props.scenario === "longName"} prompt={prompt()} layout={props.layout} />
+      </Show>
+    </div>
+  )
+}
+
+export const Layouts = {
+  args: { layout: "today", scenario: "empty", width: 720 },
+  argTypes: {
+    layout: { control: "select", options: composerLayouts },
+    scenario: { control: "select", options: layoutScenarios },
+    width: { control: { type: "range", min: 320, max: 960, step: 4 } },
+  },
+  render: (args: { layout: ComposerLayout; scenario: (typeof layoutScenarios)[number]; width: number }) => (
+    <LayoutStory layout={args.layout} scenario={args.scenario} width={args.width} />
+  ),
+}
+
+// The session surface Kit captured: a finished answer with seven subagents running above the composer.
+export const LayoutInSession = {
+  args: { layout: "today" },
+  argTypes: { layout: { control: "select", options: composerLayouts } },
+  render: (args: { layout: ComposerLayout }) => (
+    <Show when={args.layout} keyed>
+      {(layout) => (
+        <SessionPreview
+          title="Game engine"
+          description="opencode · composer layout"
+          document={largeCompletedDocument}
+          composerLayout={layout}
+          activity={{
+            subagents: Array.from({ length: 7 }, (_, index) => ({
+              key: `ses_child_${index}`,
+              type: "subagent" as const,
+              label: `Detail pass ${index + 1}`,
+              agent: "general",
+              sessionID: `ses_child_${index}`,
+              target: `ses_child_${index}`,
+            })),
+            shells: [],
+          }}
+        />
+      )}
+    </Show>
   ),
 }
 

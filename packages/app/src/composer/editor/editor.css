@@ -8,7 +8,7 @@
   mask-image: linear-gradient(
     to bottom,
     transparent,
-    black 16px,
+    black var(--composer-fade-top, 16px),
     black calc(100% - var(--composer-fade-bottom, 0px)),
     transparent
   );
@@ -63,4 +63,105 @@
 
 [data-color-scheme="dark"] [data-component="composer-suggestions"] [data-active] {
   background: var(--v2-alpha-light-10);
+}
+
+/*
+ * Composer layout exploration. "today" is the shipped geometry; every other layout drops the 60px editor and 96px
+ * form minimums, whose 16px of unrequested height sits between the text and the control row.
+ */
+[data-component="composer"]:not([data-layout="today"]) {
+  min-height: 0;
+
+  [data-component="composer-scroll"],
+  [data-component="composer-editor"] {
+    min-height: 0;
+  }
+}
+
+/* The model chip carries the variant, so it sits straight after the + button. */
+[data-component="composer"]:is([data-layout="joined"], [data-layout="slim"], [data-layout="inline"])
+  [data-slot="composer-controls"] {
+  margin-inline-start: 0;
+}
+
+/* Slim: one 12px text inset, 24px controls 8px from the edges, and the + glyph on the text's 12px spine. */
+[data-component="composer"][data-layout="slim"] {
+  --composer-fade-top: 12px;
+
+  [data-component="composer-editor"],
+  [data-slot="composer-placeholder"] {
+    padding: 12px 12px 4px;
+  }
+
+  [data-slot="composer-row"] {
+    height: 40px;
+  }
+
+  [data-action="composer-attach"],
+  [data-action="composer-submit"] {
+    width: 24px;
+    height: 24px;
+  }
+
+  [data-action="composer-submit"] {
+    padding: 4px;
+  }
+
+  [data-action="composer-model"] {
+    height: 24px !important;
+    padding-inline: 8px;
+  }
+}
+
+/* Inline: one 44px row at rest; it becomes the joined two-row layout once the draft wraps or holds context. */
+[data-component="composer"][data-layout="inline"] [data-slot="composer-model-provider"] {
+  display: none;
+}
+
+[data-component="composer"][data-layout="inline"]:not([data-expanded]) {
+  --composer-fade-top: 12px;
+  display: grid;
+  grid-template-columns: auto minmax(160px, 1fr) minmax(0, max-content) auto;
+  grid-template-areas: "add editor controls actions";
+  align-items: center;
+
+  [data-component="composer-scroll"] {
+    grid-area: editor;
+  }
+
+  [data-slot="composer-row"] {
+    display: contents;
+  }
+
+  [data-slot="composer-add"] {
+    grid-area: add;
+    padding-inline-start: 8px;
+  }
+
+  [data-slot="composer-controls"] {
+    grid-area: controls;
+    height: 44px;
+    margin-inline: 0 4px;
+  }
+
+  [data-action="composer-model"] {
+    max-width: 240px;
+  }
+
+  [data-slot="composer-actions"] {
+    grid-area: actions;
+    padding-inline-end: 8px;
+  }
+
+  [data-component="composer-editor"],
+  [data-slot="composer-placeholder"] {
+    padding-block: 12px;
+    padding-inline: 4px 8px;
+  }
+
+  [data-slot="composer-placeholder"] {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
 }

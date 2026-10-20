@@ -64,6 +64,14 @@ export type {
 
 export type ComposerMode = "normal" | "shell"
 
+// Exploration of tighter composer geometry. "today" is the shipped layout; the others are candidates for Kit's pick.
+export const composerLayouts = ["today", "tight", "joined", "slim", "inline"] as const
+
+export type ComposerLayout = (typeof composerLayouts)[number]
+
+// Layouts that fold the variant into the model chip instead of showing a second picker.
+export const composerJoinedLayouts: ComposerLayout[] = ["joined", "slim", "inline"]
+
 const COMPOSER_SUGGESTION_MAX_HEIGHT = 320
 
 const COMPOSER_SUGGESTION_ROW_HEIGHT = 28
@@ -89,6 +97,7 @@ export type ComposerEditorProps = {
   alternateKeybind?: string[]
   exitShellKeybind?: string[]
   suggestionBoundary?: () => HTMLElement | undefined
+  layout?: ComposerLayout
 }
 
 export function ComposerEditor(props: ComposerEditorProps) {
@@ -112,9 +121,32 @@ export function ComposerEditor(props: ComposerEditorProps) {
   // The bottom fade shrinks with the remaining scroll so the last line ends clear of it.
   const [fadeBottom, setFadeBottom] = createSignal(0)
 
+  const layout = () => props.layout ?? "today"
+  const [expanded, setExpanded] = createSignal(false)
+
+  const hasContext = () =>
+    props.controller.attachments().length +
+      props.controller.uploads().length +
+      props.controller.comments().length +
+      props.controller.files().length >
+    0
+
+  // The inline layout is one row while the draft fits on one line. Once it wraps it stays two rows until the draft
+  // is cleared, so the wider editor of the two-row layout cannot unwrap it and flip back.
+  createEffect(() => {
+    if (layout() !== "inline") return
+    const value = props.controller.value()
+
+    if (!value && !hasContext()) return setExpanded(false)
+
+    if (value.includes("\n") || hasContext()) setExpanded(true)
+  })
+
   const updateScroll = () => {
     if (!viewport) return
     setFadeBottom(Math.min(16, Math.max(0, viewport.scrollHeight - viewport.clientHeight - viewport.scrollTop)))
+
+    if (layout() === "inline" && !expanded() && editor && editor.scrollHeight > 44) setExpanded(true)
   }
 
   onMount(() => {
@@ -200,6 +232,8 @@ export function ComposerEditor(props: ComposerEditorProps) {
       <form
         data-component="composer"
         data-dock-border-underlay={props.borderUnderlay ? "true" : undefined}
+        data-layout={layout()}
+        data-expanded={layout() === "inline" && expanded() ? "" : undefined}
         class="group/composer relative min-h-[96px] w-full overflow-clip rounded-xl bg-v2-background-bg-base"
         classList={{
           "shadow-[var(--v2-elevation-raised)]": !props.borderUnderlay,
@@ -317,6 +351,7 @@ export function ComposerEditor(props: ComposerEditorProps) {
           />
           <Show when={!props.controller.value()}>
             <div
+              data-slot="composer-placeholder"
               dir={state.mode === "normal" ? "auto" : "ltr"}
               class="pointer-events-none absolute inset-x-0 top-0 px-4 pt-4 text-[13px] font-[440] leading-5 text-v2-text-text-faint"
               classList={{ "font-mono! tracking-[-0.04px]": state.mode === "shell" }}
@@ -330,8 +365,9 @@ export function ComposerEditor(props: ComposerEditorProps) {
           </Show>
         </ScrollView>
 
-        <div class="flex h-11 items-center px-2">
+        <div data-slot="composer-row" class="flex h-11 items-center px-2">
           <div
+            data-slot="composer-add"
             class="flex shrink-0 items-center"
             aria-hidden={state.mode === "shell"}
             inert={state.mode === "shell" ? true : undefined}
@@ -377,7 +413,7 @@ export function ComposerEditor(props: ComposerEditorProps) {
               </Show>
               <Show when={props.modelControlsVisible ?? true}>
                 {props.modelControl}
-                <Show when={view.variant} keyed>
+                <Show when={!composerJoinedLayouts.includes(layout()) && view.variant} keyed>
                   {(control) => (
                     <Show when={control.options().length > 1}>
                       <ComposerEditorConfiguredSelect

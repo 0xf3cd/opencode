@@ -7,7 +7,7 @@ import { Keybind } from "@opencode/ui/keybind"
 import { consoleModelGroup } from "@/providers/models/provider-group"
 import { consoleProviderName } from "@/providers/catalog/console"
 import { Tooltip } from "@opencode/ui/tooltip"
-import { ComposerEditor } from "./editor/editor"
+import { ComposerEditor, composerJoinedLayouts, type ComposerLayout } from "./editor/editor"
 import { DialogSelectModel, ModelSelectorDrawer } from "@/providers/models/select-dialog"
 import { ModelDetails } from "@/providers/models/details"
 import { DialogSelectModelUnpaid } from "@/providers/models/unpaid"
@@ -21,6 +21,7 @@ export function Composer(props: {
   borderUnderlay?: boolean
   readOnly?: boolean
   suggestionBoundary?: () => HTMLElement | undefined
+  layout?: ComposerLayout
 }) {
   const dialog = useDialog()
   const command = useCommand()
@@ -38,6 +39,16 @@ export function Composer(props: {
     return language.t("dialog.model.select.title")
   }
 
+  // Joined layouts show the variant inside the model chip; the model dialog changes it with ←/→.
+  const variantName = () => {
+    if (!composerJoinedLayouts.includes(props.layout ?? "today")) return
+    const control = props.model.view.variant
+
+    if (!control || control.options().length < 2 || control.current() === "default") return
+
+    return control.options().find((option) => option.id === control.current())?.label ?? control.current()
+  }
+
   return (
     <div class="flex flex-col gap-3">
       <ComposerEditor
@@ -51,6 +62,7 @@ export function Composer(props: {
         alternateKeybind={[formatKeybind("mod", language.t), "↵"]}
         exitShellKeybind={[formatKeybind("esc", language.t)]}
         suggestionBoundary={props.suggestionBoundary}
+        layout={props.layout}
         modelControl={
           <ComposerModelControl
             loading={props.model.model.loading}
@@ -60,6 +72,7 @@ export function Composer(props: {
             model={props.model.model.selection}
             providerName={props.model.model.providerName}
             modelName={modelName()}
+            variantName={variantName()}
             onClose={props.model.restoreFocus}
             onUnpaidClick={() => dialog.show(() => <DialogSelectModelUnpaid model={props.model.model.selection} />)}
           />
@@ -77,6 +90,7 @@ function ComposerModelControl(props: {
   model: ComposerModel["model"]["selection"]
   providerName?: string
   modelName: string
+  variantName?: string
   onClose: () => void
   onUnpaidClick: () => void
 }) {
@@ -98,13 +112,16 @@ function ComposerModelControl(props: {
       <span class="flex min-w-0 whitespace-nowrap leading-4">
         <Show when={props.providerName}>
           {(name) => (
-            <>
+            <span data-slot="composer-model-provider" class="contents">
               <span class="shrink-0 text-v2-text-text-faint">{name()}</span>
               <span class="shrink-0 whitespace-pre text-v2-text-text-faint">{" / "}</span>
-            </>
+            </span>
           )}
         </Show>
         <span class="truncate">{props.modelName}</span>
+        <Show when={props.variantName}>
+          {(variant) => <span class="shrink-0 ps-1.5 capitalize text-v2-text-text-faint">{variant()}</span>}
+        </Show>
       </span>
       <span class="-ml-0.5 -mr-1 flex shrink-0">
         <Icon name="chevron-down" />

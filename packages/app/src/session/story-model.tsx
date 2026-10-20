@@ -1,5 +1,6 @@
 import type { ModelSelection } from "@/providers/models/selection"
 import { Composer } from "@/composer/composer"
+import type { ComposerLayout } from "@/composer/editor/editor"
 import type { ComposerModel } from "@/composer/model"
 import { SessionHeaderActions } from "@/session/header/session-header-actions"
 import {
@@ -94,6 +95,7 @@ export type SessionPreviewProps = {
     onStop?: (item: SessionActivityItem) => void
   }
   timelineDetail?: TimelineDetail
+  composerLayout?: ComposerLayout
 }
 
 export function SessionPreview(props: SessionPreviewProps) {
@@ -303,7 +305,7 @@ function SessionSurfaceState(props: SessionPreviewProps & { onReset: () => void 
                           }
                         />
                         <div class="relative z-10">
-                          <Composer model={prompt.controller} borderUnderlay />
+                          <Composer model={prompt.controller} borderUnderlay layout={props.composerLayout} />
                         </div>
                       </div>
                     }
