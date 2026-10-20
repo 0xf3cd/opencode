@@ -7,13 +7,14 @@ import { Mcp } from "@opencode/core/mcp/index"
 import { Session } from "@opencode/core/session"
 import { Tool } from "@opencode/core/tool"
 import { McpTool } from "@opencode/core/tool/mcp"
-import { Context, Effect, Layer, Schedule } from "effect"
+import { Context, Effect, Exit, Layer, Schedule, Scope } from "effect"
 import { HttpRouter, HttpServer } from "effect/http"
 import fs from "node:fs/promises"
 import { createServer } from "node:http"
 import os from "node:os"
 import path from "node:path"
 import { it } from "../../core/test/lib/effect"
+import { ServerProcess } from "../src/process"
 import { createRoutes } from "../src/routes"
 
 // The DOM lib hides Bun's WebSocket constructor overload that accepts upgrade request headers.
@@ -68,7 +69,7 @@ const connectClient = (url: URL, headers?: Record<string, string>) =>
   Effect.acquireRelease(
     Effect.promise(async () => {
       const socket = new WebSocket(url, { headers })
-      const state = { open: false, closed: false, code: 0 }
+      const state = { open: false, initialized: false, closed: false, code: 0 }
       const sessions: unknown[] = []
       const transport: Transport = {
         start: async () => {},
@@ -89,6 +90,9 @@ const connectClient = (url: URL, headers?: Record<string, string>) =>
         sessions.push(ctx.mcpReq._meta?.["ai.opencode/sessionID"])
         return { content: [{ type: "text", text: "opened" }] }
       })
+      server.server.oninitialized = () => {
+        state.initialized = true
+      }
       await server.connect(transport)
       return { socket, state, sessions }
     }),
@@ -206,6 +210,72 @@ it.live(
       const client = yield* connectClient(server.url({ name: "bad.name" }), { authorization })
       yield* until(() => client.state.closed)
       expect(client.state.open).toBeFalse()
+    }),
+  20_000,
+)
+
+it.live(
+  "closes with 1011 when the client rejects initialize",
+  () =>
+    Effect.gen(function* () {
+      const server = yield* serve()
+      const state = yield* Effect.acquireRelease(
+        Effect.sync(() => {
+          const socket = new WebSocket(server.url({ name: "tui" }), { headers: { authorization } })
+          const state = { socket, closed: false, code: 0 }
+          socket.addEventListener("message", (event) => {
+            const message = JSON.parse(String(event.data))
+            if (message.method !== "initialize") return
+            socket.send(
+              JSON.stringify({ jsonrpc: "2.0", id: message.id, error: { code: -32603, message: "not today" } }),
+            )
+          })
+          socket.addEventListener("close", (event) => {
+            state.closed = true
+            state.code = event.code
+          })
+          return state
+        }),
+        (state) => Effect.sync(() => state.socket.close()),
+      )
+      yield* until(() => state.closed)
+      expect(state.code).toBe(1011)
+    }),
+  20_000,
+)
+
+it.live(
+  "shuts the server down while a client is attached",
+  () =>
+    Effect.gen(function* () {
+      const directory = yield* Effect.acquireRelease(
+        Effect.promise(() => fs.mkdtemp(path.join(os.tmpdir(), "opencode-client-mcp-"))),
+        (directory) => Effect.promise(() => fs.rm(directory, { recursive: true, force: true })),
+      )
+      const scope = yield* Scope.make()
+      const server = yield* ServerProcess.start<never, never>(
+        {
+          hostname: "127.0.0.1",
+          port: 0,
+          password: "secret",
+          app: { version: "test-version" },
+          database: { path: ":memory:" },
+          models: { fetch: false },
+          config: { directory, project: false, content: "{}" },
+          fs: { filewatcher: false },
+        },
+        { onListen: () => Effect.succeed(Effect.void) },
+      ).pipe(Scope.provide(scope))
+      const url = new URL("/api/experimental/client-mcp", HttpServer.formatAddress(server.address))
+      url.protocol = "ws:"
+      url.searchParams.set("location[directory]", directory)
+      url.searchParams.set("name", "tui")
+      const client = yield* connectClient(url, { authorization })
+      yield* until(() => client.state.initialized)
+
+      const closed = yield* Scope.close(scope, Exit.void).pipe(Effect.timeoutOption("5 seconds"))
+      expect(closed._tag).toBe("Some")
+      yield* until(() => client.state.closed)
     }),
   20_000,
 )
