@@ -87,6 +87,19 @@ describe("SessionLegacy", () => {
     })
   })
 
+  test("moves the kept text a compaction stored in recent into metadata", () => {
+    expect(
+      SessionLegacy.message("compaction", { status: "completed", recent: "[User]: kept", metadata: { source: "x" } }),
+    ).toEqual({ status: "completed", metadata: { recent: "[User]: kept", source: "x" } })
+    expect(SessionLegacy.message("compaction", { status: "completed", recent: "" })).toEqual({ status: "completed" })
+    expect(
+      SessionLegacy.event("session.compaction.ended", { reason: "auto", text: "s", recent: "[User]: kept" }),
+    ).toEqual({ reason: "auto", text: "s" })
+    expect(SessionLegacy.event("session.compaction.started", { reason: "auto", recent: "" })).toEqual({
+      reason: "auto",
+    })
+  })
+
   test("upgrades exported messages before decoding", () => {
     const message = {
       id: "msg_legacy",

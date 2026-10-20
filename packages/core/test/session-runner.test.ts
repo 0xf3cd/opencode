@@ -1530,7 +1530,6 @@ describe("SessionRunnerLLM", () => {
         sessionID,
         reason: "manual",
         text: "",
-        recent: "",
         providerContext,
       })
       const checkpoint = (yield* s.messages).find((message) => message.type === "compaction")
@@ -3112,7 +3111,7 @@ describe("SessionRunnerLLM", () => {
     expect(context[0]).toMatchObject({
       type: "compaction",
       summary: "## Objective\n- Preserve the task",
-      recent: `[User]: ${"Recent exact request ".repeat(180)}`,
+      metadata: { recent: `[User]: ${"Recent exact request ".repeat(180)}` },
     })
     // Only a reference to the kept messages is stored; history rebuilds their text.
     const db = (yield* Database.Service).db
@@ -3129,7 +3128,8 @@ describe("SessionRunnerLLM", () => {
       .orderBy(desc(SessionMessageTable.seq))
       .get()
       .pipe(Effect.orDie)
-    expect(stored?.data).toMatchObject({ recent: "", metadata: { firstKeptMessageID: kept?.id } })
+    expect(stored?.data).toMatchObject({ metadata: { firstKeptMessageID: kept?.id } })
+    expect(stored?.data).not.toHaveProperty("recent")
 
     s.requests.length = 0
     s.executions.length = 0
@@ -3146,7 +3146,7 @@ describe("SessionRunnerLLM", () => {
     expect((yield* store.context(sessionID))[0]).toMatchObject({
       type: "compaction",
       summary: "## Objective\n- Preserve the updated task",
-      recent: `[User]: ${"Newest exact request ".repeat(180)}`,
+      metadata: { recent: `[User]: ${"Newest exact request ".repeat(180)}` },
     })
   })
 
@@ -3583,13 +3583,11 @@ describe("SessionRunnerLLM", () => {
     yield* s.bus.publish(SessionEvent.Compaction.Started, {
       sessionID,
       reason: "manual",
-      recent: "",
     })
     yield* s.bus.publish(SessionEvent.Compaction.Ended, {
       sessionID,
       reason: "manual",
       text: "summary",
-      recent: "",
     })
     s.systemUnavailable = true
     yield* s.runPrompt("Third")
@@ -4424,25 +4422,21 @@ describe("SessionRunnerLLM", () => {
       sessionID,
       reason: "manual",
       inputID: first,
-      recent: "",
     })
     yield* s.bus.publish(SessionEvent.Compaction.Started, {
       sessionID,
       reason: "manual",
       inputID: completed,
-      recent: "",
     })
     yield* s.bus.publish(SessionEvent.Compaction.Ended, {
       sessionID,
       reason: "manual",
       text: "## Objective\n- Earlier completed checkpoint",
-      recent: "",
     })
     yield* s.bus.publish(SessionEvent.Compaction.Started, {
       sessionID,
       reason: "auto",
       inputID: last,
-      recent: "",
     })
 
     // These starts have no terminal events, as after SIGKILL. The older orphan
@@ -4478,7 +4472,6 @@ describe("SessionRunnerLLM", () => {
       sessionID,
       reason: "manual",
       inputID: previous,
-      recent: "",
     })
     yield* s.llm.push(TestLLM.text("## Objective\n- New checkpoint", "new-summary"))
     const gate = yield* s.llm.gate

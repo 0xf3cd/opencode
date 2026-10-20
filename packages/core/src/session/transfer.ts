@@ -297,7 +297,6 @@ function sanitizeMessage(message: SessionMessage.Info): SessionMessage.Info {
       ...message,
       metadata: meta,
       summary: redact("compaction-summary", message.id, message.summary),
-      recent: redact("compaction-recent", message.id, message.recent),
       ...(message.status === "completed"
         ? {
             native: metadata("compaction-native", message.id, message.native),

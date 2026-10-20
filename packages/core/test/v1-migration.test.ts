@@ -651,7 +651,7 @@ describe("V1Migration.transformSession", () => {
       id: compact.id,
       time_created: 3,
       time_updated: 6,
-      data: { status: "completed", reason: "manual", summary: "summary", recent: "" },
+      data: { status: "completed", reason: "manual", summary: "summary" },
     })
   })
 
@@ -677,8 +677,9 @@ describe("V1Migration.transformSession", () => {
     expect(result.messages[2].data).toMatchObject({
       reason: "auto",
       summary: "summary",
-      recent: "[User]: question\n\n[Assistant]: answer",
+      metadata: { recent: "[User]: question\n\n[Assistant]: answer" },
     })
+    expect(result.messages[2].data).not.toHaveProperty("recent")
     expect(result.session.agent).toBe("existing")
     expect(result.session.model).toEqual(existing.model)
   })

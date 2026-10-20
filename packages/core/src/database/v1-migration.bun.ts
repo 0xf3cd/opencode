@@ -297,6 +297,8 @@ export function transformSession(input: TransformInput): TransformResult {
             : -1
           const compactionIndex = messages.findIndex((candidate) => candidate.row.id === item.row.id)
           const tail = tailIndex < 0 ? [] : messages.slice(tailIndex, compactionIndex)
+          // V1 kept these messages beside the summary; they replay as text, like compactions before v2.1.
+          const recent = serializeRecent(tail, byMessage)
           return [
             row(
               { ...item.row, time_updated: Math.max(item.row.time_updated, summary.row.time_updated) },
@@ -306,7 +308,7 @@ export function transformSession(input: TransformInput): TransformResult {
                 status: "completed",
                 reason: compaction.auto ? "auto" : "manual",
                 summary: summaryText,
-                recent: serializeRecent(tail, byMessage),
+                ...(recent ? { metadata: { recent } } : {}),
                 time: { created: item.row.time_created },
               },
             ),

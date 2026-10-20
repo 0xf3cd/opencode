@@ -399,11 +399,7 @@ export const layer = Layer.effect(
       const context = trigger.context
       // The runner opened the manual compaction's message when it delivered the `/compact` item.
       if (trigger.reason !== "manual") {
-        yield* bus.publish(SessionEvent.Compaction.Started, {
-          sessionID: context.session.id,
-          reason: "auto",
-          recent: "",
-        })
+        yield* bus.publish(SessionEvent.Compaction.Started, { sessionID: context.session.id, reason: "auto" })
       }
       if (prepared.event.result) return yield* fromHook(context, prepared.event.result)
 
@@ -486,8 +482,9 @@ export const layer = Layer.effect(
       // TODO: Read the previous summary from the hooked request once it no longer merges summary and recent into one
       // message. Until then it is rebuilt from storage, which drops a compaction hook's edits to that message.
       const lead = summary
-        ? toLLMMessages([{ ...summary, recent: "" }], context.model.ref)
+        ? toLLMMessages([{ ...summary, metadata: { ...summary.metadata, recent: "" } }], context.model.ref)
         : request.messages.slice(0, end)
+      const recent = summary ? SessionRecentText.kept(summary) : ""
 
       // A user message and everything after it, up to the next one, is one exchange: kept or dropped whole.
       const exchanges = request.messages.slice(end).reduce<string[]>(
@@ -498,7 +495,7 @@ export const layer = Layer.effect(
           else groups[groups.length - 1] += `\n${text}`
           return groups
         },
-        summary?.recent ? [summary.recent] : [],
+        recent ? [recent] : [],
       )
 
       const note = (omitted: number) =>
@@ -660,7 +657,6 @@ export const layer = Layer.effect(
           native: outcome.native,
           providerContext: outcome.providerContext,
           text: outcome.text,
-          recent: "",
           ...usage,
         },
         { metadata: outcome.metadata },
@@ -745,7 +741,7 @@ const recentStart = (
 
   // One exchange, nothing older. Summarize it all and keep nothing, unless a previous summary already
   // kept recent text, in which case keep everything and summarize only the summary before it.
-  return previous?.recent ? 0 : entries.length
+  return previous && SessionRecentText.kept(previous) ? 0 : entries.length
 }
 
 const oldestToDrop = <T>(items: ReadonlyArray<T>, size: (item: T) => number, budget: number) => {

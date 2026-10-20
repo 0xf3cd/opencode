@@ -386,7 +386,6 @@ describe("SessionProjector", () => {
       yield* bus.publish(SessionEvent.Compaction.Started, {
         sessionID,
         reason: "manual",
-        recent: "recent context",
       })
       yield* bus.publish(SessionEvent.Compaction.Delta, {
         sessionID,
@@ -407,12 +406,11 @@ describe("SessionProjector", () => {
           .where(eq(SessionMessageTable.type, "compaction"))
           .all()
           .pipe(Effect.orDie),
-      ).toEqual([{ data: expect.objectContaining({ status: "running", summary: "", recent: "recent context" }) }])
+      ).toEqual([{ data: expect.objectContaining({ status: "running", summary: "" }) }])
       yield* bus.publish(SessionEvent.Compaction.Ended, {
         sessionID,
         reason: "manual",
         text: "summary",
-        recent: "recent context",
       })
 
       const rows = yield* db
@@ -450,10 +448,8 @@ describe("SessionProjector", () => {
         output: { output: "/project", truncated: false },
         time: { completed: DateTime.makeUnsafe(0) },
       })
-      expect(messages.find((message) => message.type === "compaction")).toMatchObject({
-        summary: "summary",
-        recent: "recent context",
-      })
+      expect(messages.find((message) => message.type === "compaction")).toMatchObject({ summary: "summary" })
+      expect(rows.find((row) => row.type === "compaction")?.data).not.toHaveProperty("recent")
       expect(
         yield* db.select().from(SessionTable).where(eq(SessionTable.id, sessionID)).get().pipe(Effect.orDie),
       ).toMatchObject({
@@ -676,7 +672,6 @@ describe("SessionProjector", () => {
         status: "completed",
         reason: "manual",
         summary: "summary",
-        recent: "",
         providerState: { compaction: "kept" },
         time: { created: 0 },
       }
