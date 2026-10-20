@@ -416,6 +416,8 @@ it.effect("generates a title for an explicitly requested child session", () =>
 it.effect("does not generate when the title agent is removed", () =>
   Effect.gen(function* () {
     const sessionID = Session.ID.make("ses_title_no_agent")
+    const agents = yield* Agent.Service
+    yield* agents.transform((editor) => editor.remove(Agent.ID.make("title")))
     yield* insertSession(sessionID)
     yield* prompt(sessionID, "Help me debug the failing build")
 

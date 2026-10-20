@@ -1850,7 +1850,7 @@ describe("SessionRunnerLLM", () => {
   scenario("fails before the model request when the selected agent is unavailable", function* (s) {
     yield* s.db
       .update(SessionTable)
-      .set({ agent: "explore" })
+      .set({ agent: "missing" })
       .where(eq(SessionTable.id, sessionID))
       .run()
       .pipe(Effect.orDie)
@@ -1863,7 +1863,7 @@ describe("SessionRunnerLLM", () => {
     expect(failure).toMatchObject({
       _tag: "Session.AgentNotFoundError",
       sessionID,
-      agent: "explore",
+      agent: "missing",
     })
     expect(s.requests).toHaveLength(0)
   })

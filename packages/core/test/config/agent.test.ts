@@ -13,7 +13,6 @@ import { LayerNode } from "@opencode/util/effect/layer-node"
 import { FSUtil } from "@opencode/util/fs-util"
 import { Global } from "@opencode/util/global"
 import { Permission } from "@opencode/core/permission"
-import { AgentPlugin } from "@opencode/core/plugin/agent"
 import { AbsolutePath } from "@opencode/core/schema"
 import { ConfigNormalize } from "@opencode/core/config/normalize"
 import { ConfigAgentV1 } from "@opencode/core/v1/config/agent"
@@ -61,6 +60,30 @@ test("keeps schema fields and name out of legacy agent options", () => {
 })
 
 describe("ConfigAgentPlugin.Plugin", () => {
+  it.effect("removes a built-in agent that config disables and announces the change", () =>
+    Effect.gen(function* () {
+      const agents = yield* Agent.Service
+      const bus = yield* Bus.Service
+      expect(yield* agents.get(Agent.ID.make("plan"))).toBeDefined()
+      const updated = yield* bus
+        .subscribe(Agent.Event.Updated)
+        .pipe(Stream.take(1), Stream.runCollect, Effect.forkScoped)
+      yield* Effect.yieldNow
+
+      yield* ConfigAgentPlugin.Plugin.effect(host({ agent: agentHost(agents) })).pipe(
+        Effect.provide(
+          Config.testLayer([
+            new Document({ type: "document", info: decode({ agents: { plan: { disabled: true } } }) }),
+          ]),
+        ),
+      )
+
+      expect(yield* Fiber.join(updated)).toHaveLength(1)
+      expect(yield* agents.get(Agent.ID.make("plan"))).toBeUndefined()
+      expect((yield* agents.list()).map((item) => String(item.id))).toContain("build")
+    }),
+  )
+
   for (const item of [
     { name: "separate legacy variant", frontmatter: "model: example/chat\nvariant: high", model: "example/chat#high" },
     { name: "unqualified model", frontmatter: "model: example/chat", model: "example/chat" },
@@ -174,7 +197,6 @@ permissions:
     Effect.gen(function* () {
       const agents = yield* Agent.Service
       const global = yield* Global.Service
-      yield* AgentPlugin.Plugin.effect(host({ agent: agentHost(agents) }))
 
       const entries = [
         new Document({
@@ -316,6 +338,7 @@ permissions:
       if (!buildAgent) throw new Error("expected configured build agent")
       expect(buildAgent.permissions).toEqual([
         ...defaultPermissions,
+        { action: "question", resource: "*", effect: "allow" },
         { action: "bash", resource: "*", effect: "allow" },
         { action: "bash", resource: "*", effect: "ask" },
         { action: "read", resource: "*", effect: "allow" },

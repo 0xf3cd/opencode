@@ -209,33 +209,6 @@ test("a prompt sent before the agents load waits and sends once they do", async 
   }
 })
 
-test("a prompt sent while the server still lists no agents sends once it lists them", async ({ page }) => {
-  const sessionID = "ses_send_empty_agents"
-  await mockWorkspace(page, {
-    name: "SendEmptyAgents",
-    sessions: [{ id: sessionID, agent: "build", model: { id: "alpha", providerID: "opencode" } }],
-    provider: provider({ id: "alpha", name: "Alpha" }),
-    emptyAgentReads: 1,
-  })
-  const emptied = page.waitForResponse((response) => new URL(response.url()).pathname === "/api/agent")
-  await page.goto(sessionHref(sessionID))
-  const editor = page.locator('[data-component="composer-editor"]')
-  await expect(editor).toBeEditable()
-  await emptied
-
-  const sent = page.waitForRequest(
-    (request) => request.method() === "POST" && new URL(request.url()).pathname === `/api/session/${sessionID}/prompt`,
-  )
-
-  await editor.click()
-  await page.keyboard.type("ship it")
-  await page.keyboard.press("Enter")
-
-  expect((await sent).postDataJSON()).toMatchObject({ text: "ship it", metadata: { agent: "build" } })
-  await expect(editor).toHaveText("")
-  await expect(page.getByText("Select an agent and model")).toHaveCount(0)
-})
-
 test("an opened session in another Location names its model from a loaded catalog before its agents load", async ({
   page,
 }) => {

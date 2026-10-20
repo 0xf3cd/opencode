@@ -4,6 +4,7 @@ import { DateTime, Effect, Option, Stream, Types } from "effect"
 import type { SessionContext } from "@opencode/plugin/effect/session"
 import type { ToolHooks } from "@opencode/plugin/effect/tool"
 import { Agent } from "@opencode/core/agent"
+import { AgentBuiltins } from "@opencode/core/agent-builtins"
 import { Environment } from "@opencode/core/environment/index"
 import { Event } from "@opencode/schema/event"
 import { Model } from "@opencode/core/model"
@@ -44,6 +45,19 @@ const run = Effect.fnUntraced(function* (events: ReadonlyArray<SessionEvent.Agen
     ...defaults,
     permissions: [...defaults.permissions],
   } satisfies Types.DeepMutable<Agent.Info>
+  // The plan agent is a built-in; the plugin owns only its tools and reminders.
+  AgentBuiltins.seed(
+    {
+      list: () => [planAgent],
+      get: (id) => (id === plan ? planAgent : undefined),
+      default: () => {},
+      update: (id, update) => {
+        if (id === plan) update(planAgent)
+      },
+      remove: () => {},
+    },
+    { ...Global.make(), home },
+  )
   const driver = Environment.makeMemoryDriver()
   yield* PlanPlugin.Plugin.effect(
     host({
@@ -51,18 +65,7 @@ const run = Effect.fnUntraced(function* (events: ReadonlyArray<SessionEvent.Agen
         get: () => Effect.die("unused agent.get"),
         list: () => Effect.die("unused agent.list"),
         reload: () => Effect.die("unused agent.reload"),
-        transform: (callback) => {
-          callback({
-            list: () => [planAgent],
-            get: (id) => (id === plan ? planAgent : undefined),
-            default: () => {},
-            update: (id, update) => {
-              if (id === plan) update(planAgent)
-            },
-            remove: () => {},
-          })
-          return Effect.succeed({ dispose: Effect.void })
-        },
+        transform: () => Effect.die("unused agent.transform"),
       },
       tool: {
         transform: () => Effect.die("unused tool.transform"),

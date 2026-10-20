@@ -209,8 +209,7 @@ describe("Permission", () => {
         .pipe(Effect.orDie)
       const agents = yield* Agent.Service
       yield* agents.transform((editor) => {
-        editor.remove(Agent.ID.make("test"))
-        editor.remove(Agent.ID.make("build"))
+        editor.list().forEach((agent) => editor.remove(agent.id))
       })
 
       const service = yield* Permission.Service

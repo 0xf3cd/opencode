@@ -74,8 +74,6 @@ export interface MockServerConfig {
   // directory it resolves.
   onLocationGet?: (directory: string) => void
   sessions: MockSession[]
-  // Answers this many agent lists empty first, like a server whose Location is still activating its plugins.
-  emptyAgentReads?: number
   pageMessages: (
     sessionId: string,
     limit: number,
@@ -536,7 +534,6 @@ export function createMockServerHandler(config: MockServerConfig, emit: (events:
           emit,
           mcp: new Map<string, MockMcpStatus>(),
           attempts: new Map<string, number>(),
-          agentReads: 0,
         }),
       ),
       Layer.provide(HttpServer.layerServices),
@@ -721,7 +718,6 @@ function mockHandlers(
     // MCP status overrides by `<directory>\n<server>`, and OAuth attempt creation times by attempt ID.
     mcp: Map<string, MockMcpStatus>
     attempts: Map<string, number>
-    agentReads: number
   },
 ) {
   const noContent = Effect.succeed(HttpApiSchema.NoContent.make())
@@ -866,22 +862,19 @@ function mockHandlers(
         config: () => Effect.succeed(configEntries),
         reference: () => Effect.succeed({ location: location(config), data: [] }),
         agent: (ctx) =>
-          Effect.sync(() => ({
+          Effect.succeed({
             location: location(config, requestDirectory(config, ctx.request)),
-            data:
-              state.agentReads++ < (config.emptyAgentReads ?? 0)
-                ? []
-                : [
-                    {
-                      id: "build",
-                      name: "Build",
-                      mode: "primary",
-                      hidden: false,
-                      request: { settings: {}, headers: {}, body: {} },
-                      permissions: [],
-                    },
-                  ],
-          })),
+            data: [
+              {
+                id: "build",
+                name: "Build",
+                mode: "primary",
+                hidden: false,
+                request: { settings: {}, headers: {}, body: {} },
+                permissions: [],
+              },
+            ],
+          }),
         provider: () =>
           Effect.succeed({ location: location(config), data: currentProviders(resolve(config.provider)) }),
         model: () => Effect.succeed({ location: location(config), data: currentModels(resolve(config.provider)) }),

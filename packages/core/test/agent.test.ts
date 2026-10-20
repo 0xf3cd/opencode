@@ -7,12 +7,10 @@ import { AppNodeBuilder } from "@opencode/core/effect/app-node-builder"
 import { LayerNode } from "@opencode/util/effect/layer-node"
 import { Location } from "@opencode/core/location"
 import { Permission } from "@opencode/core/permission"
-import { AgentPlugin } from "@opencode/core/plugin/agent"
 import { AbsolutePath } from "@opencode/core/schema"
 import { Global } from "@opencode/util/global"
 import { location } from "./fixture/location"
 import { testEffect } from "./lib/effect"
-import { agentHost, host } from "./plugin/host"
 
 const testLocation = location({ directory: AbsolutePath.make("/project") })
 const locationLayer = Layer.succeed(Location.Service, Location.Service.of(testLocation))
@@ -42,12 +40,19 @@ describe("Agent", () => {
     }),
   )
 
-  it.effect("starts without agents", () =>
+  it.effect("starts with the built-in agents before any plugin runs", () =>
     Effect.gen(function* () {
       const agent = yield* Agent.Service
 
-      expect(yield* agent.list()).toEqual([])
-      expect(yield* agent.get(Agent.ID.make("build"))).toBeUndefined()
+      expect((yield* agent.list()).map((item) => String(item.id))).toEqual([
+        "build",
+        "general",
+        "explore",
+        "compaction",
+        "title",
+        "summary",
+        "plan",
+      ])
     }),
   )
 
@@ -63,7 +68,7 @@ describe("Agent", () => {
       )
 
       expect(yield* agent.get(id)).toMatchObject({ id, description: "Reviews code", mode: "subagent" })
-      expect((yield* agent.list()).map((info) => info.id)).toEqual([id])
+      expect((yield* agent.list()).map((info) => info.id)).toContain(id)
     }),
   )
 
@@ -83,7 +88,12 @@ describe("Agent", () => {
         editor.default(Agent.ID.make("reviewer"))
       })
 
-      expect((yield* agent.list()).map((info) => String(info.id))).toEqual(["reviewer", "build", "explore"])
+      expect((yield* agent.list()).map((info) => String(info.id)).slice(0, 4)).toEqual([
+        "reviewer",
+        "build",
+        "general",
+        "explore",
+      ])
     }),
   )
 
@@ -170,11 +180,6 @@ describe("Agent", () => {
   it.effect("allows external directories without opting built-in agents into bash", () =>
     Effect.gen(function* () {
       const agent = yield* Agent.Service
-      yield* AgentPlugin.Plugin.effect(
-        host({
-          agent: agentHost(agent),
-        }),
-      )
 
       const agents = yield* agent.list()
       expect(agents.map((item) => String(item.id)).sort()).toEqual([
@@ -182,6 +187,7 @@ describe("Agent", () => {
         "compaction",
         "explore",
         "general",
+        "plan",
         "summary",
         "title",
       ])
@@ -220,11 +226,6 @@ describe("Agent", () => {
   it.effect("denies the subagent tool for built-in subagents", () =>
     Effect.gen(function* () {
       const agent = yield* Agent.Service
-      yield* AgentPlugin.Plugin.effect(
-        host({
-          agent: agentHost(agent),
-        }),
-      )
 
       yield* Effect.forEach(["general", "explore"], (id) =>
         Effect.gen(function* () {

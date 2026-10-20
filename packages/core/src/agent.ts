@@ -3,6 +3,8 @@ export * as Agent from "./agent.js"
 import { makeLocationNode } from "@opencode/util/effect/app-node"
 import { Array, Context, Effect, Layer, Types } from "effect"
 import { Agent } from "@opencode/schema/agent"
+import { Global } from "@opencode/util/global"
+import { AgentBuiltins } from "./agent-builtins.js"
 import { Bus } from "./bus.js"
 import { State } from "./state.js"
 
@@ -50,6 +52,7 @@ const layer = Layer.effect(
   Service,
   Effect.gen(function* () {
     const bus = yield* Bus.Service
+    const global = yield* Global.Service
     const selectable = (agent: Info | undefined) =>
       agent && agent.mode !== "subagent" && !agent.hidden ? agent : undefined
     const selectedDefault = (data: Data) => {
@@ -68,25 +71,31 @@ const layer = Layer.effect(
       if (!selected) return agents
       return [selected, ...agents.filter((agent) => agent.id !== selected.id)]
     }
+    const edit = (editor: Data): Editor => ({
+      list: () => Array.fromIterable(editor.agents.values()) as Info[],
+      get: (id) => editor.agents.get(id),
+      default: (id) => {
+        editor.default = id
+      },
+      update: (id, fn) => {
+        const current = editor.agents.get(id) ?? (Info.default(id) as Types.DeepMutable<Info>)
+        if (!editor.agents.has(id)) editor.agents.set(id, current)
+        fn(current)
+        current.id = id
+      },
+      remove: (id) => {
+        editor.agents.delete(id)
+      },
+    })
     const state = State.create<Data, Editor>({
       name: "agent",
-      initial: () => ({ agents: new Map() }),
-      editor: (editor) => ({
-        list: () => Array.fromIterable(editor.agents.values()) as Info[],
-        get: (id) => editor.agents.get(id),
-        default: (id) => {
-          editor.default = id
-        },
-        update: (id, fn) => {
-          const current = editor.agents.get(id) ?? (Info.default(id) as Types.DeepMutable<Info>)
-          if (!editor.agents.has(id)) editor.agents.set(id, current)
-          fn(current)
-          current.id = id
-        },
-        remove: (id) => {
-          editor.agents.delete(id)
-        },
-      }),
+      // Built-ins exist before plugins activate, so a booting Location never lists no agents.
+      initial: () => {
+        const data: Data = { agents: new Map() }
+        AgentBuiltins.seed(edit(data), global)
+        return data
+      },
+      editor: edit,
       notify: State.changes(list, () => bus.publish(Agent.Event.Updated, {}).pipe(Effect.asVoid)),
     })
 
@@ -115,4 +124,4 @@ const layer = Layer.effect(
   }),
 )
 
-export const node = makeLocationNode({ service: Service, layer, deps: [Bus.node] })
+export const node = makeLocationNode({ service: Service, layer, deps: [Bus.node, Global.node] })
