@@ -109,12 +109,18 @@ export function ComposerEditor(props: ComposerEditorProps) {
     })
   }
 
-  // The bottom fade shrinks with the remaining scroll so the last line ends clear of it.
-  const [fadeBottom, setFadeBottom] = createSignal(0)
+  // Each fade is only as deep as the text hidden past its edge, so the editor's padding alone never fades the
+  // line being typed at max height.
+  const [fade, setFade] = createStore({ top: 0, bottom: 0 })
 
   const updateScroll = () => {
-    if (!viewport) return
-    setFadeBottom(Math.min(16, Math.max(0, viewport.scrollHeight - viewport.clientHeight - viewport.scrollTop)))
+    if (!viewport || !editor) return
+    const style = getComputedStyle(editor)
+    const below = viewport.scrollHeight - viewport.clientHeight - viewport.scrollTop
+    setFade({
+      top: Math.min(16, Math.max(0, viewport.scrollTop - parseFloat(style.paddingTop))),
+      bottom: Math.min(16, Math.max(0, below - parseFloat(style.paddingBottom))),
+    })
   }
 
   onMount(() => {
@@ -239,7 +245,7 @@ export function ComposerEditor(props: ComposerEditorProps) {
         <ScrollView
           data-component="composer-scroll"
           class="min-h-[60px] max-h-[180px]"
-          style={{ "--composer-fade-bottom": `${fadeBottom()}px` }}
+          style={{ "--composer-fade-top": `${fade.top}px`, "--composer-fade-bottom": `${fade.bottom}px` }}
           onScroll={updateScroll}
           viewportRef={(element) => {
             viewport = element
