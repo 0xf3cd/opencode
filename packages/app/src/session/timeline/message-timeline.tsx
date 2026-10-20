@@ -1,7 +1,6 @@
 import { createEffect, createMemo, createSignal, on, onCleanup, Show, type Accessor, type JSX } from "solid-js"
 import { createStore } from "solid-js/store"
 import { Predicate } from "effect"
-import { createAnimatedPresence } from "@/runtime/animated-presence"
 import type { SessionUserActions } from "@opencode/session-ui/actions"
 import { Button } from "@opencode/ui/button"
 import { Icon } from "@opencode/ui/icon"
@@ -10,7 +9,7 @@ import { InlineInput } from "@opencode/ui/inline-input"
 import { Keybind } from "@opencode/ui/keybind"
 import { Menu } from "@opencode/ui/menu"
 import { TextShimmer } from "@opencode/ui/text-shimmer"
-import { enter, prefersReducedMotion } from "@opencode/ui/motion"
+import { frameLoop, Spring } from "@opencode/ui/motion"
 import type { BackgroundTask, MountedSession, SessionScreen } from "@opencode/gui-extensions/sdk"
 import { ExtensionSlot } from "@/runtime/extension/render"
 import { useLanguage } from "@/runtime/i18n/language"
@@ -29,6 +28,49 @@ import { useCommand } from "@/shell/commands/command"
 import { SessionAncestorTrail, SessionProjectMenu, SessionTitleHeader } from "../session-identity-header"
 import { SessionHeaderSpacer } from "@/session/header/session-header"
 import { SessionWorkingIndicator } from "@/session/header/session-working-indicator"
+
+// Retain the same node across interrupted fades; CSS animationend can arrive
+// from an earlier exit after status has already changed again.
+function createActivityFade(
+  show: Accessor<boolean>,
+  element: Accessor<HTMLElement | undefined>,
+  entering = false,
+  minimumDuration = 0,
+) {
+  const [present, setPresent] = createSignal(show())
+  const spring = Spring.fromDuration(show() && !entering ? 1 : 0, { duration: 0.18, bounce: 0 })
+  let started = performance.now()
+  let stop: (() => void) | undefined
+  const move = (visible: boolean) => {
+    spring.set(visible ? 1 : 0)
+    if (visible) setPresent(true)
+    if (stop) return
+    stop = frameLoop.add((dt) => {
+      const value = spring.step(dt)
+      const node = element()
+      if (node) node.style.opacity = `${value}`
+      if (!spring.resting) return true
+      stop = undefined
+      if (!spring.target) setPresent(false)
+      return false
+    })
+  }
+  createEffect(() => {
+    const node = element()
+    if (node) node.style.opacity = `${spring.value}`
+  })
+  createEffect(
+    on(show, (visible) => {
+      if (visible) started = performance.now()
+      const remaining = visible ? 0 : minimumDuration - (performance.now() - started)
+      if (remaining <= 0) return move(visible)
+      const timer = setTimeout(() => move(false), remaining)
+      onCleanup(() => clearTimeout(timer))
+    }),
+  )
+  onCleanup(() => stop?.())
+  return { present }
+}
 
 type BlockingTask = { type: "shell" | "subagent"; partID: string; id?: string; label?: string }
 
@@ -112,8 +154,13 @@ export function MessageTimeline(props: MessageTimelineProps) {
 
   return (
     <Show when={controller.data.sessionID()} keyed>
-      {() => (
-        <MessageTimelineView {...props} data={controller.data} action={controller.action} pending={controller.pending} />
+      {(_id) => (
+        <MessageTimelineView
+          {...props}
+          data={controller.data}
+          action={controller.action}
+          pending={controller.pending}
+        />
       )}
     </Show>
   )
@@ -398,26 +445,18 @@ function MessageTimelineView(
   let movedAt = -Infinity
   createEffect(on(activityRow, () => (movedAt = performance.now()), { defer: true }))
   const [bottomActivityRef, setBottomActivityRef] = createSignal<HTMLDivElement>()
-  const bottomActivityPresence = createAnimatedPresence(
-    () => (activityRow() ? undefined : true),
-    () => bottomActivityRef() ?? null,
-    sessionID,
-  )
+  const bottomActivityPresence = createActivityFade(() => !activityRow(), bottomActivityRef)
 
   // The lane keeps its height while empty, so Working and the hint come and go without moving the rows around it.
   function ActivityLane() {
     const [refs, setRefs] = createStore<{ working?: HTMLDivElement; backgroundHint?: HTMLDivElement }>({})
     // Each location owns its exit. Relocating status must not detach the fading
     // lane's observer or remove its content before its parent has disappeared.
-    const workingPresence = createAnimatedPresence(
-      () => (showWorking() ? true : undefined),
-      () => refs.working ?? null,
-      sessionID,
-    )
-    const backgroundHintPresence = createAnimatedPresence(
-      backgroundHintPartID,
-      () => refs.backgroundHint ?? null,
-      sessionID,
+    const workingPresence = createActivityFade(showWorking, () => refs.working, performance.now() - movedAt < 100)
+    const backgroundHintPresence = createActivityFade(
+      () => !!backgroundHintPartID(),
+      () => refs.backgroundHint,
+      false,
       1000,
     )
 
@@ -433,32 +472,15 @@ function MessageTimelineView(
             <div
               ref={(element) => {
                 setRefs("working", element)
-
-                if (performance.now() - movedAt < 100 && !prefersReducedMotion()) enter(element, { duration: 150 })
               }}
               data-component="session-working"
               role="status"
-              classList={{
-                "animate-in fade-in duration-150 ease-[cubic-bezier(.2,.8,.2,1)]":
-                  workingPresence.animate() && workingPresence.show(),
-                "animate-out fade-out fill-mode-forwards duration-[110ms] ease-[cubic-bezier(.4,0,1,1)]":
-                  workingPresence.animate() && !workingPresence.show(),
-              }}
             >
               <TextShimmer text={language.t("session.timeline.working")} active />
             </div>
           </Show>
           <Show when={backgroundHintPresence.present()}>
-            <div
-              ref={(element) => setRefs("backgroundHint", element)}
-              data-component="session-background-hint-row"
-              class="duration-150"
-              classList={{
-                "animate-in fade-in": backgroundHintPresence.animate() && backgroundHintPresence.show(),
-                "animate-out fade-out fill-mode-forwards":
-                  backgroundHintPresence.animate() && !backgroundHintPresence.show(),
-              }}
-            >
+            <div ref={(element) => setRefs("backgroundHint", element)} data-component="session-background-hint-row">
               <BackgroundMoveHint onMove={props.background.move} />
             </div>
           </Show>
@@ -471,15 +493,7 @@ function MessageTimelineView(
     <VirtualizedTimeline
       bottomSpacer={
         <Show when={bottomActivityPresence.present()}>
-          <div
-            ref={setBottomActivityRef}
-            class="duration-150"
-            classList={{
-              "animate-in fade-in": bottomActivityPresence.animate() && bottomActivityPresence.show(),
-              "animate-out fade-out fill-mode-forwards":
-                bottomActivityPresence.animate() && !bottomActivityPresence.show(),
-            }}
-          >
+          <div ref={setBottomActivityRef}>
             <ActivityLane />
           </div>
         </Show>
