@@ -71,7 +71,6 @@ const submit = async (captcha: string | undefined, verify: () => Promise<Respons
         return true
       },
       notifications: false,
-      accountLookup: async () => null,
     },
   )
   return { status: response.status, leads }

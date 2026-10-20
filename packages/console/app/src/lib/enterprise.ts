@@ -4,7 +4,6 @@ import { i18n } from "~/i18n"
 import { localeFromRequest } from "~/lib/language"
 import { createLead } from "~/lib/salesforce"
 import { inferenceSpendOptions } from "~/lib/inference-spend"
-import { lookupConsoleAccount, type ConsoleAccount } from "~/lib/console-account"
 import { verifyHcaptcha } from "~/lib/hcaptcha"
 
 interface EnterpriseFormData {
@@ -97,7 +96,6 @@ export async function handleEnterpriseRequest(
   options: {
     salesforceSubmit?: (payload: Record<string, unknown>) => Promise<boolean>
     notifications?: boolean
-    accountLookup?: (email: string) => Promise<ConsoleAccount | null>
     captcha?: Parameters<typeof verifyHcaptcha>[1]
   } = {},
 ) {
@@ -136,11 +134,6 @@ export async function handleEnterpriseRequest(
       return Response.json({ error: dict["enterprise.form.error.captcha"] }, { status: 400 })
     }
 
-    const account = await (options.accountLookup ?? lookupConsoleAccount)(body.email).catch((err) => {
-      console.error("Failed to look up Console account:", err)
-      return undefined
-    })
-
     const emailContent = enterpriseEmailContent(body, inferenceSpend?.salesforceValue)
 
     const [lead, mail, octopus] = await Promise.all([
@@ -153,7 +146,6 @@ export async function handleEnterpriseRequest(
           phone: body.phone,
           inferenceSpend: inferenceSpend?.salesforceValue,
           message: body.message,
-          consoleAccount: account,
         },
         options.salesforceSubmit,
       ).catch((err) => {
@@ -179,10 +171,6 @@ export async function handleEnterpriseRequest(
     ])
 
     if (!lead && !mail && !octopus) {
-      if (import.meta.env.DEV) {
-        console.warn("Enterprise inquiry accepted in dev mode without integrations", { email: body.email })
-        return Response.json({ success: true, message: dict["enterprise.form.success.submitted"] }, { status: 200 })
-      }
       console.error("Enterprise inquiry delivery failed", { email: body.email })
       return Response.json({ error: dict["enterprise.form.error.internalServer"] }, { status: 500 })
     }
