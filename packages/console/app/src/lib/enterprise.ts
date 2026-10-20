@@ -31,6 +31,36 @@ function splitFullName(fullName: string) {
   return { firstName: parts[0], lastName: parts.slice(1).join(" ") }
 }
 
+function escapeHtml(value: unknown) {
+  return String(value)
+    .replaceAll("&", "&amp;")
+    .replaceAll("<", "&lt;")
+    .replaceAll(">", "&gt;")
+    .replaceAll('"', "&quot;")
+    .replaceAll("'", "&#39;")
+}
+
+export function enterpriseEmailContent(body: EnterpriseFormData, inferenceSpend?: string) {
+  const field = (value?: unknown) => (value ? `${escapeHtml(value)}<br>` : "")
+  return {
+    html: `
+${escapeHtml(body.message)}<br><br>
+${inferenceSpend ? `Current monthly inference spend: ${escapeHtml(inferenceSpend)}<br><br>` : ""}
+--<br>
+${field(body.name)}
+${field(body.role)}
+${field(body.company)}${field(body.email)}
+${field(body.phone)}`.trim(),
+    text: [
+      body.message,
+      "",
+      ...(inferenceSpend ? [`Current monthly inference spend: ${inferenceSpend}`, ""] : []),
+      "--",
+      ...[body.name, body.role, body.company, body.email, body.phone].filter(Boolean),
+    ].join("\n"),
+  }
+}
+
 function subscribe(email: string, fullName: string) {
   const name = splitFullName(fullName)
   const fields: Record<string, string> = {}
@@ -111,14 +141,7 @@ export async function handleEnterpriseRequest(
       return undefined
     })
 
-    const emailContent = `
-${body.message}<br><br>
-${inferenceSpend ? `Current monthly inference spend: ${inferenceSpend.salesforceValue}<br><br>` : ""}
---<br>
-${body.name}<br>
-${body.role}<br>
-${body.company ? `${body.company}<br>` : ""}${body.email}<br>
-${body.phone ? `${body.phone}<br>` : ""}`.trim()
+    const emailContent = enterpriseEmailContent(body, inferenceSpend?.salesforceValue)
 
     const [lead, mail, octopus] = await Promise.all([
       createLead(
@@ -142,7 +165,8 @@ ${body.phone ? `${body.phone}<br>` : ""}`.trim()
         : sendEmail({
             to: Resource.ENTERPRISE_SALES_INBOX_EMAIL.value,
             subject: `Enterprise Inquiry from ${body.name}`,
-            body: emailContent,
+            body: emailContent.html,
+            text: emailContent.text,
             replyTo: body.email,
           }).then(
             () => true,
