@@ -1,0 +1,147 @@
+import { expect, test } from "bun:test"
+import { createTestRenderer } from "@opentui/core/testing"
+import type { ServerWebSocket } from "bun"
+import { Effect, FileSystem } from "effect"
+import { Global } from "@opencode/util/global"
+import { createEventStream, createFetch, directory, json } from "./fixture/tui-client"
+import { tmpdir } from "./fixture/fixture"
+
+test.skipIf(process.platform === "win32")("open_terminal opens a terminal for a session open in the TUI", async () => {
+  await using state = await tmpdir()
+  const setup = await createTestRenderer({ width: 120, height: 36, kittyKeyboard: true })
+  await setup.renderer.setupTerminal()
+  setup.renderer.start()
+  const session = (id: string) => ({
+    id,
+    title: `Fixture ${id}`,
+    projectID: "project",
+    location: { directory },
+    cost: 0,
+    tokens: { input: 0, output: 0, reasoning: 0, cache: { read: 0, write: 0 } },
+    time: { created: 0, updated: 0 },
+  })
+  const open = session("ses_mcp_open")
+  const other = session("ses_mcp_other")
+  const pty = {
+    id: "pty_fixture",
+    sessionID: open.id,
+    title: "Terminal",
+    command: "/bin/sh",
+    args: [],
+    cwd: directory,
+    status: "running",
+    pid: 1,
+    foregroundProcess: null,
+    size: { cols: 48, rows: 30 },
+    output: { head: 0, tail: 0 },
+  }
+  const created: string[] = []
+  const message = { id: "message-0", type: "user", text: "Client MCP message", time: { created: 0 } }
+  const calls = createFetch((url, request) => {
+    if (url.pathname === "/api/session") return json({ data: [open, other], cursor: {} })
+    for (const item of [open, other]) {
+      if (url.pathname === `/api/session/${item.id}`) return json({ data: item })
+      if (url.pathname === `/api/session/${item.id}/message`) return json({ data: [message], cursor: {} })
+      if (url.pathname === `/api/session/${item.id}/inbox`) return json({ data: [] })
+      if (url.pathname === `/api/session/${item.id}/permission`) return json({ data: [] })
+      if (url.pathname === `/api/experimental/session/${item.id}/terminal`) {
+        if (request.method === "POST") created.push(item.id)
+        return json({ data: request.method === "POST" ? pty : created.includes(item.id) ? [pty] : [] })
+      }
+    }
+    if (url.pathname === "/api/experimental/persistent-pty/pty_fixture/snapshot")
+      return json({
+        data: { info: pty, text: "Fixture shell", checkpoint: Buffer.from("Fixture shell").toString("base64") },
+      })
+    if (url.pathname === "/api/experimental/persistent-pty/pty_fixture/connect-token")
+      return json({ data: { ticket: "fixture" } })
+    return undefined
+  }, createEventStream())
+  const mcp = Promise.withResolvers<{ url: URL; socket: ServerWebSocket<{ url: URL }> }>()
+  const responses = new Map<number, (message: { result: { content: { text: string }[]; isError?: boolean } }) => void>()
+  const server = Bun.serve({
+    port: 0,
+    idleTimeout: 0,
+    fetch(request, server) {
+      const url = new URL(request.url)
+      if (
+        (url.pathname === "/api/experimental/client-mcp" || url.pathname.endsWith("/connect")) &&
+        server.upgrade(request, { data: { url } })
+      )
+        return undefined
+      return calls.fetch(request)
+    },
+    websocket: {
+      data: {} as { url: URL },
+      open(socket) {
+        if (socket.data.url.pathname === "/api/experimental/client-mcp")
+          return mcp.resolve({ url: socket.data.url, socket })
+        socket.send(JSON.stringify({ type: "attached", inputProtocol: 1, role: "controller", info: pty }))
+        socket.send(JSON.stringify({ type: "replay_complete" }))
+      },
+      message(socket, text) {
+        if (socket.data.url.pathname !== "/api/experimental/client-mcp") return
+        const message = JSON.parse(String(text))
+        responses.get(message.id)?.(message)
+      },
+    },
+  })
+  const { run } = await import("../src/app")
+  const task = Effect.runPromise(
+    run({
+      app: { name: "test", version: "test", channel: "test" },
+      server: { endpoint: { url: server.url.toString() } },
+      config: {
+        get: async () => ({ animations: false, tabs: { mode: "off" }, experimental: { "client-mcp": true } }),
+        update: async () => ({}),
+      },
+      packages: { prepare: async () => ({ directory: "" }) },
+      args: { sessionID: open.id },
+      terminalHandoff: async () => ({ renderer: setup.renderer, mode: "dark", complete: () => {} }),
+      log: () => {},
+    }).pipe(Effect.provide(Global.layerWith({ state: state.path })), Effect.provide(FileSystem.layerNoop({}))),
+  )
+  try {
+    const peer = await mcp.promise
+    expect(peer.url.searchParams.get("name")).toBe("tui")
+    expect(peer.url.searchParams.get("location[directory]")).toBe(directory)
+    let next = 0
+    const request = (method: string, params: unknown) => {
+      const id = ++next
+      const response = new Promise<{ result: { content: { text: string }[]; isError?: boolean } }>((resolve) =>
+        responses.set(id, resolve),
+      )
+      peer.socket.send(JSON.stringify({ jsonrpc: "2.0", id, method, params }))
+      return response.then((message) => message.result)
+    }
+    const callTool = (sessionID?: string) =>
+      request("tools/call", {
+        name: "open_terminal",
+        arguments: {},
+        ...(sessionID ? { _meta: { "ai.opencode/sessionID": sessionID } } : {}),
+      })
+    await request("initialize", {
+      protocolVersion: "2025-06-18",
+      capabilities: {},
+      clientInfo: { name: "fixture", version: "1.0.0" },
+    })
+    peer.socket.send(JSON.stringify({ jsonrpc: "2.0", method: "notifications/initialized" }))
+    await setup.waitForFrame((frame) => frame.includes("Client MCP message"))
+
+    expect(await callTool()).toMatchObject({ isError: true, content: [{ text: "Unknown session" }] })
+    expect(await callTool(other.id)).toMatchObject({
+      isError: true,
+      content: [{ text: "session not open in this TUI" }],
+    })
+    expect(await callTool(open.id)).toMatchObject({ content: [{ text: "Opened terminal pty_fixture" }] })
+    expect(created).toEqual([open.id])
+    await setup.waitForFrame((frame) => frame.includes("Fixture shell"))
+    // A second call reuses the session's existing terminal.
+    expect(await callTool(open.id)).toMatchObject({ content: [{ text: "Opened terminal pty_fixture" }] })
+    expect(created).toEqual([open.id])
+  } finally {
+    setup.renderer.destroy()
+    await task
+    await server.stop(true)
+  }
+})
