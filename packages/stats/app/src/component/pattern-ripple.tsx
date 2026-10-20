@@ -21,7 +21,10 @@ export const RIPPLE = {
   tint: "var(--stats-text)",
 }
 
-type Ripple = { x: number; y: number; radius: number; travel: number; start: number }
+type Ripple = { x: number; y: number; radius: number; travel: number; start: number; retired?: number }
+
+// Past this many waves on one pattern, the oldest fades out quickly so a burst of clicks stays cheap to draw.
+const LIMIT = { waves: 6, retire: 0.15 }
 
 // Clicking the visible dots of a pattern sends a wave of light across them. Waves overlap instead of replacing each other.
 export function PatternRipple() {
@@ -32,20 +35,17 @@ export function PatternRipple() {
 
     const frame = (now: number) => {
       ripples.forEach((list, el) => {
-        const live = list.filter((ripple) => (now - ripple.start) / 1000 < lifetime(ripple, reduced))
+        const live = list.filter((ripple) => !finished(ripple, now, reduced))
         if (live.length === 0) {
           ripples.delete(el)
           el.style.removeProperty("--dot-ripple")
           return
         }
         ripples.set(el, live)
-        el.style.setProperty(
-          "--dot-ripple",
-          live.map((ripple) => rippleGradient(ripple, (now - ripple.start) / 1000, reduced)).join(", "),
-        )
+        el.style.setProperty("--dot-ripple", live.map((ripple) => rippleGradient(ripple, now, reduced)).join(", "))
       })
-      if (ripples.size > 0) return requestAnimationFrame(frame)
-      state.running = false
+      state.running = ripples.size > 0
+      if (state.running) requestAnimationFrame(frame)
     }
 
     // The pattern must be the top element under the pointer, so text cut-outs over a pattern don't count.
@@ -60,16 +60,22 @@ export function PatternRipple() {
           Math.max(event.clientX - visible.left, visible.right - event.clientX),
           Math.max(event.clientY - visible.top, visible.bottom - event.clientY),
         ) * RIPPLE.reach
-      ripples.set(hit, [
+      const now = performance.now()
+      const list = [
         ...(ripples.get(hit) ?? []),
         {
           x: event.clientX - box.left,
           y: event.clientY - box.top,
           radius,
           travel: Math.min(RIPPLE.maxTravel, Math.max(RIPPLE.minTravel, radius / RIPPLE.speed)),
-          start: performance.now(),
+          start: now,
         },
-      ])
+      ]
+      list
+        .filter((ripple) => ripple.retired === undefined)
+        .slice(0, -LIMIT.waves)
+        .forEach((ripple) => (ripple.retired = now))
+      ripples.set(hit, list)
       if (state.running) return
       state.running = true
       requestAnimationFrame(frame)
@@ -84,14 +90,21 @@ export function PatternRipple() {
 
 const STILL = { radius: 72, duration: 0.2 }
 
-function lifetime(ripple: Ripple, reduced: boolean) {
-  if (reduced) return STILL.duration
-  return ripple.travel + (RIPPLE.rings - 1) * RIPPLE.gap + RIPPLE.decay * 5
+function finished(ripple: Ripple, now: number, reduced: boolean) {
+  if (ripple.retired !== undefined && now - ripple.retired >= LIMIT.retire * 1000) return true
+  const t = (now - ripple.start) / 1000
+  if (reduced) return t >= STILL.duration
+  return t >= ripple.travel + (RIPPLE.rings - 1) * RIPPLE.gap + RIPPLE.decay * 5
 }
 
-function rippleGradient(ripple: Ripple, t: number, reduced: boolean) {
-  const mix = (color: string, amount: number) =>
-    `color-mix(in srgb, ${color} ${Math.min(100, amount).toFixed(1)}%, transparent)`
+function rippleGradient(ripple: Ripple, now: number, reduced: boolean) {
+  const t = (now - ripple.start) / 1000
+  const fading = ripple.retired === undefined ? 1 : Math.max(0, 1 - (now - ripple.retired) / 1000 / LIMIT.retire)
+  // One invalid stop makes the browser drop every layer in --dot-ripple, so amounts are always finite.
+  const mix = (color: string, amount: number) => {
+    const percent = Number.isFinite(amount) ? Math.min(100, Math.max(0, amount * fading)) : 0
+    return `color-mix(in srgb, ${color} ${percent.toFixed(1)}%, transparent)`
+  }
   const at = `circle at ${ripple.x.toFixed(1)}px ${ripple.y.toFixed(1)}px`
   // Reduced motion keeps a brief glow at the click without any travel.
   if (reduced) {
@@ -131,10 +144,9 @@ function front(ripple: Ripple, local: number) {
   return ripple.radius * (1 - (1 - progress) ** RIPPLE.ease)
 }
 
-// The inverse of `front`: when the wave reached distance `d`.
+// The inverse of `front`: when the wave reached distance `d`. The wave stops at its radius.
 function passed(ripple: Ripple, d: number) {
-  if (d >= ripple.radius) return Infinity
-  return ripple.travel * (1 - (1 - d / ripple.radius) ** (1 / RIPPLE.ease))
+  return ripple.travel * (1 - (1 - Math.min(1, d / ripple.radius)) ** (1 / RIPPLE.ease))
 }
 
 function intensity(ripple: Ripple, d: number, t: number) {
