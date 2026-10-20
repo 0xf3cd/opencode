@@ -12,6 +12,7 @@ import { ServerConnection, useServers } from "@/runtime/server/registry"
 import { displayName } from "@opencode/ui/project-avatar"
 import { SessionTabAvatarView } from "@/shell/layout/session-tab-avatar"
 import { SessionProgressIndicatorV2 } from "@opencode/session-ui/v2/session-progress-indicator-v2"
+import { AgentOrb, type AgentOrbState } from "@opencode/session-ui/v2/agent-orb"
 import type { SessionInfo } from "@opencode/client/promise"
 import { sessionTabTitle } from "./tab-title"
 import { TabPreviewPopover } from "./tab-popover"
@@ -28,6 +29,7 @@ export function TabNavItem(props: {
   preparing: boolean
   unread: boolean
   loading: boolean
+  activity?: AgentOrbState
   fallbackTitle?: string
   fallbackDirectory?: string
   onRename: (title: string) => Promise<void>
@@ -317,7 +319,9 @@ export function TabNavItem(props: {
                   </Show>
                 }
               >
-                <SessionProgressIndicatorV2 />
+                <Show when={props.activity} fallback={<SessionProgressIndicatorV2 />}>
+                  {(activity) => <AgentOrb state={activity()} />}
+                </Show>
               </Show>
             }
           >
@@ -327,6 +331,7 @@ export function TabNavItem(props: {
                 directory={session.location.directory}
                 unread={false}
                 loading={props.loading}
+                activity={props.activity}
               />
             )}
           </Show>

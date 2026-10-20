@@ -19,6 +19,7 @@ import { base64Encode } from "@opencode/util/encode"
 import { showToast } from "@/shell/notifications/toast"
 import { adjacentTabKey, mergeVisibleTabOrder } from "./tab-order"
 import type { SessionInfo } from "@opencode/client/promise"
+import type { AgentOrbState } from "@opencode/session-ui/v2/agent-orb"
 
 function SessionTabSlot(props: {
   tab: SessionTab
@@ -30,6 +31,7 @@ function SessionTabSlot(props: {
   preparing: boolean
   unread: boolean
   loading: boolean
+  activity: AgentOrbState | undefined
   fallbackTitle?: string
   fallbackDirectory?: string
   onRename: (title: string) => Promise<void>
@@ -73,6 +75,7 @@ function SessionTabSlot(props: {
         preparing={props.preparing}
         unread={props.unread}
         loading={props.loading}
+        activity={props.activity}
         fallbackTitle={props.fallbackTitle}
         fallbackDirectory={props.fallbackDirectory}
         onRename={props.onRename}
@@ -225,6 +228,7 @@ function SessionTabEntry(props: {
         preparing={!!pending()}
         unread={unread()}
         loading={status.loading()}
+        activity={pending() && status.activity() ? "startup" : status.activity()}
         fallbackTitle={
           pending()
             ? language.t("session.tab.session")

@@ -17,7 +17,7 @@ import { openFileLauncher, reviewTabs } from "../utils/side-panel"
 import { mockServers } from "../utils/mock-server"
 import { fixture, mockStressTimeline } from "../utils/session-fixture"
 import { fileNode, mockWorkspace, openSession } from "../utils/workspace"
-import { expectSessionTitle } from "../utils/waits"
+import { busyIndicator, expectSessionTitle } from "../utils/waits"
 
 const a = { id: "ses_tab_a", title: "Tab A session" }
 
@@ -633,9 +633,9 @@ test("a remote tab stays busy while a child session runs", async ({ page }) => {
 
   const tabB = page.locator(`[data-titlebar-tab-slot]:has(a[href="${sessionHref(sessionB.id, REMOTE_SERVER)}"])`)
   const tabA = page.locator(`[data-titlebar-tab-slot]:has(a[href="${sessionHref(sessionA.id)}"])`)
-  await expect(tabB.locator('[data-component="session-progress-indicator-v2"]')).toBeVisible()
+  await expect(tabB.locator(busyIndicator)).toBeVisible()
   await expect(tabA.locator("[data-titlebar-tab-title]")).toHaveText(sessionA.title)
-  await expect(tabA.locator('[data-component="session-progress-indicator-v2"]')).toHaveCount(0)
+  await expect(tabA.locator(busyIndicator)).toHaveCount(0)
 })
 
 test("inactive tabs stay busy while work waits in their inbox, and pulse on a new prompt, as in the TUI", async ({
@@ -666,11 +666,10 @@ test("inactive tabs stay busy while work waits in their inbox, and pulse on a ne
   })
 
   const tab = (id: string) => page.locator(`[data-titlebar-tab-slot]:has(a[href="${sessionHref(id)}"])`)
-  const progress = '[data-component="session-progress-indicator-v2"]'
 
-  await expect(tab(b.id).locator(progress)).toBeVisible()
+  await expect(tab(b.id).locator(busyIndicator)).toBeVisible()
   await expect(tab(c.id).locator("[data-titlebar-tab-title]")).toHaveText(c.title)
-  await expect(tab(c.id).locator(progress)).toHaveCount(0)
+  await expect(tab(c.id).locator(busyIndicator)).toHaveCount(0)
   await expect(tab(c.id).locator('[data-slot="tab-prompt-pulse"]')).toHaveCount(0)
   // The pulse lasts one animation, so record that it appeared rather than racing its removal.
   await tab(c.id).evaluate((element) => {
@@ -699,7 +698,7 @@ test("inactive tabs stay busy while work waits in their inbox, and pulse on a ne
 
   await expect(tab(c.id)).toHaveAttribute("data-test-pulsed", "")
   await expect(tab(c.id).locator('[data-slot="tab-prompt-pulse"]')).toHaveCount(0)
-  await expect(tab(c.id).locator(progress)).toBeVisible()
+  await expect(tab(c.id).locator(busyIndicator)).toBeVisible()
   await expect(tab(a.id).locator('[data-slot="tab-prompt-pulse"]')).toHaveCount(0)
 })
 
@@ -719,7 +718,7 @@ test("switching between busy sessions keeps the busy indicators and the activity
   await expectSessionTitle(page, a.title)
 
   const sidebar = page.locator('[data-slot="vertical-tabs-sidebar"]')
-  const indicators = sidebar.locator('[data-component="session-progress-indicator-v2"]')
+  const indicators = sidebar.locator(busyIndicator)
   const capsule = page.locator('[data-slot="session-activity-chip"]')
   await expect(indicators).toHaveCount(2)
   await expect(capsule).toHaveText("1 subagent")
@@ -737,7 +736,9 @@ test("switching between busy sessions keeps the busy indicators and the activity
         record.setAttribute("data-test-capsule-missing", "")
     }).observe(document.body, { childList: true, subtree: true })
     document
-      .querySelectorAll('[data-slot="vertical-tabs-sidebar"] [data-component="session-progress-indicator-v2"]')
+      .querySelectorAll(
+        '[data-slot="vertical-tabs-sidebar"] :is([data-component="agent-orb"], [data-component="session-progress-indicator-v2"])',
+      )
       .forEach((element) => element.setAttribute("data-test-before-switch", ""))
   })
 
@@ -776,7 +777,7 @@ test("selecting a tab with waiting work waits for its transcript instead of show
   })
   const tabB = page.locator(`[data-titlebar-tab-slot]:has(a[href="${sessionHref(b.id)}"])`)
   // The inactive tab read its inbox, which materializes the pending steer as a transcript row.
-  await expect(tabB.locator('[data-component="session-progress-indicator-v2"]')).toBeVisible()
+  await expect(tabB.locator(busyIndicator)).toBeVisible()
 
   const transcript = await holdRoute(page, (url) => url.pathname === `/api/session/${b.id}/message`)
   await page.locator(`[data-titlebar-tab-link][href="${sessionHref(b.id)}"]`).click()

@@ -1,0 +1,70 @@
+[data-component="agent-orb"] {
+  position: relative;
+  display: block;
+  flex-shrink: 0;
+  width: var(--agent-orb-size);
+  height: var(--agent-orb-size);
+  color: var(--v2-icon-icon-muted, #808080);
+  animation: agent-orb-enter 240ms cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+/* The glow spills past the layout box, as on iOS. */
+[data-component="agent-orb"] [data-slot="agent-orb-layer"] {
+  position: absolute;
+  inset: calc(var(--agent-orb-margin) * -1);
+  width: calc(var(--agent-orb-size) + var(--agent-orb-margin) * 2);
+  height: calc(var(--agent-orb-size) + var(--agent-orb-margin) * 2);
+  pointer-events: none;
+  transition:
+    opacity 240ms cubic-bezier(0.22, 1, 0.36, 1),
+    filter 240ms cubic-bezier(0.22, 1, 0.36, 1),
+    transform 240ms cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+[data-component="agent-orb"] [data-slot="agent-orb-layer"][data-shown="true"] {
+  transition-duration: 300ms;
+}
+
+[data-component="agent-orb"] [data-slot="agent-orb-layer"][data-shown="false"] {
+  opacity: 0;
+  filter: blur(2px);
+  transform: scale(0.92);
+}
+
+/* No WebGL2: a still dotted disc in the state's colour. */
+[data-component="agent-orb"]:not([data-live]) {
+  background: radial-gradient(circle, currentColor 0.7px, transparent 1px) 0 0 / 2px 2px;
+  mask-image: radial-gradient(circle, #000 calc(50% - 1px), transparent 50%);
+  opacity: 0.8;
+}
+
+[data-component="agent-orb"][data-state="waiting"] {
+  color: var(--v2-state-fg-warning, #e6a23c);
+}
+
+[data-component="agent-orb"][data-state="failed"] {
+  color: var(--v2-state-fg-danger, #e5484d);
+}
+
+[data-component="agent-orb"][data-state="done"] {
+  color: var(--v2-state-fg-success, #30a46c);
+}
+
+[data-component="agent-orb"][data-state="handoff"] {
+  color: var(--v2-state-fg-info, #3e63dd);
+}
+
+/* Scale only: a busy indicator never passes through invisible. */
+@keyframes agent-orb-enter {
+  from {
+    transform: scale(0.7);
+  }
+}
+
+:root[data-motion="reduce"] [data-component="agent-orb"] {
+  animation: none;
+
+  [data-slot="agent-orb-layer"] {
+    transition: none;
+  }
+}

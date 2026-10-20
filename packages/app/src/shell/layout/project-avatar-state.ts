@@ -1,9 +1,13 @@
-import { createMemo, type Accessor } from "solid-js"
+import { createEffect, createMemo, createSignal, on, onCleanup, type Accessor } from "solid-js"
 import type { SessionInfo } from "@opencode/client/promise"
 import { useGlobal, useServerCtx } from "@/runtime/server/runtime"
 import { sessionPermissionRequest, sessionFormRequest } from "@/session/requests/session-request-tree"
 import { ServerConnection } from "@/runtime/server/registry"
 import { projectSettingsKey, useSettings } from "@/settings/model"
+import { agentOrbState, lastOutcome, runningStep } from "./agent-orb-state"
+
+// How long Done or Failed shows once the session goes quiet, like the iOS Working line's finale.
+const FINALE_MS = 2600
 
 type ServerData = ReturnType<ReturnType<typeof useGlobal>["ensureServerCtx"]>["data"]
 
@@ -49,7 +53,55 @@ export function useSessionTabAvatarState(
     return sessionBusy(data, sessionId())
   })
 
-  return { unread, loading }
+  // Undefined when the classic indicator is selected.
+  const work = createMemo(() => {
+    const data = serverCtx()?.data
+
+    if (!data || settings.appearance.agentStatus() !== "orb") return undefined
+    const id = sessionId()
+
+    return {
+      attention: needsAttention(),
+      running: sessionBusy(data, id),
+      step: runningStep(data.session.message.list(id)),
+      subagents: !!root?.() && data.session.family(id).some((child) => child !== id && sessionBusy(data, child)),
+      shells: data.shell.listBySession(id).some((shell) => shell.status === "running"),
+    }
+  })
+
+  // A memo, so the finale starts only when work actually stops, not on every transcript change.
+  const working = createMemo(() => {
+    const current = work()
+
+    return !!current && (current.running || current.subagents || current.shells)
+  })
+
+  const [finale, setFinale] = createSignal(false)
+  let timer: ReturnType<typeof setTimeout> | undefined
+
+  createEffect(
+    on(working, (active, previous) => {
+      clearTimeout(timer)
+      setFinale(!active && !!previous)
+
+      if (!active && previous) timer = setTimeout(() => setFinale(false), FINALE_MS)
+    }),
+  )
+  onCleanup(() => clearTimeout(timer))
+
+  const activity = createMemo(() => {
+    const current = work()
+
+    if (!current) return undefined
+    const data = serverCtx()?.data
+
+    const outcome =
+      data && (lastOutcome(data.session.message.list(sessionId())) ?? data.session.get(sessionId())?.outcome)
+
+    return agentOrbState({ ...current, finished: finale() ? (outcome ?? "succeeded") : undefined })
+  })
+
+  return { unread, loading, activity }
 }
 
 // Pending permission and form requests anywhere in the session (or its family, for roots).

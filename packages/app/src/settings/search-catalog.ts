@@ -113,6 +113,12 @@ export const clientSettings: Entry<SettingsRootTab>[] = [
     keywords: "animation accessibility",
   },
   {
+    tab: "appearance",
+    label: "settings.appearance.row.agentStatus.title",
+    target: "settings-agent-status",
+    keywords: "orb spinner busy indicator",
+  },
+  {
     tab: "notifications",
     label: "settings.general.notifications.agent.title",
     target: "settings-notifications-agent",

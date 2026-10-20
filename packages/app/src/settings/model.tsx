@@ -20,6 +20,8 @@ export type TabLayout = Settings["appearance"]["tabLayout"]
 
 export type ReduceMotion = Settings["appearance"]["reduceMotion"]
 
+export type AgentStatus = NonNullable<Settings["appearance"]["agentStatus"]>
+
 export type NotificationSettings = Settings["notifications"]
 
 export type SoundSettings = Settings["sounds"]
@@ -136,6 +138,7 @@ const appearanceSchema = Persistence.struct({
   tabLayout: Schema.Literals(["horizontal", "vertical", "inbox"]),
   sidebarOpen: Persistence.optional(Schema.Boolean),
   reduceMotion: Schema.Literals(["system", "on", "off"]),
+  agentStatus: Persistence.optional(Schema.Literals(["orb", "classic"])),
 })
 
 const permissionsSchema = Persistence.struct({
@@ -423,6 +426,10 @@ export const { use: useSettings, provider: SettingsProvider } = createSimpleCont
         reduceMotion,
         setReduceMotion(value: ReduceMotion) {
           setStore("appearance", "reduceMotion", value)
+        },
+        agentStatus: withFallback(() => store.appearance?.agentStatus, "orb"),
+        setAgentStatus(value: AgentStatus) {
+          setStore("appearance", "agentStatus", value)
         },
       },
       keybinds: {

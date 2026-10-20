@@ -5,6 +5,7 @@ import { useLanguage } from "@/runtime/i18n/language"
 import { ExternalLink } from "@/runtime/platform/external-link"
 import { SettingsList } from "@/settings/list"
 import { SettingsRow } from "@/settings/row"
+import { useSettings } from "@/settings/model"
 import { createAppearanceSettingsController, type AppearanceSettingsController } from "@/settings/general/controllers"
 import "@/settings/settings.css"
 
@@ -14,6 +15,11 @@ const reduceMotionOptions = [
   { value: "system" as const, label: "settings.appearance.row.reduceMotion.system" as const },
   { value: "on" as const, label: "settings.appearance.row.reduceMotion.on" as const },
   { value: "off" as const, label: "settings.appearance.row.reduceMotion.off" as const },
+]
+
+const agentStatusOptions = [
+  { value: "orb" as const, label: "settings.appearance.row.agentStatus.orb" as const },
+  { value: "classic" as const, label: "settings.appearance.row.agentStatus.classic" as const },
 ]
 
 const fontSettings = {
@@ -72,6 +78,7 @@ const FontSetting: Component<{
 export const SettingsAppearance: Component = () => {
   const language = useLanguage()
   const appearance = createAppearanceSettingsController()
+  const settings = useSettings()
 
   return (
     <>
@@ -148,6 +155,22 @@ export const SettingsAppearance: Component = () => {
                 value={(option) => option.value}
                 label={(option) => language.t(option.label)}
                 onSelect={(option) => option && appearance.reduceMotion.select(option.value)}
+              />
+            </SettingsRow>
+
+            <SettingsRow
+              title={language.t("settings.appearance.row.agentStatus.title")}
+              description={language.t("settings.appearance.row.agentStatus.description")}
+            >
+              <Select
+                data-action="settings-agent-status"
+                options={agentStatusOptions}
+                current={agentStatusOptions.find((option) => option.value === settings.appearance.agentStatus())}
+                placement="bottom-end"
+                gutter={6}
+                value={(option) => option.value}
+                label={(option) => language.t(option.label)}
+                onSelect={(option) => option && settings.appearance.setAgentStatus(option.value)}
               />
             </SettingsRow>
           </SettingsList>

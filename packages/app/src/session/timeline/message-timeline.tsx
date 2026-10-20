@@ -10,6 +10,7 @@ import { InlineInput } from "@opencode/ui/inline-input"
 import { Keybind } from "@opencode/ui/keybind"
 import { Menu } from "@opencode/ui/menu"
 import { TextShimmer } from "@opencode/ui/text-shimmer"
+import { AgentOrb } from "@opencode/session-ui/v2/agent-orb"
 import type { BackgroundTask, MountedSession, SessionScreen } from "@opencode/gui-extensions/sdk"
 import { ExtensionSlot } from "@/runtime/extension/render"
 import { useLanguage } from "@/runtime/i18n/language"
@@ -25,6 +26,7 @@ import { isWorkspaceDirectory } from "@/workspaces/paths"
 import { parseCommentNote, readPromptPresentation } from "@/composer/comment-note"
 import { parseVoiceDelegation } from "./voice-delegation"
 import { useCommand } from "@/shell/commands/command"
+import { useSettings } from "@/settings/model"
 import { SessionAncestorTrail, SessionLocation, SessionTitleHeader } from "../session-identity-header"
 import { SessionHeaderSpacer } from "@/session/header/session-header"
 import { SessionWorkingIndicator } from "@/session/header/session-working-indicator"
@@ -122,6 +124,7 @@ function MessageTimelineView(
   },
 ) {
   const language = useLanguage()
+  const settings = useSettings()
   const server = useServer()
   const data = server.ctx.data
   const sdk = useWorkspaceLocation()
@@ -409,7 +412,10 @@ function MessageTimelineView(
     >
       <div class={`flex h-9 items-center gap-2 pt-3 text-[13px] font-[530] leading-text-compact ${turnPadding()}`}>
         <Show when={showWorking()}>
-          <div data-component="session-working" role="status">
+          <div data-component="session-working" role="status" class="flex items-center gap-2">
+            <Show when={settings.appearance.agentStatus() === "orb"}>
+              <AgentOrb state="thinking" />
+            </Show>
             <TextShimmer text={language.t("session.timeline.working")} active />
           </div>
         </Show>

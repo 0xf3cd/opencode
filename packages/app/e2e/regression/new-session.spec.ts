@@ -1,7 +1,9 @@
 import { expect, test, type Locator, type Page } from "@playwright/test"
 import type { OpenCodeEvent, WorktreeDirectory } from "@opencode/client/promise"
+import type { Schema } from "effect"
 import { draftHref, expectPath, NO_PROVIDER, project, provider, seed, sessionHref, T0 } from "../utils/app"
 import { mockOpenCodeServer, type MockAnswer } from "../utils/mock-server"
+import { busyIndicator } from "../utils/waits"
 import { newSessionLocation, openDraft, openSession, openWorktreeDraft, type WorkspaceInput } from "../utils/workspace"
 
 const directory = "C:/OpenCode/WorkspacePending"
@@ -37,7 +39,7 @@ const pendingDraft = {
   createdSessionTitle: "Created workspace session",
 } satisfies WorkspaceInput & { draftID: string }
 
-const failFirstCreate = (_: unknown, attempt: number): MockAnswer | undefined =>
+const failFirstCreate = (_: Schema.JsonObject, attempt: number): MockAnswer | undefined =>
   attempt === 1 ? { status: 500, body: { message: "Session creation failed in the fixture" } } : undefined
 
 test.use({
@@ -95,7 +97,7 @@ test("a pending worktree session shows immediately, keeps its draft, and hands o
   const label = page.locator('[data-titlebar-tab-slot][data-active="true"] [data-titlebar-tab-title]')
   await expect(label).toHaveText("Session")
   const pending = await submitPending(page, mock)
-  const spinner = tabLink(page, pending.sessionID).locator('[data-component="session-progress-indicator-v2"]')
+  const spinner = tabLink(page, pending.sessionID).locator(busyIndicator)
   await expect(spinner).toBeVisible()
   await expect(label).toHaveText("Session")
 
@@ -157,9 +159,7 @@ test("a pending worktree session keeps Session as its mobile title until the gen
   const label = page.locator('[data-slot="mobile-tab-title"]')
   await expect(label).toHaveText("Session")
   const pending = await submitPending(page, mock)
-  await expect(
-    page.locator('[data-slot="mobile-tabs-trigger"] [data-component="session-progress-indicator-v2"]'),
-  ).toBeVisible()
+  await expect(page.locator(`[data-slot="mobile-tabs-trigger"] :is(${busyIndicator})`)).toBeVisible()
   mock.worktree.resolve({ status: 200, json: { directory: workspace } })
   await expect(pending.shimmer).toHaveCount(0)
   await expect(submit(page)).toBeEnabled()
@@ -193,7 +193,7 @@ test("the title and message stay stable through worktree creation", async ({ pag
         message: visible(document.querySelector('[data-component="user-message"]')),
         spinner: visible(
           document.querySelector(
-            '[data-titlebar-tab-slot][data-active="true"] [data-component="session-progress-indicator-v2"]',
+            '[data-titlebar-tab-slot][data-active="true"] :is([data-component="agent-orb"], [data-component="session-progress-indicator-v2"])',
           ),
         ),
         draft: visible(editor) ? editor!.textContent : null,
@@ -385,6 +385,7 @@ test("executes a selected slash command after creating its worktree", async ({ p
       },
     ])
   // The server owns command expansion; the client receives the expanded inbox item.
+  // SAFETY: the literal is a complete session.inbox.enqueued event.
   await mock.push([
     {
       id: "evt_workspace_review",
@@ -410,8 +411,10 @@ test("the location dialog lists every ready server's projects in one list and ta
   page,
 }) => {
   const apollo = "http://apollo.test:4096"
+
   const entry = (id: string, directory: string, active: number) =>
     project({ id, directory, time: { created: T0, updated: T0, active: T0 + active } })
+
   const remote = entry("proj_apollo_opencode", "/home/dax/opencode", 4)
   const files: string[] = []
   page.on("request", (request) => {
@@ -561,6 +564,7 @@ for (const row of [
       (response) => new URL(response.url()).pathname === "/api/worktree" && response.request().method() === "GET",
     )
 
+    // SAFETY: the literal is a complete worktree.updated event.
     await view.push([
       {
         id: "evt_accent_inventory",
@@ -573,6 +577,7 @@ for (const row of [
     await expect(page).toHaveURL(url)
     await expect(view.editor).toHaveText("Inspect this fixture workspace.")
     await expectBackground(send, "icon-button-contrast")
+    // SAFETY: the literal is a complete session.execution.started event.
     await view.push([
       {
         id: "evt_accent_running",
@@ -590,6 +595,7 @@ for (const row of [
 }
 
 function renamed(sessionID: string) {
+  // SAFETY: the literal is a complete session.renamed event.
   return {
     id: "evt_generated_title",
     type: "session.renamed",

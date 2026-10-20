@@ -23,3 +23,6 @@ export async function expectSessionReady(page: Page, input: { server: string; se
   await expect(page).toHaveURL(sessionHref(input.sessionID, input.server))
   await expectSessionTitle(page, input.title)
 }
+
+// A session's busy indicator in either Agent status style: the orb or the classic dot grid.
+export const busyIndicator = '[data-component="agent-orb"], [data-component="session-progress-indicator-v2"]'
