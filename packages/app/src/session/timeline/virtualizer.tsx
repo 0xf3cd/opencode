@@ -248,6 +248,7 @@ export function createTimelineVirtualizer(input: Input) {
   })
 
   const measuredElements = new WeakSet<Element>()
+  const observedElements = new WeakSet<Element>()
   let touchStart: number | undefined
   let touchTarget: EventTarget | null = null
   let touchNested = false
@@ -335,7 +336,10 @@ export function createTimelineVirtualizer(input: Input) {
       measuredElements.add(element)
       const box = entry?.borderBoxSize[0]
 
-      if (box) return Math.round(box.blockSize * 64) / 64
+      if (box) {
+        observedElements.add(element)
+        return Math.round(box.blockSize * 64) / 64
+      }
 
       if (initial) {
         const size = instance.itemSizeCache.get(instance.options.getItemKey(instance.indexFromElement(element)))
@@ -875,7 +879,12 @@ export function createTimelineVirtualizer(input: Input) {
 
     return (
       (rows().length > 0 && items.length === 0) ||
-      items.some((item) => !virtualizer.elementsCache.get(item.key)?.isConnected)
+      items.some((item) => {
+        const element = virtualizer.elementsCache.get(item.key)
+        // A synchronous attachment read can still see a tool's placeholder.
+        // Reveal only after its first browser layout delivery has been committed.
+        return !element?.isConnected || !observedElements.has(element)
+      })
     )
   }
 
