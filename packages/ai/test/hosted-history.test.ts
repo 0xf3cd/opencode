@@ -61,6 +61,25 @@ const compile = (model: LanguageModel, messages: ReadonlyArray<Message>) =>
     }),
   )
 
+it.effect("OpenAI Chat separates hosted fallback entries from surrounding assistant text", () =>
+  Effect.gen(function* () {
+    const prepared = yield* compile(models[0], [
+      Message.user("Search."),
+      Message.assistant([Message.text("Before."), call, result, Message.text("After.")]),
+      Message.user("Continue."),
+    ])
+    expect(prepared.body.messages).toMatchObject([
+      { role: "user" },
+      {
+        role: "assistant",
+        content:
+          'Before.\nProvider tool foreign_search called with: {"query":"otters"}\n\nProvider tool foreign_search returned:\nOtters use rocks.\nAfter.',
+      },
+      { role: "user" },
+    ])
+  }),
+)
+
 for (const model of models) {
   it.effect(`${model.route.id} degrades foreign hosted history without dangling tool calls`, () =>
     Effect.gen(function* () {

@@ -2240,7 +2240,7 @@ describe("Anthropic Messages route", () => {
       )
 
       expect(prepared.body.messages).toMatchObject([
-        { role: "assistant", content: [{ type: "text", text: "Provider tool future_server_tool returned:\n{}" }] },
+        { role: "assistant", content: [{ type: "text", text: "\nProvider tool future_server_tool returned:\n{}\n" }] },
       ])
     }),
   )

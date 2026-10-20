@@ -318,16 +318,16 @@ export function hostedToolHistory(
       )
         return [part]
       if (part.type === "tool-call")
-        return [{ type: "text", text: `Provider tool ${part.name} called with: ${encodeJson(part.input)}` }]
+        return [{ type: "text", text: `\nProvider tool ${part.name} called with: ${encodeJson(part.input)}\n` }]
       if (part.result.type === "content") {
         const text = part.result.value.flatMap((item) => {
           if (item.type === "text") return [item.text]
           media.push(toolFileMedia(item))
           return []
         })
-        return [{ type: "text", text: `Provider tool ${part.name} returned:\n${text.join("\n")}` }]
+        return [{ type: "text", text: `\nProvider tool ${part.name} returned:\n${text.join("\n")}\n` }]
       }
-      return [{ type: "text", text: `Provider tool ${part.name} returned:\n${toolResultText(part)}` }]
+      return [{ type: "text", text: `\nProvider tool ${part.name} returned:\n${toolResultText(part)}\n` }]
     })
     output.push(new Message({ ...message, content }))
   }
