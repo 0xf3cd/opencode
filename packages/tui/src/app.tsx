@@ -107,7 +107,7 @@ import { cliErrorMessage, errorFormat } from "./util/error"
 import { AttentionProvider } from "./context/attention"
 import { StorageProvider, useStorage } from "./context/storage"
 import { SessionTerminalsProvider } from "./context/session-terminals"
-import { ClientMcpProvider } from "./context/client-mcp"
+import { ClientMcp } from "./context/client-mcp"
 import { PanelProvider, usePanel } from "./context/panel"
 import { SessionFrame } from "./component/session-frame"
 import { createTuiClipboard } from "./clipboard"
@@ -213,9 +213,10 @@ export const run = Effect.fn("Tui.run")(function* (input: TuiInput) {
   const config = Config.resolve(yield* Effect.tryPromise(() => input.config.get()), {
     terminalSuspend: process.platform !== "win32",
   })
+  const headers = Service.headers(input.server.endpoint)
   const options = {
     baseUrl: input.server.endpoint.url,
-    headers: Service.headers(input.server.endpoint),
+    headers,
     fetch: noTimeoutFetch,
   }
   const api = OpenCode.make(options)
@@ -391,7 +392,7 @@ export const run = Effect.fn("Tui.run")(function* (input: TuiInput) {
                                             <ClientProvider
                                               api={api}
                                               url={input.server.endpoint.url}
-                                              headers={Service.headers(input.server.endpoint)}
+                                              headers={headers}
                                               service={service}
                                             >
                                               <PermissionProvider>
@@ -399,42 +400,41 @@ export const run = Effect.fn("Tui.run")(function* (input: TuiInput) {
                                                   <LocationProvider>
                                                     <SessionTabsProvider>
                                                       <SessionTerminalsProvider>
-                                                        <ClientMcpProvider>
-                                                          <ThemeProvider
-                                                            mode={mode}
-                                                            source={createThemeSource(global.config)}
-                                                          >
-                                                            <ThemeErrorToast />
-                                                            <LocalProvider>
-                                                              <PromptStashProvider>
-                                                                <DialogProvider>
-                                                                  <FrecencyProvider>
-                                                                    <PromptHistoryProvider>
-                                                                      <PromptRefProvider>
-                                                                        <EditorContextProvider>
-                                                                          <AttentionProvider>
-                                                                            <UpdateNotificationProvider
-                                                                              updater={input.updater}
-                                                                            >
-                                                                              <PanelProvider>
-                                                                                <PluginProvider
-                                                                                  packages={input.packages}
-                                                                                  directories={pluginDirectories}
-                                                                                >
-                                                                                  <App />
-                                                                                </PluginProvider>
-                                                                              </PanelProvider>
-                                                                            </UpdateNotificationProvider>
-                                                                          </AttentionProvider>
-                                                                        </EditorContextProvider>
-                                                                      </PromptRefProvider>
-                                                                    </PromptHistoryProvider>
-                                                                  </FrecencyProvider>
-                                                                </DialogProvider>
-                                                              </PromptStashProvider>
-                                                            </LocalProvider>
-                                                          </ThemeProvider>
-                                                        </ClientMcpProvider>
+                                                        <ThemeProvider
+                                                          mode={mode}
+                                                          source={createThemeSource(global.config)}
+                                                        >
+                                                          <ThemeErrorToast />
+                                                          <ClientMcp />
+                                                          <LocalProvider>
+                                                            <PromptStashProvider>
+                                                              <DialogProvider>
+                                                                <FrecencyProvider>
+                                                                  <PromptHistoryProvider>
+                                                                    <PromptRefProvider>
+                                                                      <EditorContextProvider>
+                                                                        <AttentionProvider>
+                                                                          <UpdateNotificationProvider
+                                                                            updater={input.updater}
+                                                                          >
+                                                                            <PanelProvider>
+                                                                              <PluginProvider
+                                                                                packages={input.packages}
+                                                                                directories={pluginDirectories}
+                                                                              >
+                                                                                <App />
+                                                                              </PluginProvider>
+                                                                            </PanelProvider>
+                                                                          </UpdateNotificationProvider>
+                                                                        </AttentionProvider>
+                                                                      </EditorContextProvider>
+                                                                    </PromptRefProvider>
+                                                                  </PromptHistoryProvider>
+                                                                </FrecencyProvider>
+                                                              </DialogProvider>
+                                                            </PromptStashProvider>
+                                                          </LocalProvider>
+                                                        </ThemeProvider>
                                                       </SessionTerminalsProvider>
                                                     </SessionTabsProvider>
                                                   </LocationProvider>
