@@ -4,6 +4,7 @@ import {
   createSignal,
   For,
   Index,
+  on,
   onCleanup,
   Show,
   type ComponentProps,
@@ -27,6 +28,7 @@ import { Icon } from "@opencode/ui/icon"
 import { Button } from "@opencode/ui/button"
 import { TextReveal } from "@opencode/ui/text-reveal"
 import { TextShimmer } from "@opencode/ui/text-shimmer"
+import { frameLoop, Spring } from "@opencode/ui/motion"
 import { BasicTool } from "../components/basic-tool"
 import { reasoningHeading } from "../timeline/projection"
 import { Card } from "@opencode/ui/card"
@@ -760,26 +762,65 @@ export function AssistantTextContent(props: {
     setTimeout(() => setCopied(false), 2000)
   }
 
+  // The footer leaves before its row closes the space. Removing it at the start of
+  // the fade lets the next message occupy the same pixels while it is still visible.
+  const [footer, setFooter] = createSignal(props.showCopy)
+  const opacity = Spring.fromDuration(props.showCopy ? 1 : 0, { duration: 0.18, bounce: 0 })
+  let footerElement: HTMLDivElement | undefined
+  let stopFooter: (() => void) | undefined
+
+  createEffect(
+    on(
+      () => props.showCopy,
+      (show) => {
+        if (show) setFooter(true)
+        opacity.set(show ? 1 : 0)
+        stopFooter ??= frameLoop.add((dt) => {
+          const value = opacity.step(dt)
+
+          if (footerElement) footerElement.style.opacity = String(value)
+
+          if (!opacity.resting) return true
+          stopFooter = undefined
+
+          if (!opacity.target) setFooter(false)
+
+          return false
+        })
+      },
+      { defer: true },
+    ),
+  )
+  onCleanup(() => stopFooter?.())
+
   return (
     <Show when={props.text}>
       <div data-component="text-part" data-timeline-part-id={props.id}>
         <div data-slot="text-part-body">
           <PacedMarkdown text={props.text} cacheKey={props.id} streaming={props.message.time.completed === undefined} />
         </div>
-        <Show when={props.showCopy}>
-          <div data-slot="text-part-copy-wrapper" data-interrupted={interrupted() ? "" : undefined}>
-            <MessageActionButton
-              icon={copied() ? "check" : "copy"}
-              label={copied() ? i18n.t("ui.message.copied") : i18n.t("ui.message.copyResponse")}
-              onMouseDown={(event) => event.preventDefault()}
-              onClick={copy}
-              aria-label={copied() ? i18n.t("ui.message.copied") : i18n.t("ui.message.copyResponse")}
-            />
-            <Show when={meta()}>
-              <span data-slot="text-part-meta" class="text-12-regular text-text-weak cursor-default">
-                {meta()}
-              </span>
-            </Show>
+        <Show when={footer()}>
+          <div
+            ref={(element) => {
+              footerElement = element
+              element.style.opacity = String(opacity.value)
+            }}
+            inert={!props.showCopy}
+          >
+            <div data-slot="text-part-copy-wrapper" data-interrupted={interrupted() ? "" : undefined}>
+              <MessageActionButton
+                icon={copied() ? "check" : "copy"}
+                label={copied() ? i18n.t("ui.message.copied") : i18n.t("ui.message.copyResponse")}
+                onMouseDown={(event) => event.preventDefault()}
+                onClick={copy}
+                aria-label={copied() ? i18n.t("ui.message.copied") : i18n.t("ui.message.copyResponse")}
+              />
+              <Show when={meta()}>
+                <span data-slot="text-part-meta" class="text-12-regular text-text-weak cursor-default">
+                  {meta()}
+                </span>
+              </Show>
+            </div>
           </div>
         </Show>
       </div>

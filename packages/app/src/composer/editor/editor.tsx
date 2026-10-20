@@ -4,6 +4,7 @@ import {
   createResource,
   createSignal,
   For,
+  on,
   onCleanup,
   onMount,
   Show,
@@ -25,6 +26,7 @@ import { Keybind } from "@opencode/ui/keybind"
 import { Menu } from "@opencode/ui/menu"
 import { Tooltip } from "@opencode/ui/tooltip"
 import { ScrollView } from "@opencode/ui/scroll-view"
+import { frameLoop, Spring } from "@opencode/ui/motion"
 import { AttachmentCard } from "@opencode/session-ui/attachment-card"
 import { ProgressCircle } from "@opencode/ui/progress-circle"
 import type { Upload } from "../attachments/uploads"
@@ -322,10 +324,14 @@ export function ComposerEditor(props: ComposerEditorProps) {
               classList={{ "font-mono! tracking-[-0.04px]": state.mode === "shell" }}
               style={{ "unicode-bidi": state.mode === "normal" ? "plaintext" : undefined, "text-align": "start" }}
             >
-              {view.placeholder?.() ??
-                (state.mode === "shell"
-                  ? i18n.t("ui.promptInput.placeholder.shell")
-                  : i18n.t("ui.promptInput.placeholder.normal", { slash: "/", at: "@" }))}
+              <ComposerPlaceholder
+                text={
+                  view.placeholder?.() ??
+                  (state.mode === "shell"
+                    ? i18n.t("ui.promptInput.placeholder.shell")
+                    : i18n.t("ui.promptInput.placeholder.normal", { slash: "/", at: "@" }))
+                }
+              />
             </div>
           </Show>
         </ScrollView>
@@ -1230,6 +1236,63 @@ function ComposerEditorAlternateDelivery(props: { controller: ComposerEditorMode
         </Tooltip>
       )}
     </Show>
+  )
+}
+
+function ComposerPlaceholder(props: { text: string }) {
+  type Label = { text: string; opacity: Spring; element?: HTMLSpanElement }
+
+  const [labels, setLabels] = createSignal<Label[]>([
+    { text: props.text, opacity: Spring.fromDuration(1, { duration: 0.18, bounce: 0 }) },
+  ])
+  let stop: (() => void) | undefined
+
+  createEffect(
+    on(
+      () => props.text,
+      (text) => {
+        const current = labels()
+        const next = current.some((label) => label.text === text)
+          ? current
+          : [...current, { text, opacity: Spring.fromDuration(0, { duration: 0.18, bounce: 0 }) }]
+        next.forEach((label) => label.opacity.set(label.text === text ? 1 : 0))
+        setLabels(next)
+        stop ??= frameLoop.add((dt) => {
+          const current = labels()
+          current.forEach((label) => {
+            const opacity = label.opacity.step(dt)
+
+            if (label.element) label.element.style.opacity = String(opacity)
+          })
+          setLabels(current.filter((label) => label.opacity.target || !label.opacity.resting))
+
+          if (current.some((label) => !label.opacity.resting)) return true
+          stop = undefined
+
+          return false
+        })
+      },
+      { defer: true },
+    ),
+  )
+  onCleanup(() => stop?.())
+
+  return (
+    <span class="grid">
+      <For each={labels()}>
+        {(label) => (
+          <span
+            class="[grid-area:1/1]"
+            ref={(element) => {
+              label.element = element
+              element.style.opacity = String(label.opacity.value)
+            }}
+          >
+            {label.text}
+          </span>
+        )}
+      </For>
+    </span>
   )
 }
 

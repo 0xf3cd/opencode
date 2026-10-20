@@ -192,6 +192,7 @@ export function createTimelineVirtualizer(input: Input) {
   // Rows added after the first one already shown, at the end or among the last rows. While following, they grow in
   // instead of landing.
   const arrivals = new Set<string>()
+  const flights = new Map<string, { distance: number; height: number }>()
 
   const getItemKey = createMemo(() => {
     const keys = rowKeys()
@@ -397,6 +398,20 @@ export function createTimelineVirtualizer(input: Input) {
       virtualizer.options.anchorTo = input.pinned() ? "end" : "start"
 
       const wrapper = virtualizer.elementsCache.get(key)?.parentElement
+      const flight = flights.get(key)
+
+      if (wrapper && flight) {
+        const element = wrapper.firstElementChild as HTMLElement | null
+        const progress = Math.min(1, Math.max(0, size / flight.height))
+        wrapper.style.overflow = progress === 1 ? "clip" : "visible"
+
+        if (element) {
+          element.style.translate = progress === 1 ? "" : `0 ${Math.round(flight.distance * (1 - progress) * 64) / 64}px`
+        }
+
+        if (progress === 1) flights.delete(key)
+      }
+
       const from = exiting.get(key)
 
       if (from !== undefined) {
@@ -481,8 +496,23 @@ export function createTimelineVirtualizer(input: Input) {
       virtualizer.itemSizeCache.set(key, 0)
       const element = virtualizer.elementsCache.get(key)
 
+      // The sent bubble starts behind the composer and rises on the row's own
+      // growth progress, so scrolling and its flight cannot pull in opposite directions.
+      if (element && Predicate.isTagged(rows()[index], "UserMessage")) {
+        const composer = listRoot()?.closest('[data-component="session-layout"]')?.querySelector('[data-component="composer-editor"]')
+          ?? document.querySelector('[data-component="composer-editor"]:not([contenteditable="false"])')
+
+        if (composer && size > 0) {
+          flights.set(key, { distance: Math.max(0, composer.getBoundingClientRect().top + 16 - element.getBoundingClientRect().top), height: size })
+          const wrapper = element.parentElement
+
+          if (wrapper) wrapper.style.overflow = "visible"
+          element.style.translate = `0 ${flights.get(key)!.distance}px`
+        }
+      }
+
       // Streamed text reveals its own words; other new rows fade in as they grow.
-      if (element && !streamsText(rows()[index])) enter(element, { duration: 200 })
+      if (element && !streamsText(rows()[index]) && !flights.has(key)) enter(element, { duration: 200 })
     }
 
     growth.grow(key, shown, size)

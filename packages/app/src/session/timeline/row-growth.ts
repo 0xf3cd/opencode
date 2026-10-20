@@ -121,6 +121,6 @@ export function createRowGrowth(input: {
 // The growing row's bottom fades out instead of a hard clip. The fade narrows as the row lands and never covers what
 // was already shown when the growth began.
 function paintEdge(wrapper: HTMLElement, fade: number) {
-  if (fade < 0.5) return wrapper.style.removeProperty("mask-image")
+  if (fade < 0.5 || wrapper.style.overflow === "visible") return wrapper.style.removeProperty("mask-image")
   wrapper.style.setProperty("mask-image", `linear-gradient(to bottom, #000 calc(100% - ${fade.toFixed(2)}px), transparent)`)
 }
