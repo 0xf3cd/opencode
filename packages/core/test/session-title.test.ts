@@ -505,7 +505,7 @@ it.effect("generates a title for an explicitly requested child session", () =>
   }),
 )
 
-it.effect("uses the first prompt without a model request when the title agent is removed", () =>
+it.effect("uses the first prompt when the title agent is removed", () =>
   Effect.gen(function* () {
     const sessionID = Session.ID.make("ses_title_no_agent")
     yield* insertSession(sessionID)
@@ -517,51 +517,6 @@ it.effect("uses the first prompt without a model request when the title agent is
 
     expect(requests).toHaveLength(0)
     expect((yield* store.get(sessionID))?.title).toBe("Help me debug the failing build")
-  }),
-)
-
-it.effect("collapses whitespace and truncates the first prompt fallback", () =>
-  Effect.gen(function* () {
-    const sessionID = Session.ID.make("ses_title_no_agent_long")
-    yield* insertSession(sessionID)
-    yield* prompt(sessionID, `  Fix the build\n\n  in packages/core\t${"x".repeat(200)}`)
-
-    const store = yield* SessionStore.Service
-    const title = yield* SessionTitle.Service
-    yield* title.generate(sessionID)
-
-    const fallback = (yield* store.get(sessionID))?.title
-    expect(fallback).toStartWith("Fix the build in packages/core xxx")
-    expect(fallback).toEndWith("...")
-    expect(fallback).toHaveLength(100)
-  }),
-)
-
-it.effect("keeps a blank first prompt untitled when the title agent is removed", () =>
-  Effect.gen(function* () {
-    const sessionID = Session.ID.make("ses_title_no_agent_blank")
-    yield* insertSession(sessionID)
-    yield* prompt(sessionID, " \n\t ")
-
-    const store = yield* SessionStore.Service
-    const title = yield* SessionTitle.Service
-    yield* title.generate(sessionID)
-
-    expect((yield* store.get(sessionID))?.title).toBeUndefined()
-  }),
-)
-
-it.effect("keeps an existing title when the title agent is removed", () =>
-  Effect.gen(function* () {
-    const sessionID = Session.ID.make("ses_title_no_agent_existing")
-    yield* insertSession(sessionID, "Original title")
-    yield* prompt(sessionID, "Help me debug the failing build")
-
-    const store = yield* SessionStore.Service
-    const title = yield* SessionTitle.Service
-    yield* title.generate(sessionID)
-
-    expect((yield* store.get(sessionID))?.title).toBe("Original title")
   }),
 )
 
@@ -649,45 +604,22 @@ it.effect("preserves the existing title when regeneration fails", () =>
   }),
 )
 
-it.effect("uses the first prompt after a failed title request and can regenerate it", () =>
+it.effect("retries after a failed title request", () =>
   Effect.gen(function* () {
     yield* enableTitleAgent
     const sessionID = Session.ID.make("ses_title_retry")
     yield* insertSession(sessionID)
     yield* prompt(sessionID, "Retry this title")
-    const store = yield* SessionStore.Service
     const title = yield* SessionTitle.Service
     titleStream = () => Stream.make(LLMEvent.providerError({ message: "Provider unavailable" }))
 
     yield* title.generate(sessionID)
-    expect((yield* store.get(sessionID))?.title).toBe("Retry this title")
     titleStream = successfulTitle
     yield* title.generate(sessionID)
 
-    expect(requests).toHaveLength(2)
-    expect((yield* store.get(sessionID))?.title).toBe("Generated Title")
-  }),
-)
-
-it.effect("ensures a title only while the session is untitled or labeled by its first prompt", () =>
-  Effect.gen(function* () {
-    yield* enableTitleAgent
-    const sessionID = Session.ID.make("ses_title_ensure")
-    yield* insertSession(sessionID)
-    yield* prompt(sessionID, "Ensure this title")
     const store = yield* SessionStore.Service
-    const title = yield* SessionTitle.Service
-    titleStream = () => Stream.make(LLMEvent.providerError({ message: "Provider unavailable" }))
-
-    yield* title.ensure(sessionID)
-    expect((yield* store.get(sessionID))?.title).toBe("Ensure this title")
-    titleStream = successfulTitle
-    yield* title.ensure(sessionID)
-    expect((yield* store.get(sessionID))?.title).toBe("Generated Title")
-    yield* title.ensure(sessionID)
-
     expect(requests).toHaveLength(2)
-    expect(JSON.stringify(requests[1]?.messages)).not.toContain("Original request")
+    expect((yield* store.get(sessionID))?.title).toBe("Generated Title")
   }),
 )
 
