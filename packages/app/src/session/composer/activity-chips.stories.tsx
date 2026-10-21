@@ -8,10 +8,11 @@ import {
   largeCompletedDocument,
 } from "@opencode/session-ui/storybook"
 import { timelinePresets } from "@opencode/session-ui/timeline/detail"
-import { createMemo, onCleanup, onMount } from "solid-js"
+import { createMemo, For, onCleanup, onMount, type JSX } from "solid-js"
 import { createStore } from "solid-js/store"
 import { SessionPreview } from "@/session/story-model"
-import type { SessionActivityItem } from "./activity-chips"
+import { SettingsProvider } from "@/settings/model"
+import { SessionActivityChips, type SessionActivityItem } from "./activity-chips"
 
 // The app's default timeline preset.
 const timelineDetail = timelinePresets[2].value
@@ -241,3 +242,101 @@ export const SubagentsAndShells = { render: preview(4, 2, 2) }
 export const ManySubagents = { render: preview(4, 12, 2) }
 
 export const Live = { render: () => <LiveActivity /> }
+
+const variants = [
+  { id: "today", label: "a · Today" },
+  { id: "capsule", label: "b · Capsule" },
+  { id: "orb", label: "c · Capsule + orb" },
+] as const
+
+const counts = [
+  { label: "1", subagents: 1, shells: 0 },
+  { label: "3", subagents: 3, shells: 0 },
+  { label: "12", subagents: 12, shells: 0 },
+  { label: "3 + 2 shells", subagents: 3, shells: 2 },
+]
+
+// One chip resting where the composer would be: the capsule floats out of flow above its anchor.
+function Chip(props: { variant: (typeof variants)[number]["id"]; subagents: number; shells: number }) {
+  return (
+    <div class="relative h-14">
+      <div class="absolute inset-x-0 bottom-0">
+        <div class="relative">
+          <SessionActivityChips
+            variant={props.variant}
+            subagents={Array.from({ length: props.subagents }, (_, index) => subagentItem(index))}
+            shells={Array.from({ length: props.shells }, (_, index) => shellItem(index))}
+            onOpen={() => {}}
+            onStop={() => {}}
+          />
+        </div>
+      </div>
+    </div>
+  )
+}
+
+function Schemes(props: { children: (scheme: "light" | "dark") => JSX.Element }) {
+  return (
+    <SettingsProvider>
+      <div class="flex min-h-screen">
+        <For each={["light", "dark"] as const}>
+          {(scheme) => (
+            <div
+              data-color-scheme={scheme}
+              data-slot="capsule-scheme"
+              class="flex-1 bg-v2-background-bg-base p-8 text-v2-text-text-base"
+            >
+              {props.children(scheme)}
+            </div>
+          )}
+        </For>
+      </div>
+    </SettingsProvider>
+  )
+}
+
+// The capsule decision: today's chip, a true capsule, and the capsule with the iOS orb, at 1, 3 and 12 running.
+export const CapsuleOptions = {
+  render: () => (
+    <Schemes>
+      {(scheme) => (
+        <div class="grid grid-cols-[112px_150px_150px_160px_210px] gap-x-6 text-[12px] text-v2-text-text-muted">
+          <div class="pb-2 text-v2-text-text-base">{scheme === "light" ? "Light" : "Dark"}</div>
+          <For each={counts}>{(count) => <div class="pb-2">{count.label}</div>}</For>
+          <For each={variants}>
+            {(variant) => (
+              <>
+                <div class="flex h-14 items-end pb-[16px]">{variant.label}</div>
+                <For each={counts}>
+                  {(count) => <Chip variant={variant.id} subagents={count.subagents} shells={count.shells} />}
+                </For>
+              </>
+            )}
+          </For>
+        </div>
+      )}
+    </Schemes>
+  ),
+}
+
+// Options b and c at 6×, animating in real time, for the motion clip.
+export const CapsuleMotion = {
+  render: () => (
+    <Schemes>
+      {() => (
+        <div class="flex flex-col gap-6 text-[12px] text-v2-text-text-muted">
+          <For each={variants.slice(1)}>
+            {(variant) => (
+              <div>
+                <div>{variant.label}</div>
+                <div style={{ zoom: 6 }} class="w-[130px]">
+                  <Chip variant={variant.id} subagents={3} shells={0} />
+                </div>
+              </div>
+            )}
+          </For>
+        </div>
+      )}
+    </Schemes>
+  ),
+}
