@@ -806,6 +806,7 @@ const step = (state: ParserState, event: BedrockEvent) =>
       return yield* new AIError({
         reason: classifyProviderFailure({
           message,
+          status: event.exception.details.originalStatusCode,
           rawBody: body,
         }),
       })
