@@ -859,7 +859,7 @@ export const protocol = Protocol.make({
     from: fromRequest,
   },
   stream: {
-    event: BedrockEvent,
+    event: BedrockEventStream.Frame.pipe(Schema.decodeTo(BedrockEvent)),
     initial: (request) => ({
       providerMetadataKey: request.model.route.providerMetadataKey ?? String(request.model.provider),
       tools: ToolStream.empty<number>(),
