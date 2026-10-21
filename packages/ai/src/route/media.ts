@@ -58,7 +58,7 @@ export interface InlineRoute<Request extends MediaRequest, Response> {
   readonly id: string
   readonly provider: ProviderID
   readonly protocol: string
-  readonly generate: (request: Request, execute: Execute) => Effect.Effect<Response, AIError>
+  generate(request: Request, execute: Execute): Effect.Effect<Response, AIError>
 }
 
 /** Submit, then poll through the returned `Generation`. */
@@ -67,13 +67,13 @@ export interface QueuedRoute<Request extends MediaRequest, Response> {
   readonly id: string
   readonly provider: ProviderID
   readonly protocol: string
-  readonly start: (request: Request, execute: Execute) => Effect.Effect<Generation<Response>, AIError>
+  start(request: Request, execute: Execute): Effect.Effect<Generation<Response>, AIError>
   /** Rebuild a handle from a persisted `Generation.token`; fails typed when the token is not this route's. */
-  readonly resume: (
+  resume(
     model: MediaRequest["model"],
     token: unknown,
     execute: Execute,
-  ) => Effect.Effect<Generation<Response>, AIError>
+  ): Effect.Effect<Generation<Response>, AIError>
 }
 
 /** One request whose response parses into events; `generate` runs the same stream and collects it. */
@@ -82,8 +82,8 @@ export interface StreamRoute<Request extends MediaRequest, Event, Response> {
   readonly id: string
   readonly provider: ProviderID
   readonly protocol: string
-  readonly stream: (request: Request, execute: Execute) => Stream.Stream<Event, AIError>
-  readonly generate: (request: Request, execute: Execute) => Effect.Effect<Response, AIError>
+  stream(request: Request, execute: Execute): Stream.Stream<Event, AIError>
+  generate(request: Request, execute: Execute): Effect.Effect<Response, AIError>
 }
 
 export type AnyRoute<Request extends MediaRequest, Event, Response> =

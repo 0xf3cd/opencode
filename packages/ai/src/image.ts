@@ -3,7 +3,14 @@ import { Generation, ProgressEvent, QueuedEvent, type AwaitOptions } from "./gen
 import { Media } from "./media.js"
 import { MediaModel, composeRoute, tryRequest } from "./media-model.js"
 import { MediaRoute } from "./route/media.js"
-import { AIError, HttpOptions, MediaUsage, ProviderMetadata, type OpenString } from "./schema/index.js"
+import {
+  AIError,
+  HttpOptions,
+  MediaUsage,
+  ProviderMetadata,
+  ProviderOptions,
+  type OpenString,
+} from "./schema/index.js"
 import { ImageClient, Service } from "./image-client.js"
 
 // ---------------------------------------------------------------------------
@@ -38,7 +45,7 @@ export class ImageModel<Options extends ImageOptions = ImageOptions> extends Med
       id: input.id,
       provider: route.protocol.provider,
       http: input.http,
-      route: composeRoute(route, input, collectResponse) as ImageRoute,
+      route: composeRoute(route, input, collectResponse),
     })
   }
 }
@@ -74,7 +81,7 @@ export class ImageRequest extends Schema.Class<ImageRequest>("Image.Request")({
   aspectRatio: Schema.optional(ImageAspectRatio),
   seed: Schema.optional(Schema.Number),
   format: Schema.optional(Schema.String),
-  providerOptions: Schema.optional(Schema.Record(Schema.String, Schema.Unknown)),
+  providerOptions: Schema.optional(ProviderOptions),
   http: Schema.optional(HttpOptions),
 }) {
   declare protected readonly _ImageRequest: void
