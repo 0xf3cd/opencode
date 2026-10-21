@@ -14,6 +14,8 @@ type Site = {
   session: number
   rejectApi: boolean
   apiAuth: "redirect" | "unauthorized" | "native"
+  apiStatus?: 403
+  probeStatus?: 200 | 401
 }
 
 const fixture = test.extend<{ site: Site }, { dist: string }>({
@@ -28,6 +30,7 @@ const fixture = test.extend<{ site: Site }, { dist: string }>({
         await writeFile(
           join(root, "main.js"),
           `import { fetchThroughSignInProxy } from "sign-in-proxy"
+        window.proxyFetch = fetchThroughSignInProxy
         const probes = []
         const nativeFetch = window.fetch
         window.fetch = (input, init) => {
@@ -80,12 +83,18 @@ const fixture = test.extend<{ site: Site }, { dist: string }>({
           })
           .end()
       const api = url.pathname.startsWith("/api/")
+      if (url.pathname === "/api/info" && site.probeStatus)
+        return void response.writeHead(site.probeStatus, { "content-type": "application/json" }).end("{}")
       if (request.headers.cookie !== `session=${site.session}` || (api && site.rejectApi)) {
         if (api && site.apiAuth === "native")
           return void response.writeHead(401, { "content-type": "application/json" }).end(`"unauthorized"`)
         const location = `${site.url.replace("127.0.0.1", "localhost")}/?rd=${rd}`
-        if (api && site.apiAuth === "unauthorized" && request.headers.accept?.includes("application/json"))
-          return void response.writeHead(401, { location, "content-type": "application/json" }).end(`"failed"`)
+        if (api && site.apiAuth === "unauthorized" && request.headers.accept?.includes("application/json")) {
+          const status = site.apiStatus ?? 401
+          return void response
+            .writeHead(status, { location, "content-type": "application/json" })
+            .end(JSON.stringify(`proxy-${status}`))
+        }
         return void response.writeHead(302, { location }).end()
       }
       if (api) return void response.writeHead(200, { "content-type": "application/json" }).end(`"signed in"`)
@@ -149,11 +158,37 @@ for (const apiAuth of ["redirect", "unauthorized"] as const) {
     await page.goto(`${site.url}/workspace`)
     await signIn(page)
     await expect(page).toHaveURL(`${site.url}/workspace?reauth=1`)
-    await expect(page.getByRole("status")).toHaveText("failed")
+    await expect(page.getByRole("status")).toHaveText(apiAuth === "unauthorized" ? "proxy-401" : "failed")
     expect(await probes(page)).toBe(0)
     await expect(page.getByRole("heading")).toHaveText("App")
   })
 }
+
+for (const probeStatus of [200, 401] as const) {
+  fixture(`stays on the app when the sign-in probe answers ${probeStatus}`, async ({ page, site }) => {
+    await install(page, site)
+    site.apiAuth = "unauthorized"
+    site.rejectApi = true
+    site.probeStatus = probeStatus
+    await page.goto(`${site.url}/workspace`)
+    await expect(page.getByRole("status")).toHaveText("proxy-401")
+    expect(await probes(page)).toBe(1)
+    await expect(page).toHaveURL(`${site.url}/workspace`)
+    await expect(page.getByRole("heading")).toHaveText("App")
+  })
+}
+
+fixture("leaves forbidden responses with Location on the app", async ({ page, site }) => {
+  await install(page, site)
+  site.apiAuth = "unauthorized"
+  site.apiStatus = 403
+  site.rejectApi = true
+  await page.goto(`${site.url}/workspace`)
+  await expect(page.getByRole("status")).toHaveText("proxy-403")
+  expect(await probes(page)).toBe(0)
+  await expect(page).toHaveURL(`${site.url}/workspace`)
+  await expect(page.getByRole("heading")).toHaveText("App")
+})
 
 fixture("leaves native unauthorized responses on the app", async ({ page, site }) => {
   await install(page, site)
@@ -164,6 +199,65 @@ fixture("leaves native unauthorized responses on the app", async ({ page, site }
   expect(await probes(page)).toBe(0)
   await expect(page).toHaveURL(`${site.url}/workspace`)
   await expect(page.getByRole("heading")).toHaveText("App")
+})
+
+fixture("ignores cross-origin unauthorized responses with Location", async ({ page, site }) => {
+  await install(page, site)
+  site.session++
+  const url = `${site.url.replace("127.0.0.1", "localhost")}/api/session`
+  await page.route(url, (route) =>
+    route.fulfill({
+      status: 401,
+      headers: {
+        "access-control-allow-origin": site.url,
+        "access-control-expose-headers": "Location",
+        location: "https://login.example/",
+      },
+      json: "proxy-401",
+    }),
+  )
+  expect(
+    await page.evaluate(
+      `window.proxyFetch(${JSON.stringify(url)}).then(r => ({ status: r.status, location: r.headers.get("location") }))`,
+    ),
+  ).toEqual({ status: 401, location: "https://login.example/" })
+  expect(await probes(page)).toBe(0)
+  await expect(page).toHaveURL(`${site.url}/`)
+  await expect(page.getByRole("heading")).toHaveText("App")
+})
+
+fixture("does not reauthenticate an aborted request", async ({ page, site }) => {
+  await install(page, site)
+  site.session++
+  expect(
+    await page.evaluate(`(() => {
+      const controller = new AbortController()
+      controller.abort()
+      return window.proxyFetch("/api/session", { signal: controller.signal })
+        .then(() => "completed", error => error.name)
+    })()`),
+  ).toBe("AbortError")
+  expect(await probes(page)).toBe(0)
+  await expect(page).toHaveURL(`${site.url}/`)
+  await expect(page.getByRole("heading")).toHaveText("App")
+})
+
+fixture("can recover another expiry after a successful request rearms it", async ({ page, site }) => {
+  site.apiAuth = "unauthorized"
+  await install(page, site)
+  site.session++
+  site.rejectApi = true
+  await page.goto(`${site.url}/workspace`)
+  await signIn(page)
+  await expect(page.getByRole("status")).toHaveText("proxy-401")
+  expect(await probes(page)).toBe(0)
+  site.rejectApi = false
+  expect(await page.evaluate(`window.proxyFetch("/api/session").then(r => r.status)`)).toBe(200)
+  site.session++
+  await page.evaluate(`void window.proxyFetch("/api/session", { headers: { Accept: "application/json" } })`)
+  await signIn(page)
+  await expect(page).toHaveURL(`${site.url}/workspace?reauth=1`)
+  await expect(page.getByRole("status")).toHaveText("signed in")
 })
 
 fixture("stays on the cached app when the network is down", async ({ page, context, site }) => {
