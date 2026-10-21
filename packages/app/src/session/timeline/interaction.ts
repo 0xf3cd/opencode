@@ -7,6 +7,7 @@ import { frameLoop } from "@opencode/ui/motion"
 import { useLayout } from "@/shell/state/layout"
 import { useData } from "@/runtime/server/current"
 import type { SessionModel } from "../model"
+import { messagesBefore } from "../session-domain"
 import { useSessionHashScroll } from "../use-session-hash-scroll"
 import { createTimelineModel } from "./model"
 
@@ -317,7 +318,12 @@ export function createSessionTimelineInteraction(session: SessionModel) {
     on(
       () => visibleUserMessages().at(-1)?.id,
       (lastID, previousID) => {
-        if (lastID && previousID && lastID > previousID) setState("messageID", undefined)
+        if (
+          lastID &&
+          previousID &&
+          messagesBefore(visibleUserMessages(), lastID).some((message) => message.id === previousID)
+        )
+          setState("messageID", undefined)
       },
       { defer: true },
     ),
