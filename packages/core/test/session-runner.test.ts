@@ -87,6 +87,7 @@ import { Expected } from "./lib/session-message"
 import { permissionLayer } from "./lib/permission"
 import { agentHost, modelHost, host, noProviders } from "./plugin/host"
 import { CodeModeInstructions } from "@opencode/core/codemode/instructions"
+import GenUIPlugin from "@opencode/plugin-genui"
 
 const emptyCodeMode = `${CodeModeInstructions.render({ total: 0, shown: 0, namespaces: [] })}\n\n`
 type ToolBarrier = {
@@ -1201,6 +1202,69 @@ describe("SessionRunnerLLM", () => {
     expect(s.requests).toHaveLength(1)
     expect(yield* s.messages).toMatchObject([{ id: message.id, type: "user", text: "Run automatically" }])
   })
+
+  scenario(
+    "toggles GenUI through instruction entries without extra turns or changing the cached request prefix",
+    function* (s) {
+      const hooks = yield* PluginHooks.Service
+      const tools = yield* Tool.Service
+      const entries = yield* InstructionEntry.Service
+      const registered = Effect.succeed({ dispose: Effect.void })
+      yield* GenUIPlugin.effect(
+        host({
+          session: {
+            hook: (name, callback) => hooks.register("session", name, callback),
+            instructions: {
+              entry: {
+                list: (input) => entries.list(input.sessionID),
+                put: entries.put,
+                remove: entries.remove,
+              },
+            },
+          },
+          tool: { ...host().tool, transform: tools.transform },
+          skill: { ...host().skill, transform: () => registered },
+        }),
+      )
+
+      yield* s.session.prompt({ sessionID, text: "Show me the build", metadata: { genui: true } })
+      yield* s.session.wait(sessionID)
+
+      expect(s.requests).toHaveLength(1)
+      expect(s.requests[0]?.tools.map((tool) => tool.name)).toContain("genui_render")
+      expect(s.requests[0]?.system.map((part) => part.text)).toContainEqual(
+        expect.stringContaining('<context key="genui">'),
+      )
+      expect(messageRoles(s.requests[0]!)).toEqual(["user"])
+      expect(userTexts(s.requests[0]!)).toEqual(["Show me the build"])
+
+      yield* s.session.prompt({ sessionID, text: "Text only now", metadata: { genui: false } })
+      yield* s.session.wait(sessionID)
+
+      expect(s.requests).toHaveLength(2)
+      for (const field of ["tools", "system"] as const) expect(s.requests[1]?.[field]).toEqual(s.requests[0]?.[field])
+      expect(s.requests[1]?.messages.slice(0, 1)).toEqual([...s.requests[0]!.messages])
+      expect(messageRoles(s.requests[1]!)).toEqual(["user", "system", "user"])
+      expect(s.requests[1]?.messages[1]).toEqual(
+        Message.system(
+          [
+            'The context under "genui" changed and supersedes the previous value:',
+            '<context key="genui">',
+            "genui_render is no longer available in this session, because the user is not in the OpenCode app or turned generated UI off. Answer in text.",
+            "</context>",
+          ].join("\n"),
+        ),
+      )
+
+      yield* s.session.prompt({ sessionID, text: "Still text" })
+      yield* s.session.wait(sessionID)
+
+      expect(s.requests).toHaveLength(3)
+      for (const field of ["tools", "system"] as const) expect(s.requests[2]?.[field]).toEqual(s.requests[0]?.[field])
+      expect(s.requests[2]?.messages.slice(0, 3)).toEqual([...s.requests[1]!.messages])
+      expect(messageRoles(s.requests[2]!)).toEqual(["user", "system", "user", "user"])
+    },
+  )
 
   scenario("runs a follow-up when synthetic input arrives during an active continuation", function* (s) {
     const secondStarted = yield* Deferred.make<void>()
