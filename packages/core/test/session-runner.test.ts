@@ -1055,7 +1055,7 @@ describe("SessionRunnerLLM", () => {
     yield* s.resume
     yield* Deferred.await(titleFailed)
     yield* Effect.yieldNow
-    expect((yield* s.session.get(sessionID)).title).toBeUndefined()
+    expect((yield* s.session.get(sessionID)).title).toBe("First prompt")
 
     const renamed = yield* watchRename(sessionID)
     yield* s.admit("Third prompt")

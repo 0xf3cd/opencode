@@ -25,12 +25,17 @@ const titleChanged = Symbol("Session title changed")
 export interface Interface {
   /** Generates an initial title or regenerates one from bounded conversation history. */
   readonly generate: (sessionID: SessionSchema.ID) => Effect.Effect<void>
+  /** Generates a title only while the session is untitled or still labeled by its first prompt. */
+  readonly ensure: (sessionID: SessionSchema.ID) => Effect.Effect<void>
 }
 
 export class Service extends Context.Service<Service, Interface>()("@opencode/SessionTitle") {}
 
 const truncate = (value: string) => (value.length <= MAX_LENGTH ? value : `${value.slice(0, MAX_LENGTH - 3)}...`)
-export const isUntitled = (session: SessionSchema.Info) =>
+// Labels a session whose title cannot be generated, instead of leaving a timestamped fallback.
+const promptTitle = (text: string) => truncate(text.replace(/\s+/g, " ").trim())
+const isUntitled = (session: SessionSchema.Info, firstPrompt: string) =>
+  session.title === promptTitle(firstPrompt) ||
   isExactRootFallback({
     title: session.title,
     time: { created: DateTime.toEpochMillis(session.time.created) },
@@ -97,12 +102,14 @@ export const layer = Layer.effect(
         .find((line) => line.length > 0)
     })
 
-    const generate = Effect.fn("SessionTitle.generate")(function* (sessionID: SessionSchema.ID) {
+    const run = Effect.fnUntraced(function* (sessionID: SessionSchema.ID, untitledOnly: boolean) {
       const session = yield* store.get(sessionID)
       if (!session) return
       const firstUser = yield* SessionHistory.firstUserMessage(db, session.id)
       if (!firstUser) return
-      const text = !isUntitled(session)
+      const untitled = isUntitled(session, firstUser.text)
+      if (untitledOnly && !untitled) return
+      const text = !untitled
         ? yield* store.context(session.id).pipe(
             Effect.map((messages) => {
               const original = `Original request:\n${firstUser.text.slice(0, MAX_FIRST_MESSAGE_LENGTH)}`
@@ -125,12 +132,13 @@ export const layer = Layer.effect(
           )
         : firstUser.text
       const selection = yield* context.selectTitle(session)
-      if (!selection) return
-      const title =
-        (yield* attempt({ session, agent: selection.agent, text, model: selection.selected })) ??
-        (selection.primary && !isDeepStrictEqual(selection.selected.ref, selection.primary.ref)
-          ? yield* attempt({ session, agent: selection.agent, text, model: selection.primary })
-          : undefined)
+      const generated = selection
+        ? ((yield* attempt({ session, agent: selection.agent, text, model: selection.selected })) ??
+          (selection.primary && !isDeepStrictEqual(selection.selected.ref, selection.primary.ref)
+            ? yield* attempt({ session, agent: selection.agent, text, model: selection.primary })
+            : undefined))
+        : undefined
+      const title = generated || (untitled ? promptTitle(firstUser.text) : undefined)
       if (!title) return
       const expectedSequence = (yield* Bus.latestSequence(db, sessionID)) + 1
       const current = yield* store.get(sessionID)
@@ -146,7 +154,10 @@ export const layer = Layer.effect(
         )
         .pipe(Effect.catchDefect((defect) => (defect === titleChanged ? Effect.void : Effect.die(defect))))
     })
-    return Service.of({ generate })
+    return Service.of({
+      generate: Effect.fn("SessionTitle.generate")((sessionID: SessionSchema.ID) => run(sessionID, false)),
+      ensure: Effect.fn("SessionTitle.ensure")((sessionID: SessionSchema.ID) => run(sessionID, true)),
+    })
   }),
 )
 
