@@ -5,16 +5,13 @@ import { Money } from "@opencode/schema/money"
 import type { TokenUsage } from "@opencode/schema/token-usage"
 import type { Model } from "@opencode/schema/model"
 
-const finite = (value: number) => (Number.isFinite(value) ? value : 0)
-const safe = (value: number | undefined) => Math.max(0, finite(value ?? 0))
-
 export const tokens = (usage: Usage | undefined): TokenUsage.Info => ({
-  input: safe(usage?.nonCachedInputTokens),
-  output: safe(usage?.visibleOutputTokens),
-  reasoning: safe(usage?.reasoningTokens),
+  input: usage?.nonCachedInputTokens ?? 0,
+  output: usage?.visibleOutputTokens ?? 0,
+  reasoning: usage?.reasoningTokens ?? 0,
   cache: {
-    read: safe(usage?.cacheReadInputTokens),
-    write: safe(usage?.cacheWriteInputTokens),
+    read: usage?.cacheReadInputTokens ?? 0,
+    write: usage?.cacheWriteInputTokens ?? 0,
   },
 })
 
@@ -27,10 +24,10 @@ export function calculateCost(costs: Model.Info["cost"], usage: TokenUsage.Info)
   const cost = tier ?? costs.find((cost) => cost.tier === undefined)
   if (!cost) return Money.USD.zero
   return Money.USD.make(
-    (usage.input * finite(cost.input) +
-      (usage.output + usage.reasoning) * finite(cost.output) +
-      usage.cache.read * finite(cost.cache.read) +
-      usage.cache.write * finite(cost.cache.write)) /
+    (usage.input * cost.input +
+      (usage.output + usage.reasoning) * cost.output +
+      usage.cache.read * cost.cache.read +
+      usage.cache.write * cost.cache.write) /
       1_000_000,
   )
 }
