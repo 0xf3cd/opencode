@@ -114,6 +114,13 @@ describe("callable namespaces", () => {
     expect(diagnostic.message).toBe("Unknown tool 'issues.get-list'. Did you mean tools.issues.list?")
   })
 
+  test("a built-in tool name points back to a direct call", async () => {
+    const diagnostic = await failure(runtime, `return await tools.read({ path: "README.md" })`)
+    expect(diagnostic.kind).toBe("UnknownTool")
+    expect(diagnostic.message).toContain("call read directly as a normal tool call, outside `execute`")
+    expect(diagnostic.suggestions).toBeUndefined()
+  })
+
   test("a namespace without its own tool stays non-callable", async () => {
     const nested = CodeMode.make({ tools: { "issues.list": echo("List issues", "list") } })
     const diagnostic = await failure(nested, `return await tools.issues({})`)
