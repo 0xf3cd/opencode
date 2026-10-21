@@ -1470,8 +1470,7 @@ export function createTimelineVirtualizer(input: Input) {
             left: "0",
             width: "100%",
             height: `${edges().bottom - edges().top}px`,
-            overflow: "clip",
-            "overflow-clip-margin": Predicate.isTagged(row(), "TurnGap") ? undefined : "0.5px",
+            "overflow-x": "clip",
           }}
         >
           <div
