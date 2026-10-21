@@ -2,7 +2,7 @@ import { useData } from "@/runtime/server/current"
 import { useServerSDK } from "@/runtime/server/client"
 import { normalizeProviderList } from "@/runtime/server/global-sync/utils"
 import { Iterable, pipe } from "effect"
-import { createEffect, createMemo, type Accessor } from "solid-js"
+import { createEffect, createMemo, onCleanup, type Accessor } from "solid-js"
 import type { ProviderListResponse } from "@/runtime/server/types"
 import { useIntegrations } from "./integrations"
 import { popularProviders } from "./order"
@@ -26,8 +26,14 @@ export function useProviders(directory: Accessor<string | undefined>) {
   createEffect(() => {
     if (sdk.connection.status() !== "connected") return
     const ref = location()
+    let stale = false
+    onCleanup(() => {
+      stale = true
+    })
     void (async () => {
       if (!ref) await data.location.syncInfo()
+
+      if (stale) return
       const resolved = ref ?? data.location.default()
       await Promise.all([data.location.provider.sync(resolved), data.location.model.sync(resolved)])
     })().catch(() => undefined)

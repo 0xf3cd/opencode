@@ -134,23 +134,26 @@ function createGlobalModels() {
 
   // Suspend readers only until persisted state loads. Refetching on every change would put the
   // session route into its Suspense fallback, detaching the screen and resetting the timeline scroll.
-  const [loaded] = createResource(async () => {
-    await ready.promise
+  const [loaded] = createResource(
+    async () => {
+      await ready.promise
 
-    return true
-  })
+      return true
+    },
+    { initialValue: ready() },
+  )
 
   return {
     store,
     set: setStore,
     ready,
     recent: () => {
-      loaded()
+      if (!ready()) loaded()
 
       return store.recent
     },
     favorite: () => {
-      loaded()
+      if (!ready()) loaded()
 
       return store.favorite
     },

@@ -71,7 +71,7 @@ export function createActiveSessionRegion(input: {
         const info = input.session.data.info()
         const selection = resolveSessionComposerSelection(info, message?.metadata)
 
-        if (info && selection.agent && selection.model) {
+        if (info && !info.model && selection.agent && selection.model) {
           local.session.restore({ sessionID: info.id, agent: selection.agent, model: selection.model })
         }
       },

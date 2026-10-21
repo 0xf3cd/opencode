@@ -903,6 +903,26 @@ test("inactive tabs load attention and inbox, but read the transcript only on se
     expect(reads.filter((path) => path === `/api/session/${id}/message`)).toHaveLength(1)
 
   expect(reads.filter((path) => path === `/api/session/${fixture.childID}/message`)).toEqual([])
+
+  const held = await holdRoute(
+    page,
+    (url) =>
+      url.pathname === `/api/session/${fixture.targetID}` ||
+      url.pathname === `/api/session/${fixture.targetID}/message`,
+    { method: "GET" },
+  )
+
+  state.text = "Refreshed fixture answer after reload"
+  await page.reload()
+  await held.arrived
+  await expectSessionTitle(page, fixture.expected.targetTitle)
+  await expect(page.locator(`[data-timeline-part-id="msg_${fixture.targetID}_assistant:text:0"]`)).toContainText(
+    "Latest fixture answer after tab restoration",
+  )
+  held.release()
+  await expect(page.locator(`[data-timeline-part-id="msg_${fixture.targetID}_assistant:text:0"]`)).toContainText(
+    state.text,
+  )
   expect(mutations).toEqual([])
   expect(errors).toEqual([])
 })

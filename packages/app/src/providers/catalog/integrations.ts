@@ -1,6 +1,6 @@
 import { useServerSDK } from "@/runtime/server/client"
 import { useData } from "@/runtime/server/current"
-import { createEffect, type Accessor } from "solid-js"
+import { createEffect, onCleanup, type Accessor } from "solid-js"
 
 export function useIntegrations(directory: Accessor<string | undefined>) {
   const serverSDK = useServerSDK()
@@ -9,10 +9,16 @@ export function useIntegrations(directory: Accessor<string | undefined>) {
   createEffect(() => {
     if (serverSDK.connection.status() !== "connected") return
     const value = directory()
+    let stale = false
+    onCleanup(() => {
+      stale = true
+    })
     void (async () => {
       const ref = value ? { directory: value } : undefined
 
       if (!ref) await data.location.syncInfo()
+
+      if (stale) return
       await data.location.integration.sync(ref ?? data.location.default())
     })().catch(() => undefined)
   })

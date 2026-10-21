@@ -209,6 +209,14 @@ export function Titlebar(props: { verticalTabs?: { mount?: HTMLElement } }) {
                 if (route.type !== "session") return undefined
 
                 if (preparing()) return undefined
+
+                if (
+                  tabsStore.some(
+                    (item) =>
+                      item.type === "session" && item.server === route.server && item.sessionId === route.sessionId,
+                  )
+                )
+                  return undefined
                 const conn = global.servers.list().find((item) => ServerConnection.key(item) === route.server)
 
                 return conn ? { route, ctx: global.ensureServerCtx(conn) } : undefined
@@ -237,6 +245,11 @@ export function Titlebar(props: { verticalTabs?: { mount?: HTMLElement } }) {
               },
             )
 
+            const resolved = () =>
+              resolvedSession.state === "ready" || resolvedSession.state === "refreshing"
+                ? resolvedSession.latest
+                : undefined
+
             const session = createMemo(() => {
               const route = layout.route()
 
@@ -247,9 +260,9 @@ export function Titlebar(props: { verticalTabs?: { mount?: HTMLElement } }) {
               const cached = conn ? global.ensureServerCtx(conn).data.session.get(route.sessionId) : undefined
 
               if (cached) return cached
-              const resolved = resolvedSession()
+              const item = resolved()
 
-              return resolved?.info.id === route.sessionId ? resolved.info : undefined
+              return item?.info.id === route.sessionId ? item.info : undefined
             })
 
             const matchRoute = (route: LayoutRoute) => {
@@ -271,8 +284,8 @@ export function Titlebar(props: { verticalTabs?: { mount?: HTMLElement } }) {
                 const s = session()
 
                 if (s?.parentID) {
-                  const resolved = resolvedSession()
-                  const parentID = resolved?.info.id === s.id ? resolved.rootID : s.parentID
+                  const item = resolved()
+                  const parentID = item?.info.id === s.id ? item.rootID : s.parentID
 
                   const parent = tabsStore.find(
                     (item) => item.type === "session" && item.server === route.server && item.sessionId === parentID,
@@ -317,10 +330,10 @@ export function Titlebar(props: { verticalTabs?: { mount?: HTMLElement } }) {
                 const s = session()
 
                 if (!s) return
-                const resolved = resolvedSession()
+                const item = resolved()
 
-                if (s.parentID && resolved?.info.id !== s.id) return
-                const sessionId = resolved?.info.id === s.id ? resolved.rootID : s.id
+                if (s.parentID && item?.info.id !== s.id) return
+                const sessionId = item?.info.id === s.id ? item.rootID : s.id
                 const next = { server: route.server, sessionId }
                 tabsStoreActions.addSessionTab(next)
               }

@@ -18,7 +18,7 @@ import { useData, useServer } from "@/runtime/server/current"
 import { ServerConnection } from "@/runtime/server/registry"
 import { useSettingsCommand } from "@/settings/command"
 import { SessionUIProvider } from "@/shell/routes/session-ui-provider"
-import { useTabs, type PendingSession } from "@/shell/tabs/tabs"
+import { tabKey, useTabs, type PendingSession } from "@/shell/tabs/tabs"
 import { requireServerKey } from "@/shell/routes/session"
 import { useSessionModel } from "./model"
 import { SessionPanelFrame } from "./session-frame"
@@ -34,7 +34,14 @@ export function TargetSessionRouteContent() {
   const data = useData()
   const server = useServer()
   const tabs = useTabs()
-  const directory = createMemo(() => data.session.get(params.id)?.location.directory)
+
+  const directory = createMemo(
+    () =>
+      data.session.get(params.id)?.location.directory ??
+      tabs.sessionSnapshot(server.key, params.id)?.info.location.directory ??
+      tabs.info[tabKey({ type: "session", server: server.key, sessionId: params.id })]?.directory ??
+      tabs.pendingSession(server.key, params.id)?.draft.directory,
+  )
 
   return (
     <>
@@ -126,14 +133,25 @@ function ResolvedTargetSessionRoute() {
     { children: true, connected: () => server.ctx.sdk.connection.status() === "connected" },
   )
 
-  const directory = createMemo(() => current()?.location.directory)
-
   // Only a failed health check: a version mismatch has its own panel, and a rejected credential is not an outage.
   const unreachable = () => {
     const health = server.health
 
     return !!health && !health.healthy && !health.checking && !health.unauthorized && !health.incompatible
   }
+
+  const directory = createMemo(() => {
+    const resolved = current()?.location.directory
+
+    if (resolved) return resolved
+
+    if (unreachable()) return undefined
+
+    return (
+      tabs.sessionSnapshot(server.key, params.id)?.info.location.directory ??
+      tabs.info[tabKey({ type: "session", server: server.key, sessionId: params.id })]?.directory
+    )
+  })
 
   return (
     <Show

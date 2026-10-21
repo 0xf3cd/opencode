@@ -1,7 +1,7 @@
-import type { SessionInfo, SessionMessageUser } from "@opencode/client/promise"
+import type { SessionInfo, SessionMessageInfo, SessionMessageUser } from "@opencode/client/promise"
 import type { ComposerSelection } from "@/composer/adapter"
 import { createSimpleContext } from "@opencode/ui/context"
-import { createStore, produce } from "solid-js/store"
+import { createStore, produce, unwrap } from "solid-js/store"
 import { Persist, persisted, removePersisted, draftPersistedKeys } from "@/runtime/persistence/storage"
 import { ServerConnection, useServers } from "@/runtime/server/registry"
 import { useExtensionServers } from "@/runtime/extension/servers"
@@ -21,6 +21,7 @@ import {
 } from "@/composer/state"
 import { appendPrompt, promptLength } from "@/composer/prompt-parts"
 import { TabStorage } from "./schema"
+import { SNAPSHOT_MESSAGE_LIMIT, SessionSnapshots, sameSessionSnapshot } from "./snapshot"
 import { useCurrentRoute } from "@/shell/state/layout"
 
 export type SessionTab = typeof TabStorage.Session.Type
@@ -81,6 +82,13 @@ export const { use: useTabs, provider: TabsProvider } = createSimpleContext({
     })
 
     const [info, setInfo, , infoReady] = persisted(Persist.window("tabs.info"), TabStorage.Infos, {})
+
+    const [snapshots, setSnapshots, , snapshotsReady] = persisted(
+      Persist.window("tabs.snapshots"),
+      SessionSnapshots,
+      {},
+    )
+
     const [regions, setRegions, , regionsReady] = persisted(Persist.window("tabs.panes"), TabStorage.Regions, {})
     const [closed, setClosed, , closedReady] = persisted(Persist.window("tabs.closed"), TabStorage.Closed, [])
     const [pending, setPending] = createStore<Record<string, PendingSession | undefined>>({})
@@ -139,6 +147,15 @@ export const { use: useTabs, provider: TabsProvider } = createSimpleContext({
       )
     }
 
+    const removeSnapshot = (key: string) => {
+      if (!snapshots[key]) return
+      setSnapshots(
+        produce((draft) => {
+          delete draft[key]
+        }),
+      )
+    }
+
     const removeRegions = (key: string) => {
       if (!regions[key]) return
       setRegions(
@@ -165,6 +182,7 @@ export const { use: useTabs, provider: TabsProvider } = createSimpleContext({
             const key = tabKey(tab)
             memory.remove(key)
             removeInfo(key)
+            removeSnapshot(key)
             removeRegions(key)
           }
         }
@@ -177,6 +195,23 @@ export const { use: useTabs, provider: TabsProvider } = createSimpleContext({
 
       for (const key of Object.keys(info)) {
         if (!keys.has(key)) removeInfo(key)
+      }
+
+      if (snapshotsReady()) {
+        const snapshotKeys = new Set(
+          next.flatMap((tab) => {
+            if (tab.type !== "session") return []
+            const root = tabKey(tab)
+
+            if (!tab.routeSessionId) return [root]
+
+            return [root, tabKey({ type: "session", server: tab.server, sessionId: tab.routeSessionId })]
+          }),
+        )
+
+        for (const key of Object.keys(snapshots)) {
+          if (!snapshotKeys.has(key)) removeSnapshot(key)
+        }
       }
 
       if (!regionsReady()) return
@@ -224,6 +259,7 @@ export const { use: useTabs, provider: TabsProvider } = createSimpleContext({
       }).finally(() => closing.delete(key))
       memory.remove(key)
       removeInfo(key)
+      removeSnapshot(key)
       removeRegions(key)
 
       if (draftID) removeDraftPersisted(draftID)
@@ -468,6 +504,8 @@ export const { use: useTabs, provider: TabsProvider } = createSimpleContext({
 
         for (const key of removed) removeInfo(key)
 
+        for (const key of removed) removeSnapshot(key)
+
         if (recent.key && removed.includes(recent.key)) setRecentKey(undefined)
 
         for (const draftID of drafts) removeDraftPersisted(draftID)
@@ -533,6 +571,34 @@ export const { use: useTabs, provider: TabsProvider } = createSimpleContext({
         for (const key of removed) memory.remove(key)
 
         for (const key of removed) removeInfo(key)
+
+        for (const key of removed) removeSnapshot(key)
+
+        for (const id of input.sessionIDs) {
+          removeSnapshot(tabKey({ type: "session", server: targetServer, sessionId: id }))
+        }
+      },
+      sessionSnapshot(server: ServerConnection.Key, sessionId: string) {
+        return snapshots[tabKey({ type: "session", server, sessionId })]
+      },
+      rememberSessionSnapshot(
+        input: { server: ServerConnection.Key; sessionId: string },
+        session: SessionInfo,
+        messages: SessionMessageInfo[],
+      ) {
+        const open = store.some(
+          (tab) =>
+            tab.type === "session" &&
+            tab.server === input.server &&
+            (tab.sessionId === input.sessionId || tab.routeSessionId === input.sessionId),
+        )
+
+        if (!open) return
+        const key = tabKey({ type: "session", server: input.server, sessionId: input.sessionId })
+        const tail = messages.slice(-SNAPSHOT_MESSAGE_LIMIT)
+
+        if (sameSessionSnapshot(snapshots[key], session, tail)) return
+        setSnapshots(key, { info: structuredClone(unwrap(session)), messages: structuredClone(unwrap(tail)) })
       },
       rememberSessionInfo(tab: SessionTab, session: SessionInfo, prompted: boolean) {
         const key = tabKey(tab)

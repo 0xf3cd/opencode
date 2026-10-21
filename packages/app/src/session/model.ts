@@ -1,6 +1,6 @@
 import type { SessionInfo, SessionMessageInfo, SessionMessageUser } from "@opencode/client/promise"
 import { createMediaQuery } from "@solid-primitives/media"
-import { createMemo } from "solid-js"
+import { createEffect, createMemo } from "solid-js"
 import { useWorkspaceLocation } from "@/workspaces/location"
 import { useData } from "@/runtime/server/current"
 import { same } from "@/runtime/persistence/equality"
@@ -29,10 +29,16 @@ export function useSessionModel() {
   const isDesktop = createMediaQuery("(min-width: 768px)")
   const sessionID = createMemo(() => layout.params.id)
 
+  const snapshot = createMemo(() => {
+    const id = sessionID()
+
+    return id ? shellTabs.sessionSnapshot(server.key, id) : undefined
+  })
+
   const info = createMemo(() => {
     const id = sessionID()
 
-    return id ? data.session.get(id) : undefined
+    return (id ? data.session.get(id) : undefined) ?? snapshot()?.info
   })
 
   const parentID = createMemo(() => {
@@ -65,7 +71,21 @@ export function useSessionModel() {
   const messages = createMemo(() => {
     const id = sessionID()
 
-    return id ? data.session.message.list(id) : emptyMessages
+    if (!id) return emptyMessages
+    const live = data.session.message.list(id)
+
+    return live.length > 0 ? live : (snapshot()?.messages ?? emptyMessages)
+  })
+
+  createEffect(() => {
+    const id = sessionID()
+
+    if (!id) return
+    const current = data.session.get(id)
+    const list = data.session.message.list(id)
+
+    if (!current || list.length === 0) return
+    shellTabs.rememberSessionSnapshot({ server: server.key, sessionId: id }, current, list)
   })
 
   const userMessages = createMemo(() => selectSessionUserMessages(messages()), emptyUserMessages, { equals: same })

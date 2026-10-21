@@ -39,7 +39,7 @@ export function createTimelineModel(input: { session: Pick<SessionModel, "identi
     // Enrich the partial leading group without withholding the already loaded tail. Undelivered inbox rows
     // load with the inbox, not the transcript, so alone they are no tail; a first prompt shows through its handoff.
     return (
-      data.session.message.list(id).some((message) => !data.session.input.has(id, message.id)) ||
+      input.session.history.messages().some((message) => !data.session.input.has(id, message.id)) ||
       !!getSessionMessageHandoff(input.session.identity.sessionKey())
     )
   })
