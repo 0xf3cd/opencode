@@ -10,6 +10,14 @@ export const fetchThroughSignInProxy: typeof globalThis.fetch = Object.assign(
     return fetch(request).then(
       (response) => {
         if (sameOrigin && response.ok) armed = true
+        if (
+          armed &&
+          sameOrigin &&
+          !request.signal.aborted &&
+          response.status === 401 &&
+          response.headers.has("location")
+        )
+          reauthenticate()
         return response
       },
       (error) => {

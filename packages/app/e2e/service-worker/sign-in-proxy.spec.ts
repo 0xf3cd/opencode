@@ -9,7 +9,12 @@ import { fileURLToPath } from "node:url"
 import { build } from "vite"
 import { serviceWorker } from "../../vite.pwa"
 
-type Site = { url: string; session: number; rejectApi: boolean }
+type Site = {
+  url: string
+  session: number
+  rejectApi: boolean
+  apiAuth: "redirect" | "unauthorized" | "native"
+}
 
 const fixture = test.extend<{ site: Site }, { dist: string }>({
   dist: [
@@ -33,7 +38,7 @@ const fixture = test.extend<{ site: Site }, { dist: string }>({
         // Resolves after every sign-in check has settled; the app's handler for each check runs first.
         window.probes = () => Promise.all(probes).then(() => probes.length)
         navigation.addEventListener("navigate", () => (document.querySelector("h1").textContent = "Leaving"))
-        fetchThroughSignInProxy("/api/session")
+        fetchThroughSignInProxy("/api/session", { headers: { Accept: "application/json" } })
           .then((response) => response.json(), () => "failed")
           .then((text) => (document.querySelector("output").textContent = text))`,
         )
@@ -59,7 +64,7 @@ const fixture = test.extend<{ site: Site }, { dist: string }>({
   site: async ({ dist }, use) => {
     // Models Dev Tunnels: every path needs a cookie, sign-in happens on another origin (localhost instead of
     // 127.0.0.1), and it returns through /auth/postback, which sets the cookie and redirects to rd.
-    const site = { url: "", session: 1, rejectApi: false }
+    const site: Site = { url: "", session: 1, rejectApi: false, apiAuth: "redirect" }
     const server = createServer(async (request, response) => {
       const url = new URL(request.url ?? "/", `http://${request.headers.host}`)
       const rd = encodeURIComponent(url.searchParams.get("rd") ?? url.pathname + url.search)
@@ -75,10 +80,14 @@ const fixture = test.extend<{ site: Site }, { dist: string }>({
           })
           .end()
       const api = url.pathname.startsWith("/api/")
-      if (request.headers.cookie !== `session=${site.session}` || (api && site.rejectApi))
-        return void response
-          .writeHead(302, { location: `${site.url.replace("127.0.0.1", "localhost")}/?rd=${rd}` })
-          .end()
+      if (request.headers.cookie !== `session=${site.session}` || (api && site.rejectApi)) {
+        if (api && site.apiAuth === "native")
+          return void response.writeHead(401, { "content-type": "application/json" }).end(`"unauthorized"`)
+        const location = `${site.url.replace("127.0.0.1", "localhost")}/?rd=${rd}`
+        if (api && site.apiAuth === "unauthorized" && request.headers.accept?.includes("application/json"))
+          return void response.writeHead(401, { location, "content-type": "application/json" }).end(`"failed"`)
+        return void response.writeHead(302, { location }).end()
+      }
       if (api) return void response.writeHead(200, { "content-type": "application/json" }).end(`"signed in"`)
       const file = await readFile(join(dist, extname(url.pathname) ? url.pathname : "index.html")).catch(
         () => undefined,
@@ -118,24 +127,42 @@ function probes(page: Page) {
   return page.evaluate<number>("window.probes()")
 }
 
-fixture("sends the cached app through sign-in when the proxy session expires", async ({ page, site }) => {
-  await install(page, site)
-  site.session++
-  await page.goto(`${site.url}/workspace`)
-  await signIn(page)
-  await expect(page).toHaveURL(`${site.url}/workspace?reauth=1`)
-  await expect(page.getByRole("status")).toHaveText("signed in")
-})
+for (const apiAuth of ["redirect", "unauthorized"] as const) {
+  fixture(
+    `sends the cached app through sign-in when the proxy session expires (${apiAuth})`,
+    async ({ page, site }) => {
+      site.apiAuth = apiAuth
+      await install(page, site)
+      site.session++
+      await page.goto(`${site.url}/workspace`)
+      await signIn(page)
+      await expect(page).toHaveURL(`${site.url}/workspace?reauth=1`)
+      await expect(page.getByRole("status")).toHaveText("signed in")
+    },
+  )
 
-fixture("tries once while the proxy keeps rejecting API requests", async ({ page, site }) => {
+  fixture(`tries once while the proxy keeps rejecting API requests (${apiAuth})`, async ({ page, site }) => {
+    site.apiAuth = apiAuth
+    await install(page, site)
+    site.session++
+    site.rejectApi = true
+    await page.goto(`${site.url}/workspace`)
+    await signIn(page)
+    await expect(page).toHaveURL(`${site.url}/workspace?reauth=1`)
+    await expect(page.getByRole("status")).toHaveText("failed")
+    expect(await probes(page)).toBe(0)
+    await expect(page.getByRole("heading")).toHaveText("App")
+  })
+}
+
+fixture("leaves native unauthorized responses on the app", async ({ page, site }) => {
   await install(page, site)
-  site.session++
+  site.apiAuth = "native"
   site.rejectApi = true
   await page.goto(`${site.url}/workspace`)
-  await signIn(page)
-  await expect(page).toHaveURL(`${site.url}/workspace?reauth=1`)
-  await expect(page.getByRole("status")).toHaveText("failed")
+  await expect(page.getByRole("status")).toHaveText("unauthorized")
   expect(await probes(page)).toBe(0)
+  await expect(page).toHaveURL(`${site.url}/workspace`)
   await expect(page.getByRole("heading")).toHaveText("App")
 })
 
