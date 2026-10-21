@@ -12,6 +12,7 @@ import { Spinner } from "@opencode/ui/spinner"
 import { Tooltip } from "@opencode/ui/tooltip"
 import { useLanguage } from "@/runtime/i18n/language"
 import type { SessionQueueView } from "./queue"
+import { SpringHeight } from "./spring-height"
 import "./queue-panel.css"
 
 // Pullout above the composer listing the prompts queued behind the current
@@ -19,13 +20,20 @@ import "./queue-panel.css"
 // composer background) so the two read as one attached surface.
 export function SessionQueuePanel(props: { queue: SessionQueueView }) {
   const language = useLanguage()
-  const count = () => props.queue.rows().length
+  // While the emptied panel closes behind the composer it keeps showing its last prompts.
+  const rows = createMemo(
+    (last: ReturnType<SessionQueueView["rows"]>) => (props.queue.rows().length ? props.queue.rows() : last),
+    [],
+  )
+  const queue = { ...props.queue, rows }
+  const count = () => rows().length
   let listRef!: HTMLDivElement
 
   return (
-    <Show when={count() > 0}>
+    <SpringHeight watch={count()} when={props.queue.rows().length > 0} skirt={12} class="relative z-0">
       <div
         data-component="session-queue-panel"
+        inert={props.queue.rows().length === 0}
         class="relative z-0 -mb-3 rounded-xl bg-v2-background-bg-base px-1.5 pt-1.5 shadow-[inset_0_0_0_0.5px_var(--v2-border-border-base)]"
         // Match the composer overlap so the scroll crop meets the input edge.
         classList={{ "pb-3": count() > 4, "pb-[18px]": count() <= 4 }}
@@ -56,7 +64,7 @@ export function SessionQueuePanel(props: { queue: SessionQueueView }) {
             if (source.initialIndex === source.index) return
             void props.queue.reorder(
               arrayMove(
-                props.queue.rows().map((row) => row.id),
+                rows().map((row) => row.id),
                 source.initialIndex,
                 source.index,
               ),
@@ -78,13 +86,13 @@ export function SessionQueuePanel(props: { queue: SessionQueueView }) {
                   : undefined,
             }}
           >
-            <For each={props.queue.rows().map((row) => row.id)}>
-              {(id, index) => <SessionQueueRow queue={props.queue} id={id} index={index()} />}
+            <For each={rows().map((row) => row.id)}>
+              {(id, index) => <SessionQueueRow queue={queue} id={id} index={index()} />}
             </For>
           </div>
         </DragDropProvider>
       </div>
-    </Show>
+    </SpringHeight>
   )
 }
 
@@ -110,12 +118,12 @@ function SessionQueueRow(props: { queue: SessionQueueView; id: string; index: nu
   })
 
   return (
-    <Show when={row()} keyed>
+    <Show when={row()}>
       {(entry) => (
         <div
           ref={sortable.ref}
           data-component="session-queue-row"
-          aria-busy={entry.pending}
+          aria-busy={entry().pending}
           class="group/queue-row flex h-8 shrink-0 items-center justify-between gap-2 rounded-md py-1 ps-0.5 pe-2"
           classList={{
             "bg-v2-overlay-simple-overlay-hover": editing(),
@@ -138,22 +146,22 @@ function SessionQueueRow(props: { queue: SessionQueueView; id: string; index: nu
                 type="button"
                 data-action="session-queue-edit"
                 dir="auto"
-                aria-disabled={entry.pending}
+                aria-disabled={entry().pending}
                 class="max-w-full min-w-0 self-start truncate rounded-sm text-start text-[13px] font-[440] leading-[var(--line-height-compact)]"
                 classList={{
-                  "text-v2-text-text-faint": editing() || entry.pending,
-                  "cursor-progress": entry.pending,
+                  "text-v2-text-text-faint": editing() || entry().pending,
+                  "cursor-progress": entry().pending,
                   "cursor-text text-v2-text-text-base hover:bg-v2-overlay-simple-overlay-hover":
-                    !editing() && !entry.pending,
+                    !editing() && !entry().pending,
                 }}
                 onClick={() => props.queue.edit(props.id)}
               >
-                {entry.text ||
-                  (entry.attachments ? language.plural("session.queue.attachments", entry.attachments) : "")}
+                {entry().text ||
+                  (entry().attachments ? language.plural("session.queue.attachments", entry().attachments) : "")}
               </button>
-              <Show when={entry.attachments && entry.text}>
+              <Show when={entry().attachments && entry().text}>
                 <span class="shrink-0 whitespace-nowrap text-[13px] font-[440] leading-[var(--line-height-compact)] text-v2-text-text-muted">
-                  {language.plural("session.queue.attachments", entry.attachments)}
+                  {language.plural("session.queue.attachments", entry().attachments)}
                 </span>
               </Show>
             </div>
@@ -163,14 +171,14 @@ function SessionQueueRow(props: { queue: SessionQueueView; id: string; index: nu
             class="flex shrink-0 items-center gap-1.5"
             classList={{
               "opacity-0 focus-within:opacity-100 group-hover/queue-row:opacity-100 [@media(hover:none)]:opacity-100":
-                !active() && !editing() && !entry.pending,
+                !active() && !editing() && !entry().pending,
               "pointer-events-none": props.queue.busy(),
             }}
           >
-            <Show when={entry.pending}>
+            <Show when={entry().pending}>
               <Spinner class="size-3.5 text-v2-text-text-faint" />
             </Show>
-            <Show when={!editing() && !entry.pending}>
+            <Show when={!editing() && !entry().pending}>
               <Tooltip
                 placement="top"
                 inactive={!props.queue.working()}
@@ -202,7 +210,7 @@ function SessionQueueRow(props: { queue: SessionQueueView; id: string; index: nu
                 />
               </Tooltip>
             </Show>
-            <Show when={!entry.pending}>
+            <Show when={!entry().pending}>
               <Tooltip placement="top" value={language.t("session.queue.remove")}>
                 <IconButton
                   data-action="session-queue-remove"
