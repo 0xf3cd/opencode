@@ -330,36 +330,11 @@ const namespaceKeys = <R>(root: ToolNode<R>, path: ReadonlyArray<string>): Reado
   return Array.from(node.children.keys())
 }
 
-// Built-in tool names models reach for inside scripts.
-const TOP_LEVEL_TOOLS = new Set([
-  "read",
-  "write",
-  "edit",
-  "patch",
-  "shell",
-  "bash",
-  "grep",
-  "glob",
-  "webfetch",
-  "websearch",
-  "todowrite",
-  "question",
-  "skill",
-  "subagent",
-  "task",
-])
-
 const resolve = <R>(root: ToolNode<R>, path: ReadonlyArray<string>, index: ReadonlyArray<SearchEntry>): Tool<R> => {
   const segments = canonicalSegments(path)
   const node = lookup(root, segments)
   if (node === undefined) {
     const name = segments.join(".")
-    if (!root.children.has(segments[0]) && TOP_LEVEL_TOOLS.has(segments[0])) {
-      throw new ToolRuntimeError(
-        "UnknownTool",
-        `'${segments[0]}' is not a Code Mode tool. It is one of your regular tools: call ${segments[0]} directly as a normal tool call, outside \`execute\`. It does not exist inside \`execute\`.`,
-      )
-    }
     const ns = segments.length > 1 && root.children.has(segments[0]) ? segments[0] : undefined
     const closest = rank(
       ns ? index.filter((entry) => entry.description.path.startsWith(`${ns}.`)) : index,
